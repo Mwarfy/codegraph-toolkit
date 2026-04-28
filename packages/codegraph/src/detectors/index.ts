@@ -1,3 +1,4 @@
+// ADR-003: détecteurs généralistes par défaut, project-specific opt-in
 /**
  * Detector Registry
  *

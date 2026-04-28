@@ -1,3 +1,4 @@
+// ADR-003: project-specific (opt-in)
 /**
  * Block Loader Detector — PROJECT-SPECIFIC (Sentinel)
  *

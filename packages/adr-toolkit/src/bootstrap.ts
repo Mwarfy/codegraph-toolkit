@@ -1,3 +1,4 @@
+// ADR-004: 3 rôles séparés (codegraph détecte / LLM rédige / humain valide)
 /**
  * `adr-toolkit bootstrap` — auto-rédaction de drafts ADR via agents Sonnet ciblés.
  *

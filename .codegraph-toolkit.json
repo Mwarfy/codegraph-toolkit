@@ -1,0 +1,37 @@
+{
+  "rootDir": ".",
+  "adrDir": "docs/adr",
+  "srcDirs": [
+    "packages/codegraph/src",
+    "packages/adr-toolkit/src"
+  ],
+  "tsconfigPath": "packages/codegraph/tsconfig.json",
+  "briefPath": "CLAUDE-CONTEXT.md",
+  "anchorMarkerExtensions": [
+    "ts",
+    "tsx",
+    "sh",
+    "sql"
+  ],
+  "skipDirs": [
+    "node_modules",
+    "dist",
+    ".next",
+    ".codegraph",
+    "coverage",
+    ".git",
+    "examples",
+    "fixtures",
+    "tests"
+  ],
+  "hubThreshold": 10,
+  "invariantTestPaths": [
+    "packages/*/tests/*.test.ts"
+  ],
+  "briefCustomSections": [
+    {
+      "placement": "after-anchored-files",
+      "markdown": "> **Dogfooding** : ce repo gouverne sa propre architecture via le toolkit qu'il publie. Les 4 ADRs ci-dessus encadrent les invariants critiques (zéro LLM dans synopsis, config-driven, séparation détecteurs, 3 rôles bootstrap)."
+    }
+  ]
+}

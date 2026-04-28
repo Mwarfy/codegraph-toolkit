@@ -12,7 +12,7 @@
  * Level 4 (Code / functions) is already served by `codegraph_symbol`; we don't double it.
  */
 
-// ADR-009
+// ADR-001: synopsis builder pur, zéro LLM, déterministe
 
 import type { GraphSnapshot, GraphNode, GraphEdge, EdgeType } from '../core/types.js'
 

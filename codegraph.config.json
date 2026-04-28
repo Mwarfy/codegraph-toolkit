@@ -1,0 +1,31 @@
+{
+  "rootDir": ".",
+  "include": [
+    "packages/**/*.{ts,tsx}"
+  ],
+  "exclude": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/.next/**",
+    "**/coverage/**",
+    "**/__tests__/**",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "**/*.d.ts"
+  ],
+  "entryPoints": [
+    "apps/**/index.ts",
+    "apps/**/main.ts",
+    "packages/**/index.ts"
+  ],
+  "detectors": [
+    "ts-imports",
+    "event-bus",
+    "http-routes",
+    "bullmq-queues",
+    "db-tables"
+  ],
+  "snapshotDir": ".codegraph",
+  "maxSnapshots": 50,
+  "tsconfigPath": "tsconfig.json"
+}

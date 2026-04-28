@@ -1,3 +1,4 @@
+// ADR-004: 3 rôles séparés (Status: Proposed only, jamais Accepted)
 /**
  * Bootstrap writer — écrit les drafts validés sur disque.
  *

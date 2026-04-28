@@ -1,3 +1,4 @@
+// ADR-002: config-driven obligatoire, pas de hardcoded projet
 /**
  * Loader de `.codegraph-toolkit.json` à la racine du projet consommateur.
  *
