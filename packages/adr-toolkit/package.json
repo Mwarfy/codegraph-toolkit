@@ -1,13 +1,38 @@
 {
   "name": "@liby/adr-toolkit",
   "version": "0.1.0",
+  "description": "ADR governance toolkit — anchors regen, file→ADRs linker, ts-morph asserts, boot brief generator",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "bin": {
+    "adr-toolkit": "./dist/cli/index.js"
+  },
+  "files": [
+    "dist",
+    "templates",
+    "src/hooks",
+    "README.md"
+  ],
   "engines": {
     "node": ">=22"
   },
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsc -b --watch",
+    "test": "vitest run"
+  },
   "dependencies": {
-    "@liby/codegraph": "*"
+    "@liby/codegraph": "*",
+    "commander": "^13.0.0",
+    "chalk": "^5.4.0",
+    "ts-morph": "^25.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0"
   }
 }
