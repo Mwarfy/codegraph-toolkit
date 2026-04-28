@@ -22,6 +22,8 @@ import { loadADRs, findAdrsForFile } from '../linker.js'
 import { checkAsserts } from '../check-asserts.js'
 import { generateBrief } from '../brief.js'
 import { initProject } from '../init.js'
+import { detectSingletonCandidates, bootstrapAdrs } from '../bootstrap.js'
+import { applyDrafts } from '../bootstrap-writer.js'
 
 const program = new Command()
 program
@@ -146,6 +148,110 @@ program
     })
     console.log(chalk.green(`✓ ${path.relative(config.rootDir, result.outputPath)} (${result.lineCount} lines, ${result.adrCount} ADRs, ${result.anchoredFileCount} anchored files, ${result.invariantTestCount} invariant tests)`))
   })
+
+program
+  .command('bootstrap')
+  .description('Auto-rédige des drafts ADR via agents Sonnet (depuis patterns détectés)')
+  .option('--apply', 'Écrit les drafts + pose les marqueurs (sinon dry-run)', false)
+  .option('--max <n>', 'Max candidats à traiter', '10')
+  .option('--api-key <key>', 'Clé API Anthropic (sinon ANTHROPIC_API_KEY)')
+  .option('--model <id>', 'Modèle Anthropic', 'claude-sonnet-4-5')
+  .option('--only-confidence <level>', 'Filtre par confiance: low|medium|high (multi: m,h)', '')
+  .action(async (opts) => {
+    const config = await loadConfig()
+    console.log(chalk.dim('🔍 Scanning project for pattern candidates...'))
+
+    // Walk les srcDirs pour trouver les fichiers .ts/.tsx
+    const allFiles: string[] = []
+    for (const dir of config.srcDirs) {
+      const fullDir = path.join(config.rootDir, dir)
+      try {
+        await walkTsFiles(fullDir, config.rootDir, allFiles)
+      } catch {
+        // dir absent
+      }
+    }
+
+    const candidates = await detectSingletonCandidates(config, allFiles)
+    console.log(chalk.dim(`   ${candidates.length} singleton candidate(s) found`))
+
+    if (candidates.length === 0) {
+      console.log(chalk.yellow('Aucun candidat détecté. (MVP : seul le pattern singleton est détecté pour l\'instant.)'))
+      return
+    }
+
+    console.log(chalk.dim(`🤖 Spawning Sonnet agents (${Math.min(candidates.length, parseInt(opts.max))} agents)...`))
+    const result = await bootstrapAdrs({
+      config,
+      apiKey: opts.apiKey,
+      model: opts.model,
+      candidates,
+      maxCandidates: parseInt(opts.max),
+    })
+
+    console.log('')
+    console.log(chalk.bold(`Drafts générés : ${result.drafts.length}`))
+    console.log(chalk.dim(`Skipped : ${result.skipped.length} · Errors : ${result.errors.length}`))
+    console.log('')
+
+    let filtered = result.drafts
+    if (opts.onlyConfidence) {
+      const allowed = new Set(opts.onlyConfidence.split(',').map((s: string) => {
+        const c = s.trim().toLowerCase()
+        if (c.startsWith('h')) return 'high'
+        if (c.startsWith('m')) return 'medium'
+        if (c.startsWith('l')) return 'low'
+        return c
+      }))
+      filtered = result.drafts.filter(d => allowed.has(d.confidence ?? 'low'))
+    }
+
+    for (const draft of filtered) {
+      const conf = draft.confidence === 'high' ? chalk.green('HAUTE')
+        : draft.confidence === 'medium' ? chalk.yellow('MOYENNE')
+        : chalk.red('BASSE')
+      console.log(chalk.bold(`  ${draft.title ?? '(no title)'} [${conf}]`))
+      console.log(`    Pattern  : ${draft.pattern}`)
+      console.log(`    Anchor   : ${draft.primaryAnchor}`)
+      console.log(`    Rule     : ${draft.rule ?? '—'}`)
+      console.log(`    Asserts  : ${draft.asserts?.length ?? 0}`)
+      console.log(`    Why      : ${(draft.why ?? '').slice(0, 100)}${(draft.why?.length ?? 0) > 100 ? '…' : ''}`)
+      console.log('')
+    }
+
+    if (!opts.apply) {
+      console.log(chalk.dim('💡 Pour écrire les drafts + poser les marqueurs : --apply'))
+      console.log(chalk.dim('   (recommandé : --apply --only-confidence high,medium pour skip les drafts low)'))
+      return
+    }
+
+    const applyResult = await applyDrafts({ config, drafts: filtered, applyMarkers: true })
+    console.log(chalk.green(`✓ ${applyResult.written.length} ADR(s) écrits :`))
+    for (const f of applyResult.written) console.log(`    + ${f}`)
+    console.log(chalk.green(`✓ ${applyResult.markersAdded.length} marqueur(s) posés`))
+    console.log('')
+    console.log(chalk.dim('Étapes suivantes :'))
+    console.log('  1. Relire chaque ADR généré (Status: Proposed jusqu\'à validation)')
+    console.log('  2. Compléter "How to apply" + "Tested by"')
+    console.log('  3. Quand validé, passer Status: Proposed → Accepted')
+    console.log('  4. Run: npx adr-toolkit regen && npx adr-toolkit brief')
+  })
+
+async function walkTsFiles(dir: string, rootDir: string, out: string[]): Promise<void> {
+  const skip = new Set(['node_modules', 'dist', '.next', '.codegraph', 'coverage', '.git', '__tests__'])
+  const base = path.basename(dir)
+  if (skip.has(base)) return
+  let entries
+  try { entries = await readdir(dir, { withFileTypes: true }) } catch { return }
+  for (const e of entries) {
+    const full = path.join(dir, e.name)
+    if (e.isDirectory()) await walkTsFiles(full, rootDir, out)
+    else if (e.isFile() && (e.name.endsWith('.ts') || e.name.endsWith('.tsx'))) {
+      if (e.name.endsWith('.test.ts') || e.name.endsWith('.spec.ts') || e.name.endsWith('.d.ts')) continue
+      out.push(path.relative(rootDir, full))
+    }
+  }
+}
 
 program
   .command('install-hooks')

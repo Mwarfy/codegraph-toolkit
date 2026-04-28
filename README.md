@@ -197,9 +197,40 @@ cat .claude/settings.json
 
 Le synopsis builder (`@liby/codegraph buildSynopsis`) est **pur** : aucun I/O, aucun LLM, aucun random. Même snapshot → output JSON byte-équivalent. C'est le cœur de la mental map déterministe et reproductible. Test `synopsis-determinism` verrouille cette propriété.
 
+## Bootstrap agentique (auto-rédaction de drafts)
+
+`adr-toolkit bootstrap` lance des agents Sonnet ciblés pour rédiger des **drafts** d'ADRs depuis les patterns détectés. L'agent ne décide pas du périmètre (codegraph le fait), l'humain reste le filtre final.
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+npx adr-toolkit bootstrap                              # dry-run, affiche les drafts
+npx adr-toolkit bootstrap --apply --only-confidence high,medium    # écrit ADRs + pose marqueurs
+```
+
+**Architecture en 3 rôles séparés (le cadrage)** :
+
+| Niveau | Qui décide | Quoi |
+|---|---|---|
+| OÙ regarder | codegraph + pattern detectors | détecte les candidats (singleton, hubs, FSM, etc.) |
+| COMMENT formuler | agent Sonnet (prompt cadré, output JSON) | rédige Rule + Why + asserts depuis le code |
+| QUOI accepter | humain (CLI revue + `--apply`) | valide / édite / rejette |
+
+**Garde-fous anti-dérive** :
+- Why halluciné → forcer à citer commentaire/git OU "TODO" → flag basse confiance
+- Asserts inventés → checkAsserts AVANT d'écrire l'ADR
+- Sur-génération → candidat vient de codegraph, pas du LLM
+- Rule générique ("for consistency", "best practice") → flag basse confiance
+
+**Status MVP** :
+- ✅ Détection : pattern `singleton` (private static instance + getInstance)
+- ⏳ Détection à venir : `fsm` (union string literals), `write-isolation` (seul writer DB), `hub` (in-degree ≥ threshold)
+- ✅ Output : drafts avec Status: Proposed (relire avant Accepted)
+- ✅ Confiance auto-calculée (high si Why cite source, low si TODO ou phrase générique)
+
 ## Roadmap
 
-- **Bootstrap agentique** (Phase D, en cours) : `adr-toolkit bootstrap` lance des agents Sonnet ciblés pour rédiger des **drafts** d'ADRs depuis les patterns détectés par codegraph. L'humain valide/édite/rejette. Cadré : l'agent ne décide pas du périmètre (codegraph le fait), l'humain reste le filtre final.
+- **Détecteurs additionnels** pour bootstrap (fsm, write-isolation, hub).
+- **Spawn parallèle** des agents (actuellement séquentiel).
 - **Publication npm registry** — pour passer du `npm link` vers `npm install @liby/...`.
 
 ## Consommateurs

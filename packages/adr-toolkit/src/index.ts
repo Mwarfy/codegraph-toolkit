@@ -28,3 +28,18 @@ export type {
 } from './brief.js'
 
 export { initProject } from './init.js'
+
+export {
+  bootstrapAdrs,
+  detectSingletonCandidates,
+} from './bootstrap.js'
+export type {
+  BootstrapOptions,
+  BootstrapResult,
+  AdrDraft,
+  PatternCandidate,
+  PatternKind,
+} from './bootstrap.js'
+
+export { applyDrafts } from './bootstrap-writer.js'
+export type { ApplyOptions, ApplyResult } from './bootstrap-writer.js'
