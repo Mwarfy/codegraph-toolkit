@@ -21,6 +21,15 @@ const ConfigSchema = z.object({
   ]),
   hubThreshold: z.number().default(15),
   invariantTestPaths: z.array(z.string()).default([]),
+  /**
+   * Sections markdown projet-spécifiques injectées dans le brief généré.
+   * Permet à un projet de garder ses propres références (liens vers MAP.md,
+   * notes sur les hooks Claude Code, etc.) sans forker le toolkit.
+   */
+  briefCustomSections: z.array(z.object({
+    placement: z.enum(['after-anchored-files', 'after-invariant-tests', 'after-recent-activity']),
+    markdown: z.string(),
+  })).default([]),
   codegraph: z.object({
     configPath: z.string().default('codegraph.config.json'),
   }).optional(),

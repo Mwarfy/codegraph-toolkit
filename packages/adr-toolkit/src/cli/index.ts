@@ -130,7 +130,10 @@ program
   .description("Régénère le boot brief (CLAUDE-CONTEXT.md ou config.briefPath)")
   .action(async () => {
     const config = await loadConfig()
-    const result = await generateBrief({ config })
+    const result = await generateBrief({
+      config,
+      customSections: config.briefCustomSections,
+    })
     console.log(chalk.green(`✓ ${path.relative(config.rootDir, result.outputPath)} (${result.lineCount} lines, ${result.adrCount} ADRs, ${result.anchoredFileCount} anchored files, ${result.invariantTestCount} invariant tests)`))
   })
 

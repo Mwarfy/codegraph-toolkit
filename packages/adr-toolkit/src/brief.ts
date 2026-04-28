@@ -183,6 +183,17 @@ export interface GenerateBriefOptions {
   config: AdrToolkitConfig
   /** Nom du projet pour le titre. Default : basename de rootDir. */
   projectName?: string
+  /**
+   * Sections markdown à injecter dans le brief. Chaque section est ajoutée
+   * dans l'ordre fourni, à l'emplacement indiqué par `placement`.
+   * - `after-anchored-files` : après "Fichiers gouvernés par un ADR"
+   * - `after-invariant-tests` : après "Tests d'invariant"
+   * - `after-recent-activity` : à la toute fin (avant "Comment contribuer")
+   */
+  customSections?: Array<{
+    placement: 'after-anchored-files' | 'after-invariant-tests' | 'after-recent-activity'
+    markdown: string
+  }>
 }
 
 export interface GenerateBriefResult {
@@ -196,6 +207,12 @@ export interface GenerateBriefResult {
 export async function generateBrief(opts: GenerateBriefOptions): Promise<GenerateBriefResult> {
   const { config } = opts
   const projectName = opts.projectName ?? path.basename(config.rootDir)
+  const customSections = opts.customSections ?? []
+  const sectionsAt = (placement: string) =>
+    customSections
+      .filter(s => s.placement === placement)
+      .map(s => '\n' + s.markdown.trim() + '\n')
+      .join('\n')
   const adrs = await collectADRs(config)
   const tests = await collectInvariantTests(config)
   const commits = recentCommits(config.rootDir)
@@ -222,11 +239,11 @@ ${adrs.length > 0 ? adrs.map(a => `- **ADR-${a.num}** — ${a.rule}\n  → [\`${
 ## Fichiers gouvernés par un ADR (lookup pré-calculé)
 
 ${fileAdrLines.length > 0 ? fileAdrLines.join('\n') : '- (aucun ADR n\'a de section `## Anchored in` extractable)'}
-
+${sectionsAt('after-anchored-files')}
 ## Tests d'invariant qui gardent ces règles
 
 ${tests.length > 0 ? tests.map(t => `- \`${t}\``).join('\n') : '- (aucun invariant configuré — voir `invariantTestPaths` dans .codegraph-toolkit.json)'}
-
+${sectionsAt('after-invariant-tests')}
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
 ${hubs.length > 0 ? hubs.map(h => `- ${h}`).join('\n') : '- (snapshot codegraph absent — `npx @liby/codegraph analyze`)'}
@@ -236,7 +253,7 @@ ${adrSuggestions.length > 0 ? `\n## ⚠ ADR anchor suggestions\n\nFichiers load-
 \`\`\`
 ${commits.join('\n') || '(no commits in last 14 days)'}
 \`\`\`
-
+${sectionsAt('after-recent-activity')}
 ## Comment contribuer à ce brief
 
 - Une nouvelle décision architecturale ? Crée un ADR via le template :
