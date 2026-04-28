@@ -1,0 +1,7 @@
+{
+  "name": "workspace-pkg-fixture",
+  "version": "1.0.0",
+  "dependencies": {
+    "chalk": "^5.0.0"
+  }
+}

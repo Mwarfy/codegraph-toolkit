@@ -1,10 +1,40 @@
 {
   "name": "@liby/codegraph",
   "version": "0.1.0",
+  "description": "Visual dependency graph + deterministic synopsis for AI-supervised codebases",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./synopsis": "./dist/synopsis/builder.js",
+    "./synopsis/adr-markers": "./dist/synopsis/adr-markers.js"
+  },
+  "bin": {
+    "codegraph": "./dist/cli/index.js"
+  },
+  "files": ["dist", "README.md"],
   "engines": {
     "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsc -b --watch",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "ts-morph": "^25.0.0",
+    "graphology": "^0.26.0",
+    "graphology-metrics": "^2.3.0",
+    "graphology-operators": "^1.6.0",
+    "graphology-types": "^0.24.7",
+    "commander": "^13.0.0",
+    "chalk": "^5.4.0",
+    "minimatch": "^10.0.0",
+    "serve-handler": "^6.1.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/serve-handler": "^6.1.4"
   }
 }
