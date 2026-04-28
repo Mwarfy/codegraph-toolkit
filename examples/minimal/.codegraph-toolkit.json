@@ -1,0 +1,11 @@
+{
+  "rootDir": ".",
+  "adrDir": "docs/adr",
+  "srcDirs": ["src"],
+  "tsconfigPath": "tsconfig.json",
+  "briefPath": "CLAUDE-CONTEXT.md",
+  "anchorMarkerExtensions": ["ts", "tsx", "sh", "sql"],
+  "skipDirs": ["node_modules", "dist", ".git", ".codegraph"],
+  "hubThreshold": 5,
+  "invariantTestPaths": []
+}

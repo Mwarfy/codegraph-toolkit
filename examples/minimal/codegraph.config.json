@@ -1,0 +1,7 @@
+{
+  "rootDir": ".",
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules/**", "dist/**", ".codegraph/**"],
+  "detectors": ["ts-imports"],
+  "snapshotDir": ".codegraph"
+}
