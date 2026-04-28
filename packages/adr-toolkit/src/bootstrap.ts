@@ -17,11 +17,13 @@
  * - Rule générique → refus si "for consistency", "for maintainability", etc.
  */
 
-import { readFile } from 'node:fs/promises'
+import { readFile, writeFile, mkdtemp, rm } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
+import { tmpdir } from 'node:os'
 import * as path from 'node:path'
 import Anthropic from '@anthropic-ai/sdk'
 import type { AdrToolkitConfig } from './config.js'
+import { checkAsserts } from './check-asserts.js'
 
 // ─── Pattern candidates ─────────────────────────────────────────────────────
 
@@ -104,14 +106,39 @@ export interface AdrDraft {
   pattern: PatternKind
   /** Path du candidat principal */
   primaryAnchor: string
+  /** Notes de la validation pré-apply (asserts retirés, etc.) */
+  validationNotes?: string
 }
 
 // ─── Prompt templates par pattern ───────────────────────────────────────────
+
+/**
+ * Dérive le préfixe `module` pour un assert ts-morph depuis un filePath.
+ * Le format attendu par checkAsserts est `module#symbol` où `module` est
+ * le path relatif depuis srcDirs SANS extension (ex: services/Foo).
+ *
+ * Le toolkit essaie chaque srcDir × {.ts, .tsx, /index.ts}, donc on
+ * retourne juste le path sans le srcDir préfixe ni l'extension.
+ */
+function deriveModulePrefix(relativePath: string, srcDirs: string[]): string {
+  let p = relativePath
+  // Strip srcDir prefix if matches
+  for (const dir of srcDirs) {
+    const prefix = dir.endsWith('/') ? dir : dir + '/'
+    if (p.startsWith(prefix)) {
+      p = p.slice(prefix.length)
+      break
+    }
+  }
+  // Strip extension
+  return p.replace(/\.(tsx?|jsx?)$/, '').replace(/\/index$/, '')
+}
 
 const SINGLETON_PROMPT_TEMPLATE = (args: {
   filePath: string
   fileContent: string
   evidence: string
+  modulePrefix: string
 }) => `Tu es un assistant d'extraction d'ADR. UN seul fichier, UN seul pattern.
 
 PATTERN DÉTECTÉ : SINGLETON
@@ -128,7 +155,20 @@ TÂCHE LIMITÉE :
 2. Rule : 1 phrase, ≤120 chars, présent indicatif. PAS de "for consistency" / "for maintainability" / "for cleanliness".
 3. Why : 2 phrases MAX. PRIORITÉ : cite un commentaire en tête de fichier ou de classe (avec numéro de ligne entre parenthèses si possible). Si rien à citer → écrire littéralement "TODO: pourquoi ce singleton ?".
 4. Title : nom court (≤60 chars).
-5. Asserts ts-morph : symbole exact (className, getInstance), exists: true.
+5. Asserts ts-morph — FORMAT OBLIGATOIRE \`module#symbol\` :
+   - \`module\` = path relatif SANS extension. Pour CE fichier, le module est : \`${args.modulePrefix}\`
+   - \`symbol\` = SYMBOLE TOP-LEVEL exporté UNIQUEMENT (classe, fonction, variable, type, enum).
+     ⚠ checkAsserts NE SUPPORTE PAS les méthodes de classe (ex: \`Class.method\`).
+     Pour un singleton, asserter UNIQUEMENT la classe : \`${args.modulePrefix}#NomClasse\`
+   - Exemple correct (classe top-level) : \`${args.modulePrefix}#NomDeLaClasseSingleton\`
+   - Exemple correct (fonction top-level exportée) : \`${args.modulePrefix}#nomFonction\`
+   - INCORRECT : \`${args.modulePrefix}#getInstance\` si \`getInstance\` est une méthode statique de classe (ts-morph ne la trouvera pas au top-level).
+   - INCORRECT : \`NomDeLaClasse\` (manque le préfixe module)
+   - INCORRECT : \`${args.modulePrefix}.NomDeLaClasse\` (mauvais séparateur)
+   - Pour chaque assert, utilise UNIQUEMENT \`exists: true\` (default safe).
+   - N'utilise PAS \`type: "class"\` / \`type: "function"\` — ts-morph compare au type TS exact (ex: \`type: "Set<string>"\`, \`type: "string[]"\`).
+   - Si tu n'es pas SÛR du type TS exact, ne mets PAS le champ \`type\` du tout.
+   - Pour un singleton, 1 seul assert sur la classe suffit. Pas de sur-génération.
 6. Anchors : ce fichier uniquement (l'orchestrateur étendra si besoin).
 
 OUTPUT : utilise OBLIGATOIREMENT l'outil "submit_draft" avec un JSON conforme au schema. Ne réponds rien d'autre.`
@@ -206,11 +246,65 @@ const GENERIC_RULE_PHRASES = [
 function calculateConfidence(draft: AdrDraft): 'low' | 'medium' | 'high' {
   if (draft.verdict !== 'propose') return 'low'
   if (!draft.rule || !draft.why) return 'low'
-  if (draft.why.startsWith('TODO')) return 'low'
+  // TODO/anywhere = low (pas juste startsWith — le LLM peut dire
+  // "Aucun commentaire trouvé. TODO: ..." → essentiellement vide).
+  if (/\bTODO\b/i.test(draft.why)) return 'low'
+  // Why trop court = sans substance utile
+  if (draft.why.trim().length < 30) return 'low'
   if (GENERIC_RULE_PHRASES.some(re => re.test(draft.rule!))) return 'low'
   // Confiance haute = Why cite quelque chose (parenthèses avec ligne, ou guillemets)
-  if (/\(line\s+\d+\)|"[^"]+"/.test(draft.why)) return 'high'
+  if (/\(l(?:igne|ine)?\.?\s*\d+\)|"[^"]{8,}"|«[^»]{8,}»/.test(draft.why)) return 'high'
   return 'medium'
+}
+
+/**
+ * Valide que les asserts d'un draft résolvent réellement contre le code.
+ * Si un assert pète (symbole introuvable, type drift), le draft est rejeté
+ * pour ne pas écrire un ADR qui ferait planter checkAsserts au commit suivant.
+ */
+async function validateDraftAsserts(
+  draft: AdrDraft,
+  config: AdrToolkitConfig,
+): Promise<{ valid: boolean; failedAsserts: string[] }> {
+  if (!draft.asserts || draft.asserts.length === 0) {
+    return { valid: true, failedAsserts: [] }
+  }
+  // On crée un ADR temporaire dans un tmpdir + on lance checkAsserts dessus.
+  // checkAsserts utilise un Project ts-morph dérivé de config.tsconfigPath
+  // — on garde ça intact, seul l'ADR change d'emplacement.
+  const tmp = await mkdtemp(path.join(tmpdir(), 'adr-validate-'))
+  const tmpAdrPath = path.join(tmp, '001-validate.md')
+  const yaml = draft.asserts.map(a => {
+    const lines = [`  - symbol: "${a.symbol}"`]
+    if (a.exists !== undefined) lines.push(`    exists: ${a.exists}`)
+    if (a.type !== undefined) lines.push(`    type: "${a.type}"`)
+    return lines.join('\n')
+  }).join('\n')
+  await writeFile(
+    tmpAdrPath,
+    `---\nasserts:\n${yaml}\n---\n\n# ADR-001: validate\n\n## Rule\n> validate\n`,
+    'utf-8',
+  )
+  const tmpConfig: AdrToolkitConfig = {
+    ...config,
+    adrDir: path.relative(config.rootDir, tmp),
+  }
+  // Si tmp est en dehors de rootDir, on bascule rootDir.
+  if (!tmp.startsWith(config.rootDir)) {
+    tmpConfig.rootDir = config.rootDir // checkAsserts utilise tmpConfig.adrDir relatif à rootDir
+    tmpConfig.adrDir = path.relative(config.rootDir, tmp)
+    // path.relative peut retourner ../../tmp/... — c'est OK, ça reste un path
+  }
+
+  try {
+    const result = await checkAsserts({ config: tmpConfig })
+    const failed = result.results.filter(r => !r.ok).map(r => `${r.symbol}: ${r.reason ?? 'unknown'}`)
+    return { valid: failed.length === 0, failedAsserts: failed }
+  } catch (e) {
+    return { valid: false, failedAsserts: [`validation error: ${(e as Error).message}`] }
+  } finally {
+    await rm(tmp, { recursive: true, force: true })
+  }
 }
 
 // ─── Claude CLI invocation ──────────────────────────────────────────────────
@@ -367,6 +461,7 @@ export async function bootstrapAdrs(opts: BootstrapOptions): Promise<BootstrapRe
               filePath: candidate.relativePath,
               fileContent,
               evidence: candidate.evidence,
+              modulePrefix: deriveModulePrefix(candidate.relativePath, config.srcDirs),
             }) + (mode === 'cli' ? CLI_SCHEMA_HINT : '')
           : null
 
@@ -403,9 +498,28 @@ export async function bootstrapAdrs(opts: BootstrapOptions): Promise<BootstrapRe
 
       if (draft.verdict === 'skip') {
         skipped.push({ candidate, reason: draft.reason ?? 'agent skip' })
-      } else {
-        drafts.push(draft)
+        continue
       }
+
+      // Validation pré-apply : les asserts ts-morph doivent résoudre contre
+      // le code RÉEL. Sinon le pre-commit suivant pèterait silencieusement.
+      const validation = await validateDraftAsserts(draft, config)
+      if (!validation.valid) {
+        const failedSymbols = new Set(validation.failedAsserts.map(f => f.split(':')[0]?.trim()))
+        const validAsserts = (draft.asserts ?? []).filter(a => !failedSymbols.has(a.symbol))
+        const removedCount = (draft.asserts?.length ?? 0) - validAsserts.length
+        draft.asserts = validAsserts.length > 0 ? validAsserts : undefined
+        // Annote sans forcer "low" : si le Why est solide, on garde la
+        // confiance d'origine (Why solide vaut plus que asserts cassés).
+        // Le user voit `validationNotes` dans la revue et peut éditer.
+        draft.validationNotes = `${removedCount} assert(s) retirés (résolution échouée): ${validation.failedAsserts.slice(0, 3).join('; ')}`
+        // Si tous les asserts sont retirés, dégrade d'un cran (mais pas plus)
+        if (validAsserts.length === 0 && draft.confidence === 'high') {
+          draft.confidence = 'medium'
+        }
+      }
+
+      drafts.push(draft)
     } catch (e) {
       errors.push({ candidate, error: (e as Error).message })
     }

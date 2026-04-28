@@ -206,6 +206,18 @@ program
         return c
       }))
       filtered = result.drafts.filter(d => allowed.has(d.confidence ?? 'low'))
+      if (filtered.length === 0 && result.drafts.length > 0) {
+        const counts = result.drafts.reduce((acc, d) => {
+          const c = d.confidence ?? 'low'
+          acc[c] = (acc[c] ?? 0) + 1
+          return acc
+        }, {} as Record<string, number>)
+        console.log(chalk.yellow(`⚠ Aucun draft ne passe le filtre --only-confidence ${opts.onlyConfidence}.`))
+        console.log(chalk.dim(`   Confidences obtenues : ${Object.entries(counts).map(([k, v]) => `${k}=${v}`).join(', ')}`))
+        console.log(chalk.dim(`   → Relance sans --only-confidence pour voir les drafts basse confiance,`))
+        console.log(chalk.dim(`     ou ajoute "low" au filtre.`))
+        return
+      }
     }
 
     for (const draft of filtered) {
@@ -218,6 +230,9 @@ program
       console.log(`    Rule     : ${draft.rule ?? '—'}`)
       console.log(`    Asserts  : ${draft.asserts?.length ?? 0}`)
       console.log(`    Why      : ${(draft.why ?? '').slice(0, 100)}${(draft.why?.length ?? 0) > 100 ? '…' : ''}`)
+      if (draft.validationNotes) {
+        console.log(chalk.yellow(`    ⚠ ${draft.validationNotes}`))
+      }
       console.log('')
     }
 
