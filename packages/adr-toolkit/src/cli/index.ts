@@ -32,8 +32,12 @@ program
 program
   .command('init')
   .description('Scaffold ADR toolkit dans le projet courant')
-  .action(async () => {
-    const result = await initProject(process.cwd())
+  .option('--with-claude-settings', 'Ajoute aussi .claude/settings.json avec le hook PreToolUse adr-hook', false)
+  .action(async (opts) => {
+    const result = await initProject(process.cwd(), {
+      withClaudeSettings: !!opts.withClaudeSettings,
+    })
+    console.log(chalk.dim(`Layout détecté : ${result.layout}`))
     if (result.created.length > 0) {
       console.log(chalk.green('Created:'))
       for (const c of result.created) console.log(`  + ${c}`)
@@ -50,9 +54,15 @@ program
     console.log(chalk.bold('Next steps:'))
     console.log('  1. Crée ton premier ADR : copie docs/adr/_TEMPLATE.md → docs/adr/001-<slug>.md')
     console.log('  2. Pose // ADR-001 au top du fichier source ancré')
-    console.log('  3. Run: npx @liby/adr-toolkit regen')
-    console.log('  4. Run: npx @liby/adr-toolkit brief')
-    console.log('  5. Commit — le pre-commit hook prendra le relais')
+    console.log('  3. Run: npx adr-toolkit regen')
+    console.log('  4. Run: npx codegraph analyze')
+    console.log('  5. Run: npx adr-toolkit brief')
+    console.log('  6. Commit — le pre-commit hook prendra le relais')
+    if (!opts.withClaudeSettings) {
+      console.log('')
+      console.log(chalk.dim('💡 Pour activer le hook Claude Code (auto-injection ADR avant chaque Edit) :'))
+      console.log(chalk.dim('   npx adr-toolkit init --with-claude-settings'))
+    }
   })
 
 program
