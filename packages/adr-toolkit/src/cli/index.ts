@@ -151,11 +151,12 @@ program
 
 program
   .command('bootstrap')
-  .description('Auto-rédige des drafts ADR via agents Sonnet (depuis patterns détectés)')
+  .description('Auto-rédige des drafts ADR via Claude (CLI ou SDK)')
   .option('--apply', 'Écrit les drafts + pose les marqueurs (sinon dry-run)', false)
   .option('--max <n>', 'Max candidats à traiter', '10')
-  .option('--api-key <key>', 'Clé API Anthropic (sinon ANTHROPIC_API_KEY)')
-  .option('--model <id>', 'Modèle Anthropic', 'claude-sonnet-4-5')
+  .option('--mode <mode>', 'auto|cli|sdk (default: auto = CLI si dispo, sinon SDK)', 'auto')
+  .option('--api-key <key>', 'Clé API Anthropic (mode sdk uniquement)')
+  .option('--model <id>', 'Modèle (default: sonnet pour CLI, claude-sonnet-4-5 pour SDK)')
   .option('--only-confidence <level>', 'Filtre par confiance: low|medium|high (multi: m,h)', '')
   .action(async (opts) => {
     const config = await loadConfig()
@@ -180,9 +181,10 @@ program
       return
     }
 
-    console.log(chalk.dim(`🤖 Spawning Sonnet agents (${Math.min(candidates.length, parseInt(opts.max))} agents)...`))
+    console.log(chalk.dim(`🤖 Spawning agents (${Math.min(candidates.length, parseInt(opts.max))} agents, mode: ${opts.mode})...`))
     const result = await bootstrapAdrs({
       config,
+      agentMode: opts.mode as 'auto' | 'cli' | 'sdk',
       apiKey: opts.apiKey,
       model: opts.model,
       candidates,

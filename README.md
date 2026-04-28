@@ -201,10 +201,19 @@ Le synopsis builder (`@liby/codegraph buildSynopsis`) est **pur** : aucun I/O, a
 
 `adr-toolkit bootstrap` lance des agents Sonnet ciblés pour rédiger des **drafts** d'ADRs depuis les patterns détectés. L'agent ne décide pas du périmètre (codegraph le fait), l'humain reste le filtre final.
 
+**3 modes d'invocation** :
+- `--mode auto` (default) — utilise **Claude CLI** s'il est installé (auth via keychain, pas besoin de clé), sinon fallback sur Anthropic SDK.
+- `--mode cli` — force Claude CLI (échoue si absent).
+- `--mode sdk` — force Anthropic SDK avec `ANTHROPIC_API_KEY`.
+
 ```bash
+# Si tu as Claude Code installé, ça marche directement :
+npx adr-toolkit bootstrap --max 5             # dry-run, 5 candidats
+npx adr-toolkit bootstrap --apply --only-confidence high,medium    # écrit ADRs + marqueurs
+
+# Sinon avec une clé API :
 export ANTHROPIC_API_KEY=sk-ant-...
-npx adr-toolkit bootstrap                              # dry-run, affiche les drafts
-npx adr-toolkit bootstrap --apply --only-confidence high,medium    # écrit ADRs + pose marqueurs
+npx adr-toolkit bootstrap --mode sdk --max 5
 ```
 
 **Architecture en 3 rôles séparés (le cadrage)** :

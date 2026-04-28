@@ -18,6 +18,7 @@
  */
 
 import { readFile } from 'node:fs/promises'
+import { spawn } from 'node:child_process'
 import * as path from 'node:path'
 import Anthropic from '@anthropic-ai/sdk'
 import type { AdrToolkitConfig } from './config.js'
@@ -170,9 +171,17 @@ const DRAFT_TOOL = {
 
 export interface BootstrapOptions {
   config: AdrToolkitConfig
-  /** API key Anthropic. Default : process.env.ANTHROPIC_API_KEY */
+  /**
+   * Mode d'invocation de l'agent :
+   *   - 'auto' (default) : utilise Claude CLI s'il est dispo (auth keychain),
+   *     sinon SDK avec ANTHROPIC_API_KEY
+   *   - 'cli' : force Claude CLI (échoue si absent)
+   *   - 'sdk' : force Anthropic SDK (échoue si pas d'API key)
+   */
+  agentMode?: 'auto' | 'cli' | 'sdk'
+  /** API key Anthropic (pour mode sdk). Default : process.env.ANTHROPIC_API_KEY */
   apiKey?: string
-  /** Modèle. Default : claude-sonnet-4-6 */
+  /** Modèle. Default : sonnet (alias Claude CLI) ou claude-sonnet-4-5 (SDK) */
   model?: string
   /** Liste des candidats à traiter. Sinon détection auto. */
   candidates?: PatternCandidate[]
@@ -204,20 +213,139 @@ function calculateConfidence(draft: AdrDraft): 'low' | 'medium' | 'high' {
   return 'medium'
 }
 
+// ─── Claude CLI invocation ──────────────────────────────────────────────────
+
+async function isClaudeCliAvailable(): Promise<boolean> {
+  return new Promise(resolve => {
+    const child = spawn('which', ['claude'], { stdio: 'pipe' })
+    child.on('close', code => resolve(code === 0))
+    child.on('error', () => resolve(false))
+  })
+}
+
+const CLI_SYSTEM_PROMPT = `Tu es un assistant d'extraction d'ADR. Tu réponds UNIQUEMENT avec un objet JSON brut conforme au schema fourni dans le prompt utilisateur.
+
+RÈGLES STRICTES :
+- Pas de markdown, pas de \`\`\`json, pas d'explication.
+- Seulement l'objet JSON brut sur stdout.
+- Si tu hésites ou si le pattern ne tient pas, output {"verdict":"skip","reason":"..."}.`
+
+const CLI_SCHEMA_HINT = `
+Schema attendu :
+{
+  "verdict": "propose" | "skip",
+  "reason": string (si skip),
+  "title": string (≤60 chars),
+  "rule": string (≤120 chars, présent indicatif, PAS "for consistency" / "best practice"),
+  "why": string (2 phrases max, cite ligne ou TODO),
+  "asserts": [{ "symbol": string, "exists": boolean, "type"?: string }],
+  "anchors": [string]
+}`
+
+async function callViaClaudeCli(args: {
+  systemPrompt: string
+  userPrompt: string
+  model: string
+}): Promise<Partial<AdrDraft>> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      'claude',
+      [
+        '-p',
+        '--model', args.model,
+        '--output-format', 'json',
+        '--system-prompt', args.systemPrompt,
+        args.userPrompt,
+      ],
+      { stdio: ['ignore', 'pipe', 'pipe'] },
+    )
+
+    let stdout = ''
+    let stderr = ''
+    child.stdout.on('data', d => { stdout += d.toString() })
+    child.stderr.on('data', d => { stderr += d.toString() })
+    child.on('error', reject)
+    child.on('close', code => {
+      if (code !== 0) {
+        reject(new Error(`claude CLI exited ${code}: ${stderr.slice(0, 500)}`))
+        return
+      }
+      // Wrapper Claude CLI : { type:"result", result:"<le JSON string>" }
+      let cliWrapper: { result?: string }
+      try {
+        cliWrapper = JSON.parse(stdout)
+      } catch (e) {
+        reject(new Error(`CLI output not JSON: ${stdout.slice(0, 200)}`))
+        return
+      }
+      if (!cliWrapper.result) {
+        reject(new Error(`CLI wrapper has no result field: ${stdout.slice(0, 200)}`))
+        return
+      }
+      // Strip markdown au cas où le LLM en ajoute malgré le system prompt
+      let jsonText = cliWrapper.result.trim()
+      const fence = jsonText.match(/```(?:json)?\n([\s\S]+?)\n```/)
+      if (fence) jsonText = fence[1].trim()
+      try {
+        resolve(JSON.parse(jsonText) as Partial<AdrDraft>)
+      } catch (e) {
+        reject(new Error(`Cannot parse draft JSON: ${jsonText.slice(0, 300)}`))
+      }
+    })
+  })
+}
+
+// ─── Anthropic SDK invocation ───────────────────────────────────────────────
+
+async function callViaSdk(args: {
+  client: Anthropic
+  systemPrompt: string
+  userPrompt: string
+  model: string
+}): Promise<Partial<AdrDraft>> {
+  const response = await args.client.messages.create({
+    model: args.model,
+    max_tokens: 1024,
+    system: args.systemPrompt,
+    tools: [DRAFT_TOOL],
+    tool_choice: { type: 'tool', name: 'submit_draft' },
+    messages: [{ role: 'user', content: args.userPrompt }],
+  })
+  const toolUse = response.content.find(c => c.type === 'tool_use')
+  if (!toolUse || toolUse.type !== 'tool_use') {
+    throw new Error('No tool_use in response')
+  }
+  return toolUse.input as Partial<AdrDraft>
+}
+
+// ─── Orchestrateur ──────────────────────────────────────────────────────────
+
 export async function bootstrapAdrs(opts: BootstrapOptions): Promise<BootstrapResult> {
   const { config } = opts
-  const apiKey = opts.apiKey ?? process.env.ANTHROPIC_API_KEY
-  if (!apiKey) {
-    throw new Error('ANTHROPIC_API_KEY absent. Set la variable d\'env ou passe --api-key.')
-  }
-
   const candidates = (opts.candidates ?? []).slice(0, opts.maxCandidates ?? 10)
   if (candidates.length === 0) {
     return { drafts: [], skipped: [], errors: [] }
   }
 
-  const client = new Anthropic({ apiKey })
-  const model = opts.model ?? 'claude-sonnet-4-5'
+  // Choix du mode
+  const requestedMode = opts.agentMode ?? 'auto'
+  const cliAvailable = await isClaudeCliAvailable()
+  const apiKey = opts.apiKey ?? process.env.ANTHROPIC_API_KEY
+  let mode: 'cli' | 'sdk'
+  if (requestedMode === 'cli') {
+    if (!cliAvailable) throw new Error('Claude CLI demandé mais introuvable dans PATH')
+    mode = 'cli'
+  } else if (requestedMode === 'sdk') {
+    if (!apiKey) throw new Error('Mode SDK demandé mais ANTHROPIC_API_KEY absent')
+    mode = 'sdk'
+  } else {
+    if (cliAvailable) mode = 'cli'
+    else if (apiKey) mode = 'sdk'
+    else throw new Error('Ni Claude CLI ni ANTHROPIC_API_KEY disponibles. Install Claude Code (https://claude.com/claude-code) ou set ANTHROPIC_API_KEY.')
+  }
+
+  const sdkClient = mode === 'sdk' ? new Anthropic({ apiKey: apiKey! }) : null
+  const model = opts.model ?? (mode === 'cli' ? 'sonnet' : 'claude-sonnet-4-5')
 
   const drafts: AdrDraft[] = []
   const skipped: BootstrapResult['skipped'] = []
@@ -233,35 +361,32 @@ export async function bootstrapAdrs(opts: BootstrapOptions): Promise<BootstrapRe
         continue
       }
 
-      const prompt =
+      const userPrompt =
         candidate.kind === 'singleton'
           ? SINGLETON_PROMPT_TEMPLATE({
               filePath: candidate.relativePath,
               fileContent,
               evidence: candidate.evidence,
-            })
+            }) + (mode === 'cli' ? CLI_SCHEMA_HINT : '')
           : null
 
-      if (!prompt) {
+      if (!userPrompt) {
         skipped.push({ candidate, reason: `Pattern ${candidate.kind} not yet supported` })
         continue
       }
 
-      const response = await client.messages.create({
-        model,
-        max_tokens: 1024,
-        tools: [DRAFT_TOOL],
-        tool_choice: { type: 'tool', name: 'submit_draft' },
-        messages: [{ role: 'user', content: prompt }],
-      })
-
-      // Extraction du tool_use
-      const toolUse = response.content.find(c => c.type === 'tool_use')
-      if (!toolUse || toolUse.type !== 'tool_use') {
-        errors.push({ candidate, error: 'No tool_use in response' })
-        continue
-      }
-      const draftPayload = toolUse.input as Partial<AdrDraft>
+      const draftPayload = mode === 'cli'
+        ? await callViaClaudeCli({
+            systemPrompt: CLI_SYSTEM_PROMPT,
+            userPrompt,
+            model,
+          })
+        : await callViaSdk({
+            client: sdkClient!,
+            systemPrompt: 'Tu es un assistant d\'extraction d\'ADR.',
+            userPrompt,
+            model,
+          })
 
       const draft: AdrDraft = {
         verdict: draftPayload.verdict ?? 'skip',
