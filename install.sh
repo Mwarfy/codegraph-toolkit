@@ -17,7 +17,7 @@
 set -e
 
 TOOLKIT_DIR="${TOOLKIT_DIR:-$HOME/Documents/codegraph-toolkit}"
-TOOLKIT_REPO="${TOOLKIT_REPO:-https://github.com/REPLACE_ME/codegraph-toolkit.git}"
+TOOLKIT_REPO="${TOOLKIT_REPO:-https://github.com/Mwarfy/codegraph-toolkit.git}"
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
