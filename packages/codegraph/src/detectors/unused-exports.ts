@@ -49,7 +49,7 @@ export function createSharedProject(
   tsConfigPath?: string,
 ): Project {
   const project = new Project({
-    tsConfigFilePath: tsConfigPath,
+    ...(tsConfigPath ? { tsConfigFilePath: tsConfigPath } : {}),
     skipAddingFilesFromTsConfig: true,
     compilerOptions: {
       allowJs: true,
@@ -395,24 +395,13 @@ export async function analyzeExports(
 
 async function discoverTestFiles(rootDir: string): Promise<string[]> {
   const testFiles: string[] = []
-  // Fix M-007 : les tests unitaires vivent dans `<pkg>/tests/` (tsx + vitest
-  // config), pas seulement dans `<pkg>/src/`. Sans scan de ces répertoires,
-  // tous les exports consommés uniquement par ces tests étaient faussement
+  // Walk depuis rootDir avec les mêmes excludes que le walker. Sans scan
+  // des tests, les exports consommés uniquement par eux seraient faussement
   // classés safe-to-remove.
-  const testDirs = [
-    'sentinel-core/src',
-    'sentinel-core/tests',
-    'sentinel-web/src',
-    'sentinel-web/tests',
-  ]
-
-  for (const dir of testDirs) {
-    const fullDir = path.join(rootDir, dir)
-    try {
-      await walkForTests(fullDir, rootDir, testFiles)
-    } catch {
-      // Directory might not exist
-    }
+  try {
+    await walkForTests(rootDir, rootDir, testFiles)
+  } catch {
+    // rootDir absent — silent
   }
   return testFiles
 }

@@ -83,6 +83,7 @@ export async function analyze(config: CodeGraphConfig): Promise<AnalyzeResult> {
     rootDir: config.rootDir,
     files,
     readFile,
+    tsconfigPath: config.tsconfigPath,
   }
 
   // ─── 3. Run detectors ──────────────────────────────────────────────
@@ -137,13 +138,20 @@ export async function analyze(config: CodeGraphConfig): Promise<AnalyzeResult> {
 
   const tExports = performance.now()
 
-  // Find tsconfig for alias resolution
-  const tsConfigCandidates = [
-    path.join(config.rootDir, 'sentinel-web', 'tsconfig.json'),
-    path.join(config.rootDir, 'sentinel-core', 'tsconfig.json'),
-    path.join(config.rootDir, 'tsconfig.json'),
-  ]
+  // Find tsconfig for alias resolution. Priorité :
+  //   1. config.tsconfigPath (depuis CodeGraphConfig — projet-spécifique)
+  //   2. Fallback : tsconfig.json à la racine
   let tsConfigPath: string | undefined
+  const tsConfigCandidates: string[] = []
+  if (config.tsconfigPath) {
+    tsConfigCandidates.push(
+      path.isAbsolute(config.tsconfigPath)
+        ? config.tsconfigPath
+        : path.join(config.rootDir, config.tsconfigPath),
+    )
+  }
+  tsConfigCandidates.push(path.join(config.rootDir, 'tsconfig.json'))
+
   for (const candidate of tsConfigCandidates) {
     try {
       await fs.access(candidate)

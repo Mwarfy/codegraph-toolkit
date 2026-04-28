@@ -3,17 +3,18 @@
  *
  * Discovers connections between backend route handlers and frontend API calls.
  *
- * Backend patterns (Sentinel-specific — raw http, not Express):
+ * Backend patterns (raw http via path matching) :
  *   path.match(/^\/api\/projects\/([^/]+)$/)
  *   if (path === '/api/projects' && method === 'GET')
  *
- * Frontend patterns:
+ * Frontend patterns :
  *   apiFetch('/api/resources')
  *   apiFetch(`/api/projects/${id}`)
  *   fetch(`${API_BASE}/api/...`)
  *
- * Also detects internal route handler wiring:
- *   handleProjectRoutes, handleBlockRoutes, etc. in server.ts
+ * Note : les patterns frontend ciblent `apiFetch()` (convention) et
+ * `fetch(\`${API_BASE}/...\`)`. Si ton projet utilise des patterns différents
+ * (axios, native fetch direct), ce détecteur ne matchera rien — fail silencieux.
  */
 
 import type { Detector, DetectorContext, DetectedLink } from '../core/types.js'
@@ -109,8 +110,12 @@ export class HttpRouteDetector implements Detector {
     const directFetchPattern = /fetch\(\s*`\$\{API_BASE\}(\/api[^`]*)`/g
 
     for (const file of ctx.files) {
-      // Only scan frontend files
-      if (!file.includes('sentinel-web/') && !file.includes('app/') && !file.includes('hooks/') && !file.includes('components/')) continue
+      // Heuristique frontend : .tsx OU dans un dir typiquement frontend
+      // (app/, hooks/, components/, frontend/). Évite de scanner inutilement
+      // tous les fichiers backend.
+      const isFrontendDir = /(?:^|\/)(?:app|hooks|components|frontend|src\/app|src\/components|src\/hooks)\//.test(file)
+      const isTsx = file.endsWith('.tsx')
+      if (!isTsx && !isFrontendDir) continue
       if (!file.endsWith('.ts') && !file.endsWith('.tsx')) continue
 
       const content = await ctx.readFile(file)

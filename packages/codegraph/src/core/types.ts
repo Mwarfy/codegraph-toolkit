@@ -920,6 +920,13 @@ export interface DetectorContext {
 
   /** Get the ts-morph SourceFile for a path (only for TS detectors) */
   getSourceFile?(relativePath: string): unknown
+
+  /**
+   * Tsconfig path from the codegraph config (relative to rootDir or absolute).
+   * Detectors that need ts-morph alias resolution should use this in priority
+   * over hardcoded fallbacks. Optional — fallback aux conventions standards.
+   */
+  tsconfigPath?: string
 }
 
 export interface DetectedLink {
@@ -949,6 +956,12 @@ export interface CodeGraphConfig {
 
   /** Which detectors to run */
   detectors: string[]
+
+  /**
+   * Path vers le tsconfig à utiliser pour résoudre les path aliases TS.
+   * Relatif à rootDir ou absolu. Optional — fallback à `<rootDir>/tsconfig.json`.
+   */
+  tsconfigPath?: string
 
   /** Where to store snapshots */
   snapshotDir: string

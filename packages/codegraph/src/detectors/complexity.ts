@@ -209,7 +209,7 @@ export async function analyzeComplexity(
     project = sharedProject
   } else {
     project = new Project({
-      tsConfigFilePath: tsConfigPath,
+      ...(tsConfigPath ? { tsConfigFilePath: tsConfigPath } : {}),
       skipAddingFilesFromTsConfig: true,
       compilerOptions: {
         allowJs: true,

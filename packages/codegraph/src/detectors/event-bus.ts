@@ -1,16 +1,18 @@
 /**
  * Event Bus Detector
  *
- * Discovers event-based connections in the Sentinel codebase.
+ * Discovers event-based connections via emit/listen patterns.
  *
- * Patterns detected:
- * 1. Block declarations: `get emits() { return ['event.name'] }`
- *                        `get listensTo() { return ['event.name', '*.found'] }`
- * 2. Direct emit calls: `emit({ type: 'event.name', ... })`
- *                        `emitEvent({ type: 'event.name', ... })`
- * 3. Direct listen calls: `listen('event.name', handler)`
+ * Patterns détectés (généralistes) :
+ * 1. Direct emit calls : `emit({ type: 'event.name', ... })`
+ *                         `emitEvent({ type: 'event.name', ... })`
+ * 2. Direct listen calls : `listen('event.name', handler)`
  *
- * Glob patterns like '*.found' are expanded against all known emitted events.
+ * Patterns optionnels (convention class-based — fail silencieux ailleurs) :
+ * 3. `get emits() { return ['event.name'] }`
+ *    `get listensTo() { return ['event.name', '*.found'] }`
+ *
+ * Glob patterns comme '*.found' sont expandés contre les événements connus.
  */
 
 import type { Detector, DetectorContext, DetectedLink } from '../core/types.js'

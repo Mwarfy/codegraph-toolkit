@@ -10,6 +10,7 @@
 
 import { Project, type SourceFile } from 'ts-morph'
 import * as path from 'node:path'
+import * as fs from 'node:fs/promises'
 import type { Detector, DetectorContext, DetectedLink } from '../core/types.js'
 
 export class TsImportDetector implements Detector {
@@ -22,17 +23,23 @@ export class TsImportDetector implements Detector {
   async detect(ctx: DetectorContext): Promise<DetectedLink[]> {
     const links: DetectedLink[] = []
 
-    // Find all tsconfig files to properly resolve path aliases
-    const tsConfigCandidates = [
-      path.join(ctx.rootDir, 'sentinel-web', 'tsconfig.json'),
-      path.join(ctx.rootDir, 'sentinel-core', 'tsconfig.json'),
-      path.join(ctx.rootDir, 'tsconfig.json'),
-    ]
-
+    // Trouve le tsconfig pour résoudre les path aliases. Priorité :
+    //   1. ctx.tsconfigPath (depuis CodeGraphConfig — projet-spécifique)
+    //   2. Fallback : tsconfig.json à la racine
     let tsConfigPath: string | undefined
-    for (const candidate of tsConfigCandidates) {
+    const candidates: string[] = []
+    if (ctx.tsconfigPath) {
+      candidates.push(
+        path.isAbsolute(ctx.tsconfigPath)
+          ? ctx.tsconfigPath
+          : path.join(ctx.rootDir, ctx.tsconfigPath),
+      )
+    }
+    candidates.push(path.join(ctx.rootDir, 'tsconfig.json'))
+
+    for (const candidate of candidates) {
       try {
-        await ctx.readFile(path.relative(ctx.rootDir, candidate))
+        await fs.access(candidate)
         tsConfigPath = candidate
         break
       } catch {
@@ -40,9 +47,11 @@ export class TsImportDetector implements Detector {
       }
     }
 
-    // Initialize ts-morph project — prefer loading from tsconfig for alias resolution
+    // Initialize ts-morph project — prefer loading from tsconfig for alias
+    // resolution. Sans tsconfig, on tourne sans alias (mais le détecteur
+    // continue à fonctionner pour les imports relatifs).
     this.project = new Project({
-      tsConfigFilePath: tsConfigPath,
+      ...(tsConfigPath ? { tsConfigFilePath: tsConfigPath } : {}),
       skipAddingFilesFromTsConfig: true,
       compilerOptions: {
         allowJs: true,
@@ -255,7 +264,7 @@ export class TsImportDetector implements Detector {
     const aliasPath = specifier.replace(/^[@~]\//, '')
 
     // Determine which sub-project the importing file is in
-    // e.g., sentinel-web/src/app/page.tsx → sentinel-web/src/
+    // e.g., backend/src/foo.ts → backend/src/
     const parts = fromFilePath.split('/')
     let srcIndex = parts.indexOf('src')
     if (srcIndex < 0) return null

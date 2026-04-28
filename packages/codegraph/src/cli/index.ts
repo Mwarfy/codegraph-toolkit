@@ -17,7 +17,7 @@ import * as path from 'node:path'
 import { analyze } from '../core/analyzer.js'
 import { CodeGraph } from '../core/graph.js'
 import type { CodeGraphConfig, GraphSnapshot } from '../core/types.js'
-import { listDetectorNames } from '../detectors/index.js'
+import { listDetectorNames, defaultDetectorNames } from '../detectors/index.js'
 import { buildSynopsis, renderLevel1, renderLevel2, renderLevel3 } from '../synopsis/builder.js'
 import { collectAdrMarkers } from '../synopsis/adr-markers.js'
 import { buildMap } from '../map/builder.js'
@@ -1366,6 +1366,28 @@ program
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 async function loadConfig(opts: { config?: string; root?: string; detectors?: string }): Promise<CodeGraphConfig> {
+  // Apply sensible defaults to a partial config (detectors, snapshotDir,
+  // maxSnapshots, include/exclude/entryPoints if missing). Mutates + returns.
+  const applyDefaults = (cfg: Partial<CodeGraphConfig> & { rootDir: string }): CodeGraphConfig => {
+    return {
+      rootDir: cfg.rootDir,
+      include: cfg.include ?? ['**/*.ts', '**/*.tsx'],
+      exclude: cfg.exclude ?? [
+        '**/node_modules/**', '**/dist/**', '**/build/**',
+        '**/*.test.ts', '**/*.spec.ts', '**/test/**',
+        '**/*.d.ts',
+      ],
+      entryPoints: cfg.entryPoints ?? ['**/server.ts', '**/main.ts', '**/index.ts'],
+      detectors: cfg.detectors ?? defaultDetectorNames(),
+      snapshotDir: cfg.snapshotDir ?? path.join(cfg.rootDir, '.codegraph'),
+      maxSnapshots: cfg.maxSnapshots ?? 50,
+      tsconfigPath: cfg.tsconfigPath,
+      detectorOptions: cfg.detectorOptions,
+      rules: cfg.rules,
+      concerns: cfg.concerns,
+    }
+  }
+
   // Try to load config file
   if (opts.config) {
     const configPath = path.resolve(opts.config)
@@ -1377,10 +1399,6 @@ async function loadConfig(opts: { config?: string; root?: string; detectors?: st
       }
       // --root override : permet au caller d'utiliser la même config (include,
       // entryPoints, detectors) mais de pointer vers un autre checkout du code.
-      // Cas d'usage principal : codegraph vit dans /app/codegraph mais analyse
-      // le code à /srv/sentinel-src (mirror agent). Le snapshotDir suit le
-      // rootDir effectif — sinon le snapshot serait écrit à côté de la config,
-      // pas du code analysé.
       if (opts.root) {
         raw.rootDir = path.resolve(opts.root)
         if (!raw.snapshotDir || !path.isAbsolute(raw.snapshotDir)) {
@@ -1389,10 +1407,10 @@ async function loadConfig(opts: { config?: string; root?: string; detectors?: st
       } else if (raw.snapshotDir && !path.isAbsolute(raw.snapshotDir)) {
         raw.snapshotDir = path.resolve(path.dirname(configPath), raw.snapshotDir)
       }
-      return raw
+      return applyDefaults(raw)
     }
     const mod = await import(configPath)
-    return mod.default || mod
+    return applyDefaults(mod.default || mod)
   }
 
   // Try default config locations
@@ -1410,11 +1428,13 @@ async function loadConfig(opts: { config?: string; root?: string; detectors?: st
         const raw = JSON.parse(await fs.readFile(p, 'utf-8'))
         if (raw.rootDir && !path.isAbsolute(raw.rootDir)) {
           raw.rootDir = path.resolve(path.dirname(p), raw.rootDir)
+        } else if (!raw.rootDir) {
+          raw.rootDir = root
         }
-        return raw
+        return applyDefaults(raw)
       }
       const mod = await import(p)
-      return mod.default || mod
+      return applyDefaults({ rootDir: root, ...(mod.default || mod) })
     } catch {
       // Try next
     }

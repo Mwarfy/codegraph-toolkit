@@ -1,18 +1,21 @@
 /**
- * Block Loader Detector
+ * Block Loader Detector — PROJECT-SPECIFIC (Sentinel)
  *
- * Discovers the dynamic loading relationship between the block runtime
- * and concrete block implementations.
- *
- * Pattern in Sentinel:
+ * Détecte le pattern de dynamic loading utilisé par Sentinel :
  *   const BLOCK_CONSTRUCTORS: Record<string, ...> = {
  *     'web-scraper': WebScraperBlock,
  *     'browser': BrowserBlock,
  *     ...
  *   }
  *
- * This creates edges from block-runtime.ts → each block file,
- * typed as 'dynamic-load' since the lookup is by string key at runtime.
+ * Crée des edges `dynamic-load` depuis le fichier de registry vers chaque
+ * implémentation. La résolution se fait par clé string au runtime.
+ *
+ * ⚠ NON inclus dans le default detector set (cf. detectors/index.ts).
+ * Pour l'activer, l'ajouter explicitement dans `codegraph.config.json` :
+ *   "detectors": ["ts-imports", "block-loader", ...]
+ *
+ * Hors Sentinel, ce détecteur ne matchera probablement rien — fail silencieux.
  */
 
 import type { Detector, DetectorContext, DetectedLink } from '../core/types.js'

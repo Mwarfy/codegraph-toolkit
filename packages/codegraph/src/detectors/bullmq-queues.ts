@@ -1,15 +1,14 @@
 /**
  * BullMQ Queue Detector
  *
- * Discovers connections between queue producers and workers.
+ * Discovers connections between queue producers and workers (BullMQ lib).
  *
- * Patterns:
+ * Patterns :
  *   new Queue('queue-name', ...)
  *   new Worker('queue-name', handler, ...)
  *   queue.add('job-name', data, ...)
  *
- * In Sentinel, the main queue is 'sentinel-scheduler' with jobs
- * dispatched to blocks via the scheduler → block-runtime pipeline.
+ * Détecteur généraliste — utilisable par tout projet qui consomme BullMQ.
  */
 
 import type { Detector, DetectorContext, DetectedLink } from '../core/types.js'
