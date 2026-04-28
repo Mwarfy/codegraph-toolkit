@@ -1,52 +1,130 @@
 # codegraph-toolkit
 
-Outils partagés pour cartographier et gouverner les projets TypeScript.
+> Garde la mental map de ton projet TypeScript synchrone avec le code, et donne à ton agent IA un brief précis avant chaque session.
+
+```bash
+# Install (à faire une fois)
+curl -fsSL https://raw.githubusercontent.com/REPLACE_ME/codegraph-toolkit/main/install.sh | bash
+
+# Dans n'importe quel projet TS
+cd ton-projet
+npm link @liby/codegraph @liby/adr-toolkit
+npx adr-toolkit init --with-claude-settings
+```
+
+3 commandes. Tu écris ton premier ADR, tu poses un marqueur `// ADR-001` dans le code, et le toolkit régénère automatiquement la doc à chaque commit.
 
 ## Pourquoi
 
-Sans infra partagée, chaque projet recommence de zéro la cartographie + la gouvernance docs↔code. L'agent dérive, le projet est abandonné après quelques semaines. Avec : la mental map est rendue déterministe et les invariants tiennent — c'est une infra de **concentration** plus qu'une infra de code.
+Sans infra partagée, chaque projet recommence de zéro la cartographie + la gouvernance docs↔code. L'agent IA dérive, le projet est abandonné après quelques semaines. Avec : la mental map est rendue déterministe et les invariants tiennent — c'est une infra de **concentration** plus qu'une infra de code.
 
-## Packages
+## Ce que ça fait
 
-- **[@liby/codegraph](packages/codegraph)** — analyseur statique : graph dépendances, synopsis C4, dead-exports, cycles, truth-points, taint, etc. Utilisable seul.
-- **[@liby/adr-toolkit](packages/adr-toolkit)** — gouvernance docs↔code : marqueurs `// ADR-NNN` → section `## Anchored in` auto-régénérée, ts-morph asserts (claims sémantiques exécutables), boot brief generator. Dépend de `@liby/codegraph`.
+- **Cartographie automatique** — `codegraph analyze` produit un snapshot des imports, événements, hubs, dead exports, cycles. Synopsis C4 (Level 1/2/3) markdown auto-généré, **zéro LLM**, déterministe.
+- **ADRs gouvernés par le code** — tu poses `// ADR-013` au top d'un fichier, la section `## Anchored in` de l'ADR se régénère automatiquement. Renames absorbés gratuitement (le marqueur suit le code).
+- **Asserts ts-morph** — les claims sémantiques d'un ADR (`fonction X existe`, `Y est de type Set<string>`) deviennent exécutables. Renomme un symbole, le check pète, l'ADR doit être mise à jour.
+- **Boot brief** — `CLAUDE-CONTEXT.md` régénéré à chaque commit. Liste les ADRs actifs, les fichiers gouvernés, les hubs critiques, les invariants. C'est ce que ton agent IA lit en début de session.
+- **Hook Claude Code** — `adr-hook.sh` intercepte chaque Edit/Write et injecte les ADRs liés au fichier édité directement dans le contexte du modèle (avant la modification).
 
-## Quickstart (nouveau projet)
+## Exemple concret d'ADR
 
-```bash
-# 1. Cloner le toolkit (à côté de tes projets)
-cd ~/Documents
-git clone <url> codegraph-toolkit
-cd codegraph-toolkit && nvm use && npm install && npm run build
+```md
+---
+asserts:
+  - symbol: "kernel/scheduler#inFlightBlocks"
+    type: "Set<string>"
+---
 
-# 2. Publier les packages localement
-npm link --workspaces
+# ADR-018: Scheduler anti-double-execution
 
-# 3. Dans ton projet TS
-cd ~/Documents/mon-projet
-npm link @liby/codegraph @liby/adr-toolkit
+## Rule
+> Un même blockId ne peut JAMAIS tick deux fois en parallèle. Le verrou
+> `inFlightBlocks: Set<string>` protège `jobHandler`.
 
-# 4. Scaffold ADR governance
-npx adr-toolkit init
+## Why
+Race condition vue le 2026-03-12 : deux ticks BullMQ concurrents pour le
+même block ont écrit deux jobs à la queue → double exécution.
 
-# 5. Activer les hooks
-npx adr-toolkit install-hooks
+## How to apply
+- Avant chaque tick : `if (inFlightBlocks.has(id)) return`
+- Après le tick : `inFlightBlocks.delete(id)` dans `finally`
 
-# 6. Premier ADR
-cp docs/adr/_TEMPLATE.md docs/adr/001-mon-invariant.md
-# édite, puis pose `// ADR-001` au top du fichier ancré
-
-# 7. Régén + brief
-npx adr-toolkit regen
-npx codegraph analyze
-npx adr-toolkit brief    # → CLAUDE-CONTEXT.md
+## Anchored in
+<!-- AUTO-GÉNÉRÉ — ne pas éditer -->
+- `kernel/scheduler.ts`
 ```
 
-Voir [examples/minimal](examples/minimal) pour un projet vierge complet.
+Tu poses `// ADR-018` au top de `kernel/scheduler.ts`. À chaque commit, le toolkit vérifie que `inFlightBlocks` est toujours un `Set<string>`. Si quelqu'un le renomme en `_inFlight`, le check pète.
 
-## Configuration `.codegraph-toolkit.json`
+## Quickstart détaillé
 
-Le toolkit lit ce fichier à la racine du projet consommateur. Tous les champs ont des défauts raisonnables.
+### 1. Installer le toolkit (une fois par machine)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/REPLACE_ME/codegraph-toolkit/main/install.sh | bash
+```
+
+Ça clone le repo dans `~/Documents/codegraph-toolkit`, build les 2 packages, et expose les binaires `codegraph` + `adr-toolkit` via `npm link`.
+
+Alternative si tu préfères contrôler manuellement :
+```bash
+git clone https://github.com/REPLACE_ME/codegraph-toolkit.git ~/Documents/codegraph-toolkit
+cd ~/Documents/codegraph-toolkit
+nvm use && npm install && npm run build && npm link --workspaces
+```
+
+### 2. Activer dans ton projet
+
+```bash
+cd ton-projet
+npm link @liby/codegraph @liby/adr-toolkit
+npx adr-toolkit init --with-claude-settings
+```
+
+`init` détecte ton layout (simple `src/`, monorepo `backend+frontend`, `apps/*`, `packages/*`) et scaffolde tout :
+- `.codegraph-toolkit.json` — config du toolkit
+- `codegraph.config.json` — config du codegraph (include/exclude/detectors)
+- `docs/adr/_TEMPLATE.md` + `INDEX.md` — modèle d'ADR
+- `scripts/git-hooks/{pre,post}-commit` + `adr-hook.sh` — hooks
+- `git config core.hooksPath` — active les hooks
+- `.claude/settings.json` — wire le hook Claude Code (avec `--with-claude-settings`)
+
+### 3. Premier ADR
+
+```bash
+cp docs/adr/_TEMPLATE.md docs/adr/001-mon-invariant.md
+# édite : Rule, Why, asserts si pertinent
+```
+
+Pose un marqueur au top du fichier ancré :
+```ts
+// ADR-001: rôle court (optionnel)
+export class FooService { ... }
+```
+
+### 4. Régénération + brief
+
+```bash
+npx adr-toolkit regen     # met à jour ## Anchored in dans l'ADR
+npx codegraph analyze     # snapshot + synopsis
+npx adr-toolkit brief     # CLAUDE-CONTEXT.md
+git commit -am "feat: ADR-001"
+```
+
+Le pre-commit hook prend le relais à chaque commit suivant : régen + brief automatiques, drift bloqué.
+
+## Layouts supportés
+
+| Layout | Détection | Config générée |
+|---|---|---|
+| Simple | `src/` à la racine | `srcDirs: ["src"]`, tsconfig: `tsconfig.json` |
+| Fullstack monorepo | `backend/src/` + `frontend/` | `srcDirs: ["backend/src", "shared/src", "frontend"]`, tsconfig: `backend/tsconfig.json` |
+| Workspaces monorepo | `apps/*` ou `packages/*` | `srcDirs: ["apps", "packages"]` |
+| Flat | Rien d'évident | Fallback minimal — ajuste `srcDirs` à la main |
+
+## Configuration
+
+Le toolkit lit `.codegraph-toolkit.json` à la racine :
 
 ```json
 {
@@ -56,119 +134,76 @@ Le toolkit lit ce fichier à la racine du projet consommateur. Tous les champs o
   "tsconfigPath": "tsconfig.json",
   "briefPath": "CLAUDE-CONTEXT.md",
   "anchorMarkerExtensions": ["ts", "tsx", "sh", "sql"],
-  "skipDirs": ["node_modules", "dist", ".next", ".codegraph", "coverage", ".git"],
   "hubThreshold": 15,
   "invariantTestPaths": ["tests/unit/*-invariant.test.ts"],
   "briefCustomSections": [
     {
       "placement": "after-anchored-files",
-      "markdown": "> Note projet-spécifique injectée dans le brief..."
+      "markdown": "Note projet-spécifique injectée dans le brief..."
     }
   ]
 }
 ```
 
-`briefCustomSections` permet d'injecter du markdown projet-spécifique dans le brief sans forker le toolkit. Placements : `after-anchored-files`, `after-invariant-tests`, `after-recent-activity`.
-
-## API
-
-```ts
-import {
-  loadConfig,
-  regenerateAnchors,
-  loadADRs, matches, findAdrsForFile,
-  checkAsserts,
-  generateBrief,
-  initProject,
-} from '@liby/adr-toolkit'
-
-import {
-  analyze,
-  buildSynopsis,
-  collectAdrMarkers,
-} from '@liby/codegraph'
-```
+`briefCustomSections` permet d'injecter du markdown projet-spécifique dans le brief (ex: liens vers ta MAP.md, notes sur les hooks Claude Code) sans forker le toolkit.
 
 ## CLI
 
 ```
-npx adr-toolkit init                Scaffold un nouveau projet
-npx adr-toolkit regen [--check]     Régen ## Anchored in
-npx adr-toolkit linker <file>       ADRs qui couvrent ce fichier
-npx adr-toolkit check-asserts       ts-morph asserts (frontmatter YAML)
-npx adr-toolkit brief               Régénère le boot brief
-npx adr-toolkit install-hooks       Set core.hooksPath + chmod +x
+adr-toolkit init [--with-claude-settings]
+adr-toolkit regen [--check]
+adr-toolkit linker <file>
+adr-toolkit check-asserts [--json]
+adr-toolkit brief
+adr-toolkit install-hooks
 
-npx codegraph analyze               Snapshot + synopsis L1/L2/L3
-npx codegraph synopsis              Génère synopsis depuis snapshot existant
-npx codegraph orphans               Liste les nœuds orphelins
-npx codegraph exports               Dead exports candidates
-npx codegraph diff <prev> <new>     Compare 2 snapshots
+codegraph analyze [-c <config>] [--map] [--no-save]
+codegraph synopsis [snapshot] [--level 1|2|3]
+codegraph orphans [snapshot]
+codegraph exports [snapshot]
+codegraph diff <prev> <new>
 ```
 
-## Hooks (Claude Code)
+## API programmatique
 
-`adr-hook.sh` est un PreToolUse hook Claude Code qui intercepte chaque Edit/Write/MultiEdit, identifie les ADRs liés au fichier édité, et les injecte en `additionalContext` (vu par le modèle AVANT la modification).
+```ts
+import {
+  loadConfig, regenerateAnchors,
+  loadADRs, matches, findAdrsForFile,
+  checkAsserts, generateBrief, initProject,
+} from '@liby/adr-toolkit'
 
-Format JSON output protocol — c'est un **piège fréquent** : un hook qui imprime sur stdout texte brut est invisible côté modèle. Voir `packages/adr-toolkit/src/hooks/adr-hook.sh`.
+import { analyze, buildSynopsis, collectAdrMarkers } from '@liby/codegraph'
+```
 
-À ajouter à ton `.claude/settings.json` :
+## Hook Claude Code
 
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [{ "type": "command", "command": "scripts/git-hooks/adr-hook.sh" }]
-      }
-    ]
-  }
-}
+`adr-hook.sh` intercepte chaque Edit/Write/MultiEdit et injecte la liste des ADRs liés au fichier en `additionalContext`. L'agent IA voit le bloc `📋 ADR check` AVANT la modification.
+
+`init --with-claude-settings` wire ça automatiquement. Vérification :
+```bash
+cat .claude/settings.json
 ```
 
 ## Pièges connus
 
-### Node version
-
-Vitest 4 + rolldown exigent Node ≥ 22. Les hooks pre-commit doivent **sourcer nvm** explicitement, sinon ils tournent avec le node de login shell (souvent v20) et plantent silencieusement (`SyntaxError: ... styleText`). Les hooks templates du toolkit incluent ce sourcing.
-
-### `workspace:*`
-
-npm 10+ ne supporte pas le protocole `workspace:*` de pnpm. Utiliser `"*"` à la place pour les deps inter-workspaces — npm 7+ résout en local automatiquement quand le package est déclaré dans `workspaces`.
-
-### Marqueurs ADR — convention de format
-
-Doivent être en **début de commentaire**, pas en prose :
-- ✓ `// ADR-013`
-- ✓ `// ADR-013, ADR-018`
-- ✓ `// ADR-013: rôle court`
-- ✓ `# ADR-013` (bash/sql/yaml)
-- ✗ `// cf. ADR-013 pour le contexte` (prose, skip)
-
-### Suffix matching strict
-
-Anchor sans `/` (ex: `index.ts`) ne fait PAS de suffix match — sinon il matcherait 50 fichiers `index.ts` du repo. Match identique uniquement.
-
-### `git config core.hooksPath` est local
-
-Pas versionné. Un nouveau clone perd les hooks silencieusement. Le projet consommateur doit appeler `adr-toolkit install-hooks` (ou équivalent dans son script `setup`).
-
-## Consommateurs
-
-- **[Sentinel](../Sentinel)** — projet de référence (extrait depuis ce toolkit, 18 ADRs, 47 marqueurs, 11 ts-morph asserts).
-- **[Morovar](../morovar)** — MMORPG TS (consommateur cible Phase 6).
-
-Ajouter un consommateur : la convention est de cloner ce toolkit voisin du projet (`~/Documents/<projet>` + `~/Documents/codegraph-toolkit`), `npm link --workspaces` ici puis `npm link @liby/codegraph @liby/adr-toolkit` dans le projet.
-
-## Setup en local
-
-```bash
-nvm use && npm install && npm run build && npm test
-```
-
-39 tests vitest doivent passer (codegraph: 10, adr-toolkit: 29).
+- **`workspace:*`** : npm ne supporte pas le protocole pnpm. Utiliser `"*"` pour les deps inter-workspaces.
+- **Node ≥22** : nécessaire pour vitest 4. Les hooks doivent sourcer nvm (déjà fait dans les templates).
+- **Marqueurs en prose** : `// cf. ADR-013` ne match pas, le matcher exige `ADR-NNN` en début de commentaire.
+- **Suffix matching strict** : anchor sans `/` (ex: `index.ts`) ne fait PAS de suffix match — sinon il matcherait 50 fichiers.
+- **`git config core.hooksPath`** est local, pas versionné. `init` le set, mais sur un nouveau clone il faut relancer `npx adr-toolkit install-hooks`.
 
 ## Convention zéro LLM
 
-Le synopsis builder (`@liby/codegraph buildSynopsis`) est **pur** : aucun I/O, aucun LLM, aucun random. Même snapshot → output JSON byte-équivalent. C'est le cœur de la mental map déterministe et reproductible. Préserver cette propriété est non-négociable (cf. test `synopsis-determinism`).
+Le synopsis builder (`@liby/codegraph buildSynopsis`) est **pur** : aucun I/O, aucun LLM, aucun random. Même snapshot → output JSON byte-équivalent. C'est le cœur de la mental map déterministe et reproductible. Test `synopsis-determinism` verrouille cette propriété.
+
+## Roadmap
+
+- **Bootstrap agentique** (Phase D, en cours) : `adr-toolkit bootstrap` lance des agents Sonnet ciblés pour rédiger des **drafts** d'ADRs depuis les patterns détectés par codegraph. L'humain valide/édite/rejette. Cadré : l'agent ne décide pas du périmètre (codegraph le fait), l'humain reste le filtre final.
+- **Publication npm registry** — pour passer du `npm link` vers `npm install @liby/...`.
+
+## Consommateurs
+
+- **Sentinel** (référence) — 18 ADRs, 47 marqueurs, 11 ts-morph asserts.
+- **Morovar** (en cours) — MMORPG TS.
+- **<ton projet ?>** — ouvre une issue avec ton retour.
