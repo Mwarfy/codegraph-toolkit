@@ -4,7 +4,7 @@
 
 ```bash
 # Install (à faire une fois)
-curl -fsSL https://raw.githubusercontent.com/Mwarfy/codegraph-toolkit/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Mwarfy/codegraph-toolkit/master/install.sh | bash
 
 # Dans n'importe quel projet TS
 cd ton-projet
@@ -61,7 +61,7 @@ Tu poses `// ADR-018` au top de `kernel/scheduler.ts`. À chaque commit, le tool
 ### 1. Installer le toolkit (une fois par machine)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Mwarfy/codegraph-toolkit/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Mwarfy/codegraph-toolkit/master/install.sh | bash
 ```
 
 Ça clone le repo dans `~/Documents/codegraph-toolkit`, build les 2 packages, et expose les binaires `codegraph` + `adr-toolkit` via `npm link`.

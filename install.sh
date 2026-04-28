@@ -3,7 +3,7 @@
 # codegraph-toolkit — installer one-liner
 # ============================================
 # Usage :
-#   curl -fsSL https://raw.githubusercontent.com/<user>/codegraph-toolkit/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/<user>/codegraph-toolkit/master/install.sh | bash
 #
 # Clone le repo dans ~/Documents/codegraph-toolkit (ou $TOOLKIT_DIR), build
 # les 2 packages, et publie les binaires `codegraph` + `adr-toolkit` via
