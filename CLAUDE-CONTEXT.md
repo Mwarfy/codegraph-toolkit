@@ -91,6 +91,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+e75b92b feat(codegraph): factsOnly mode + facts --regen flag (M8)
 7ab3214 feat(codegraph): oauth-scope-literals extractor + OauthScopeLiteral facts (M7 prep)
 18f64c6 feat(codegraph,datalog): wrappedIn capture + relax inline fact constraint (M4 prep)
 216b48f fix(datalog,codegraph): multi-file ref-check + auto-regen facts in analyze (M3 prep)
@@ -102,7 +103,6 @@ a5f8c8e feat(synopsis): tensions actives — convocations courtes + testHint vé
 41f2ebd fix(bootstrap): 4 frictions identifiées sur test « fresh user »
 6d4679c feat(adr-toolkit): bootstrap supporte Claude CLI (auto auth keychain)
 d47beef docs: install.sh URL pointe sur /master/ (le repo GitHub utilise master)
-7ff0154 docs: pointer install.sh + README vers github.com/Mwarfy
 ```
 
 ## Comment contribuer à ce brief
