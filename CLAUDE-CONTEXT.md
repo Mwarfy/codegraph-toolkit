@@ -35,20 +35,20 @@
 
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
-- `packages/codegraph/src/core/types.ts` (in: 47)
+- `packages/codegraph/src/core/types.ts` (in: 48)
 - `packages/adr-toolkit/src/config.ts` (in: 9) · gov by ADR-002
 - `packages/codegraph/src/diff/types.ts` (in: 8)
 - `packages/datalog/src/types.ts` (in: 8)
 - `packages/codegraph/src/check/types.ts` (in: 7)
+- `packages/salsa/dist/index.d.ts` (in: 4)
 - `packages/salsa/src/types.ts` (in: 4)
 - `packages/adr-toolkit/src/bootstrap.ts` (in: 3) · gov by ADR-004
-- `packages/adr-toolkit/src/check-asserts.ts` (in: 3)
 
 ## ⚠ ADR anchor suggestions
 
 Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `// ADR-NNN`** dans le code. Intentionnel ? Sinon poser un marqueur ou créer un ADR :
 
-- **47** `packages/codegraph/src/core/types.ts` _(top-hub)_
+- **48** `packages/codegraph/src/core/types.ts` _(top-hub)_
 
 ## Tensions actives — invitations à explorer
 
@@ -91,6 +91,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+84c8287 fix(salsa): add Database.resetState() — preserve registry across reset
 0a3c571 docs: PHASE-1-SALSA-MIGRATION.md — boot brief pour reprendre Sprints 2-4
 5d90920 feat(salsa): @liby/salsa runtime — Salsa-style incremental computation (Sprint 1)
 e75b92b feat(codegraph): factsOnly mode + facts --regen flag (M8)
@@ -102,7 +103,6 @@ b4b7679 feat(datalog): @liby/datalog package — pure-TS interpreter for ADR inv
 5592ff8 feat(package-deps): downgrade declared-unused to runtime-asset on path refs
 a5f8c8e feat(synopsis): tensions actives — convocations courtes + testHint vérifiable
 669a917 feat: dogfooding — toolkit gouverne sa propre architecture (4 ADRs)
-41f2ebd fix(bootstrap): 4 frictions identifiées sur test « fresh user »
 ```
 
 ## Comment contribuer à ce brief

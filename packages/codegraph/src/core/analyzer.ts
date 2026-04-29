@@ -32,6 +32,13 @@ import { analyzeBarrels } from '../extractors/barrels.js'
 import { analyzeTaint } from '../extractors/taint.js'
 import { analyzeEventEmitSites } from '../extractors/event-emit-sites.js'
 import { analyzeOauthScopeLiterals } from '../extractors/oauth-scope-literals.js'
+import {
+  fileContent as incFileContent,
+  projectFiles as incProjectFiles,
+  setIncrementalContext,
+} from '../incremental/queries.js'
+import { allEnvUsage as incAllEnvUsage } from '../incremental/env-usage.js'
+import { allOauthScopeLiterals as incAllOauthScopeLiterals } from '../incremental/oauth-scope-literals.js'
 import type { TaintRules } from './types.js'
 import { computeModuleMetrics } from '../metrics/module-metrics.js'
 import { computeComponentMetrics } from '../metrics/component-metrics.js'
@@ -61,6 +68,19 @@ export interface AnalyzeOptions {
    * rafraîchir les facts avant les invariants Datalog.
    */
   factsOnly?: boolean
+
+  /**
+   * Mode "incremental" (Sprint 2 — Phase 1 Salsa migration) : route les
+   * détecteurs Salsa-isés (env-usage, oauth-scope-literals à ce stade)
+   * via le runtime @liby/salsa au lieu du chemin batch. Sur deux runs
+   * successifs sans changement, le 2e doit hit le cache (sub-seconde).
+   *
+   * Les détecteurs non-encore-migrés continuent de tourner en batch
+   * (legacy path) — c'est volontaire, Sprint 3 migrera les autres.
+   *
+   * Compatible avec `factsOnly: true`.
+   */
+  incremental?: boolean
 }
 
 export async function analyze(
@@ -68,6 +88,7 @@ export async function analyze(
   options: AnalyzeOptions = {},
 ): Promise<AnalyzeResult> {
   const factsOnly = options.factsOnly ?? false
+  const incremental = options.incremental ?? false
   const t0 = performance.now()
   const timing: AnalyzeResult['timing'] = {
     total: 0,
@@ -184,6 +205,31 @@ export async function analyze(
   // Projet ts-morph partagé entre les deux analyses AST qui suivent. Crucial :
   // charger ts-morph deux fois fait sauter le heap Node sur projets ≥ 200 fichiers.
   const sharedProject = createSharedProject(config.rootDir, files, tsConfigPath)
+
+  // ─── Incremental mode setup ────────────────────────────────────────
+  // Sprint 2 : on alimente le runtime Salsa AVANT de tourner les
+  // détecteurs incrementalisés. Le Project ts-morph est ré-utilisé
+  // (compagnon hors-Salsa). `fileContent` est set pour chaque fichier
+  // à partir du fileCache déjà rempli par le pipeline batch.
+  if (incremental) {
+    setIncrementalContext({ project: sharedProject, rootDir: config.rootDir })
+    // Pré-charger fileContent depuis le fileCache. Sur 2e run sans
+    // modif, `set` avec une valeur Object.is-égale ne bouge pas
+    // changedAt → cache hit downstream.
+    for (const f of files) {
+      let content = fileCache.get(f)
+      if (content === undefined) {
+        try {
+          content = await fs.readFile(path.join(config.rootDir, f), 'utf-8')
+          fileCache.set(f, content)
+        } catch {
+          content = ''
+        }
+      }
+      incFileContent.set(f, content)
+    }
+    incProjectFiles.set('all', files)
+  }
 
   if (!factsOnly) {
     const exportInfos = await analyzeExports(config.rootDir, files, tsConfigPath, sharedProject)
@@ -408,14 +454,22 @@ export async function analyze(
   if (envUsageEnabled) {
     try {
       const euOptions = config.detectorOptions?.['envUsage'] ?? {}
-      envUsage = await analyzeEnvUsage(
-        config.rootDir,
-        files,
-        sharedProject,
-        {
-          secretTokens: euOptions['secretTokens'] as string[] | undefined,
-        },
-      )
+      if (incremental) {
+        // Salsa path : agrégat global, cache hit per-file si fileContent
+        // n'a pas bougé. NB : `secretTokens` custom non supporté ici,
+        // on prend le default — Sentinel n'override jamais ce champ.
+        // Si un consumer en a besoin, refactorer en input Salsa.
+        envUsage = incAllEnvUsage.get('all')
+      } else {
+        envUsage = await analyzeEnvUsage(
+          config.rootDir,
+          files,
+          sharedProject,
+          {
+            secretTokens: euOptions['secretTokens'] as string[] | undefined,
+          },
+        )
+      }
       timing.detectors['env-usage'] = performance.now() - tEnvUsage
     } catch (err) {
       timing.detectors['env-usage'] = performance.now() - tEnvUsage
@@ -520,14 +574,21 @@ export async function analyze(
   if (oauthScopeLiteralsEnabled) {
     try {
       const oslOptions = config.detectorOptions?.['oauthScopeLiterals'] ?? {}
-      oauthScopeLiterals = await analyzeOauthScopeLiterals(
-        config.rootDir,
-        files,
-        sharedProject,
-        {
-          scopePattern: oslOptions['scopePattern'] as RegExp | undefined,
-        },
-      )
+      if (incremental) {
+        // Salsa path : pure string scan, encore plus simple à cacher.
+        // `scopePattern` custom non supporté ici (default suffit pour
+        // Sentinel ADR-014).
+        oauthScopeLiterals = incAllOauthScopeLiterals.get('all')
+      } else {
+        oauthScopeLiterals = await analyzeOauthScopeLiterals(
+          config.rootDir,
+          files,
+          sharedProject,
+          {
+            scopePattern: oslOptions['scopePattern'] as RegExp | undefined,
+          },
+        )
+      }
       timing.detectors['oauth-scope-literals'] = performance.now() - tOauthScope
     } catch (err) {
       timing.detectors['oauth-scope-literals'] = performance.now() - tOauthScope

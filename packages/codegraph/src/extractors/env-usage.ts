@@ -52,51 +52,82 @@ export async function analyzeEnvUsage(
   for (const sf of project.getSourceFiles()) {
     const relPath = relativize(sf.getFilePath(), rootDir)
     if (!relPath || !fileSet.has(relPath)) continue
-
-    // Court-circuit : si `process.env` n'apparaît pas textuellement, skip.
-    const content = sf.getFullText()
-    if (!content.includes('process.env')) continue
-
-    const lineToSymbol = buildLineToSymbol(sf)
-
-    sf.forEachDescendant((node) => {
-      const k = node.getKind()
-
-      // `process.env.NAME` — PropertyAccessExpression
-      if (k === SyntaxKind.PropertyAccessExpression) {
-        const pa = node as any
-        const obj = pa.getExpression?.()
-        if (!obj) return
-        if (!isProcessEnv(obj)) return
-        const name = pa.getName?.()
-        if (!name || !isValidEnvName(name)) return
-
-        recordReader(pa, name, relPath, lineToSymbol, byName)
-        return
-      }
-
-      // `process.env['NAME']` — ElementAccessExpression
-      if (k === SyntaxKind.ElementAccessExpression) {
-        const ea = node as any
-        const obj = ea.getExpression?.()
-        if (!obj) return
-        if (!isProcessEnv(obj)) return
-        const arg = ea.getArgumentExpression?.()
-        if (!arg) return
-        const argKind = arg.getKind?.()
-        if (argKind !== SyntaxKind.StringLiteral && argKind !== SyntaxKind.NoSubstitutionTemplateLiteral) {
-          return  // nom dynamique non capturable
-        }
-        const name = arg.getLiteralText?.()
-        if (!name || !isValidEnvName(name)) return
-
-        recordReader(ea, name, relPath, lineToSymbol, byName)
-        return
-      }
-    })
+    const readers = scanEnvReadersInSourceFile(sf, relPath)
+    for (const r of readers) {
+      if (!byName.has(r.varName)) byName.set(r.varName, [])
+      byName.get(r.varName)!.push(r.reader)
+    }
   }
 
-  // Build output : tri par nom.
+  return aggregateEnvReaders(byName, secretTokens)
+}
+
+/**
+ * Helper réutilisable : scanne UN SourceFile et retourne tous les
+ * `process.env.X` capturés. Réutilisé par la version Salsa
+ * (incremental/env-usage.ts) pour cacher par-fichier.
+ *
+ * Retourne une paire (varName, reader) parce que l'agrégation par nom
+ * se fait au niveau supérieur — on ne veut pas pré-agréger ici sinon
+ * la cache hit incremental serait moins fine.
+ */
+export function scanEnvReadersInSourceFile(
+  sf: SourceFile,
+  relPath: string,
+): { varName: string; reader: EnvVarReader }[] {
+  const out: { varName: string; reader: EnvVarReader }[] = []
+
+  // Court-circuit : si `process.env` n'apparaît pas textuellement, skip.
+  const content = sf.getFullText()
+  if (!content.includes('process.env')) return out
+
+  const lineToSymbol = buildLineToSymbol(sf)
+
+  sf.forEachDescendant((node) => {
+    const k = node.getKind()
+
+    // `process.env.NAME` — PropertyAccessExpression
+    if (k === SyntaxKind.PropertyAccessExpression) {
+      const pa = node as any
+      const obj = pa.getExpression?.()
+      if (!obj) return
+      if (!isProcessEnv(obj)) return
+      const name = pa.getName?.()
+      if (!name || !isValidEnvName(name)) return
+      pushReader(out, pa, name, relPath, lineToSymbol)
+      return
+    }
+
+    // `process.env['NAME']` — ElementAccessExpression
+    if (k === SyntaxKind.ElementAccessExpression) {
+      const ea = node as any
+      const obj = ea.getExpression?.()
+      if (!obj) return
+      if (!isProcessEnv(obj)) return
+      const arg = ea.getArgumentExpression?.()
+      if (!arg) return
+      const argKind = arg.getKind?.()
+      if (argKind !== SyntaxKind.StringLiteral && argKind !== SyntaxKind.NoSubstitutionTemplateLiteral) {
+        return  // nom dynamique non capturable
+      }
+      const name = arg.getLiteralText?.()
+      if (!name || !isValidEnvName(name)) return
+      pushReader(out, ea, name, relPath, lineToSymbol)
+      return
+    }
+  })
+
+  return out
+}
+
+/**
+ * Agrège un map (name → readers[]) en EnvVarUsage[] trié, avec calcul de
+ * `isSecret`. Réutilisé par les chemins legacy + Salsa.
+ */
+export function aggregateEnvReaders(
+  byName: Map<string, EnvVarReader[]>,
+  secretTokens: string[],
+): EnvVarUsage[] {
   const usages: EnvVarUsage[] = []
   for (const [name, readers] of byName) {
     readers.sort((a, b) => {
@@ -109,10 +140,11 @@ export async function analyzeEnvUsage(
       isSecret: matchesSecretTokens(name, secretTokens),
     })
   }
-
   usages.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
   return usages
 }
+
+export const DEFAULT_ENV_SECRET_TOKENS = DEFAULT_SECRET_TOKENS
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -133,21 +165,20 @@ function isValidEnvName(name: string): boolean {
   return ENV_NAME_RE.test(name) && name.length >= 2
 }
 
-function recordReader(
+function pushReader(
+  out: { varName: string; reader: EnvVarReader }[],
   node: any,
   name: string,
   file: string,
   lineToSymbol: Map<number, string>,
-  out: Map<string, EnvVarReader[]>,
 ): void {
   const line = node.getStartLineNumber?.() ?? 0
   const symbol = lineToSymbol.get(line) ?? ''
   const hasDefault = parentHasDefault(node)
   const wrappedIn = wrappingCallName(node)
-  if (!out.has(name)) out.set(name, [])
   const reader: EnvVarReader = { file, symbol, line, hasDefault }
   if (wrappedIn !== undefined) reader.wrappedIn = wrappedIn
-  out.get(name)!.push(reader)
+  out.push({ varName: name, reader })
 }
 
 /**

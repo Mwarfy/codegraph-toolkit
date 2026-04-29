@@ -23,6 +23,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@liby/salsa": "*",
     "ts-morph": "^25.0.0",
     "graphology": "^0.26.0",
     "graphology-metrics": "^2.3.0",
