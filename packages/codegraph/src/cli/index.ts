@@ -172,6 +172,20 @@ program
       }
       console.log(chalk.green(`  ✓ Synopsis written: synopsis.json + ${synopsis.containers.length + 2} markdown files in ${snapDir}\n`))
 
+      // Datalog facts derivative — un fichier .facts par relation +
+      // schema.dl avec les déclarations. Régen à chaque analyze pour que
+      // le test invariant Datalog côté consumer ne tourne jamais sur des
+      // facts stale (cf. ADR-022 à venir).
+      try {
+        const factsResult = await exportFacts(snapshot, {
+          outDir: path.join(snapDir, 'facts'),
+        })
+        const totalTuples = factsResult.relations.reduce((s, r) => s + r.tuples, 0)
+        console.log(chalk.green(`  ✓ Facts written: ${factsResult.relations.length} relations, ${totalTuples} tuples in ${path.relative(process.cwd(), factsResult.outDir)}\n`))
+      } catch (err) {
+        console.error(chalk.yellow(`  ⚠ Facts export failed: ${err instanceof Error ? err.message : String(err)}`))
+      }
+
       if (opts.map) {
         const mapContent = buildMap(snapshot, { concerns: config.concerns })
         const mapPath = path.join(config.rootDir, 'MAP.md')

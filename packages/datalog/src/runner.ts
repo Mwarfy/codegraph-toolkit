@@ -15,7 +15,7 @@
 
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
-import { parse } from './parser.js'
+import { parse, validateProgramReferences } from './parser.js'
 import { evaluate, formatProof, type EvalOptions } from './eval.js'
 import { loadFactsFromDir, loadFacts } from './facts-loader.js'
 import {
@@ -76,7 +76,9 @@ export function mergePrograms(
   let nextIndex = 0
 
   for (const { name, content } of sources) {
-    const sub = parse(content, { source: name })
+    // Skip per-file ref check : a rule in `adr-017.dl` may reference a
+    // `Violation` declared in `schema.dl`. We validate after the merge.
+    const sub = parse(content, { source: name, skipReferenceCheck: true })
     for (const [k, d] of sub.decls) {
       if (decls.has(k)) {
         throw new DatalogError('runner.duplicateDecl',
@@ -91,7 +93,9 @@ export function mergePrograms(
     inlineFacts.push(...sub.inlineFacts)
   }
 
-  return { decls, rules, inlineFacts, source: '<merged>' }
+  const merged: Program = { decls, rules, inlineFacts, source: '<merged>' }
+  validateProgramReferences(merged)
+  return merged
 }
 
 // ─── Pretty printing of a RunResult (text — deterministic) ────────────────

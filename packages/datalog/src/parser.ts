@@ -220,12 +220,44 @@ class Lexer {
 export interface ParseOptions {
   /** Source filename for error messages. Optional. */
   source?: string
+  /**
+   * Skip the post-parse "every referenced relation must have a .decl" check.
+   * Used by the multi-file merger : when parsing a single `.dl` we may
+   * reference a relation declared in another file. The merger validates
+   * after merging via `validateProgramReferences`.
+   */
+  skipReferenceCheck?: boolean
 }
 
 export function parse(src: string, options: ParseOptions = {}): Program {
   const tokens = new Lexer(src, options.source).tokenize()
   const p = new Parser(tokens, options.source)
-  return p.program()
+  return p.program(options.skipReferenceCheck ?? false)
+}
+
+/**
+ * Run the "every referenced relation has a .decl" check on a (possibly
+ * merged) program. Throws DatalogError on first violation.
+ */
+export function validateProgramReferences(program: Program): void {
+  const checkAtom = (a: Atom): void => {
+    const decl = program.decls.get(a.rel)
+    if (!decl) {
+      throw new DatalogError('parse.unknownRel',
+        `relation '${a.rel}' is referenced but not declared`,
+        a.pos, program.source)
+    }
+    if (decl.columns.length !== a.args.length) {
+      throw new DatalogError('parse.arityMismatch',
+        `'${a.rel}' declared with arity ${decl.columns.length} but called with ${a.args.length}`,
+        a.pos, program.source)
+    }
+  }
+  for (const rule of program.rules) {
+    checkAtom(rule.head)
+    for (const b of rule.body) checkAtom(b)
+  }
+  for (const f of program.inlineFacts) checkAtom(f)
 }
 
 class Parser {
@@ -255,7 +287,7 @@ class Parser {
     throw new DatalogError(code, msg, pos, this.source)
   }
 
-  program(): Program {
+  program(skipReferenceCheck: boolean): Program {
     const decls = new Map<string, RelationDecl>()
     const rules: Rule[] = []
     const inlineFacts: Atom[] = []
@@ -291,8 +323,12 @@ class Parser {
     const program: Program = { decls, rules, inlineFacts }
     if (this.source !== undefined) program.source = this.source
 
-    // Validation post-parse : toutes les rels référencées DOIVENT avoir un .decl
-    this.validateReferences(program)
+    if (!skipReferenceCheck) {
+      // Validation post-parse : toutes les rels référencées DOIVENT avoir
+      // un .decl. Skippable pour les fichiers parsés indépendamment puis
+      // mergés (cf. mergePrograms / validateProgramReferences).
+      validateProgramReferences(program)
+    }
     return program
   }
 
@@ -479,27 +515,4 @@ class Parser {
     }
   }
 
-  /**
-   * Tous les `rel` référencés (rules + inline facts) doivent avoir un `.decl`,
-   * et leur arity doit matcher.
-   */
-  private validateReferences(program: Program): void {
-    const checkAtom = (a: Atom): void => {
-      const decl = program.decls.get(a.rel)
-      if (!decl) {
-        this.err('parse.unknownRel',
-          `relation '${a.rel}' is referenced but not declared`, a.pos)
-      }
-      if (decl.columns.length !== a.args.length) {
-        this.err('parse.arityMismatch',
-          `'${a.rel}' declared with arity ${decl.columns.length} but called with ${a.args.length}`,
-          a.pos)
-      }
-    }
-    for (const rule of program.rules) {
-      checkAtom(rule.head)
-      for (const b of rule.body) checkAtom(b)
-    }
-    for (const f of program.inlineFacts) checkAtom(f)
-  }
 }
