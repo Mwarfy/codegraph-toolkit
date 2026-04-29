@@ -25,6 +25,7 @@
 - `packages/codegraph/src/detectors/block-loader.ts` → ADR-003
 - `packages/codegraph/src/detectors/index.ts` → ADR-003
 - `packages/codegraph/src/synopsis/builder.ts` → ADR-001
+- `packages/codegraph/src/synopsis/tensions.ts` → ADR-001
 
 > **Dogfooding** : ce repo gouverne sa propre architecture via le toolkit qu'il publie. Les 4 ADRs ci-dessus encadrent les invariants critiques (zéro LLM dans synopsis, config-driven, séparation détecteurs, 3 rôles bootstrap).
 
@@ -34,7 +35,7 @@
 
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
-- `packages/codegraph/src/core/types.ts` (in: 45)
+- `packages/codegraph/src/core/types.ts` (in: 46)
 - `packages/adr-toolkit/src/config.ts` (in: 9) · gov by ADR-002
 - `packages/codegraph/src/diff/types.ts` (in: 8)
 - `packages/codegraph/src/check/types.ts` (in: 7)
@@ -47,11 +48,50 @@
 
 Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `// ADR-NNN`** dans le code. Intentionnel ? Sinon poser un marqueur ou créer un ADR :
 
-- **45** `packages/codegraph/src/core/types.ts` _(top-hub)_
+- **46** `packages/codegraph/src/core/types.ts` _(top-hub)_
+
+## Tensions actives — invitations à explorer
+
+> Convocations courtes pointant vers des frictions détectées dans le code.
+> Chaque tension a un **test rapide** pour trancher : hypothèse à vérifier,
+> pas verdict. Une tension non explorée n'est pas un bug — c'est un saut
+> latéral possible que le sol stable rend testable.
+
+- **CYCLE** `packages/codegraph/src/core/types.ts → packages/codegraph/src/extractors/data-flows.ts` — boucle directe (2 fichiers)  
+  _→ inverser l'import OU extraire dans un 3e fichier_
+- **ORPHELIN** `packages/adr-toolkit/tests/fixtures/sample-project/src/core/event-bus.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/adr-toolkit/tests/fixtures/sample-project/src/services/state-service.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/b.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/c.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **FSM-ORPHAN** `ApprovalStatus#expired` — état déclaré mais jamais écrit dans le code  
+  _→ supprimer l'état OU ajouter la transition manquante_
+- **FSM-ORPHAN** `DocumentPhase#published` — état déclaré mais jamais écrit dans le code  
+  _→ supprimer l'état OU ajouter la transition manquante_
+- **FSM-ORPHAN** `DocumentPhase#archived` — état déclaré mais jamais écrit dans le code  
+  _→ supprimer l'état OU ajouter la transition manquante_
+- **FSM-ORPHAN** `NodeStatus#entry-point` — état déclaré mais jamais écrit dans le code  
+  _→ supprimer l'état OU ajouter la transition manquante_
+- **FSM-ORPHAN** `NodeStatus#uncertain` — état déclaré mais jamais écrit dans le code  
+  _→ supprimer l'état OU ajouter la transition manquante_
+- **DEP-UNUSED** `@liby/codegraph` — déclaré dans packages/adr-toolkit/package.json, jamais importé  
+  _→ npm uninstall @liby/codegraph + npm test_
+- **DEP-UNUSED** `graphology-operators` — déclaré dans packages/codegraph/package.json, jamais importé  
+  _→ npm uninstall graphology-operators + npm test_
+- **DEP-UNUSED** `graphology-types` — déclaré dans packages/codegraph/package.json, jamais importé  
+  _→ npm uninstall graphology-types + npm test_
+- **DEP-UNUSED** `serve-handler` — déclaré dans packages/codegraph/package.json, jamais importé  
+  _→ npm uninstall serve-handler + npm test_
 
 ## Activité récente (14 derniers jours)
 
 ```
+669a917 feat: dogfooding — toolkit gouverne sa propre architecture (4 ADRs)
 41f2ebd fix(bootstrap): 4 frictions identifiées sur test « fresh user »
 6d4679c feat(adr-toolkit): bootstrap supporte Claude CLI (auto auth keychain)
 d47beef docs: install.sh URL pointe sur /master/ (le repo GitHub utilise master)
@@ -63,7 +103,6 @@ f738340 feat: install.sh one-liner + README "frère friendly" (Phase B+C)
 4af6841 docs: README + CONTRIBUTING + CHANGELOG (Phase 7)
 2f74c84 feat(adr-toolkit): briefCustomSections — injection markdown projet-spécifique
 da487b1 feat(example): minimal hello-world consommateur
-3b023f7 feat(adr-toolkit): extracted + config-driven
 ```
 
 ## Comment contribuer à ce brief

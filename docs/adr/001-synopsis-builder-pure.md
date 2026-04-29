@@ -41,6 +41,7 @@ sa garantie de reproductibilité.
 <!-- AUTO-GÉNÉRÉ depuis les marqueurs ADR-NNN du code source. Voir @liby/adr-toolkit. NE PAS éditer à la main. -->
 
 - `packages/codegraph/src/synopsis/builder.ts` — synopsis builder pur, zéro LLM, déterministe
+- `packages/codegraph/src/synopsis/tensions.ts` — synopsis builder pur, zéro LLM, déterministe — tensions inclus
 
 
 ## Tested by

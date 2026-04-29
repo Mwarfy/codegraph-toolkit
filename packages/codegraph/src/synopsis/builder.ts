@@ -15,6 +15,8 @@
 // ADR-001: synopsis builder pur, zéro LLM, déterministe
 
 import type { GraphSnapshot, GraphNode, GraphEdge, EdgeType } from '../core/types.js'
+import { extractTensions, type Tension } from './tensions.js'
+export type { Tension, TensionKind } from './tensions.js'
 
 // ─── Public types ────────────────────────────────────────────────────────────
 
@@ -111,6 +113,13 @@ export interface SynopsisJSON {
   phase38?: Phase38Summary
   /** Suggestions d'ancrage ADR (Lien 1+2 ADR-toolkit). Présent si options.adrMarkers fourni. */
   adrSuggestions?: AdrAnchorSuggestion[]
+  /**
+   * Tensions actives — convocations courtes pointant vers des frictions
+   * dans le code (cycles, orphelins, FSM dead, truth-points sans cache,
+   * etc.). Chacune a un testHint pour rendre l'hypothèse vérifiable.
+   * Toujours présent — vide si aucune tension détectée.
+   */
+  tensions: Tension[]
 }
 
 /**
@@ -390,6 +399,7 @@ export function buildSynopsis(snapshot: GraphSnapshot, options: SynopsisOptions 
     crossContainerEdges,
     ...(phase38 ? { phase38 } : {}),
     ...(adrSuggestions ? { adrSuggestions } : {}),
+    tensions: extractTensions(snapshot, { maxPerKind: 5 }),
   }
 }
 

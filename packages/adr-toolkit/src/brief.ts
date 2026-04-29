@@ -135,9 +135,17 @@ async function collectInvariantTests(config: AdrToolkitConfig): Promise<string[]
   }
 }
 
+interface SynopsisTension {
+  kind: string
+  coordinates: string
+  note?: string
+  testHint?: string
+}
+
 interface SynopsisData {
   topHubs?: Array<{ id: string; inDegree: number; adrs?: string[] }>
   adrSuggestions?: Array<{ file: string; inDegree: number; reason: string }>
+  tensions?: SynopsisTension[]
 }
 
 async function loadSynopsis(config: AdrToolkitConfig): Promise<SynopsisData | null> {
@@ -165,6 +173,28 @@ async function topHubsFromSynopsis(synopsis: SynopsisData | null): Promise<strin
       : ''
     return `\`${h.id}\` (in: ${h.inDegree})${adrSuffix}`
   })
+}
+
+/**
+ * Format markdown des tensions pour le brief — convocations courtes.
+ * Une ligne par tension. Format : **LABEL** `coords` — note · _→ test_
+ */
+function renderTensionsForBrief(tensions: SynopsisTension[]): string {
+  const labels: Record<string, string> = {
+    'cycle': 'CYCLE',
+    'orphan': 'ORPHELIN',
+    'fsm-dead': 'FSM-DEAD',
+    'fsm-orphan': 'FSM-ORPHAN',
+    'dep-unused': 'DEP-UNUSED',
+    'barrel-low': 'BARREL-LOW',
+    'back-edge': 'BACK-EDGE',
+  }
+  return tensions.slice(0, 15).map(t => {
+    const label = labels[t.kind] ?? t.kind.toUpperCase()
+    const note = t.note ? ` — ${t.note}` : ''
+    const hint = t.testHint ? `  \n  _→ ${t.testHint}_` : ''
+    return `- **${label}** \`${t.coordinates}\`${note}${hint}`
+  }).join('\n')
 }
 
 function recentCommits(rootDir: string): string[] {
@@ -219,6 +249,7 @@ export async function generateBrief(opts: GenerateBriefOptions): Promise<Generat
   const synopsis = await loadSynopsis(config)
   const hubs = await topHubsFromSynopsis(synopsis)
   const adrSuggestions = synopsis?.adrSuggestions ?? []
+  const tensions = synopsis?.tensions ?? []
   const anchorIndex = buildAnchorIndex(adrs)
   const fileAdrLines = [...anchorIndex.entries()]
     .sort((a, b) => a[0].localeCompare(b[0]))
@@ -248,6 +279,15 @@ ${sectionsAt('after-invariant-tests')}
 
 ${hubs.length > 0 ? hubs.map(h => `- ${h}`).join('\n') : '- (snapshot codegraph absent — `npx @liby/codegraph analyze`)'}
 ${adrSuggestions.length > 0 ? `\n## ⚠ ADR anchor suggestions\n\nFichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur \`// ADR-NNN\`** dans le code. Intentionnel ? Sinon poser un marqueur ou créer un ADR :\n\n${adrSuggestions.slice(0, 8).map((s) => `- **${s.inDegree}** \`${s.file}\` _(${s.reason})_`).join('\n')}\n` : ''}
+## Tensions actives — invitations à explorer
+
+> Convocations courtes pointant vers des frictions détectées dans le code.
+> Chaque tension a un **test rapide** pour trancher : hypothèse à vérifier,
+> pas verdict. Une tension non explorée n'est pas un bug — c'est un saut
+> latéral possible que le sol stable rend testable.
+
+${tensions.length > 0 ? renderTensionsForBrief(tensions) : '_(aucune tension détectée par les détecteurs codegraph — code sain ou détecteurs silencieux)_'}
+
 ## Activité récente (14 derniers jours)
 
 \`\`\`
