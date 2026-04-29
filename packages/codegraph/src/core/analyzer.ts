@@ -48,7 +48,26 @@ export interface AnalyzeResult {
   }
 }
 
-export async function analyze(config: CodeGraphConfig): Promise<AnalyzeResult> {
+export interface AnalyzeOptions {
+  /**
+   * Mode "facts-only" : ne tourne QUE les extracteurs nécessaires aux .facts
+   * Datalog (event-emit-sites, env-usage, oauth-scope-literals, module-metrics
+   * + détecteurs de base ts-imports/event-bus/http/bullmq/db-tables pour le
+   * graph). Skip unused-exports, complexity, symbol-refs, typed-calls,
+   * cycles, truth-points, data-flows, state-machines, package-deps, barrels,
+   * taint, component-metrics, dsm.
+   *
+   * Sentinel : passe de ~14s à ~5s. Utilisé au pre-commit hook pour
+   * rafraîchir les facts avant les invariants Datalog.
+   */
+  factsOnly?: boolean
+}
+
+export async function analyze(
+  config: CodeGraphConfig,
+  options: AnalyzeOptions = {},
+): Promise<AnalyzeResult> {
+  const factsOnly = options.factsOnly ?? false
   const t0 = performance.now()
   const timing: AnalyzeResult['timing'] = {
     total: 0,
@@ -166,40 +185,42 @@ export async function analyze(config: CodeGraphConfig): Promise<AnalyzeResult> {
   // charger ts-morph deux fois fait sauter le heap Node sur projets ≥ 200 fichiers.
   const sharedProject = createSharedProject(config.rootDir, files, tsConfigPath)
 
-  const exportInfos = await analyzeExports(config.rootDir, files, tsConfigPath, sharedProject)
+  if (!factsOnly) {
+    const exportInfos = await analyzeExports(config.rootDir, files, tsConfigPath, sharedProject)
 
-  // Patch export data into the graph nodes
-  for (const info of exportInfos) {
-    const node = graph.getNodeById(info.file)
-    if (node) {
-      graph.setNodeExports(info.file, info.exports, info.totalCount)
+    // Patch export data into the graph nodes
+    for (const info of exportInfos) {
+      const node = graph.getNodeById(info.file)
+      if (node) {
+        graph.setNodeExports(info.file, info.exports, info.totalCount)
+      }
     }
-  }
 
-  timing.detectors['unused-exports'] = performance.now() - tExports
+    timing.detectors['unused-exports'] = performance.now() - tExports
 
-  // ─── 5b. Cyclomatic complexity par fonction ────────────────────────
-  // Parcours des AST pour calculer la complexité cyclomatique. Résultats
-  // mergés dans node.meta pour rester compatibles avec les consommateurs
-  // actuels (le schéma GraphNode n'a pas besoin de champ dédié).
+    // ─── 5b. Cyclomatic complexity par fonction ────────────────────────
+    // Parcours des AST pour calculer la complexité cyclomatique. Résultats
+    // mergés dans node.meta pour rester compatibles avec les consommateurs
+    // actuels (le schéma GraphNode n'a pas besoin de champ dédié).
 
-  const tComplexity = performance.now()
-  try {
-    const complexityInfos = await analyzeComplexity(config.rootDir, files, tsConfigPath, sharedProject)
-    for (const info of complexityInfos) {
-      graph.setNodeMeta(info.file, {
-        complexity: {
-          topFunctions: info.topFunctions,
-          maxComplexity: info.maxComplexity,
-          avgComplexity: info.avgComplexity,
-          totalFunctions: info.totalFunctions,
-        },
-      })
+    const tComplexity = performance.now()
+    try {
+      const complexityInfos = await analyzeComplexity(config.rootDir, files, tsConfigPath, sharedProject)
+      for (const info of complexityInfos) {
+        graph.setNodeMeta(info.file, {
+          complexity: {
+            topFunctions: info.topFunctions,
+            maxComplexity: info.maxComplexity,
+            avgComplexity: info.avgComplexity,
+            totalFunctions: info.totalFunctions,
+          },
+        })
+      }
+      timing.detectors['complexity'] = performance.now() - tComplexity
+    } catch (err) {
+      timing.detectors['complexity'] = performance.now() - tComplexity
+      console.error(`  ✗ complexity failed: ${err}`)
     }
-    timing.detectors['complexity'] = performance.now() - tComplexity
-  } catch (err) {
-    timing.detectors['complexity'] = performance.now() - tComplexity
-    console.error(`  ✗ complexity failed: ${err}`)
   }
 
   // ─── 5c. Symbol-level references (aider-style) ─────────────────────
@@ -214,7 +235,7 @@ export async function analyze(config: CodeGraphConfig): Promise<AnalyzeResult> {
 
   const tSymbolRefs = performance.now()
   let symbolRefs: { from: string; to: string; line: number }[] | undefined
-  try {
+  if (!factsOnly) try {
     const result = await analyzeSymbolRefs(config.rootDir, files, sharedProject)
     symbolRefs = result.refs
     timing.detectors['symbol-refs'] = performance.now() - tSymbolRefs
@@ -229,7 +250,8 @@ export async function analyze(config: CodeGraphConfig): Promise<AnalyzeResult> {
   // config.detectorOptions.typedCalls.enabled = false (default on).
 
   const typedCallsEnabled =
-    (config.detectorOptions?.['typedCalls']?.['enabled'] as boolean | undefined) ?? true
+    !factsOnly &&
+    ((config.detectorOptions?.['typedCalls']?.['enabled'] as boolean | undefined) ?? true)
 
   const tTypedCalls = performance.now()
   let typedCalls: Awaited<ReturnType<typeof analyzeTypedCalls>> | undefined
@@ -248,7 +270,8 @@ export async function analyze(config: CodeGraphConfig): Promise<AnalyzeResult> {
   // Désactivable via config.detectorOptions.cycles.enabled = false.
 
   const cyclesEnabled =
-    (config.detectorOptions?.['cycles']?.['enabled'] as boolean | undefined) ?? true
+    !factsOnly &&
+    ((config.detectorOptions?.['cycles']?.['enabled'] as boolean | undefined) ?? true)
 
   const tCycles = performance.now()
   let cycles: Awaited<ReturnType<typeof analyzeCycles>> | undefined
@@ -278,7 +301,8 @@ export async function analyze(config: CodeGraphConfig): Promise<AnalyzeResult> {
   // config.detectorOptions.truthPoints.enabled = false.
 
   const truthPointsEnabled =
-    (config.detectorOptions?.['truthPoints']?.['enabled'] as boolean | undefined) ?? true
+    !factsOnly &&
+    ((config.detectorOptions?.['truthPoints']?.['enabled'] as boolean | undefined) ?? true)
 
   const tTruthPoints = performance.now()
   let truthPoints: Awaited<ReturnType<typeof analyzeTruthPoints>> | undefined
@@ -310,7 +334,8 @@ export async function analyze(config: CodeGraphConfig): Promise<AnalyzeResult> {
   // typedCalls : si désactivé, data-flows skip.
 
   const dataFlowsEnabled =
-    (config.detectorOptions?.['dataFlows']?.['enabled'] as boolean | undefined) ?? true
+    !factsOnly &&
+    ((config.detectorOptions?.['dataFlows']?.['enabled'] as boolean | undefined) ?? true)
 
   const tDataFlows = performance.now()
   let dataFlows: Awaited<ReturnType<typeof analyzeDataFlows>> | undefined
@@ -347,7 +372,8 @@ export async function analyze(config: CodeGraphConfig): Promise<AnalyzeResult> {
   // init). Désactivable via config.detectorOptions.stateMachines.enabled.
 
   const stateMachinesEnabled =
-    (config.detectorOptions?.['stateMachines']?.['enabled'] as boolean | undefined) ?? true
+    !factsOnly &&
+    ((config.detectorOptions?.['stateMachines']?.['enabled'] as boolean | undefined) ?? true)
 
   const tStateMachines = performance.now()
   let stateMachines: Awaited<ReturnType<typeof analyzeStateMachines>> | undefined
@@ -403,7 +429,8 @@ export async function analyze(config: CodeGraphConfig): Promise<AnalyzeResult> {
   // Désactivable via config.detectorOptions.packageDeps.enabled = false.
 
   const packageDepsEnabled =
-    (config.detectorOptions?.['packageDeps']?.['enabled'] as boolean | undefined) ?? true
+    !factsOnly &&
+    ((config.detectorOptions?.['packageDeps']?.['enabled'] as boolean | undefined) ?? true)
 
   const tPackageDeps = performance.now()
   let packageDeps: Awaited<ReturnType<typeof analyzePackageDeps>> | undefined
@@ -429,7 +456,8 @@ export async function analyze(config: CodeGraphConfig): Promise<AnalyzeResult> {
   // Fichiers 100 % ré-exports → `lowValue` si consumers < threshold.
 
   const barrelsEnabled =
-    (config.detectorOptions?.['barrels']?.['enabled'] as boolean | undefined) ?? true
+    !factsOnly &&
+    ((config.detectorOptions?.['barrels']?.['enabled'] as boolean | undefined) ?? true)
 
   const tBarrels = performance.now()
   let barrels: Awaited<ReturnType<typeof analyzeBarrels>> | undefined
@@ -514,7 +542,8 @@ export async function analyze(config: CodeGraphConfig): Promise<AnalyzeResult> {
   // `<rootDir>/taint-rules.json` / `<rootDir>/codegraph/taint-rules.json`.
 
   const taintEnabled =
-    (config.detectorOptions?.['taint']?.['enabled'] as boolean | undefined) ?? false
+    !factsOnly &&
+    ((config.detectorOptions?.['taint']?.['enabled'] as boolean | undefined) ?? false)
 
   const tTaint = performance.now()
   let taintViolations: Awaited<ReturnType<typeof analyzeTaint>> | undefined
@@ -609,7 +638,8 @@ export async function analyze(config: CodeGraphConfig): Promise<AnalyzeResult> {
 
   // ─── 7b. Component metrics — Martin I/A/D (phase 3.7 #2) ───────────
   const componentMetricsEnabled =
-    (config.detectorOptions?.['componentMetrics']?.['enabled'] as boolean | undefined) ?? true
+    !factsOnly &&
+    ((config.detectorOptions?.['componentMetrics']?.['enabled'] as boolean | undefined) ?? true)
 
   const tComponentMetrics = performance.now()
   if (componentMetricsEnabled) {
@@ -637,7 +667,8 @@ export async function analyze(config: CodeGraphConfig): Promise<AnalyzeResult> {
   // dsm --granularity file`. Toggle via `detectorOptions.dsm.enabled`.
 
   const dsmEnabled =
-    (config.detectorOptions?.['dsm']?.['enabled'] as boolean | undefined) ?? true
+    !factsOnly &&
+    ((config.detectorOptions?.['dsm']?.['enabled'] as boolean | undefined) ?? true)
 
   const tDsm = performance.now()
   if (dsmEnabled) {

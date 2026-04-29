@@ -1152,9 +1152,26 @@ program
   .argument('[snapshot]', 'Path to snapshot JSON file (default: latest)')
   .option('-c, --config <path>', 'Path to codegraph config file')
   .option('-o, --output <dir>', 'Output directory (default: <snapshotDir>/facts)')
+  .option(
+    '--regen',
+    'Re-analyze the project in facts-only mode FIRST, then export. Skips heavy ' +
+      'extractors (unused-exports, typed-calls, data-flows, taint, …) — about 3x ' +
+      'faster than a full `codegraph analyze`. Use at pre-commit to refresh facts ' +
+      'against the staged tree without paying the full pipeline cost.',
+  )
   .action(async (snapshotPath, opts) => {
-    const snapshot = await loadSnapshot(snapshotPath, opts)
     const config = await loadConfig(opts)
+    let snapshot: GraphSnapshot
+    if (opts.regen) {
+      console.log(chalk.dim('  Re-analyzing in facts-only mode...'))
+      const t0 = performance.now()
+      const result = await analyze(config, { factsOnly: true })
+      snapshot = result.snapshot
+      const elapsed = (performance.now() - t0) / 1000
+      console.log(chalk.dim(`  Analyze done in ${elapsed.toFixed(2)}s`))
+    } else {
+      snapshot = await loadSnapshot(snapshotPath, opts)
+    }
 
     const outDir: string = opts.output
       ? path.resolve(opts.output)
