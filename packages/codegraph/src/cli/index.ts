@@ -769,9 +769,9 @@ program
         byManifest.set(i.packageJson, list)
       }
 
-      const counts = { 'declared-unused': 0, missing: 0, devOnly: 0 }
+      const counts = { 'declared-unused': 0, 'declared-runtime-asset': 0, missing: 0, devOnly: 0 }
       for (const i of filtered) counts[i.kind]++
-      console.log(`  ${chalk.red(String(counts.missing))} missing · ${chalk.yellow(String(counts['declared-unused']))} declared-unused · ${chalk.blue(String(counts.devOnly))} devOnly`)
+      console.log(`  ${chalk.red(String(counts.missing))} missing · ${chalk.yellow(String(counts['declared-unused']))} declared-unused · ${chalk.magenta(String(counts['declared-runtime-asset']))} runtime-asset · ${chalk.blue(String(counts.devOnly))} devOnly`)
       console.log()
 
       for (const [manifest, list] of [...byManifest].sort()) {

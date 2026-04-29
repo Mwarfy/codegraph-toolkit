@@ -680,10 +680,10 @@ function renderPackageDeps(s: GraphSnapshot): string {
   if (!issues || issues.length === 0) return ''
 
   const lines: string[] = ['## 4.6. Package deps hygiene', '']
-  const counts = { missing: 0, 'declared-unused': 0, devOnly: 0 }
+  const counts = { missing: 0, 'declared-unused': 0, 'declared-runtime-asset': 0, devOnly: 0 }
   for (const i of issues) counts[i.kind]++
   lines.push(
-    `${counts.missing} missing (build hazard) · ${counts['declared-unused']} declared-unused · ${counts.devOnly} devOnly (misplaced in \`dependencies\`).`,
+    `${counts.missing} missing (build hazard) · ${counts['declared-unused']} declared-unused · ${counts['declared-runtime-asset']} runtime-asset (review before uninstall) · ${counts.devOnly} devOnly (misplaced in \`dependencies\`).`,
   )
   lines.push('')
 

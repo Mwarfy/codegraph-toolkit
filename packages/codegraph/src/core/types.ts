@@ -381,18 +381,30 @@ export interface EnvVarUsage {
 // ─── Package Deps / Barrels (structural map, phase 3.8 #7) ─────────────────
 
 /**
- * Trois catégories de mismatch entre imports externes et `package.json` :
+ * Quatre catégories de mismatch entre imports externes et `package.json` :
  *
- * - `declared-unused` : déclaré dans deps/devDeps mais jamais importé dans
- *                       aucun fichier du scope.
- * - `missing`         : importé mais absent de tous les blocs deps ; casse
- *                       le build en prod si npm install --omit=dev.
- * - `devOnly`         : importé uniquement depuis les fichiers de test
- *                       (`*.test.ts`, `*.spec.ts`, `tests/**`) mais déclaré
- *                       dans `dependencies` au lieu de `devDependencies`.
- *                       Pollue le bundle prod sans raison.
+ * - `declared-unused`    : déclaré dans deps/devDeps mais jamais importé dans
+ *                          aucun fichier du scope. **Safe to remove.**
+ * - `declared-runtime-asset` : déclaré, pas d'import statique, MAIS un fichier
+ *                          du scope référence `node_modules/<pkg>/...` via un
+ *                          path runtime (ex: `new URL('node_modules/p5/lib/p5.min.js',
+ *                          import.meta.url)`, `readFile('node_modules/X/...')`).
+ *                          **NE PAS uninstall** sans grep manuel.
+ *                          Ajouté 2026-04-29 après cas vécu Sentinel : audit
+ *                          codegraph DEP-UNUSED a fait uninstall p5, tous les
+ *                          renders ont fail ENOENT en prod.
+ * - `missing`            : importé mais absent de tous les blocs deps ; casse
+ *                          le build en prod si npm install --omit=dev.
+ * - `devOnly`            : importé uniquement depuis les fichiers de test
+ *                          (`*.test.ts`, `*.spec.ts`, `tests/**`) mais déclaré
+ *                          dans `dependencies` au lieu de `devDependencies`.
+ *                          Pollue le bundle prod sans raison.
  */
-export type PackageDepsIssueKind = 'declared-unused' | 'missing' | 'devOnly'
+export type PackageDepsIssueKind =
+  | 'declared-unused'
+  | 'declared-runtime-asset'
+  | 'missing'
+  | 'devOnly'
 
 export interface PackageDepsIssue {
   kind: PackageDepsIssueKind
@@ -406,6 +418,8 @@ export interface PackageDepsIssue {
   testImporters?: string[]
   /** Bloc dans lequel le package est déclaré, s'il existe. */
   declaredIn?: 'dependencies' | 'devDependencies' | 'peerDependencies'
+  /** Fichiers où un usage runtime asset a été détecté (pour declared-runtime-asset). */
+  runtimeAssetReferences?: string[]
 }
 
 // ─── Taint Analysis (structural map, phase 3.8 #3) ─────────────────────────

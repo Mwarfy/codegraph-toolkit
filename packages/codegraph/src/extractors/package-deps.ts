@@ -6,13 +6,21 @@
  * node_modules / dist / build exclus). Chaque fichier est rattaché au
  * `package.json` le plus proche dans son arborescence parent.
  *
- * Trois catégories de mismatch :
- *   - `declared-unused` : listé dans deps/devDeps/peerDeps mais jamais importé
- *                         dans le scope du manifest.
- *   - `missing`         : importé mais absent de tous les blocs deps (casse le
- *                         build en prod avec `npm install --omit=dev`).
- *   - `devOnly`         : importé uniquement depuis des fichiers de test mais
- *                         déclaré dans `dependencies` au lieu de `devDependencies`.
+ * Quatre catégories de mismatch :
+ *   - `declared-unused`        : listé dans deps mais jamais importé. SAFE.
+ *   - `declared-runtime-asset` : listé, pas d'import statique, MAIS le code
+ *                                réfère `node_modules/<pkg>/...` via un path
+ *                                runtime. NE PAS UNINSTALL.
+ *   - `missing`                : importé mais absent. Casse le build prod.
+ *   - `devOnly`                : importé seulement par tests, déclaré en deps
+ *                                au lieu de devDependencies.
+ *
+ * Le kind `declared-runtime-asset` (ajouté 2026-04-29) ferme un angle mort
+ * majeur : codegraph ne voit que les imports statiques. Les patterns
+ * runtime asset (`new URL('node_modules/p5/lib/p5.min.js', import.meta.url)`,
+ * `readFile('node_modules/X/...')`) sont invisibles. Cas vécu Sentinel :
+ * uninstall p5 sur la base d'un faux positif DEP-UNUSED → tous les renders
+ * fail ENOENT en prod.
  *
  * Limites v1 :
  *   - TS path mapping — `@/foo`, `~/bar`, `#internal` filtrés heuristiquement
@@ -23,6 +31,9 @@
  *   - Imports dynamiques (`import('pkg')`) non capturés.
  *   - Workspaces npm/yarn/pnpm non résolus : chaque `package.json` découvert
  *     est traité comme un scope indépendant.
+ *   - Runtime asset detection : regex sur le texte source. Faux positifs
+ *     possibles si `node_modules/X` apparaît dans un commentaire / string
+ *     littéral non-asset. Trade-off accepté : mieux vaut conservateur.
  */
 
 import { Project, type SourceFile } from 'ts-morph'
@@ -86,7 +97,15 @@ export async function analyzePackageDeps(
 
   // importsByManifest : manifest.abs → Map<packageName, Set<file>>
   const importsByManifest = new Map<string, Map<string, Set<string>>>()
-  for (const m of active) importsByManifest.set(m.abs, new Map())
+  // runtimeAssetsByManifest : manifest.abs → Map<packageName, Set<file>>
+  // Détecté via regex `node_modules/<pkg>/` dans le source — pour identifier
+  // les deps utilisées en runtime asset (p5.min.js, etc.) et éviter de les
+  // flagger declared-unused à tort.
+  const runtimeAssetsByManifest = new Map<string, Map<string, Set<string>>>()
+  for (const m of active) {
+    importsByManifest.set(m.abs, new Map())
+    runtimeAssetsByManifest.set(m.abs, new Map())
+  }
 
   for (const sf of project.getSourceFiles()) {
     const absPath = sf.getFilePath() as string
@@ -103,26 +122,47 @@ export async function analyzePackageDeps(
       if (!bucket.has(pkg)) bucket.set(pkg, new Set())
       bucket.get(pkg)!.add(relPath)
     }
+
+    for (const pkg of collectRuntimeAssetReferences(sf)) {
+      const bucket = runtimeAssetsByManifest.get(manifest.abs)!
+      if (!bucket.has(pkg)) bucket.set(pkg, new Set())
+      bucket.get(pkg)!.add(relPath)
+    }
   }
 
   const issues: PackageDepsIssue[] = []
 
   for (const m of active) {
     const imports = importsByManifest.get(m.abs)!
+    const runtimeAssets = runtimeAssetsByManifest.get(m.abs)!
     const importedNames = new Set(imports.keys())
 
     // declared-unused : déclaré mais jamais importé. On exclut `@types/*` qui
     // sont utilisés en type-only (non distinguable v1 — filtre explicite).
+    // Si un usage runtime asset est détecté → downgrade vers
+    // `declared-runtime-asset` (review carefully, ne pas uninstall).
     for (const [name, block] of m.declared) {
       if (importedNames.has(name)) continue
       if (name.startsWith('@types/')) continue
-      issues.push({
-        kind: 'declared-unused',
-        packageName: name,
-        packageJson: m.rel,
-        importers: [],
-        declaredIn: block,
-      })
+      const runtimeRefs = runtimeAssets.get(name)
+      if (runtimeRefs && runtimeRefs.size > 0) {
+        issues.push({
+          kind: 'declared-runtime-asset',
+          packageName: name,
+          packageJson: m.rel,
+          importers: [],
+          declaredIn: block,
+          runtimeAssetReferences: [...runtimeRefs].sort(),
+        })
+      } else {
+        issues.push({
+          kind: 'declared-unused',
+          packageName: name,
+          packageJson: m.rel,
+          importers: [],
+          declaredIn: block,
+        })
+      }
     }
 
     // missing + devOnly
@@ -240,6 +280,40 @@ function collectImportSpecifiers(sf: SourceFile): string[] {
     if (ms) specs.push(ms)
   }
   return specs
+}
+
+/**
+ * Détecte les noms de packages référencés via des paths runtime
+ * (`node_modules/<pkg>/...`). Couvre les patterns vus dans Sentinel :
+ *   - `new URL('../../node_modules/p5/lib/p5.min.js', import.meta.url)`
+ *   - `readFile('node_modules/X/dist/foo.js')`
+ *   - `path.join(..., 'node_modules', 'X', ...)`  ← partial, regex string only
+ *
+ * Conservateur : on regex le **texte source brut** plutôt que d'analyser
+ * sémantiquement. Faux positifs OK (un package mentionné dans un commentaire
+ * sera flagué `declared-runtime-asset` au lieu de `declared-unused` —
+ * downgrade safe). Faux négatifs minimisés : tout `node_modules/<name>` ou
+ * `node_modules', '<name>` détecté.
+ */
+function collectRuntimeAssetReferences(sf: SourceFile): Set<string> {
+  const found = new Set<string>()
+  const text = sf.getFullText()
+  // Pattern A : node_modules/<pkg>/...  ou  node_modules\\<pkg>\\...
+  // <pkg> peut être @scope/name ou name simple.
+  const reSlash = /node_modules[/\\]((?:@[a-z0-9._-]+[/\\])?[a-z0-9._-]+)/gi
+  let m: RegExpExecArray | null
+  while ((m = reSlash.exec(text)) !== null) {
+    const pkg = m[1]!.replace(/\\/g, '/').replace(/\/$/, '')
+    // Normalize @scope\name → @scope/name (regex captures with separator)
+    if (pkg.startsWith('@') && !pkg.includes('/')) continue        // malformé
+    found.add(pkg)
+  }
+  // Pattern B : 'node_modules', '<pkg>' (path.join style)
+  const reJoin = /['"`]node_modules['"`]\s*,\s*['"`](@[a-z0-9._-]+\/[a-z0-9._-]+|[a-z0-9._-]+)['"`]/gi
+  while ((m = reJoin.exec(text)) !== null) {
+    found.add(m[1]!)
+  }
+  return found
 }
 
 /**
