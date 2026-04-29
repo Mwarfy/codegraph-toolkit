@@ -40,9 +40,9 @@
 - `packages/codegraph/src/diff/types.ts` (in: 8)
 - `packages/datalog/src/types.ts` (in: 8)
 - `packages/codegraph/src/check/types.ts` (in: 7)
+- `packages/salsa/src/types.ts` (in: 4)
 - `packages/adr-toolkit/src/bootstrap.ts` (in: 3) · gov by ADR-004
 - `packages/adr-toolkit/src/check-asserts.ts` (in: 3)
-- `packages/codegraph/src/detectors/bullmq-queues.ts` (in: 3)
 
 ## ⚠ ADR anchor suggestions
 
@@ -91,6 +91,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+5d90920 feat(salsa): @liby/salsa runtime — Salsa-style incremental computation (Sprint 1)
 e75b92b feat(codegraph): factsOnly mode + facts --regen flag (M8)
 7ab3214 feat(codegraph): oauth-scope-literals extractor + OauthScopeLiteral facts (M7 prep)
 18f64c6 feat(codegraph,datalog): wrappedIn capture + relax inline fact constraint (M4 prep)
@@ -102,7 +103,6 @@ a5f8c8e feat(synopsis): tensions actives — convocations courtes + testHint vé
 669a917 feat: dogfooding — toolkit gouverne sa propre architecture (4 ADRs)
 41f2ebd fix(bootstrap): 4 frictions identifiées sur test « fresh user »
 6d4679c feat(adr-toolkit): bootstrap supporte Claude CLI (auto auth keychain)
-d47beef docs: install.sh URL pointe sur /master/ (le repo GitHub utilise master)
 ```
 
 ## Comment contribuer à ce brief
