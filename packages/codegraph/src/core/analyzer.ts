@@ -31,6 +31,7 @@ import { analyzePackageDeps } from '../extractors/package-deps.js'
 import { analyzeBarrels } from '../extractors/barrels.js'
 import { analyzeTaint } from '../extractors/taint.js'
 import { analyzeEventEmitSites } from '../extractors/event-emit-sites.js'
+import { analyzeOauthScopeLiterals } from '../extractors/oauth-scope-literals.js'
 import type { TaintRules } from './types.js'
 import { computeModuleMetrics } from '../metrics/module-metrics.js'
 import { computeComponentMetrics } from '../metrics/component-metrics.js'
@@ -479,6 +480,33 @@ export async function analyze(config: CodeGraphConfig): Promise<AnalyzeResult> {
     }
   }
 
+  // ─── 5k-ter. OAuth scope literals (Datalog facts) ──────────────────
+  // Strings hardcodées matchant le pattern d'URL de scope Google Auth.
+  // Source du fact `OauthScopeLiteral` pour ADR-014.
+
+  const oauthScopeLiteralsEnabled =
+    (config.detectorOptions?.['oauthScopeLiterals']?.['enabled'] as boolean | undefined) ?? true
+
+  const tOauthScope = performance.now()
+  let oauthScopeLiterals: Awaited<ReturnType<typeof analyzeOauthScopeLiterals>> | undefined
+  if (oauthScopeLiteralsEnabled) {
+    try {
+      const oslOptions = config.detectorOptions?.['oauthScopeLiterals'] ?? {}
+      oauthScopeLiterals = await analyzeOauthScopeLiterals(
+        config.rootDir,
+        files,
+        sharedProject,
+        {
+          scopePattern: oslOptions['scopePattern'] as RegExp | undefined,
+        },
+      )
+      timing.detectors['oauth-scope-literals'] = performance.now() - tOauthScope
+    } catch (err) {
+      timing.detectors['oauth-scope-literals'] = performance.now() - tOauthScope
+      console.error(`  ✗ oauth-scope-literals failed: ${err}`)
+    }
+  }
+
   // ─── 5l. Taint analysis (phase 3.8 #3) ─────────────────────────────
   // Flux source non-trusté → sink dangereux sans passage par un sanitizer.
   // Désactivé par default — activer via `detectorOptions.taint.enabled: true`
@@ -545,6 +573,9 @@ export async function analyze(config: CodeGraphConfig): Promise<AnalyzeResult> {
   }
   if (eventEmitSites) {
     snapshot.eventEmitSites = eventEmitSites
+  }
+  if (oauthScopeLiterals) {
+    snapshot.oauthScopeLiterals = oauthScopeLiterals
   }
 
   // ─── 7. Module metrics (phase 3.7 #5 + #6) ─────────────────────────

@@ -181,6 +181,17 @@ export async function exportFacts(
   }
   relations.push(envReadRel, envReadWrappedRel)
 
+  // ─── OauthScopeLiteral ────────────────────────────────────────────────
+  const oauthScopeRel: RelationDef = {
+    name: 'OauthScopeLiteral',
+    decl: '(file:symbol, line:number, scope:symbol)',
+    rows: [],
+  }
+  for (const s of snapshot.oauthScopeLiterals ?? []) {
+    oauthScopeRel.rows.push([sym(s.file), num(s.line), sym(s.scope)])
+  }
+  relations.push(oauthScopeRel)
+
   // ─── ModuleFanIn ──────────────────────────────────────────────────────
   const fanInRel: RelationDef = {
     name: 'ModuleFanIn',

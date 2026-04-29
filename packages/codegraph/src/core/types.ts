@@ -286,6 +286,20 @@ export interface GraphSnapshot {
    * pour les invariants ADR-017-style. Optionnel.
    */
   eventEmitSites?: EventEmitSite[]
+
+  /**
+   * OAuth scope string literals — strings matchant le pattern d'URL de
+   * scope Google Auth (`https://www.googleapis.com/auth/...`). Source du
+   * fact Datalog `OauthScopeLiteral` pour ADR-014 (registry typé). Optionnel.
+   */
+  oauthScopeLiterals?: OauthScopeLiteralRef[]
+}
+
+/** Re-export du type produit par `extractors/oauth-scope-literals`. */
+export interface OauthScopeLiteralRef {
+  file: string
+  line: number
+  scope: string
 }
 
 // ─── Event Emit Sites ──────────────────────────────────────────────────────

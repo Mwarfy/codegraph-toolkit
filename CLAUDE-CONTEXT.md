@@ -91,6 +91,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+18f64c6 feat(codegraph,datalog): wrappedIn capture + relax inline fact constraint (M4 prep)
 216b48f fix(datalog,codegraph): multi-file ref-check + auto-regen facts in analyze (M3 prep)
 b4b7679 feat(datalog): @liby/datalog package — pure-TS interpreter for ADR invariants (M2)
 690865c feat(codegraph): event-emit-sites extractor + Datalog facts export (M1)
@@ -102,7 +103,6 @@ a5f8c8e feat(synopsis): tensions actives — convocations courtes + testHint vé
 d47beef docs: install.sh URL pointe sur /master/ (le repo GitHub utilise master)
 7ff0154 docs: pointer install.sh + README vers github.com/Mwarfy
 12c13c2 feat(adr-toolkit): bootstrap agentique MVP — singleton drafts via Sonnet (Phase D)
-f738340 feat: install.sh one-liner + README "frère friendly" (Phase B+C)
 ```
 
 ## Comment contribuer à ce brief
