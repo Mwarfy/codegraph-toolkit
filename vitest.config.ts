@@ -18,6 +18,8 @@ export default defineConfig({
       'packages/codegraph/tests/typed-calls.test.ts',
       'packages/codegraph/tests/truth-points.test.ts',
       'packages/codegraph/tests/env-usage.test.ts',
+      'packages/codegraph/tests/event-emit-sites.test.ts',
+      'packages/codegraph/tests/facts.test.ts',
       'packages/codegraph/tests/package-deps.test.ts',
       'packages/codegraph/tests/taint.test.ts',
       'packages/codegraph/tests/component-metrics.test.ts',

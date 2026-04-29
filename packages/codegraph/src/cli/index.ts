@@ -26,6 +26,7 @@ import { buildStructuralDiff, renderStructuralDiffMarkdown } from '../diff/index
 import { findReachablePaths, globToRegex } from '../graph/reachability.js'
 import { computeDsm } from '../graph/dsm.js'
 import { renderDsm, aggregateByContainer } from '../map/dsm-renderer.js'
+import { exportFacts } from '../facts/index.js'
 
 const program = new Command()
 
@@ -1127,6 +1128,42 @@ program
     const summary = `${result.counts.error} error(s), ${result.counts.warn} warning(s)`
     console.log(result.passed ? chalk.yellow(`  ${summary}\n`) : chalk.red(`  ${summary}\n`))
     process.exit(result.passed ? 0 : 1)
+  })
+
+// ─── facts ────────────────────────────────────────────────────────────────
+
+program
+  .command('facts')
+  .description('Export the snapshot as Soufflé Datalog .facts files (TSV) + schema.dl')
+  .argument('[snapshot]', 'Path to snapshot JSON file (default: latest)')
+  .option('-c, --config <path>', 'Path to codegraph config file')
+  .option('-o, --output <dir>', 'Output directory (default: <snapshotDir>/facts)')
+  .action(async (snapshotPath, opts) => {
+    const snapshot = await loadSnapshot(snapshotPath, opts)
+    const config = await loadConfig(opts)
+
+    const outDir: string = opts.output
+      ? path.resolve(opts.output)
+      : path.join(config.snapshotDir, 'facts')
+
+    const result = await exportFacts(snapshot, { outDir })
+
+    console.log(chalk.bold('\n  CodeGraph Facts (Datalog export)\n'))
+    console.log(`  ${chalk.dim('out')}    ${result.outDir}`)
+    console.log(`  ${chalk.dim('schema')} ${path.relative(process.cwd(), result.schemaFile)}`)
+    console.log()
+    const totalTuples = result.relations.reduce((s, r) => s + r.tuples, 0)
+    for (const r of result.relations) {
+      const tuples = r.tuples === 0
+        ? chalk.dim('0')
+        : r.tuples > 1000
+          ? chalk.yellow(String(r.tuples))
+          : chalk.green(String(r.tuples))
+      console.log(`  ${r.name.padEnd(18)} ${tuples.padStart(7)} tuples`)
+    }
+    console.log()
+    console.log(chalk.dim(`  Total: ${totalTuples} tuples across ${result.relations.length} relations`))
+    console.log()
   })
 
 // ─── serve ────────────────────────────────────────────────────────────────

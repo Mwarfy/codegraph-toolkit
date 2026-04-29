@@ -91,6 +91,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+5592ff8 feat(package-deps): downgrade declared-unused to runtime-asset on path refs
 a5f8c8e feat(synopsis): tensions actives — convocations courtes + testHint vérifiable
 669a917 feat: dogfooding — toolkit gouverne sa propre architecture (4 ADRs)
 41f2ebd fix(bootstrap): 4 frictions identifiées sur test « fresh user »
@@ -102,7 +103,6 @@ f738340 feat: install.sh one-liner + README "frère friendly" (Phase B+C)
 8ea9073 feat(adr-toolkit): init scaffolde codegraph.config + .claude/settings (Phase A.4-A.5)
 642f3fc fix(codegraph): départager généraliste / Sentinel-spécifique (Phase A.1-A.3)
 4af6841 docs: README + CONTRIBUTING + CHANGELOG (Phase 7)
-2f74c84 feat(adr-toolkit): briefCustomSections — injection markdown projet-spécifique
 ```
 
 ## Comment contribuer à ce brief

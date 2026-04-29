@@ -277,6 +277,33 @@ export interface GraphSnapshot {
    * Optionnel.
    */
   barrels?: BarrelInfo[]
+
+  /**
+   * Event emit sites — chaque appel `emit({ type: ... })` ou
+   * `emitEvent({ type: ... })` (y compris les méthodes `bus.emit(...)`,
+   * `this.emit(...)`) avec sa classification `literal | eventConstRef |
+   * dynamic`. Source des facts Datalog `EmitsEventLiteral` / `EmitsEventConst`
+   * pour les invariants ADR-017-style. Optionnel.
+   */
+  eventEmitSites?: EventEmitSite[]
+}
+
+// ─── Event Emit Sites ──────────────────────────────────────────────────────
+
+/**
+ * Re-export du type produit par `extractors/event-emit-sites`. Conservé ici
+ * pour que `GraphSnapshot` reste auto-portant côté types.
+ */
+export interface EventEmitSite {
+  file: string
+  line: number
+  symbol: string
+  callee: string
+  isMethodCall: boolean
+  receiver?: string
+  kind: 'literal' | 'eventConstRef' | 'dynamic'
+  literalValue?: string
+  refExpression?: string
 }
 
 // ─── Module Metrics (structural map, phase 3.7) ────────────────────────────

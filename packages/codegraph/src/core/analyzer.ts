@@ -30,6 +30,7 @@ import { analyzeEnvUsage } from '../extractors/env-usage.js'
 import { analyzePackageDeps } from '../extractors/package-deps.js'
 import { analyzeBarrels } from '../extractors/barrels.js'
 import { analyzeTaint } from '../extractors/taint.js'
+import { analyzeEventEmitSites } from '../extractors/event-emit-sites.js'
 import type { TaintRules } from './types.js'
 import { computeModuleMetrics } from '../metrics/module-metrics.js'
 import { computeComponentMetrics } from '../metrics/component-metrics.js'
@@ -449,6 +450,35 @@ export async function analyze(config: CodeGraphConfig): Promise<AnalyzeResult> {
     }
   }
 
+  // ─── 5k-bis. Event emit sites (Datalog facts) ──────────────────────
+  // Classification AST des appels emit({ type: ... }) — literal vs
+  // eventConstRef vs dynamic. Source des facts `EmitsEventLiteral` /
+  // `EmitsEventConst` pour les invariants ADR-017-style. Pas de coût ts-morph
+  // additionnel car on réutilise le sharedProject.
+
+  const eventEmitSitesEnabled =
+    (config.detectorOptions?.['eventEmitSites']?.['enabled'] as boolean | undefined) ?? true
+
+  const tEventEmitSites = performance.now()
+  let eventEmitSites: Awaited<ReturnType<typeof analyzeEventEmitSites>> | undefined
+  if (eventEmitSitesEnabled) {
+    try {
+      const eesOptions = config.detectorOptions?.['eventEmitSites'] ?? {}
+      eventEmitSites = await analyzeEventEmitSites(
+        config.rootDir,
+        files,
+        sharedProject,
+        {
+          emitFnNames: eesOptions['emitFnNames'] as string[] | undefined,
+        },
+      )
+      timing.detectors['event-emit-sites'] = performance.now() - tEventEmitSites
+    } catch (err) {
+      timing.detectors['event-emit-sites'] = performance.now() - tEventEmitSites
+      console.error(`  ✗ event-emit-sites failed: ${err}`)
+    }
+  }
+
   // ─── 5l. Taint analysis (phase 3.8 #3) ─────────────────────────────
   // Flux source non-trusté → sink dangereux sans passage par un sanitizer.
   // Désactivé par default — activer via `detectorOptions.taint.enabled: true`
@@ -512,6 +542,9 @@ export async function analyze(config: CodeGraphConfig): Promise<AnalyzeResult> {
   }
   if (taintViolations) {
     snapshot.taintViolations = taintViolations
+  }
+  if (eventEmitSites) {
+    snapshot.eventEmitSites = eventEmitSites
   }
 
   // ─── 7. Module metrics (phase 3.7 #5 + #6) ─────────────────────────
