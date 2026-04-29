@@ -22,11 +22,14 @@ But Phase 1 : passer en **incremental** via @liby/salsa. Sur changement
 d'1 fichier, seul ce qui dépend de ce fichier recompute. Cible : <1s par
 commit incrémental.
 
-## État à reprise (après Sprint 1)
+## État à reprise (après Sprint 2)
 
 ### Commits livrés sur cette chaîne (codegraph-toolkit)
 
 ```
+ca6d610 feat(codegraph): incremental mode — env-usage + oauth-scope-literals via Salsa (Sprint 2)
+84c8287 fix(salsa): add Database.resetState() — preserve registry across reset
+0a3c571 docs: PHASE-1-SALSA-MIGRATION.md — boot brief pour reprendre Sprints 2-4
 5d90920 feat(salsa): @liby/salsa runtime — Salsa-style incremental computation (Sprint 1)
 e75b92b feat(codegraph): factsOnly mode + facts --regen flag (M8)
 7ab3214 feat(codegraph): oauth-scope-literals extractor + OauthScopeLiteral facts (M7 prep)
@@ -49,28 +52,44 @@ bc26f4f feat(invariants): ADR-017 migré vers Datalog déclaratif (M3)
 
 ### Ce qui MARCHE déjà (ne pas casser)
 
-- 96/96 tests passent côté toolkit (codegraph 33 + datalog 35 + salsa 28)
-- 67/67 invariant tests passent côté Sentinel (incl. datalog-invariants)
+- 103/103 tests passent côté toolkit (96 Sprint 1 + 7 nouveaux Sprint 2)
+- 659/659 invariant tests passent côté Sentinel (incl. datalog-invariants)
 - Pre-commit hook Sentinel : tsc + invariants + ADR anchors + brief sync (~17s)
 - 3 ADRs migrés en Datalog : ADR-014 (oauth scopes), ADR-017 (event types), ADR-019 (thresholds)
-- `codegraph analyze` : full 14s, `--regen` (factsOnly) 7s
+- `codegraph analyze` legacy : full 15s, `--regen` (factsOnly) 7s
+- `codegraph analyze` incremental : opt-in via `AnalyzeOptions.incremental: true`
+  → env-usage + oauth-scope-literals via cache Salsa per-file
 
-### Ce qui est NEUF dans Sprint 1 (et n'est pas encore wiré)
+### Ce qui est NEUF dans Sprint 2
 
-`@liby/salsa` package complet à `packages/salsa/` :
-- `src/types.ts` — Revision, Cell, QueryKey, SalsaError
-- `src/key-encoder.ts` — encodage canonical déterministe
-- `src/database.ts` — storage + registry + stats + reset
-- `src/runtime.ts` — `input()`, `derived()`, algorithme red/green deep-verify
-- `src/index.ts` — public API
-- `tests/` — 4 fichiers, 28 tests
+**@liby/salsa** :
+- `Database.resetState()` — clear cells + revision + stats en gardant le
+  registry. Indispensable pour les tests qui utilisent des queries
+  module-level (sinon `reset()` casse le wake-up).
 
-**Aucun consumer ne l'utilise.** Tu peux le supprimer sans casser quoi que
-ce soit. C'est volontaire — Sprint 1 livre le runtime, Sprints 2-4 le wire.
+**@liby/codegraph** :
+- `src/incremental/database.ts` — sharedDb singleton process-wide
+- `src/incremental/queries.ts` — `fileContent` (input), `projectFiles`
+  (input), `setIncrementalContext()` pour passer le ts-morph Project
+- `src/incremental/env-usage.ts` — `envUsageOfFile(path)` + `allEnvUsage(label)`
+- `src/incremental/oauth-scope-literals.ts` — `oauthScopesOfFile(path)` +
+  `allOauthScopeLiterals(label)`
+- Refactor `extractors/env-usage.ts` : `scanEnvReadersInSourceFile()` +
+  `aggregateEnvReaders()` exportés (réutilisables Salsa).
+- Refactor `extractors/oauth-scope-literals.ts` : `scanOauthScopesInContent()`
+  exporté.
+- `analyze(config, { incremental: true })` route les 2 détecteurs vers
+  Salsa, mode legacy entièrement préservé.
+- `tests/incremental.test.ts` (7 tests) : parité legacy/incremental,
+  cache hit total, invalidation ciblée.
+
+**Pour Sprint 3** : suivre exactement le même pattern (helper per-file +
+queries Salsa + tests parité+invalidation). Le Project ts-morph reste
+global au moins jusqu'à fin Sprint 3.
 
 ## Algorithme Salsa — sémantique subtile (lis-moi)
 
-**2 bugs réels rencontrés en Sprint 1**, à ne pas refaire :
+**3 bugs réels rencontrés en Sprints 1-2**, à ne pas refaire :
 
 ### Bug 1 — `hasQuery` regardait le cache
 
@@ -111,6 +130,22 @@ Idem dans `executeAndCache` : si nouvelle valeur === ancienne, garde
 Le test qui prouve que ça marche : `tests/invalidation.test.ts > "red/green"
 — derived value unchanged → grandchild not recomputed`.
 
+### Bug 3 — `reset()` cassait les queries module-level
+
+`Database.reset()` clear `registered` + `derivedFns`. Mais des wrappers
+créés au top-level d'un module (`input(db, 'X')` / `derived(db, 'Y', fn)`)
+ne se ré-enregistrent pas — ils existent en module state, pas dans le
+registry de la DB. Après `reset()`, `derivedFns` était vide, donc
+`allDepsStable()` ne pouvait plus wake-up les deps derived (le
+`getDerivedFn(id)` retournait undefined).
+
+**Fix (Sprint 2 commit `84c8287`)** : ajouter `resetState()` qui clear
+seulement cells + revision + stats. Le registry est préservé. `reset()`
+garde sa sémantique pour les tests qui re-créent leurs queries.
+
+Pour les tests Sprint 2+ : utiliser `sharedDb.resetState()` dans
+`beforeEach`, jamais `reset()` (sauf si on re-create explicitement).
+
 ### Wake-up isolation
 
 `wakeUpDerivedDep` push une "isolated frame" via `als.run(isolatedFrame, ...)`
@@ -130,19 +165,20 @@ déjà à l'entrée d'`executeAndCache`, throw `cycle`.
 - **Pas de GC de cells stales.** `db.reset()` pour repartir. À <10k cells ce n'est pas un problème.
 - **Pas de tuples nested.** `decodeKey` ne sait pas. Si besoin un jour, étendre.
 
-## Sprint 2 — Migrate parseFile + 2 detectors PoC
+## Sprint 2 — Migrate parseFile + 2 detectors PoC ✅ DONE (commit `ca6d610`)
 
-### Goal
+### Goal (atteint)
 
 Wraper le pipeline ts-morph autour de Salsa pour que `parseFile(path)`
 devienne une query. Migrer 2 détecteurs simples (env-usage et
 oauth-scope-literals — tous deux ont peu de deps, output stable).
 
-À la fin de Sprint 2 :
-- `analyze()` gagne un mode `incremental: true` qui utilise Salsa
-- Mode legacy (full + factsOnly) reste intact
-- Sur 2 reruns consécutifs sans changement → 2nd run < 1s
-- Tests dédiés démontrant le cache hit
+À la fin de Sprint 2 (état actuel) :
+- ✅ `analyze()` gagne un mode `incremental: true` qui utilise Salsa
+- ✅ Mode legacy (full + factsOnly) reste intact (15s sur Sentinel)
+- ✅ Sur 2 reruns consécutifs sans changement → cache hit total
+  (0 miss supplémentaire sur `envUsageOfFile` et `oauthScopesOfFile`)
+- ✅ 7 tests dédiés démontrant le cache hit + parité legacy
 
 ### Étape 1 — Database wiring
 
@@ -480,10 +516,15 @@ Quand tu reprends dans une nouvelle session :
 
 1. [ ] Lire CE FICHIER en entier
 2. [ ] `git log --oneline | head -20` côté codegraph-toolkit + Sentinel
-3. [ ] Vérifier que `npx vitest run` côté toolkit passe (96/96 attendus)
-4. [ ] Vérifier que les invariants Sentinel passent
-5. [ ] Décider quel sprint reprendre (probablement Sprint 2 step 1)
-6. [ ] Suivre les étapes du plan ci-dessus
+3. [ ] Vérifier que `npx vitest run` côté toolkit passe (103/103 attendus)
+4. [ ] Vérifier que les invariants Sentinel passent (659/659)
+5. [ ] Reprendre **Sprint 3** : suivre la liste de détecteurs (par
+       complexité croissante) — pour chaque détecteur, exposer
+       `scanXxxInSourceFile()` côté legacy puis créer
+       `incremental/xxx.ts` avec `xxxOfFile(path)` + `allXxx(label)`,
+       wirer dans `analyze()` en mode incremental, ajouter le test
+       parité+invalidation dans `tests/incremental.test.ts`.
+6. [ ] Suivre les étapes du plan Sprint 3 ci-dessus
 
 Si un step ne matche plus exactement la réalité (ex: nouveau commit
 intercalé), adapte mais reste fidèle au principe : Salsa partout,

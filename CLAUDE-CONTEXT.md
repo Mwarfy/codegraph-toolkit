@@ -91,6 +91,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+ca6d610 feat(codegraph): incremental mode — env-usage + oauth-scope-literals via Salsa (Sprint 2)
 84c8287 fix(salsa): add Database.resetState() — preserve registry across reset
 0a3c571 docs: PHASE-1-SALSA-MIGRATION.md — boot brief pour reprendre Sprints 2-4
 5d90920 feat(salsa): @liby/salsa runtime — Salsa-style incremental computation (Sprint 1)
@@ -102,7 +103,6 @@ b4b7679 feat(datalog): @liby/datalog package — pure-TS interpreter for ADR inv
 690865c feat(codegraph): event-emit-sites extractor + Datalog facts export (M1)
 5592ff8 feat(package-deps): downgrade declared-unused to runtime-asset on path refs
 a5f8c8e feat(synopsis): tensions actives — convocations courtes + testHint vérifiable
-669a917 feat: dogfooding — toolkit gouverne sa propre architecture (4 ADRs)
 ```
 
 ## Comment contribuer à ce brief
