@@ -57,12 +57,10 @@ export function evaluate(
   const recordSet = new Set(options.recordProofsFor ?? [])
 
   // Add inline facts (parsed from `.dl` source) into the DB.
+  // Acceptés sur n'importe quelle relation déclarée — utile pour les
+  // lookup tables (`.decl ForbiddenCoercion` + facts inline) et pour
+  // pré-remplir une relation aussi écrite par des rules.
   for (const fact of program.inlineFacts) {
-    const decl = program.decls.get(fact.rel)!
-    if (!decl.isInput) {
-      throw new DatalogError('eval.inlineFactNotInput',
-        `inline fact for non-.input relation '${fact.rel}'`, fact.pos, program.source)
-    }
     const tuple: DatalogValue[] = fact.args.map((t) => {
       if (t.kind !== 'const') {
         throw new DatalogError('eval.inlineFactNotConst',

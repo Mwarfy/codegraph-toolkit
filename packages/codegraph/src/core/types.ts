@@ -390,6 +390,21 @@ export interface EnvVarReader {
    * Signale une config tolérante. Absence de default = dépendance dure.
    */
   hasDefault: boolean
+  /**
+   * Nom de la fonction qui wrappe immédiatement le `process.env.X` :
+   *   - 'parseInt'    → `parseInt(process.env.X, 10)`
+   *   - 'parseFloat'  → `parseFloat(process.env.X)`
+   *   - 'Number'      → `Number(process.env.X)`
+   *   - 'envInt'      → `envInt('X', N)` — ce form n'est PAS un read direct,
+   *                      capturé seulement quand on voit `process.env[X]`
+   *                      EN ARG, pas via le resolver. Souvent absent.
+   * Undefined si le read n'est pas l'argument direct d'un call. Le détecteur
+   * remonte au parent immédiat — pas plus loin.
+   *
+   * Utile pour ADR-019 : `parseInt(process.env.X, 10)` est interdit hors
+   * `shared/env.ts`. La rule Datalog filtre sur ce champ.
+   */
+  wrappedIn?: string
 }
 
 export interface EnvVarUsage {

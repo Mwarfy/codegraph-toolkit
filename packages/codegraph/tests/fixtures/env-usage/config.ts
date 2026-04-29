@@ -36,3 +36,14 @@ export function getEnvCount(): string {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-return
   return process.env.toString()  // `toString` match-t-il ? Non : pattern exige uppercase.
 }
+
+// ─── ADR-019 wrapping detection ──────────────────────────────────────────
+// `wrappedIn` doit capturer le callee qui enveloppe DIRECTEMENT le read.
+export const HEALER_CYCLE_MS = parseInt(process.env.HEALER_CYCLE_MS ?? '900000', 10)
+export const RETENTION_DAYS = parseFloat(process.env.RETENTION_DAYS)
+export const MAX_BUDGET = Number(process.env.MAX_BUDGET)
+// Method-call wrapping doit aussi marcher (cas custom helpers).
+declare const helper: { coerce(x: unknown): number }
+export const COERCED = helper.coerce(process.env.COERCED_VAL)
+// Sans wrapping = pas d'entrée wrappedIn.
+export const RAW_ENV = process.env.RAW_ENV

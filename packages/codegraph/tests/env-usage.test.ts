@@ -69,6 +69,37 @@ async function run(): Promise<void> {
 
   console.log('✓ env-usage: isSecret heuristic correct')
 
+  // ─── 4b. wrappedIn detection (ADR-019 prep) ────────────────────────
+  const healer = usage.find((u) => u.name === 'HEALER_CYCLE_MS')
+  assert.ok(healer)
+  assert.equal(healer!.readers[0].wrappedIn, 'parseInt',
+    'HEALER_CYCLE_MS read is wrapped in parseInt(... ?? ..., 10)')
+
+  const retention = usage.find((u) => u.name === 'RETENTION_DAYS')
+  assert.ok(retention)
+  assert.equal(retention!.readers[0].wrappedIn, 'parseFloat',
+    'RETENTION_DAYS wrapped in parseFloat')
+
+  const maxBudget = usage.find((u) => u.name === 'MAX_BUDGET')
+  assert.ok(maxBudget)
+  assert.equal(maxBudget!.readers[0].wrappedIn, 'Number',
+    'MAX_BUDGET wrapped in Number(...)')
+
+  const coerced = usage.find((u) => u.name === 'COERCED_VAL')
+  assert.ok(coerced)
+  assert.equal(coerced!.readers[0].wrappedIn, 'coerce',
+    'method-call wrapping captured (rightmost identifier)')
+
+  const raw = usage.find((u) => u.name === 'RAW_ENV')
+  assert.ok(raw)
+  assert.equal(raw!.readers[0].wrappedIn, undefined,
+    'no wrapping when read is bare')
+
+  // dbUrl is the same case (bare assignment) — confirm.
+  assert.equal(dbUrl!.readers[0].wrappedIn, undefined)
+
+  console.log('✓ env-usage: wrappedIn detected (parseInt, parseFloat, Number, method-call)')
+
   // ─── 5. Tri stable + déterminisme ──────────────────────────────────
   const project2 = createSharedProject(fixtureDir, files, path.join(fixtureDir, 'tsconfig.json'))
   const usage2 = await analyzeEnvUsage(fixtureDir, files, project2)

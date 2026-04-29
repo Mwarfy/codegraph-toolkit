@@ -153,6 +153,14 @@ export async function exportFacts(
     decl: '(file:symbol, line:number, varName:symbol, hasDefault:symbol)',
     rows: [],
   }
+  // EnvReadWrapped — uniquement les sites où process.env.X est passé
+  // directement comme arg d'un call (parseInt, Number, envInt, …). Le 4e
+  // arg est le nom du callee. Sert à ADR-019.
+  const envReadWrappedRel: RelationDef = {
+    name: 'EnvReadWrapped',
+    decl: '(file:symbol, line:number, varName:symbol, wrappedIn:symbol)',
+    rows: [],
+  }
   for (const u of snapshot.envUsage ?? []) {
     for (const r of u.readers) {
       envReadRel.rows.push([
@@ -161,9 +169,17 @@ export async function exportFacts(
         sym(u.name),
         sym(r.hasDefault ? 'true' : 'false'),
       ])
+      if (r.wrappedIn) {
+        envReadWrappedRel.rows.push([
+          sym(r.file),
+          num(r.line),
+          sym(u.name),
+          sym(r.wrappedIn),
+        ])
+      }
     }
   }
-  relations.push(envReadRel)
+  relations.push(envReadRel, envReadWrappedRel)
 
   // ─── ModuleFanIn ──────────────────────────────────────────────────────
   const fanInRel: RelationDef = {

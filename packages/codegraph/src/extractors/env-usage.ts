@@ -143,8 +143,61 @@ function recordReader(
   const line = node.getStartLineNumber?.() ?? 0
   const symbol = lineToSymbol.get(line) ?? ''
   const hasDefault = parentHasDefault(node)
+  const wrappedIn = wrappingCallName(node)
   if (!out.has(name)) out.set(name, [])
-  out.get(name)!.push({ file, symbol, line, hasDefault })
+  const reader: EnvVarReader = { file, symbol, line, hasDefault }
+  if (wrappedIn !== undefined) reader.wrappedIn = wrappedIn
+  out.get(name)!.push(reader)
+}
+
+/**
+ * Si le `process.env.X` (ou son parent immédiat `?? default`) est passé
+ * directement comme argument d'un CallExpression dont le callee est un
+ * Identifier ou PropertyAccess (ex: `parseInt(process.env.X, 10)` ou
+ * `Number(process.env.X)`), retourne le rightmost identifier du callee.
+ *
+ * Cas couvert :
+ *   parseInt(process.env.X, 10)             → 'parseInt'
+ *   parseInt(process.env.X ?? '5', 10)      → 'parseInt'
+ *   Number(process.env.X)                   → 'Number'
+ *   parseFloat(process.env.X)               → 'parseFloat'
+ *   foo.bar(process.env.X)                  → 'bar'
+ *
+ * Hors-cas (retourne undefined) :
+ *   const x = process.env.X                  // pas de call
+ *   process.env.X.length                     // pas l'arg d'un call
+ *   foo(bar(process.env.X))                  // bar capturé, pas foo
+ */
+function wrappingCallName(node: any): string | undefined {
+  // Remonter au-dessus d'un éventuel `?? 'default'` / `|| 'x'` parent.
+  let target = node
+  const direct = target.getParent?.()
+  if (
+    direct &&
+    direct.getKind?.() === SyntaxKind.BinaryExpression
+  ) {
+    const op = direct.getOperatorToken?.()
+    const opKind = op?.getKind?.()
+    if (
+      (opKind === SyntaxKind.QuestionQuestionToken ||
+        opKind === SyntaxKind.BarBarToken) &&
+      direct.getLeft?.() === target
+    ) {
+      target = direct
+    }
+  }
+
+  const parent = target.getParent?.()
+  if (!parent || parent.getKind?.() !== SyntaxKind.CallExpression) return undefined
+  // Vérifie que `target` est dans la liste des args, pas le callee.
+  const args = parent.getArguments?.() ?? []
+  if (!args.includes(target)) return undefined
+  const callee = parent.getExpression?.()
+  if (!callee) return undefined
+  const calleeKind = callee.getKind?.()
+  if (calleeKind === SyntaxKind.Identifier) return callee.getText?.()
+  if (calleeKind === SyntaxKind.PropertyAccessExpression) return callee.getName?.()
+  return undefined
 }
 
 /**
