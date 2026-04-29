@@ -1,0 +1,37 @@
+// ADR-017 — Event names typés via EVENTS const
+//
+// Rule : tout `emit({ type: 'string-literal' })` est une violation.
+// Aucune string littérale n'est autorisée comme valeur de `type`.
+//
+// Source des facts : @liby/codegraph `codegraph facts`.
+// Cette règle .dl est l'ADR-017 EXÉCUTABLE — la prose dans le markdown
+// devient redondante. La seule source de vérité est ce fichier.
+
+.decl File(file: symbol)
+.decl FileTag(file: symbol, tag: symbol)
+.decl Imports(from: symbol, to: symbol)
+.decl ImportEdge(from: symbol, to: symbol, line: number)
+.decl EmitsLiteral(file: symbol, line: number, eventName: symbol)
+.decl EmitsConstRef(file: symbol, line: number, namespace: symbol, member: symbol)
+.decl EmitsDynamic(file: symbol, line: number)
+.decl EnvRead(file: symbol, line: number, varName: symbol, hasDefault: symbol)
+.decl ModuleFanIn(file: symbol, count: number)
+
+.input File
+.input FileTag
+.input Imports
+.input ImportEdge
+.input EmitsLiteral
+.input EmitsConstRef
+.input EmitsDynamic
+.input EnvRead
+.input ModuleFanIn
+
+// ─── Violations ─────────────────────────────────────────────────────────
+
+.decl Violation(adr: symbol, file: symbol, line: number, msg: symbol)
+.output Violation
+
+// ADR-017 : aucune string littérale n'est admise comme `type` d'un emit.
+Violation("ADR-017", File, Line, "untyped emit (string literal)") :-
+    EmitsLiteral(File, Line, _).

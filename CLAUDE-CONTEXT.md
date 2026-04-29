@@ -35,7 +35,7 @@
 
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
-- `packages/codegraph/src/core/types.ts` (in: 46)
+- `packages/codegraph/src/core/types.ts` (in: 47)
 - `packages/adr-toolkit/src/config.ts` (in: 9) · gov by ADR-002
 - `packages/codegraph/src/diff/types.ts` (in: 8)
 - `packages/codegraph/src/check/types.ts` (in: 7)
@@ -48,7 +48,7 @@
 
 Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `// ADR-NNN`** dans le code. Intentionnel ? Sinon poser un marqueur ou créer un ADR :
 
-- **46** `packages/codegraph/src/core/types.ts` _(top-hub)_
+- **47** `packages/codegraph/src/core/types.ts` _(top-hub)_
 
 ## Tensions actives — invitations à explorer
 
@@ -91,6 +91,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+690865c feat(codegraph): event-emit-sites extractor + Datalog facts export (M1)
 5592ff8 feat(package-deps): downgrade declared-unused to runtime-asset on path refs
 a5f8c8e feat(synopsis): tensions actives — convocations courtes + testHint vérifiable
 669a917 feat: dogfooding — toolkit gouverne sa propre architecture (4 ADRs)
@@ -102,7 +103,6 @@ d47beef docs: install.sh URL pointe sur /master/ (le repo GitHub utilise master)
 f738340 feat: install.sh one-liner + README "frère friendly" (Phase B+C)
 8ea9073 feat(adr-toolkit): init scaffolde codegraph.config + .claude/settings (Phase A.4-A.5)
 642f3fc fix(codegraph): départager généraliste / Sentinel-spécifique (Phase A.1-A.3)
-4af6841 docs: README + CONTRIBUTING + CHANGELOG (Phase 7)
 ```
 
 ## Comment contribuer à ce brief

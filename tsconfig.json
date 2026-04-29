@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "packages/codegraph" },
-    { "path": "packages/adr-toolkit" }
+    { "path": "packages/adr-toolkit" },
+    { "path": "packages/datalog" }
   ]
 }

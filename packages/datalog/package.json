@@ -1,0 +1,32 @@
+{
+  "name": "@liby/datalog",
+  "version": "0.1.0",
+  "description": "Deterministic Datalog interpreter for codegraph invariants — pure TS, zero binary",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./parser": "./dist/parser.js",
+    "./eval": "./dist/eval.js"
+  },
+  "bin": {
+    "datalog": "./dist/cli.js"
+  },
+  "files": ["dist", "README.md"],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsc -b --watch",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "commander": "^13.0.0",
+    "chalk": "^5.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0"
+  }
+}

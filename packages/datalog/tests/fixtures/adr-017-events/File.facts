@@ -1,0 +1,5 @@
+src/legacy/old-handler.ts
+src/another/leak.ts
+src/api/projects.ts
+src/blocks/render.ts
+src/blocks/dyn.ts
