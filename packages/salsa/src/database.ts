@@ -125,14 +125,37 @@ export class Database {
   }
 
   /**
-   * Reset complet. Utile en tests entre cas. Garde l'instance vivante
-   * (pas la même chose que `new Database()`, mais l'effet observable l'est).
+   * Reset complet. Utile en tests qui veulent re-créer leurs queries
+   * via `input()` / `derived()` après le reset (cf. e2e.test.ts).
+   *
+   * Pour les use-cases où les queries sont déclarées au top-level d'un
+   * module (donc inscrites une seule fois au load) et NE PEUVENT PAS
+   * être ré-enregistrées sans throw `duplicateId` — utiliser
+   * `resetState()` à la place.
    */
   reset(): void {
     this.revision = REVISION_ZERO
     this.cells.clear()
     this.registered.clear()
     this.derivedFns.clear()
+    this.hitCount.clear()
+    this.missCount.clear()
+  }
+
+  /**
+   * Reset l'état observable (cells + revision + stats) en gardant le
+   * registry (registered + derivedFns) intact. Utile quand les queries
+   * sont déclarées une fois au top-level d'un module et qu'on veut
+   * juste vider le cache pour repartir d'une revision propre.
+   *
+   * Important : sans ça, les wrappers module-level ne peuvent pas se
+   * ré-enregistrer (duplicateId throw), mais après un `reset()` plein
+   * le runtime perd ses fns derived et ne peut plus wake-up les deps
+   * pendant un deep-verify upstream.
+   */
+  resetState(): void {
+    this.revision = REVISION_ZERO
+    this.cells.clear()
     this.hitCount.clear()
     this.missCount.clear()
   }

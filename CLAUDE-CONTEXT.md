@@ -91,6 +91,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+0a3c571 docs: PHASE-1-SALSA-MIGRATION.md — boot brief pour reprendre Sprints 2-4
 5d90920 feat(salsa): @liby/salsa runtime — Salsa-style incremental computation (Sprint 1)
 e75b92b feat(codegraph): factsOnly mode + facts --regen flag (M8)
 7ab3214 feat(codegraph): oauth-scope-literals extractor + OauthScopeLiteral facts (M7 prep)
@@ -102,7 +103,6 @@ b4b7679 feat(datalog): @liby/datalog package — pure-TS interpreter for ADR inv
 a5f8c8e feat(synopsis): tensions actives — convocations courtes + testHint vérifiable
 669a917 feat: dogfooding — toolkit gouverne sa propre architecture (4 ADRs)
 41f2ebd fix(bootstrap): 4 frictions identifiées sur test « fresh user »
-6d4679c feat(adr-toolkit): bootstrap supporte Claude CLI (auto auth keychain)
 ```
 
 ## Comment contribuer à ce brief
