@@ -25,6 +25,7 @@
 .decl EvalCall(file: symbol, line: number, kind: symbol, containingSymbol: symbol)
 .decl HardcodedSecret(file: symbol, line: number, context: symbol, trigger: symbol, entropy: number)
 .decl BooleanParam(file: symbol, line: number, name: symbol, paramName: symbol, paramIndex: number, totalParams: number)
+.decl DeadCode(file: symbol, line: number, kind: symbol)
 
 .input File
 .input FileTag
@@ -41,6 +42,7 @@
 .input EvalCall
 .input HardcodedSecret
 .input BooleanParam
+.input DeadCode
 
 // La relation cible commune : tous les fichiers de rules écrivent ici.
 .decl Violation(adr: symbol, file: symbol, line: number, msg: symbol)

@@ -1,0 +1,26 @@
+// NO-IDENTICAL-SUBEXPRESSIONS — pas de comparaison `a OP a` quand OP
+// est logical / equality / comparison.
+//
+// Pourquoi : `if (a > 0 && a > 0)` est presque toujours un copy-paste
+// raté. Une expression `a === a` est vraie pour tout sauf NaN — quasi
+// jamais le but recherché. Inspiration : Sonar S1764, SpotBugs
+// SA_LOCAL_SELF_COMPARISON.
+//
+// Skip déjà côté extracteur :
+//   - Operators arithmétiques (+ - * /) — `x + x` peut être légitime.
+//   - Literals courts (`0 === 0`).
+//   - Fichiers de test.
+//   - Sites avec `// dead-code-ok: <reason>`.
+//
+// Source des facts : `DeadCode(file, line, kind)` ; kind ∈
+// {"identical-subexpressions", "return-then-else"}.
+//
+// Pattern ratchet : grandfather par (file, line) si vrai test NaN
+// volontaire ou pattern justifié.
+
+.decl IdenticalSubexprGrandfathered(file: symbol, line: number)
+
+Violation("NO-IDENTICAL-SUBEXPRESSIONS", File, Line,
+  "comparaison ou logique avec les 2 cotes identiques — copy-paste rate ?") :-
+    DeadCode(File, Line, "identical-subexpressions"),
+    !IdenticalSubexprGrandfathered(File, Line).

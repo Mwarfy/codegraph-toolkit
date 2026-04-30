@@ -492,6 +492,20 @@ export interface GraphSnapshot {
     paramName: string
     totalParams: number
   }>
+
+  /**
+   * Dead code findings — patterns redundant ou inatteignable.
+   * - identical-subexpressions : `a > 0 && a > 0` (Sonar S1764)
+   * - return-then-else : `if (x) return; else { ... }` (Sonar S1126)
+   * Cf. extractors/dead-code.ts (Phase 4 Tier 3).
+   */
+  deadCode?: Array<{
+    kind: 'identical-subexpressions' | 'return-then-else'
+    file: string
+    line: number
+    message: string
+    details?: Record<string, string | number | boolean>
+  }>
 }
 
 /** Re-export du type produit par `extractors/oauth-scope-literals`. */

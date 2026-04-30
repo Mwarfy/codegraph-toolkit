@@ -275,6 +275,79 @@ describe('no-boolean-positional-param', () => {
   })
 })
 
+describe('no-identical-subexpressions', () => {
+  it('0 violations sur facts vides', async () => {
+    const { violations } = await runRule({ ruleName: 'no-identical-subexpressions.dl' })
+    expect(violations).toEqual([])
+  })
+
+  it('flag un identical-subexpressions', async () => {
+    const facts = new Map([
+      ['DeadCode', 'src/foo.ts\t10\tidentical-subexpressions'],
+    ])
+    const { violations } = await runRule({ ruleName: 'no-identical-subexpressions.dl', facts })
+    expect(violations).toHaveLength(1)
+    expect(violations[0][0]).toBe('NO-IDENTICAL-SUBEXPRESSIONS')
+  })
+
+  it('skip si grandfathered', async () => {
+    const schema = await loadRule('schema-subset.dl')
+    const baseRule = await loadRule('no-identical-subexpressions.dl')
+    const customRule = baseRule + '\nIdenticalSubexprGrandfathered("src/foo.ts", 10).\n'
+    const program = mergePrograms([
+      { name: 'schema.dl', content: schema },
+      { name: 'rule.dl', content: customRule },
+    ])
+    const facts = new Map([
+      ['DeadCode', 'src/foo.ts\t10\tidentical-subexpressions'],
+    ])
+    const db = loadFacts(program.decls, { factsByRelation: facts })
+    const result = evaluate(program, db, { allowRecursion: true })
+    expect(result.outputs.get('Violation') ?? []).toEqual([])
+  })
+
+  it('ne flag PAS un return-then-else (kind discriminé)', async () => {
+    const facts = new Map([
+      ['DeadCode', 'src/foo.ts\t10\treturn-then-else'],
+    ])
+    const { violations } = await runRule({ ruleName: 'no-identical-subexpressions.dl', facts })
+    expect(violations).toEqual([])
+  })
+})
+
+describe('no-return-then-else', () => {
+  it('0 violations sur facts vides', async () => {
+    const { violations } = await runRule({ ruleName: 'no-return-then-else.dl' })
+    expect(violations).toEqual([])
+  })
+
+  it('flag un return-then-else', async () => {
+    const facts = new Map([
+      ['DeadCode', 'src/foo.ts\t42\treturn-then-else'],
+    ])
+    const { violations } = await runRule({ ruleName: 'no-return-then-else.dl', facts })
+    expect(violations).toHaveLength(1)
+    expect(violations[0][0]).toBe('NO-RETURN-THEN-ELSE')
+    expect(violations[0][2]).toBe(42)
+  })
+
+  it('skip si grandfathered par (file, line)', async () => {
+    const schema = await loadRule('schema-subset.dl')
+    const baseRule = await loadRule('no-return-then-else.dl')
+    const customRule = baseRule + '\nReturnThenElseGrandfathered("src/foo.ts", 42).\n'
+    const program = mergePrograms([
+      { name: 'schema.dl', content: schema },
+      { name: 'rule.dl', content: customRule },
+    ])
+    const facts = new Map([
+      ['DeadCode', 'src/foo.ts\t42\treturn-then-else'],
+    ])
+    const db = loadFacts(program.decls, { factsByRelation: facts })
+    const result = evaluate(program, db, { allowRecursion: true })
+    expect(result.outputs.get('Violation') ?? []).toEqual([])
+  })
+})
+
 describe('schema-subset.dl est valide', () => {
   it('parse sans erreur et déclare les relations attendues', async () => {
     const schema = await loadRule('schema-subset.dl')
@@ -289,6 +362,7 @@ describe('schema-subset.dl est valide', () => {
     expect(program.decls.has('EvalCall')).toBe(true)
     expect(program.decls.has('HardcodedSecret')).toBe(true)
     expect(program.decls.has('BooleanParam')).toBe(true)
+    expect(program.decls.has('DeadCode')).toBe(true)
     expect(program.decls.has('Violation')).toBe(true)
     // Toutes les input relations sont marquées .input
     expect(program.decls.get('CycleNode')!.isInput).toBe(true)

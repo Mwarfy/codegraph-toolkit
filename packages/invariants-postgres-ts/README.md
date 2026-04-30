@@ -2,7 +2,7 @@
 
 Standard Datalog invariants for **TypeScript + Postgres** projects, drop-in for [`codegraph-toolkit`](https://github.com/Mwarfy/codegraph-toolkit).
 
-Eight invariants, all 100% portable across TS/Postgres projects:
+Ten invariants, all 100% portable across TS/Postgres projects:
 
 | Invariant | What it catches |
 |---|---|
@@ -14,6 +14,8 @@ Eight invariants, all 100% portable across TS/Postgres projects:
 | `no-eval` | `eval(...)` and `new Function(...)` (RCE vector). Ratchet on `(file, kind)`. |
 | `no-hardcoded-secret` | Hardcoded API keys / tokens / credentials in source (regex + entropy). Ratchet on `(file, line)`. |
 | `no-boolean-positional-param` | Boolean trap (Sonar S2301) — prefer options object. Ratchet on `(file, name)`. |
+| `no-identical-subexpressions` | `a OP a` where OP is logical/equality/comparison (Sonar S1764, copy-paste detection). Ratchet on `(file, line)`. |
+| `no-return-then-else` | `if (cond) { return X } else { Y }` — flatten suggestion (Sonar S1126). Ratchet on `(file, line)`. |
 
 ## Why these two
 

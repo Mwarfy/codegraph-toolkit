@@ -46,6 +46,7 @@ import { analyzeDriftPatterns, type DriftSignal } from '../extractors/drift-patt
 import { analyzeEvalCalls, type EvalCall } from '../extractors/eval-calls.js'
 import { analyzeHardcodedSecrets, type HardcodedSecret } from '../extractors/hardcoded-secrets.js'
 import { analyzeBooleanParams, type BooleanParamSite } from '../extractors/boolean-params.js'
+import { analyzeDeadCode, type DeadCodeFinding } from '../extractors/dead-code.js'
 import { analyzeLongFunctions, type LongFunction } from '../extractors/long-functions.js'
 import { analyzeMagicNumbers, type MagicNumber } from '../extractors/magic-numbers.js'
 import { analyzeTestCoverage, type TestCoverageReport } from '../extractors/test-coverage.js'
@@ -561,6 +562,7 @@ async function runDeterministicDetectors(
   let evalCalls: EvalCall[] | undefined
   let hardcodedSecrets: HardcodedSecret[] | undefined
   let booleanParams: BooleanParamSite[] | undefined
+  let deadCode: DeadCodeFinding[] | undefined
 
   const tTodos = performance.now()
   try {
@@ -646,6 +648,15 @@ async function runDeterministicDetectors(
     console.error(`  ✗ boolean-params failed: ${err}`)
   }
 
+  const tDeadCode = performance.now()
+  try {
+    deadCode = await analyzeDeadCode(config.rootDir, files, sharedProject)
+    timing.detectors['dead-code'] = performance.now() - tDeadCode
+  } catch (err) {
+    timing.detectors['dead-code'] = performance.now() - tDeadCode
+    console.error(`  ✗ dead-code failed: ${err}`)
+  }
+
   if (todos) snapshot.todos = todos
   if (longFunctions) snapshot.longFunctions = longFunctions
   if (magicNumbers) snapshot.magicNumbers = magicNumbers
@@ -655,6 +666,7 @@ async function runDeterministicDetectors(
   if (evalCalls) snapshot.evalCalls = evalCalls
   if (hardcodedSecrets) snapshot.hardcodedSecrets = hardcodedSecrets
   if (booleanParams) snapshot.booleanParams = booleanParams
+  if (deadCode) snapshot.deadCode = deadCode
 }
 
 /**

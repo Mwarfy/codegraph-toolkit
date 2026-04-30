@@ -1,0 +1,29 @@
+// NO-RETURN-THEN-ELSE — flatten les if/return + else.
+//
+// Pourquoi : `if (cond) { return X } else { Y }` peut être simplifié en
+// `if (cond) return X; Y` — un niveau d'indentation en moins, le else
+// devient implicite. Le else est sémantiquement redondant car le return
+// du then court-circuite déjà tout. Inspiration : Sonar S1126.
+//
+// Cas où le pattern est intentionnel (à grandfather) :
+//   - Code qui montre une symétrie if/else explicite pour lisibilité
+//     (logging des deux branches typiquement).
+//   - Else immédiatement suivi d'un return aussi (forme symétrique
+//     équivalente, choix de style).
+//
+// Skip déjà côté extracteur :
+//   - `else if` chains (pattern lisible reconnu).
+//   - Fichiers de test.
+//   - Sites avec `// dead-code-ok: <reason>`.
+//
+// Source des facts : `DeadCode(file, line, "return-then-else")`.
+//
+// Pattern ratchet : grandfather par (file, line). Severity = info, pas
+// strict — c'est une suggestion de style, pas un bug.
+
+.decl ReturnThenElseGrandfathered(file: symbol, line: number)
+
+Violation("NO-RETURN-THEN-ELSE", File, Line,
+  "if/return + else — flatten : retirer le else, dedent le bloc") :-
+    DeadCode(File, Line, "return-then-else"),
+    !ReturnThenElseGrandfathered(File, Line).

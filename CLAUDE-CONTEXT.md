@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+2f3d214 feat(phase4-tier2): 4 invariants + 2 drift patterns lift de Sonar/Bandit
 3c94c2d fix(sql-schema): strip les commentaires SQL avant splitTopLevel
 6f1f454 feat(phase4-tier1): 4 invariants déterministes universels lift cross-stack
 d998e49 feat(phase4-axe5): @liby-tools/invariants-postgres-ts — catalogue portable
@@ -111,7 +112,6 @@ e61268d feat(phase4-axe2): SymbolCallEdge / SymbolSignature / EntryPoint facts
 7c16751 docs: README rewrite — clearer setup path + Phase 1+2+3 features
 294de4a feat(adr-toolkit): init détecte la stack DB et active les bons détecteurs
 fffe142 feat(codegraph): Drizzle schema detector — mêmes facts que sql-schema
-7defd9b feat(codegraph): SQL schema detector — FK sans index + 5 facts Datalog
 ```
 
 ## Comment contribuer à ce brief

@@ -1,0 +1,171 @@
+/**
+ * Dead code patterns — détecteur déterministe AST (Phase 4 Tier 3).
+ *
+ * Deux patterns proches conceptuellement (du code redundant/inatteignable) :
+ *
+ * 1. **identical-subexpressions** : les deux côtés d'un BinaryExpression
+ *    (logical / equality / comparison) sont textuellement identiques.
+ *    Ex : `if (a > 0 && a > 0)`, `Math.min(x, x)`, `x === x`.
+ *    Inspirations : Sonar S1764, SpotBugs SA_LOCAL_SELF_COMPARISON.
+ *
+ * 2. **return-then-else** : `if (cond) { return X } else { Y }` où la
+ *    branche else est inatteignable APRÈS le if (le return court-circuite).
+ *    Le `else` est syntaxiquement valide mais sémantiquement redondant —
+ *    plat = plus lisible. Inspiration : Sonar S1126.
+ *
+ * Les deux patterns sont AST-déterministe + contextuel (pas de
+ * control-flow complet). Convention exempt : `// dead-code-ok: <reason>`
+ * sur ligne précédente.
+ *
+ * Skip les fichiers de test (pattern souvent intentionnel en setup/mock).
+ */
+
+import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
+
+export type DeadCodeKind = 'identical-subexpressions' | 'return-then-else'
+
+export interface DeadCodeFinding {
+  kind: DeadCodeKind
+  file: string
+  line: number
+  /** Court (≤ 120 chars), actionnable. */
+  message: string
+  /** Détail spécifique au kind. */
+  details?: Record<string, string | number | boolean>
+}
+
+export interface DeadCodeFileBundle {
+  findings: DeadCodeFinding[]
+}
+
+const TEST_FILE_RE = /(\.test\.tsx?|\.spec\.tsx?|(^|\/)tests?\/|(^|\/)fixtures?\/)/
+
+// Operators où l'identité des côtés est SUSPECTE.
+// `&& || == === != !== > >= < <=` — toujours bug-prone si A == A.
+// `+ - * / %` peuvent être légitimes (`x + x`, `x - x` pour debug).
+const SUSPECT_OPS = new Set<string>([
+  '&&', '||', '==', '===', '!=', '!==',
+  '>', '>=', '<', '<=',
+])
+
+export function extractDeadCodeFileBundle(
+  sf: SourceFile,
+  relPath: string,
+): DeadCodeFileBundle {
+  if (TEST_FILE_RE.test(relPath)) return { findings: [] }
+  const findings: DeadCodeFinding[] = []
+
+  const lines = sf.getFullText().split('\n')
+  const isExempt = (line: number): boolean => {
+    if (line < 2 || line - 2 >= lines.length) return false
+    const prev = lines[line - 2]
+    return /\/\/\s*dead-code-ok\b/.test(prev)
+  }
+
+  // ─── Pattern 1 : identical-subexpressions ──────────────────────────
+  for (const expr of sf.getDescendantsOfKind(SyntaxKind.BinaryExpression)) {
+    const op = expr.getOperatorToken().getText()
+    if (!SUSPECT_OPS.has(op)) continue
+    const left = expr.getLeft().getText().trim()
+    const right = expr.getRight().getText().trim()
+    if (left !== right) continue
+    // Skip si c'est juste une constante littérale identique de chaque
+    // côté (ex `0 === 0` typique de tests / typings) — peu probable
+    // d'être un bug.
+    if (/^[\d"'`]/.test(left) && left.length < 4) continue
+    const line = expr.getStartLineNumber()
+    if (isExempt(line)) continue
+    findings.push({
+      kind: 'identical-subexpressions',
+      file: relPath,
+      line,
+      message: `expression ${op} avec les 2 cotes identiques (${truncate(left, 30)}) — bug ou redondance`,
+      details: { operator: op, expression: truncate(left, 60) },
+    })
+  }
+
+  // ─── Pattern 2 : return-then-else ──────────────────────────────────
+  // `if (cond) { return X } else { ... }` — le else est inatteignable
+  // APRÈS le if (le return du then court-circuite). Pattern Sonar S1126.
+  for (const ifStmt of sf.getDescendantsOfKind(SyntaxKind.IfStatement)) {
+    const elseBranch = ifStmt.getElseStatement()
+    if (!elseBranch) continue
+    // Skip `else if` chain — c'est un pattern lisible reconnu.
+    if (Node.isIfStatement(elseBranch)) continue
+
+    const thenBranch = ifStmt.getThenStatement()
+    if (!thenAlwaysExits(thenBranch)) continue
+
+    const line = ifStmt.getStartLineNumber()
+    if (isExempt(line)) continue
+    findings.push({
+      kind: 'return-then-else',
+      file: relPath,
+      line,
+      message: `if/return suivi de else — flatten : retirer le else, dedent le bloc`,
+    })
+  }
+
+  return { findings }
+}
+
+/**
+ * Détermine si la branche `then` d'un if SE TERMINE TOUJOURS (return /
+ * throw / continue / break) — auquel cas le `else` est sémantiquement
+ * inatteignable et peut être flatten.
+ *
+ * Cas reconnus :
+ *   - `if (x) return;`           ← single statement
+ *   - `if (x) throw new Error()` ← single statement
+ *   - `if (x) { ...; return; }`  ← block dont le DERNIER statement exit
+ *
+ * Pour rester déterministe et conservatif : on ne tient compte que du
+ * dernier statement du block (pas de control-flow analysis profonde).
+ */
+function thenAlwaysExits(then: Node): boolean {
+  if (Node.isReturnStatement(then)) return true
+  if (Node.isThrowStatement(then)) return true
+  if (Node.isBreakStatement(then)) return true
+  if (Node.isContinueStatement(then)) return true
+  if (Node.isBlock(then)) {
+    const stmts = then.getStatements()
+    if (stmts.length === 0) return false
+    const last = stmts[stmts.length - 1]
+    return thenAlwaysExits(last)
+  }
+  return false
+}
+
+function truncate(s: string, max: number): string {
+  return s.length <= max ? s : s.slice(0, max - 1) + '…'
+}
+
+export async function analyzeDeadCode(
+  rootDir: string,
+  files: string[],
+  project: Project,
+): Promise<DeadCodeFinding[]> {
+  const fileSet = new Set(files)
+  const all: DeadCodeFinding[] = []
+
+  for (const sf of project.getSourceFiles()) {
+    const rel = relativize(sf.getFilePath(), rootDir)
+    if (!rel || !fileSet.has(rel)) continue
+    const bundle = extractDeadCodeFileBundle(sf, rel)
+    all.push(...bundle.findings)
+  }
+
+  all.sort((a, b) => {
+    if (a.file !== b.file) return a.file < b.file ? -1 : 1
+    if (a.line !== b.line) return a.line - b.line
+    return a.kind < b.kind ? -1 : 1
+  })
+  return all
+}
+
+function relativize(absPath: string, rootDir: string): string | null {
+  const normalized = absPath.replace(/\\/g, '/')
+  const rootNormalized = rootDir.replace(/\\/g, '/')
+  if (!normalized.startsWith(rootNormalized)) return null
+  return normalized.slice(rootNormalized.length + 1)
+}

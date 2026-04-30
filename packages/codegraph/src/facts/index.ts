@@ -449,6 +449,24 @@ export async function exportFacts(
   }
   relations.push(booleanParamRel)
 
+  // ─── DeadCode (Tier 3) ───────────────────────────────────────────────
+  // Findings : identical-subexpressions (Sonar S1764) + return-then-else
+  // (Sonar S1126). 2 émetteurs partagent la même relation Datalog —
+  // discriminés par le champ `kind`.
+  const deadCodeRel: RelationDef = {
+    name: 'DeadCode',
+    decl: '(file:symbol, line:number, kind:symbol)',
+    rows: [],
+  }
+  for (const d of snapshot.deadCode ?? []) {
+    deadCodeRel.rows.push([
+      sym(d.file),
+      num(d.line),
+      sym(d.kind),
+    ])
+  }
+  relations.push(deadCodeRel)
+
   // ─── Write to disk ────────────────────────────────────────────────────
   await fs.mkdir(options.outDir, { recursive: true })
 
