@@ -22,21 +22,21 @@ But Phase 1 : passer en **incremental** via @liby/salsa. Sur changement
 d'1 fichier, seul ce qui dépend de ce fichier recompute. Cible : <1s par
 commit incrémental.
 
-## État à reprise (après Sprint 2)
+## État à reprise (après Sprint 3)
 
 ### Commits livrés sur cette chaîne (codegraph-toolkit)
 
 ```
+b6c2bb6 feat(codegraph): incremental mode — batch 4 final (symbol-refs, taint, metrics) [Sprint 3]
+cb6309d feat(codegraph): incremental mode — batch 3 (typed-calls, cycles, data-flows) [Sprint 3]
+4756b92 feat(codegraph): incremental mode — batch 2 (complexity, state-machines, truth-points) [Sprint 3]
+92eabe3 feat(codegraph): incremental mode — batch 1 (event-emit-sites, package-deps, barrels) [Sprint 3]
+0c36ea1 docs(phase-1): refresh boot brief post-Sprint 2
 ca6d610 feat(codegraph): incremental mode — env-usage + oauth-scope-literals via Salsa (Sprint 2)
 84c8287 fix(salsa): add Database.resetState() — preserve registry across reset
 0a3c571 docs: PHASE-1-SALSA-MIGRATION.md — boot brief pour reprendre Sprints 2-4
 5d90920 feat(salsa): @liby/salsa runtime — Salsa-style incremental computation (Sprint 1)
 e75b92b feat(codegraph): factsOnly mode + facts --regen flag (M8)
-7ab3214 feat(codegraph): oauth-scope-literals extractor + OauthScopeLiteral facts (M7 prep)
-216b48f fix(datalog,codegraph): multi-file ref-check + auto-regen facts in analyze (M3 prep)
-b4b7679 feat(datalog): @liby/datalog package — pure-TS interpreter for ADR invariants (M2)
-690865c feat(codegraph): event-emit-sites extractor + Datalog facts export (M1)
-18f64c6 feat(codegraph,datalog): wrappedIn capture + relax inline fact constraint (M4 prep)
 ```
 
 ### Commits livrés sur Sentinel
@@ -52,13 +52,36 @@ bc26f4f feat(invariants): ADR-017 migré vers Datalog déclaratif (M3)
 
 ### Ce qui MARCHE déjà (ne pas casser)
 
-- 103/103 tests passent côté toolkit (96 Sprint 1 + 7 nouveaux Sprint 2)
+- 106/106 tests vitest toolkit (legacy script-style tests vérifiés via tsx)
 - 659/659 invariant tests passent côté Sentinel (incl. datalog-invariants)
 - Pre-commit hook Sentinel : tsc + invariants + ADR anchors + brief sync (~17s)
 - 3 ADRs migrés en Datalog : ADR-014 (oauth scopes), ADR-017 (event types), ADR-019 (thresholds)
-- `codegraph analyze` legacy : full 15s, `--regen` (factsOnly) 7s
+- `codegraph analyze` legacy : 15s, 0 violation Datalog
 - `codegraph analyze` incremental : opt-in via `AnalyzeOptions.incremental: true`
-  → env-usage + oauth-scope-literals via cache Salsa per-file
+  → 13/14 détecteurs cachés (tous sauf unused-exports)
+- Smoke E2E sur Sentinel : counts identiques cross-mode (60 envs, 8 oauth,
+  51 events, 19 pkg, 6 barrels, 71 truthPoints, 3 fsm, 521 sigs, 750 edges,
+  1 cycle, 160 dataFlows, 1179 symbolRefs)
+- Cold incremental ~16s, warm ~13s (-21%), legacy 19s
+
+### Ce qui est NEUF dans Sprint 3
+
+**13 détecteurs migrés** sous le pattern uniforme `extractXxxFileBundle`
+(per-file) + `buildXxxFromBundles` (pure agrégat) + queries Salsa
+`xxxOfFile(path)` + `allXxx(label)`.
+
+Migrés (ordre des batches) :
+- Batch 1 (commit `92eabe3`) : event-emit-sites, package-deps, barrels
+- Batch 2 (commit `4756b92`) : complexity, state-machines, truth-points
+- Batch 3 (commit `cb6309d`) : typed-calls, cycles, data-flows
+- Batch 4 (commit `b6c2bb6`) : symbol-refs, taint, module-metrics,
+  component-metrics
+
+**Reporté** : unused-exports. Le détecteur est intrinsèquement cross-file
+(un export est unused ssi PERSONNE ne l'importe — chaque modif d'import
+invalide tout). Pour l'incrémentaliser proprement il faut le découper
+en queries fines ("symbol X importé quelque part ?") — refactor à part,
+pas un wrap.
 
 ### Ce qui est NEUF dans Sprint 2
 
@@ -332,7 +355,28 @@ Si 2e run > 1s, c'est qu'un détecteur dépend de quelque chose qui invalide
 trop largement. Diagnostic via `db.stats().misses` — qui doit être 0 sur
 les queries non touchées.
 
-## Sprint 3 — Migrate remaining detectors
+## Sprint 3 — Migrate remaining detectors ✅ DONE (commits 92eabe3, 4756b92, cb6309d, b6c2bb6)
+
+13/14 détecteurs migrés selon le pattern uniforme. unused-exports
+volontairement reporté (refactor dédié, pas un wrap).
+
+Mesures réelles sur Sentinel (~600 fichiers TS) :
+- Cold incremental : 16.4s (vs 19.2s legacy → -15%)
+- Warm incremental (2e run sans modif) : 12.9s (-21% vs cold)
+- Counts cross-mode bit-pour-bit identiques
+
+Le warm n'atteint PAS la cible <500ms du boot brief original.
+Diagnostic :
+- File discovery + Project ts-morph build non-cachés (~5s)
+- Inputs Salsa réécrits à chaque run (set boucle sur tous les fichiers
+  même si fileContent identique → bumps revision)
+- Agrégats globaux dépendent d'inputs reconstruits (typedCalls,
+  graphEdges, manifests) → invalidation totale même si data identique
+- Persistence disque DB Salsa absente (cache cross-process)
+
+Toutes ces améliorations sont chantier Sprint 5+.
+
+
 
 ### Liste à migrer (dans l'ordre suggéré)
 
@@ -516,15 +560,13 @@ Quand tu reprends dans une nouvelle session :
 
 1. [ ] Lire CE FICHIER en entier
 2. [ ] `git log --oneline | head -20` côté codegraph-toolkit + Sentinel
-3. [ ] Vérifier que `npx vitest run` côté toolkit passe (103/103 attendus)
+3. [ ] Vérifier que `npx vitest run` côté toolkit passe (106/106 attendus)
 4. [ ] Vérifier que les invariants Sentinel passent (659/659)
-5. [ ] Reprendre **Sprint 3** : suivre la liste de détecteurs (par
-       complexité croissante) — pour chaque détecteur, exposer
-       `scanXxxInSourceFile()` côté legacy puis créer
-       `incremental/xxx.ts` avec `xxxOfFile(path)` + `allXxx(label)`,
-       wirer dans `analyze()` en mode incremental, ajouter le test
-       parité+invalidation dans `tests/incremental.test.ts`.
-6. [ ] Suivre les étapes du plan Sprint 3 ci-dessus
+5. [ ] Reprendre **Sprint 4** : décommissionner factsOnly + exposer le
+       flag `--incremental` en CLI. Si refactor unused-exports en mode
+       Salsa souhaité, le faire avant Sprint 4.
+6. [ ] Sprint 5 hypothétique : optimisations perf warm (persistence
+       disque, set-only-changed-files, inputs granulaires).
 
 Si un step ne matche plus exactement la réalité (ex: nouveau commit
 intercalé), adapte mais reste fidèle au principe : Salsa partout,
