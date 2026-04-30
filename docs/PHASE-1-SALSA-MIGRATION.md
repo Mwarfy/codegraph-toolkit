@@ -712,6 +712,12 @@ de 109ms à 0ms (cache per-file finalement consommé en mode incremental).
   c'est le bottleneck dominant (269ms warm). Refactor profond du
   détecteur (670 lignes, 4 passes : import map, test scan, dynamic
   usage, classification confidence). Estimé 3-4h dédiées.
+
+  **PLAN DÉTAILLÉ : voir `docs/SPRINT-11-2-UNUSED-EXPORTS-PLAN.md`.**
+  Ce doc contient l'architecture, les étapes pas-à-pas, les pièges
+  connus (M-003 dynamic imports, M-006 test imports, ESM .js→.ts),
+  les tests de parité bit-pour-bit, et l'estimation d'effort. C'est
+  le boot brief dédié pour reprendre Sprint 11.2 à froid.
 - **Sprint 12 — buildGraph incremental** : gain marginal (~6ms warm).
   Faible priorité.
 - **AST persistence** : sérialiser les ASTs ts-morph dans le cache
@@ -728,9 +734,14 @@ Quand tu reprends dans une nouvelle session :
 2. [ ] `git log --oneline | head -20` côté codegraph-toolkit + Sentinel
 3. [ ] Vérifier que `npx vitest run` côté toolkit passe (106/106 attendus)
 4. [ ] Vérifier que les invariants Sentinel passent (659/659)
-5. [ ] Décider la suite parmi : Phase 2 (AST persistence / watcher),
-       Sprint 8 (retire factsOnly + bascule pre-commit), ou autre
-       chantier (Sentinel / nouveau pack).
+5. [ ] Décider la suite parmi :
+   - **Sprint 11.2** (le plus impactant — atteindre <50ms watcher) :
+     suivre `docs/SPRINT-11-2-UNUSED-EXPORTS-PLAN.md` pas-à-pas.
+   - **AST persistence** (gain CLI cold) : refactor profond ts-morph.
+   - **Bascule pre-commit Sentinel sur --incremental** : retire
+     factsOnly. Risque limité maintenant que warm <500ms same-process.
+   - Autre chantier (Sentinel / nouveau pack) — l'outil est déjà très
+     utilisable en l'état (warm 376ms watcher, 16x speedup).
 
 Si un step ne matche plus exactement la réalité (ex: nouveau commit
 intercalé), adapte mais reste fidèle au principe : Salsa partout,
