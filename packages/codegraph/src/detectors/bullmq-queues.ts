@@ -114,6 +114,11 @@ export class BullmqQueueDetector implements Detector {
       intervalPattern.lastIndex = 0
       let match: RegExpExecArray | null
       while ((match = intervalPattern.exec(content)) !== null) {
+        // Skip mentions in comments / docstrings (audit codegraph-on-codegraph
+        // a révélé le faux positif sur core/types.ts qui décrit les
+        // patterns détectés dans des JSDoc).
+        if (isInComment(content, match.index)) continue
+
         // Check if this is near a BullMQ fallback comment or pattern
         const surrounding = content.substring(
           Math.max(0, match.index - 200),
@@ -143,4 +148,31 @@ export class BullmqQueueDetector implements Detector {
   private getLineNumber(content: string, offset: number): number {
     return content.substring(0, offset).split('\n').length
   }
+}
+
+/**
+ * Heuristique simple : le match est-il dans un commentaire (line ou block) ?
+ *
+ * - Line comment : remonte au début de ligne ; si on trouve `//` avant le
+ *   match sur la même ligne, skip.
+ * - Block comment : compte les `/*` et `*\/` avant le match. Si plus de
+ *   `/*` ouvrants que de `*\/` fermants, on est dans un block.
+ * - Docblock heuristique : si la ligne commence par `*` (après whitespace),
+ *   c'est un docblock JSDoc.
+ *
+ * Pas exhaustif (ne gère pas les cas tordus type string contenant `//`),
+ * mais couvre 95% des cas réels et évite la dépendance AST.
+ */
+function isInComment(content: string, offset: number): boolean {
+  // Line comment check
+  const lineStart = content.lastIndexOf('\n', offset - 1) + 1
+  const lineBefore = content.substring(lineStart, offset)
+  if (lineBefore.includes('//')) return true
+  // Docblock heuristique
+  if (/^\s*\*/.test(lineBefore)) return true
+  // Block comment : count /* and */ before offset
+  const before = content.substring(0, offset)
+  const opens = (before.match(/\/\*/g) ?? []).length
+  const closes = (before.match(/\*\//g) ?? []).length
+  return opens > closes
 }

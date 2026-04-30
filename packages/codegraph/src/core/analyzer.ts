@@ -32,6 +32,10 @@ import { analyzeBarrels } from '../extractors/barrels.js'
 import { analyzeTaint } from '../extractors/taint.js'
 import { analyzeEventEmitSites } from '../extractors/event-emit-sites.js'
 import { analyzeOauthScopeLiterals } from '../extractors/oauth-scope-literals.js'
+import { analyzeTodos, type TodoMarker } from '../extractors/todos.js'
+import { analyzeLongFunctions, type LongFunction } from '../extractors/long-functions.js'
+import { analyzeMagicNumbers, type MagicNumber } from '../extractors/magic-numbers.js'
+import { analyzeTestCoverage, type TestCoverageReport } from '../extractors/test-coverage.js'
 import {
   fileContent as incFileContent,
   projectFiles as incProjectFiles,
@@ -945,6 +949,59 @@ export async function analyze(
   }
   if (oauthScopeLiterals) {
     snapshot.oauthScopeLiterals = oauthScopeLiterals
+  }
+
+  // ─── 6b. New deterministic detectors (Sprint 12) ───────────────────
+  // TODO/FIXME, long functions, magic numbers, test coverage. Pas de
+  // dépendance lourde, pas de wrapper Salsa pour l'instant — pattern
+  // ADR-005 prévu en suivi.
+
+  if (!factsOnly) {
+    let todos: TodoMarker[] | undefined
+    let longFunctions: LongFunction[] | undefined
+    let magicNumbers: MagicNumber[] | undefined
+    let testCoverage: TestCoverageReport | undefined
+
+    const tTodos = performance.now()
+    try {
+      todos = await analyzeTodos(config.rootDir, files, readFile)
+      timing.detectors['todos'] = performance.now() - tTodos
+    } catch (err) {
+      timing.detectors['todos'] = performance.now() - tTodos
+      console.error(`  ✗ todos failed: ${err}`)
+    }
+
+    const tLongFns = performance.now()
+    try {
+      longFunctions = await analyzeLongFunctions(config.rootDir, files, sharedProject)
+      timing.detectors['long-functions'] = performance.now() - tLongFns
+    } catch (err) {
+      timing.detectors['long-functions'] = performance.now() - tLongFns
+      console.error(`  ✗ long-functions failed: ${err}`)
+    }
+
+    const tMagic = performance.now()
+    try {
+      magicNumbers = await analyzeMagicNumbers(config.rootDir, files, sharedProject)
+      timing.detectors['magic-numbers'] = performance.now() - tMagic
+    } catch (err) {
+      timing.detectors['magic-numbers'] = performance.now() - tMagic
+      console.error(`  ✗ magic-numbers failed: ${err}`)
+    }
+
+    const tCov = performance.now()
+    try {
+      testCoverage = await analyzeTestCoverage(config.rootDir, files, snapshot.edges)
+      timing.detectors['test-coverage'] = performance.now() - tCov
+    } catch (err) {
+      timing.detectors['test-coverage'] = performance.now() - tCov
+      console.error(`  ✗ test-coverage failed: ${err}`)
+    }
+
+    if (todos) snapshot.todos = todos
+    if (longFunctions) snapshot.longFunctions = longFunctions
+    if (magicNumbers) snapshot.magicNumbers = magicNumbers
+    if (testCoverage) snapshot.testCoverage = testCoverage
   }
 
   // ─── 7. Module metrics (phase 3.7 #5 + #6) ─────────────────────────

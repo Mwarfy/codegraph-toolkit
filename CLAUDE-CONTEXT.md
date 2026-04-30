@@ -37,7 +37,7 @@
 
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
-- `packages/codegraph/src/core/types.ts` (in: 59)
+- `packages/codegraph/src/core/types.ts` (in: 58)
 - `packages/codegraph/src/incremental/database.ts` (in: 20)
 - `packages/salsa/dist/index.d.ts` (in: 19)
 - `packages/codegraph/src/incremental/queries.ts` (in: 17)
@@ -50,7 +50,7 @@
 
 Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `// ADR-NNN`** dans le code. Intentionnel ? Sinon poser un marqueur ou créer un ADR :
 
-- **59** `packages/codegraph/src/core/types.ts` _(top-hub)_
+- **58** `packages/codegraph/src/core/types.ts` _(top-hub)_
 - **20** `packages/codegraph/src/incremental/database.ts` _(top-hub)_
 - **19** `packages/salsa/dist/index.d.ts` _(top-hub)_
 - **17** `packages/codegraph/src/incremental/queries.ts` _(top-hub)_
@@ -62,8 +62,6 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 > pas verdict. Une tension non explorée n'est pas un bug — c'est un saut
 > latéral possible que le sol stable rend testable.
 
-- **CYCLE** `packages/codegraph/src/core/types.ts → packages/codegraph/src/extractors/data-flows.ts` — boucle directe (2 fichiers)  
-  _→ inverser l'import OU extraire dans un 3e fichier_
 - **ORPHELIN** `packages/adr-toolkit/tests/fixtures/sample-project/src/core/event-bus.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/adr-toolkit/tests/fixtures/sample-project/src/services/state-service.ts` — aucun importeur  
@@ -92,10 +90,13 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ npm uninstall graphology-types + npm test_
 - **DEP-UNUSED** `serve-handler` — déclaré dans packages/codegraph/package.json, jamais importé  
   _→ npm uninstall serve-handler + npm test_
+- **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
+  _→ npm uninstall jest + npm test_
 
 ## Activité récente (14 derniers jours)
 
 ```
+be1553e docs+test: ADR-005 pattern détecteurs + test parité legacy/incremental
 9906e22 perf(codegraph): unused-exports en queries Salsa fines [Sprint 11.2]
 5b0a379 docs: SPRINT-11-2-UNUSED-EXPORTS-PLAN.md — boot brief dédié pour reprendre Sprint 11.2
 66a4ae6 docs(phase-3): refresh boot brief — Phase 3 partielle, prochaines étapes
@@ -107,7 +108,6 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 e65edee feat(salsa,codegraph): disk persistence for cross-process cache hit [Sprint 7]
 29dc4d4 docs(phase-1): refresh boot brief post-Sprint 6 — cible <500ms warm ATTEINTE
 5254819 perf(codegraph): ts-imports reuses sharedProject in incremental mode [Sprint 6]
-7815a4d feat(codegraph): expose --incremental flag in CLI [Sprint 4]
 ```
 
 ## Comment contribuer à ce brief

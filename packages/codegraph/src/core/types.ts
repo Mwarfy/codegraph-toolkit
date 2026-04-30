@@ -293,6 +293,64 @@ export interface GraphSnapshot {
    * fact Datalog `OauthScopeLiteral` pour ADR-014 (registry typé). Optionnel.
    */
   oauthScopeLiterals?: OauthScopeLiteralRef[]
+
+  /**
+   * TODO/FIXME/HACK/XXX/NOTE markers — la dette assumée. Capture les
+   * commentaires `// TODO: ...` etc. avec leur file + line + message.
+   * Détectés via regex. Optionnel.
+   */
+  todos?: Array<{
+    tag: 'TODO' | 'FIXME' | 'HACK' | 'XXX' | 'NOTE'
+    message: string
+    file: string
+    line: number
+  }>
+
+  /**
+   * Long functions — fonctions/méthodes au-delà d'un seuil LOC (default 100).
+   * Complement de cyclomatic complexity : capture la verbosité brute (200
+   * lignes séquentielles sans branches sont aussi candidats refactor).
+   * Optionnel.
+   */
+  longFunctions?: Array<{
+    file: string
+    name: string
+    line: number
+    loc: number
+    kind: 'function' | 'method' | 'arrow'
+  }>
+
+  /**
+   * Magic numbers — littéraux numériques hardcodés dans des positions
+   * suspectes (timeouts, thresholds, ratios, large ints en property/call
+   * position). Candidats à migrer vers env-driven config (cf. ADR-019).
+   * Optionnel.
+   */
+  magicNumbers?: Array<{
+    file: string
+    line: number
+    value: string
+    context: string
+    category: 'timeout' | 'threshold' | 'ratio' | 'large-int' | 'other'
+  }>
+
+  /**
+   * Test coverage structurel — pour chaque fichier source, liste les
+   * tests qui le couvrent (par naming convention OU par import). Pas de
+   * coverage runtime, juste la présence/absence d'un test associé.
+   * Optionnel.
+   */
+  testCoverage?: {
+    entries: Array<{
+      sourceFile: string
+      testFiles: string[]
+      matchedBy: Array<'naming' | 'import'>
+    }>
+    totalSourceFiles: number
+    coveredFiles: number
+    uncoveredFiles: number
+    coverageRatio: number
+  }
 }
 
 /** Re-export du type produit par `extractors/oauth-scope-literals`. */
