@@ -316,6 +316,21 @@ export interface GraphSnapshot {
   }>
 
   /**
+   * Drift signals — patterns que l'agent crée plus que les humains.
+   * 3 patterns V1 : excessive-optional-params, wrapper-superfluous,
+   * todo-no-owner. Sert à RALENTIR l'agent au bon moment, pas à bloquer.
+   * Source : `extractors/drift-patterns.ts` (Phase 4 axe 4). Optionnel.
+   */
+  driftSignals?: Array<{
+    kind: 'excessive-optional-params' | 'wrapper-superfluous' | 'todo-no-owner'
+    file: string
+    line: number
+    message: string
+    severity: 1 | 2 | 3
+    details?: Record<string, string | number | boolean>
+  }>
+
+  /**
    * Long functions — fonctions/méthodes au-delà d'un seuil LOC (default 100).
    * Complement de cyclomatic complexity : capture la verbosité brute (200
    * lignes séquentielles sans branches sont aussi candidats refactor).

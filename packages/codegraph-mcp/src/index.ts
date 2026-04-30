@@ -33,6 +33,7 @@ import { codegraphAffected } from './tools/affected.js'
 import { codegraphChangesSince } from './tools/changes-since.js'
 import { codegraphDatalogQuery } from './tools/datalog-query.js'
 import { codegraphMemoryRecall, codegraphMemoryMark } from './tools/memory.js'
+import { codegraphDrift } from './tools/drift.js'
 
 const server = new Server(
   {
@@ -321,6 +322,25 @@ const TOOLS = [
     },
   },
   {
+    name: 'codegraph_drift',
+    description:
+      'List "drift agentique" signals — patterns AI agents create more ' +
+      'than humans, flagged to slow you down at the right moment, NOT to ' +
+      'block. 3 patterns V1: excessive-optional-params (>5 optional params), ' +
+      'wrapper-superfluous (function = single forward call), todo-no-owner ' +
+      '(// TODO without @user nor #issue). Use `// drift-ok: <reason>` on ' +
+      'the line above a signal to silence it. Without file_path: project-wide; ' +
+      'with: filtered to that file.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        file_path: { type: 'string', description: 'Optional. Filter to one file.' },
+        repo_root: { type: 'string' },
+        limit: { type: 'number', description: 'Top-N per kind (default 10).' },
+      },
+    },
+  },
+  {
     name: 'codegraph_datalog_query',
     description:
       'Execute an ad hoc Datalog rule against the emitted facts ' +
@@ -405,6 +425,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break
       case 'codegraph_memory_mark':
         result = await codegraphMemoryMark(args as any)
+        break
+      case 'codegraph_drift':
+        result = codegraphDrift(args as any)
         break
       default:
         return {

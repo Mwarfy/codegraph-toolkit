@@ -42,6 +42,7 @@ import { TaintDetector } from './detectors/taint-detector.js'
 import { SqlSchemaDetector } from './detectors/sql-schema-detector.js'
 import { DrizzleSchemaDetector } from './detectors/drizzle-schema-detector.js'
 import { analyzeTodos, type TodoMarker } from '../extractors/todos.js'
+import { analyzeDriftPatterns, type DriftSignal } from '../extractors/drift-patterns.js'
 import { analyzeLongFunctions, type LongFunction } from '../extractors/long-functions.js'
 import { analyzeMagicNumbers, type MagicNumber } from '../extractors/magic-numbers.js'
 import { analyzeTestCoverage, type TestCoverageReport } from '../extractors/test-coverage.js'
@@ -553,6 +554,7 @@ async function runDeterministicDetectors(
   let magicNumbers: MagicNumber[] | undefined
   let testCoverage: TestCoverageReport | undefined
   let coChangePairs: CoChangePair[] | undefined
+  let driftSignals: DriftSignal[] | undefined
 
   const tTodos = performance.now()
   try {
@@ -600,11 +602,23 @@ async function runDeterministicDetectors(
     console.error(`  ✗ co-change failed: ${err}`)
   }
 
+  // Drift patterns — dépend de todos (pattern 3) + sharedProject (1, 2).
+  // Run après les autres pour avoir todos résolu.
+  const tDrift = performance.now()
+  try {
+    driftSignals = await analyzeDriftPatterns(config.rootDir, files, sharedProject, todos)
+    timing.detectors['drift-patterns'] = performance.now() - tDrift
+  } catch (err) {
+    timing.detectors['drift-patterns'] = performance.now() - tDrift
+    console.error(`  ✗ drift-patterns failed: ${err}`)
+  }
+
   if (todos) snapshot.todos = todos
   if (longFunctions) snapshot.longFunctions = longFunctions
   if (magicNumbers) snapshot.magicNumbers = magicNumbers
   if (testCoverage) snapshot.testCoverage = testCoverage
   if (coChangePairs) snapshot.coChangePairs = coChangePairs
+  if (driftSignals) snapshot.driftSignals = driftSignals
 }
 
 /**
