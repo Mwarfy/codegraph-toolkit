@@ -179,12 +179,36 @@ export class CodeGraphWatcher {
     }
 
     try {
-      await analyze(this.config, {
+      const result = await analyze(this.config, {
         incremental: true,
         skipPersistenceLoad: opts.skipLoad ?? true,
         skipPersistenceSave: opts.skipSave ?? true,
         preDiscoveredFiles: this.files,
       })
+
+      // Sprint B2 : écrit `.codegraph/snapshot-live.json` + facts à chaque
+      // update, pour que les consumers (hook PostToolUse, MCP tools) voient
+      // un snapshot live au lieu du dernier post-commit (qui peut dater).
+      // Le préfixe `snapshot-` matche le filter du loader. Naming dédié
+      // pour ne pas confondre avec les snapshots versionnés post-commit.
+      if (this.opts.writeSnapshot) {
+        try {
+          const snapshotPath = path.join(this.config.rootDir, '.codegraph', 'snapshot-live.json')
+          await fs.mkdir(path.dirname(snapshotPath), { recursive: true })
+          await fs.writeFile(snapshotPath, JSON.stringify(result.snapshot, null, 2))
+
+          // Régénère aussi les facts datalog (les invariants Sentinel les
+          // consomment via .codegraph/facts/). Latence ~50ms supplémentaire.
+          const { exportFacts } = await import('../facts/index.js')
+          await exportFacts(result.snapshot, {
+            outDir: path.join(this.config.rootDir, '.codegraph', 'facts'),
+          })
+        } catch (writeErr) {
+          // Échec d'écriture = pas bloquant, le run en RAM a réussi
+          this.opts.onError?.(writeErr)
+        }
+      }
+
       const durationMs = performance.now() - t0
       this.opts.onUpdate?.({ changedFiles, durationMs })
     } catch (err) {

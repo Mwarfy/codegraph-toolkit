@@ -19,14 +19,24 @@ export function loadSnapshot(repoRoot: string): any {
   try {
     files = fs.readdirSync(codegraphDir)
       .filter(f => f.startsWith('snapshot-') && f.endsWith('.json'))
-      .sort()
   } catch {
     throw new Error(`No .codegraph directory at ${repoRoot}. Run \`npx codegraph analyze\` first.`)
   }
   if (files.length === 0) {
     throw new Error(`No snapshot found in ${codegraphDir}. Run \`npx codegraph analyze\` first.`)
   }
-  const latestPath = path.join(codegraphDir, files[files.length - 1])
+  // Sprint B2 : tri par mtime descendant — préfère le snapshot le plus
+  // frais. Ainsi `snapshot-live.json` (réécrit en continu par
+  // `codegraph watch`) gagne sur `snapshot-2026-...-COMMIT.json`
+  // (post-commit, donc plus ancien dès qu'on a édité un fichier).
+  // Si pas de watcher actif, le post-commit le plus récent gagne —
+  // comportement inchangé vs avant B2.
+  const filesWithMtime = files.map((f) => {
+    const p = path.join(codegraphDir, f)
+    return { path: p, mtime: fs.statSync(p).mtimeMs }
+  })
+  filesWithMtime.sort((a, b) => b.mtime - a.mtime)
+  const latestPath = filesWithMtime[0].path
   const stat = fs.statSync(latestPath)
   if (cachedPath === latestPath && cachedMtime === stat.mtimeMs && cachedSnapshot) {
     return cachedSnapshot

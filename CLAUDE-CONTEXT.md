@@ -47,8 +47,8 @@
 - `packages/salsa/dist/index.d.ts` (in: 19)
 - `packages/codegraph/src/core/detector-registry.ts` (in: 15)
 - `packages/adr-toolkit/src/config.ts` (in: 10) · gov by ADR-002
+- `packages/codegraph-mcp/src/snapshot-loader.ts` (in: 8)
 - `packages/codegraph/src/diff/types.ts` (in: 8)
-- `packages/datalog/src/types.ts` (in: 8)
 
 ## ⚠ ADR anchor suggestions
 
@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+26159fc feat(codegraph): reverse-deps BFS — codegraph_affected MCP tool + CLI affected
 f65f5c7 docs: clôture du plan d'enrichissement 5 axes — Axe 3 obsolète
 1a239bd feat(codegraph-mcp): codegraph_who_calls + codegraph_extract_candidates
 c9da515 feat(codegraph): co-change extractor + codegraph_co_changed MCP tool
@@ -111,7 +112,6 @@ ff7cd93 refactor(codegraph): Phase C — analyze() à 157 LOC via 4 helpers d'or
 f0f9ca3 feat(adr-toolkit): détecteur fsm — unions string literals + write sites observables
 41f0d10 docs: boot briefs SPRINT-13-FSM + REFACTOR-ANALYZER pour reprise à froid
 08534fb release: v0.2.0 — bootstrap detectors + types invariant + install.sh moderne
-b28b910 chore: rename @liby/ → @liby-tools/ pour publication npm
 ```
 
 ## Comment contribuer à ce brief
