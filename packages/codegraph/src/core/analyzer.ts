@@ -31,7 +31,9 @@ import { analyzePackageDeps } from '../extractors/package-deps.js'
 import { analyzeBarrels } from '../extractors/barrels.js'
 import { analyzeTaint } from '../extractors/taint.js'
 import { analyzeEventEmitSites } from '../extractors/event-emit-sites.js'
-import { analyzeOauthScopeLiterals } from '../extractors/oauth-scope-literals.js'
+import type { OauthScopeLiteral } from '../extractors/oauth-scope-literals.js'
+import { DetectorRegistry, type DetectorRunContext } from './detector-registry.js'
+import { OauthScopeLiteralsDetector } from './detectors/oauth-scope-literals-detector.js'
 import { analyzeTodos, type TodoMarker } from '../extractors/todos.js'
 import { analyzeLongFunctions, type LongFunction } from '../extractors/long-functions.js'
 import { analyzeMagicNumbers, type MagicNumber } from '../extractors/magic-numbers.js'
@@ -53,7 +55,6 @@ import {
 } from '../incremental/persistence.js'
 import { sharedDb as incSharedDb } from '../incremental/database.js'
 import { allEnvUsage as incAllEnvUsage } from '../incremental/env-usage.js'
-import { allOauthScopeLiterals as incAllOauthScopeLiterals } from '../incremental/oauth-scope-literals.js'
 import { allEventEmitSites as incAllEventEmitSites } from '../incremental/event-emit-sites.js'
 import { allPackageDeps as incAllPackageDeps } from '../incremental/package-deps.js'
 import { allBarrels as incAllBarrels } from '../incremental/barrels.js'
@@ -788,39 +789,26 @@ export async function analyze(
     }
   }
 
-  // ─── 5k-ter. OAuth scope literals (Datalog facts) ──────────────────
-  // Strings hardcodées matchant le pattern d'URL de scope Google Auth.
-  // Source du fact `OauthScopeLiteral` pour ADR-014.
+  // ─── 5k-ter. OAuth scope literals (via DetectorRegistry — Phase A refactor) ──
+  // Premier détecteur migré au pattern Detector/Registry. Logique 1:1 avec le
+  // legacy. Ajout de nouveaux détecteurs au registry → Phase B.
+  // Cf. core/detector-registry.ts + core/detectors/oauth-scope-literals-detector.ts
 
-  const oauthScopeLiteralsEnabled =
-    (config.detectorOptions?.['oauthScopeLiterals']?.['enabled'] as boolean | undefined) ?? true
+  const detectorRegistry = new DetectorRegistry()
+    .register(new OauthScopeLiteralsDetector())
 
-  const tOauthScope = performance.now()
-  let oauthScopeLiterals: Awaited<ReturnType<typeof analyzeOauthScopeLiterals>> | undefined
-  if (oauthScopeLiteralsEnabled) {
-    try {
-      const oslOptions = config.detectorOptions?.['oauthScopeLiterals'] ?? {}
-      if (incremental) {
-        // Salsa path : pure string scan, encore plus simple à cacher.
-        // `scopePattern` custom non supporté ici (default suffit pour
-        // Sentinel ADR-014).
-        oauthScopeLiterals = incAllOauthScopeLiterals.get('all')
-      } else {
-        oauthScopeLiterals = await analyzeOauthScopeLiterals(
-          config.rootDir,
-          files,
-          sharedProject,
-          {
-            scopePattern: oslOptions['scopePattern'] as RegExp | undefined,
-          },
-        )
-      }
-      timing.detectors['oauth-scope-literals'] = performance.now() - tOauthScope
-    } catch (err) {
-      timing.detectors['oauth-scope-literals'] = performance.now() - tOauthScope
-      console.error(`  ✗ oauth-scope-literals failed: ${err}`)
-    }
+  const detectorCtx: DetectorRunContext = {
+    config,
+    files,
+    sharedProject,
+    options: { factsOnly, incremental },
+    results: {},
   }
+  await detectorRegistry.runAll(detectorCtx, timing.detectors)
+
+  const oauthScopeLiterals = detectorCtx.results['oauth-scope-literals'] as
+    | OauthScopeLiteral[]
+    | undefined
 
   // ─── 5l. Taint analysis (phase 3.8 #3) ─────────────────────────────
   // Flux source non-trusté → sink dangereux sans passage par un sanitizer.

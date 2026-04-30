@@ -45,7 +45,7 @@
 - `packages/codegraph/src/incremental/database.ts` (in: 20)
 - `packages/salsa/dist/index.d.ts` (in: 19)
 - `packages/codegraph/src/incremental/queries.ts` (in: 17)
-- `packages/adr-toolkit/src/config.ts` (in: 9) · gov by ADR-002
+- `packages/adr-toolkit/src/config.ts` (in: 10) · gov by ADR-002
 - `packages/codegraph/src/diff/types.ts` (in: 8)
 - `packages/datalog/src/types.ts` (in: 8)
 - `packages/codegraph/src/check/types.ts` (in: 7)
@@ -65,6 +65,8 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 > pas verdict. Une tension non explorée n'est pas un bug — c'est un saut
 > latéral possible que le sol stable rend testable.
 
+- **CYCLE** `packages/adr-toolkit/src/bootstrap-fsm.ts → packages/adr-toolkit/src/bootstrap.ts` — boucle directe (2 fichiers)  
+  _→ inverser l'import OU extraire dans un 3e fichier_
 - **ORPHELIN** `packages/adr-toolkit/tests/fixtures/sample-project/src/core/event-bus.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/adr-toolkit/tests/fixtures/sample-project/src/services/state-service.ts` — aucun importeur  
@@ -93,12 +95,11 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ npm uninstall graphology-operators + npm test_
 - **DEP-UNUSED** `graphology-types` — déclaré dans packages/codegraph/package.json, jamais importé  
   _→ npm uninstall graphology-types + npm test_
-- **DEP-UNUSED** `serve-handler` — déclaré dans packages/codegraph/package.json, jamais importé  
-  _→ npm uninstall serve-handler + npm test_
 
 ## Activité récente (14 derniers jours)
 
 ```
+f0f9ca3 feat(adr-toolkit): détecteur fsm — unions string literals + write sites observables
 41f0d10 docs: boot briefs SPRINT-13-FSM + REFACTOR-ANALYZER pour reprise à froid
 08534fb release: v0.2.0 — bootstrap detectors + types invariant + install.sh moderne
 b28b910 chore: rename @liby/ → @liby-tools/ pour publication npm
@@ -110,7 +111,6 @@ b28b910 chore: rename @liby/ → @liby-tools/ pour publication npm
 04e3f2d feat(codegraph-mcp): nouveau MCP server exposant les queries codegraph
 20b3709 feat(codegraph): 4 nouveaux détecteurs déterministes + fix cycles bullmq
 be1553e docs+test: ADR-005 pattern détecteurs + test parité legacy/incremental
-9906e22 perf(codegraph): unused-exports en queries Salsa fines [Sprint 11.2]
 ```
 
 ## Comment contribuer à ce brief
