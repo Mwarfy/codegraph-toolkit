@@ -35,11 +35,11 @@
 
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
-- `packages/codegraph/src/core/types.ts` (in: 52)
-- `packages/salsa/dist/index.d.ts` (in: 10)
+- `packages/codegraph/src/core/types.ts` (in: 55)
+- `packages/salsa/dist/index.d.ts` (in: 13)
+- `packages/codegraph/src/incremental/database.ts` (in: 12)
+- `packages/codegraph/src/incremental/queries.ts` (in: 12)
 - `packages/adr-toolkit/src/config.ts` (in: 9) · gov by ADR-002
-- `packages/codegraph/src/incremental/database.ts` (in: 9)
-- `packages/codegraph/src/incremental/queries.ts` (in: 9)
 - `packages/codegraph/src/diff/types.ts` (in: 8)
 - `packages/datalog/src/types.ts` (in: 8)
 - `packages/codegraph/src/check/types.ts` (in: 7)
@@ -48,7 +48,7 @@
 
 Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `// ADR-NNN`** dans le code. Intentionnel ? Sinon poser un marqueur ou créer un ADR :
 
-- **52** `packages/codegraph/src/core/types.ts` _(top-hub)_
+- **55** `packages/codegraph/src/core/types.ts` _(top-hub)_
 
 ## Tensions actives — invitations à explorer
 
@@ -91,6 +91,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+cb6309d feat(codegraph): incremental mode — batch 3 (typed-calls, cycles, data-flows) [Sprint 3]
 4756b92 feat(codegraph): incremental mode — batch 2 (complexity, state-machines, truth-points) [Sprint 3]
 92eabe3 feat(codegraph): incremental mode — batch 1 (event-emit-sites, package-deps, barrels) [Sprint 3]
 0c36ea1 docs(phase-1): refresh boot brief post-Sprint 2
@@ -102,7 +103,6 @@ e75b92b feat(codegraph): factsOnly mode + facts --regen flag (M8)
 7ab3214 feat(codegraph): oauth-scope-literals extractor + OauthScopeLiteral facts (M7 prep)
 18f64c6 feat(codegraph,datalog): wrappedIn capture + relax inline fact constraint (M4 prep)
 216b48f fix(datalog,codegraph): multi-file ref-check + auto-regen facts in analyze (M3 prep)
-b4b7679 feat(datalog): @liby/datalog package — pure-TS interpreter for ADR invariants (M2)
 ```
 
 ## Comment contribuer à ce brief

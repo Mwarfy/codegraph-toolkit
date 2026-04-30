@@ -62,6 +62,17 @@ import {
   allDataFlows as incAllDataFlows,
   typedCallsInput as incTypedCallsInput,
 } from '../incremental/data-flows.js'
+import { allSymbolRefs as incAllSymbolRefs } from '../incremental/symbol-refs.js'
+import {
+  allTaintViolations as incAllTaint,
+  taintRulesInput as incTaintRules,
+} from '../incremental/taint.js'
+import {
+  allModuleMetrics as incAllModuleMetrics,
+  allComponentMetrics as incAllComponentMetrics,
+  graphNodesInput as incGraphNodes,
+  graphEdgesForMetricsInput as incGraphEdgesForMetrics,
+} from '../incremental/metrics.js'
 import { packageManifestsInput as incPackageManifests } from '../incremental/queries.js'
 import {
   discoverManifests as discoverPackageManifests,
@@ -346,7 +357,9 @@ export async function analyze(
   const tSymbolRefs = performance.now()
   let symbolRefs: { from: string; to: string; line: number }[] | undefined
   if (!factsOnly) try {
-    const result = await analyzeSymbolRefs(config.rootDir, files, sharedProject)
+    const result = incremental
+      ? incAllSymbolRefs.get('all')
+      : await analyzeSymbolRefs(config.rootDir, files, sharedProject)
     symbolRefs = result.refs
     timing.detectors['symbol-refs'] = performance.now() - tSymbolRefs
   } catch (err) {
@@ -738,7 +751,12 @@ export async function analyze(
           sinks: raw.sinks ?? [],
           sanitizers: raw.sanitizers ?? [],
         }
-        taintViolations = await analyzeTaint(config.rootDir, files, sharedProject, rules)
+        if (incremental) {
+          incTaintRules.set('all', rules)
+          taintViolations = incAllTaint.get('all')
+        } else {
+          taintViolations = await analyzeTaint(config.rootDir, files, sharedProject, rules)
+        }
       }
       timing.detectors['taint'] = performance.now() - tTaint
     } catch (err) {
@@ -800,15 +818,25 @@ export async function analyze(
   if (moduleMetricsEnabled) {
     try {
       const mmOptions = config.detectorOptions?.['moduleMetrics'] ?? {}
-      snapshot.moduleMetrics = computeModuleMetrics(
-        snapshot.nodes,
-        snapshot.edges,
-        {
-          edgeTypesForCentrality: mmOptions['edgeTypesForCentrality'] as any,
-          pagerankAlpha: mmOptions['pagerankAlpha'] as number | undefined,
-          pagerankTolerance: mmOptions['pagerankTolerance'] as number | undefined,
-        },
-      )
+      if (incremental) {
+        // Salsa path : nodes+edges déjà construits, on les set en
+        // input puis on calcule via le derived. Custom options
+        // (edgeTypesForCentrality, alpha, tolerance) non supportés —
+        // defaults suffisent pour Sentinel.
+        incGraphNodes.set('all', snapshot.nodes)
+        incGraphEdgesForMetrics.set('all', snapshot.edges)
+        snapshot.moduleMetrics = incAllModuleMetrics.get('all')
+      } else {
+        snapshot.moduleMetrics = computeModuleMetrics(
+          snapshot.nodes,
+          snapshot.edges,
+          {
+            edgeTypesForCentrality: mmOptions['edgeTypesForCentrality'] as any,
+            pagerankAlpha: mmOptions['pagerankAlpha'] as number | undefined,
+            pagerankTolerance: mmOptions['pagerankTolerance'] as number | undefined,
+          },
+        )
+      }
       timing.detectors['module-metrics'] = performance.now() - tModuleMetrics
     } catch (err) {
       timing.detectors['module-metrics'] = performance.now() - tModuleMetrics
@@ -825,15 +853,23 @@ export async function analyze(
   if (componentMetricsEnabled) {
     try {
       const cmOptions = config.detectorOptions?.['componentMetrics'] ?? {}
-      snapshot.componentMetrics = computeComponentMetrics(
-        snapshot.nodes,
-        snapshot.edges,
-        {
-          depth: cmOptions['depth'] as number | undefined,
-          edgeTypes: cmOptions['edgeTypes'] as any,
-          excludeComponents: cmOptions['excludeComponents'] as string[] | undefined,
-        },
-      )
+      if (incremental) {
+        // Salsa path : nodes+edges déjà set par module-metrics au-dessus.
+        // Custom options non supportés.
+        if (!incGraphNodes.has('all')) incGraphNodes.set('all', snapshot.nodes)
+        if (!incGraphEdgesForMetrics.has('all')) incGraphEdgesForMetrics.set('all', snapshot.edges)
+        snapshot.componentMetrics = incAllComponentMetrics.get('all')
+      } else {
+        snapshot.componentMetrics = computeComponentMetrics(
+          snapshot.nodes,
+          snapshot.edges,
+          {
+            depth: cmOptions['depth'] as number | undefined,
+            edgeTypes: cmOptions['edgeTypes'] as any,
+            excludeComponents: cmOptions['excludeComponents'] as string[] | undefined,
+          },
+        )
+      }
       timing.detectors['component-metrics'] = performance.now() - tComponentMetrics
     } catch (err) {
       timing.detectors['component-metrics'] = performance.now() - tComponentMetrics

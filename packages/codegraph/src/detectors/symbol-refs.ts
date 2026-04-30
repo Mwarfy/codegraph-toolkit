@@ -309,39 +309,52 @@ export async function analyzeSymbolRefs(
 ): Promise<SymbolRefsResult> {
   const refs: SymbolRef[] = []
   const exportedSymbols = new Set<string>()
+  const fileSet = new Set(files)
 
-  // Pass 1 : collecte des symboles EXPORTÉS (pour info — pas strictement
-  // nécessaire pour le PageRank car le graphe se construit depuis les edges).
   for (const sf of sharedProject.getSourceFiles()) {
-    const filePath = path.relative(rootDir, sf.getFilePath()).replace(/\\/g, '/')
-    if (!files.includes(filePath)) continue
-
-    const units = getAllUnits(sf)
-    for (const u of units) {
-      if (u.exported) exportedSymbols.add(`${filePath}:${u.name}`)
-    }
-  }
-
-  // Pass 2 : pour TOUTES les unités (exportées ou non), scanne le body et
-  // émet les edges. Inclure les non-exportées est critique pour find_references
-  // (un call site dans un helper doit apparaître) et enrichit le PageRank
-  // (un helper qui appelle emit() 50 fois pousse emit vers le haut du rank).
-  for (const sf of sharedProject.getSourceFiles()) {
-    const filePath = path.relative(rootDir, sf.getFilePath()).replace(/\\/g, '/')
-    if (!files.includes(filePath)) continue
-
-    const importMap = getImportMap(sf, rootDir)
-    const units = getAllUnits(sf)
-
-    for (const unit of units) {
-      const fromId = `${filePath}:${unit.name}`
-      const hits = collectRefs(unit.body, importMap)
-      for (const hit of hits) {
-        const toId = `${hit.file}:${hit.name}`
-        refs.push({ from: fromId, to: toId, line: hit.line })
-      }
-    }
+    const filePath = path.relative(sf.getFilePath(), rootDir).replace(/\\/g, '/')
+    // Note legacy: ce chemin était `files.includes(filePath)`. Garder le check
+    // sur fileSet pour parité.
+    const rel = path.relative(rootDir, sf.getFilePath()).replace(/\\/g, '/')
+    if (!fileSet.has(rel)) continue
+    void filePath
+    const bundle = extractSymbolRefsFileBundle(sf, rel, rootDir)
+    for (const e of bundle.exportedSymbols) exportedSymbols.add(e)
+    refs.push(...bundle.refs)
   }
 
   return { refs, exportedSymbols }
+}
+
+/**
+ * Bundle per-file : les symboles exportés + les refs sortantes
+ * détectées. Réutilisable côté Salsa.
+ */
+export interface SymbolRefsFileBundle {
+  exportedSymbols: string[]
+  refs: SymbolRef[]
+}
+
+export function extractSymbolRefsFileBundle(
+  sf: SourceFile,
+  relPath: string,
+  rootDir: string,
+): SymbolRefsFileBundle {
+  const importMap = getImportMap(sf, rootDir)
+  const units = getAllUnits(sf)
+
+  const exportedSymbols: string[] = []
+  const refs: SymbolRef[] = []
+
+  for (const unit of units) {
+    if (unit.exported) exportedSymbols.push(`${relPath}:${unit.name}`)
+    const fromId = `${relPath}:${unit.name}`
+    const hits = collectRefs(unit.body, importMap)
+    for (const hit of hits) {
+      const toId = `${hit.file}:${hit.name}`
+      refs.push({ from: fromId, to: toId, line: hit.line })
+    }
+  }
+
+  return { exportedSymbols, refs }
 }

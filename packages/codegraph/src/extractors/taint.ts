@@ -32,7 +32,7 @@
  *     pour repérer `req.body[foo]` comme tainted.
  */
 
-import { Project, SyntaxKind, Node } from 'ts-morph'
+import { Project, SyntaxKind, Node, type SourceFile } from 'ts-morph'
 import * as path from 'node:path'
 import type {
   TaintRules,
@@ -61,32 +61,42 @@ export async function analyzeTaint(
     const absPath = sf.getFilePath() as string
     const relPath = path.relative(rootDir, absPath).replace(/\\/g, '/')
     if (!fileSet.has(relPath)) continue
-
-    // Scope file : toutes les fonctions + le top-level module lui-même.
-    const scopes: Node[] = [sf]
-    sf.forEachDescendant((node) => {
-      const k = node.getKind()
-      if (
-        k === SyntaxKind.FunctionDeclaration ||
-        k === SyntaxKind.FunctionExpression ||
-        k === SyntaxKind.ArrowFunction ||
-        k === SyntaxKind.MethodDeclaration
-      ) {
-        scopes.push(node)
-      }
-    })
-
-    const lineToSymbol = buildLineToSymbol(sf)
-
-    for (const scope of scopes) {
-      analyzeScope(scope, relPath, lineToSymbol, rules, violations)
-    }
+    violations.push(...scanTaintInSourceFile(sf, relPath, rules))
   }
 
   violations.sort((a, b) => {
     if (a.file !== b.file) return a.file < b.file ? -1 : 1
     return a.line - b.line
   })
+  return violations
+}
+
+/**
+ * Helper réutilisable : scanne UN SourceFile et retourne les violations
+ * détectées (sans tri global). Réutilisé par la version Salsa.
+ */
+export function scanTaintInSourceFile(
+  sf: SourceFile,
+  relPath: string,
+  rules: TaintRules,
+): TaintViolation[] {
+  const violations: TaintViolation[] = []
+  const scopes: Node[] = [sf]
+  sf.forEachDescendant((node) => {
+    const k = node.getKind()
+    if (
+      k === SyntaxKind.FunctionDeclaration ||
+      k === SyntaxKind.FunctionExpression ||
+      k === SyntaxKind.ArrowFunction ||
+      k === SyntaxKind.MethodDeclaration
+    ) {
+      scopes.push(node)
+    }
+  })
+  const lineToSymbol = buildLineToSymbol(sf)
+  for (const scope of scopes) {
+    analyzeScope(scope, relPath, lineToSymbol, rules, violations)
+  }
   return violations
 }
 
