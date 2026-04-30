@@ -689,18 +689,36 @@ local (15x speedup vs cold).
   gain en cas de modif locale d'un seul fichier dans un gros projet,
   mais pour Sentinel c'est négligeable.
 
-### Sprints "next" si Phase 3 voulue
+### Phase 3 partielle livrée (Sprint 10 + 11.1, commit `2244034`)
 
+**Sprint 10 — discoverFiles cache** : `preDiscoveredFiles` option
++ watcher maintient sa liste en RAM via fs events. Gain mesuré ~50ms
+(le walk était déjà rapide sur Sentinel).
+
+**Sprint 11.1 — wire allTsImports Salsa** : ts-imports warm passe
+de 109ms à 0ms (cache per-file finalement consommé en mode incremental).
+
+**Constat Sentinel breakdown warm** : 376ms total, dont :
+- unused-exports : 269ms (84% du restant)
+- détecteurs Salsa : ~5ms
+- fileDiscovery : 30ms
+- graphBuild : 6ms
+- détecteurs base (event-bus, db-tables, etc.) : ~50ms
+- overhead analyze() : ~30ms
+
+### Sprints "next" pour atteindre <50ms watcher (Phase 3 complète)
+
+- **Sprint 11.2 — refactor unused-exports en queries Salsa fines** :
+  c'est le bottleneck dominant (269ms warm). Refactor profond du
+  détecteur (670 lignes, 4 passes : import map, test scan, dynamic
+  usage, classification confidence). Estimé 3-4h dédiées.
+- **Sprint 12 — buildGraph incremental** : gain marginal (~6ms warm).
+  Faible priorité.
 - **AST persistence** : sérialiser les ASTs ts-morph dans le cache
   disque pour skip le `createSharedProject` au cold CLI (~3-5s gain).
-  Refactor profond, demande de bien gérer la version de ts-morph et
-  l'invalidation. Cible : warm CLI <2s.
-- **discoverFiles cache** : ~500ms de walk fs récursif à chaque
-  analyze(). Cacher le résultat + invalider via fs.watch sur les
-  dirs cibles. Étape vers warm watcher <50ms.
-- **buildGraph incremental** : ne recompute que les edges qui
-  changent (delta sur graph.addEdge / removeEdge). Étape finale
-  pour warm watcher <50ms.
+  Refactor profond, gestion fragile de la version ts-morph.
+- **Migrer event-bus / http-routes / bullmq-queues / db-tables en
+  Salsa** : cumulent ~50ms warm, gain marginal vs effort.
 
 ## Reprise rapide checklist
 

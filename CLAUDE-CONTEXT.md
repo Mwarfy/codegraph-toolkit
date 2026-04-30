@@ -94,6 +94,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+2244034 perf(codegraph): Phase 3 partielle — discoverFiles cache + ts-imports Salsa wired [Sprint 10+11.1]
 2a9043e docs(phase-2): refresh boot brief post-Sprint 8+9 — Phase 2 livrée
 7a57eef feat(codegraph): watcher mode `codegraph watch` [Sprint 9 — Phase 2]
 77d2053 feat(salsa,codegraph): delta saves — append-only deltas + auto-compact [Sprint 8]
@@ -105,7 +106,6 @@ e65edee feat(salsa,codegraph): disk persistence for cross-process cache hit [Spr
 4dfd6cc docs(phase-1): refresh boot brief post-Sprint 5
 f3af3cb perf(codegraph): warm path optimizations — mtime-aware + Project reuse + skip-set [Sprint 5]
 e875f5e docs(phase-1): refresh boot brief post-Sprint 3
-b6c2bb6 feat(codegraph): incremental mode — batch 4 final (symbol-refs, taint, metrics) [Sprint 3]
 ```
 
 ## Comment contribuer à ce brief
