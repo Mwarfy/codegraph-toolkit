@@ -746,6 +746,20 @@ export interface StateMachine {
    * `from`. Bruit attendu vu qu'on a rarement `from != '*'` v1.
    */
   deadStates: string[]
+  /**
+   * Confidence de détection :
+   *   - `'observed'`  : au moins une transition observée dans le code
+   *     (`transitions.length > 0`). Le détecteur a vu le concept ET ses
+   *     transitions — signal fiable.
+   *   - `'declared-only'` : type/enum déclaré mais aucune transition
+   *     observée. Soit la FSM est vraiment orpheline (à supprimer ?),
+   *     soit le détecteur rate les writes pour cette FSM (bug à
+   *     investiguer). Les consumers doivent traiter ce cas avec prudence.
+   *
+   * Cf. axe 4 du plan d'enrichissement post-Phase-C
+   * (docs/ENRICHMENT-5-AXES-PLAN.md).
+   */
+  detectionConfidence: 'observed' | 'declared-only'
 }
 
 // ─── Cycles (structural map, phase 1.3) ─────────────────────────────────────

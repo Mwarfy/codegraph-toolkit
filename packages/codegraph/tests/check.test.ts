@@ -86,6 +86,7 @@ function fsm(concept: string, states: string[], orphans: string[], dead: string[
     transitions: [],
     orphanStates: orphans,
     deadStates: dead,
+    detectionConfidence: 'declared-only',
   }
 }
 

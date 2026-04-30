@@ -235,6 +235,7 @@ export function buildStateMachinesFromBundles(
       transitions: deduped,
       orphanStates,
       deadStates,
+      detectionConfidence: deduped.length > 0 ? 'observed' : 'declared-only',
     })
   }
 

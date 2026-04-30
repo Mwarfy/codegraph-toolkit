@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+63b9a45 feat(codegraph): émission CycleNode facts + boot brief enrichissement 5 axes
 ff7cd93 refactor(codegraph): Phase C — analyze() à 157 LOC via 4 helpers d'orchestration
 6029444 refactor(codegraph): Phase B — migration des 13 détecteurs restants vers Detector/Registry
 2807c3e refactor(codegraph): Phase A — pattern visiteur Detector/Registry pour analyze()
@@ -111,7 +112,6 @@ b28b910 chore: rename @liby/ → @liby-tools/ pour publication npm
 8935e31 docs: README codegraph-mcp + npm publish setup + bootstrap backlog
 7bb2997 docs(adr-006): core/types.ts est canonical contract — pas de breaking change
 467b4e0 refactor(codegraph): extract 2 sections from analyze() god-file
-812d7bd refactor(codegraph): move 3 fns from detectors/ to extractors/
 ```
 
 ## Comment contribuer à ce brief

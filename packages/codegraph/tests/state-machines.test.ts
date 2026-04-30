@@ -42,6 +42,13 @@ async function run(): Promise<void> {
     ['approved', 'expired', 'pending', 'rejected'],
   )
 
+  // detectionConfidence = 'observed' car des transitions sont vues
+  assert.equal(
+    approval!.detectionConfidence,
+    'observed',
+    'ApprovalStatus has transitions → detectionConfidence must be observed',
+  )
+
   // pending : transition avec trigger event:approval.submit
   const pendingT = approval!.transitions.find((t) => t.to === 'pending')
   assert.ok(pendingT, 'pending transition missing')

@@ -220,6 +220,7 @@ function testStateMachinesAddedStateAndTransition(): void {
     concept: 'S', states: ['a', 'b'],
     transitions: [transition('*', 'a', 'init', '', 'f.ts', 1)],
     orphanStates: [], deadStates: [],
+    detectionConfidence: 'observed',
   }
   const fsmAfter: StateMachine = {
     concept: 'S', states: ['a', 'b', 'c'],
@@ -229,6 +230,7 @@ function testStateMachinesAddedStateAndTransition(): void {
     ],
     orphanStates: ['c'],
     deadStates: [],
+    detectionConfidence: 'observed',
   }
   const d = buildStructuralDiff(snap({ stateMachines: [fsmBefore] }), snap({ stateMachines: [fsmAfter] }))
   assert.equal(d.stateMachines.changed.length, 1)
@@ -358,11 +360,13 @@ function testStateMachinesIgnoreTransitionLineShifts(): void {
     concept: 'S', states: ['a'],
     transitions: [transition('*', 'a', 'event', 'foo', 'f.ts', 10)],
     orphanStates: [], deadStates: [],
+    detectionConfidence: 'observed',
   }
   const fsmAfter: StateMachine = {
     concept: 'S', states: ['a'],
     transitions: [transition('*', 'a', 'event', 'foo', 'f.ts', 42)],
     orphanStates: [], deadStates: [],
+    detectionConfidence: 'observed',
   }
   const d = buildStructuralDiff(snap({ stateMachines: [fsmBefore] }), snap({ stateMachines: [fsmAfter] }))
   assert.equal(d.stateMachines.changed.length, 0, 'line shift alone must not trigger a FSM change')
