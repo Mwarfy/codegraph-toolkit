@@ -67,6 +67,8 @@ import {
   typedCallsInput as incTypedCallsInput,
 } from '../incremental/data-flows.js'
 import { allSymbolRefs as incAllSymbolRefs } from '../incremental/symbol-refs.js'
+import { allTsImports as incAllTsImports } from '../incremental/ts-imports.js'
+import { setTsImportPrebuiltProject } from '../detectors/ts-imports.js'
 import {
   allTaintViolations as incAllTaint,
   taintRulesInput as incTaintRules,
@@ -171,7 +173,41 @@ export async function analyze(
     tsconfigPath: config.tsconfigPath,
   }
 
-  // ─── 3. Run detectors ──────────────────────────────────────────────
+  // ─── 3. Pre-build shared Project (incremental mode only, Sprint 6) ──
+  // En mode incremental, on pré-construit le sharedProject AVANT la
+  // boucle des détecteurs pour que TsImportDetector puisse le réutiliser
+  // (vs créer son propre Project — qui doublait le coût parse, ~7s sur
+  // Sentinel warm).
+  let preBuiltSharedProject: ReturnType<typeof createSharedProject> | null = null
+  if (incremental) {
+    let earlyTsConfigPath: string | undefined
+    const earlyCandidates: string[] = []
+    if (config.tsconfigPath) {
+      earlyCandidates.push(
+        path.isAbsolute(config.tsconfigPath)
+          ? config.tsconfigPath
+          : path.join(config.rootDir, config.tsconfigPath),
+      )
+    }
+    earlyCandidates.push(path.join(config.rootDir, 'tsconfig.json'))
+    for (const candidate of earlyCandidates) {
+      try { await fs.access(candidate); earlyTsConfigPath = candidate; break } catch {}
+    }
+
+    const previousMtimes = new Map<string, number>()
+    for (const f of files) {
+      const m = incGetCachedMtime(f)
+      if (m !== undefined) previousMtimes.set(f, m)
+    }
+
+    preBuiltSharedProject = await incGetOrBuildProject(
+      config.rootDir, files, earlyTsConfigPath, previousMtimes, fileCache,
+    )
+    setIncrementalContext({ project: preBuiltSharedProject, rootDir: config.rootDir })
+    setTsImportPrebuiltProject(preBuiltSharedProject)
+  }
+
+  // ─── 4. Run detectors ──────────────────────────────────────────────
 
   const detectors = createDetectors(config.detectors)
   const allLinks: DetectedLink[] = []
@@ -188,6 +224,10 @@ export async function analyze(
       console.error(`  ✗ ${detector.name} failed (${elapsed.toFixed(0)}ms): ${err}`)
     }
   }
+
+  // Reset le prebuilt — autres détecteurs qui en auraient besoin
+  // doivent passer par sharedProject explicitement.
+  if (incremental) setTsImportPrebuiltProject(null)
 
   // ─── 4. Build graph ────────────────────────────────────────────────
 
@@ -246,26 +286,13 @@ export async function analyze(
   }
 
   // Projet ts-morph partagé.
+  // En mode incremental : déjà construit en step 3 (preBuiltSharedProject)
+  //   et setIncrementalContext fait. On le réutilise.
   // En mode legacy : créer un Project frais (pattern actuel).
-  // En mode incremental : passer par le project-cache qui réutilise
-  //   le Project entre runs et refresh seulement les SourceFile dont
-  //   le mtime a bougé (Sprint 5.2).
   let sharedProject: ReturnType<typeof createSharedProject>
 
   if (incremental) {
-    // Snapshot des mtimes "vus au run précédent" AVANT toute mise à jour.
-    // Le project-cache utilise ce snapshot pour décider quels SourceFile
-    // refresh.
-    const previousMtimes = new Map<string, number>()
-    for (const f of files) {
-      const m = incGetCachedMtime(f)
-      if (m !== undefined) previousMtimes.set(f, m)
-    }
-
-    sharedProject = await incGetOrBuildProject(
-      config.rootDir, files, tsConfigPath, previousMtimes, fileCache,
-    )
-    setIncrementalContext({ project: sharedProject, rootDir: config.rootDir })
+    sharedProject = preBuiltSharedProject!
 
     // Sprint 5.1 — mtime-aware fileContent : skip readFile + skip
     // fileContent.set quand mtime fs n'a pas bougé depuis le run

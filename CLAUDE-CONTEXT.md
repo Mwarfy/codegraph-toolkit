@@ -59,7 +59,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 > pas verdict. Une tension non explorée n'est pas un bug — c'est un saut
 > latéral possible que le sol stable rend testable.
 
-- **CYCLE** `packages/codegraph/src/core/types.ts → packages/codegraph/src/detectors/bullmq-queues.ts` — boucle directe (2 fichiers)  
+- **CYCLE** `packages/codegraph/src/core/types.ts → packages/codegraph/src/extractors/data-flows.ts` — boucle directe (2 fichiers)  
   _→ inverser l'import OU extraire dans un 3e fichier_
 - **ORPHELIN** `packages/adr-toolkit/tests/fixtures/sample-project/src/core/event-bus.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
@@ -93,6 +93,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+7815a4d feat(codegraph): expose --incremental flag in CLI [Sprint 4]
 4dfd6cc docs(phase-1): refresh boot brief post-Sprint 5
 f3af3cb perf(codegraph): warm path optimizations — mtime-aware + Project reuse + skip-set [Sprint 5]
 e875f5e docs(phase-1): refresh boot brief post-Sprint 3
@@ -104,7 +105,6 @@ cb6309d feat(codegraph): incremental mode — batch 3 (typed-calls, cycles, data
 ca6d610 feat(codegraph): incremental mode — env-usage + oauth-scope-literals via Salsa (Sprint 2)
 84c8287 fix(salsa): add Database.resetState() — preserve registry across reset
 0a3c571 docs: PHASE-1-SALSA-MIGRATION.md — boot brief pour reprendre Sprints 2-4
-5d90920 feat(salsa): @liby/salsa runtime — Salsa-style incremental computation (Sprint 1)
 ```
 
 ## Comment contribuer à ce brief
