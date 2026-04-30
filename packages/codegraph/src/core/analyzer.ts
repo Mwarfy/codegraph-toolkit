@@ -40,6 +40,7 @@ import { DataFlowsDetector } from './detectors/data-flows-detector.js'
 import { StateMachinesDetector } from './detectors/state-machines-detector.js'
 import { TaintDetector } from './detectors/taint-detector.js'
 import { SqlSchemaDetector } from './detectors/sql-schema-detector.js'
+import { DrizzleSchemaDetector } from './detectors/drizzle-schema-detector.js'
 import { analyzeTodos, type TodoMarker } from '../extractors/todos.js'
 import { analyzeLongFunctions, type LongFunction } from '../extractors/long-functions.js'
 import { analyzeMagicNumbers, type MagicNumber } from '../extractors/magic-numbers.js'
@@ -259,6 +260,7 @@ export async function analyze(
     .register(new OauthScopeLiteralsDetector())
     .register(new TaintDetector())
     .register(new SqlSchemaDetector())
+    .register(new DrizzleSchemaDetector())
 
   const detectorCtx: DetectorRunContext = {
     config,
@@ -631,6 +633,12 @@ function patchSnapshotWithDetectorResults(
     ['event-emit-sites', 'eventEmitSites'],
     ['oauth-scope-literals', 'oauthScopeLiterals'],
     ['sql-schema', 'sqlSchema'],
+    // 'drizzle-schema' partage le même snapshot field. Si le détecteur
+    // Drizzle a des résultats, il aura déjà mergé sql-schema dans son
+    // propre output via ctx.results, donc l'écrasement est correct. Si
+    // Drizzle n'a rien (tables.length === 0), il retourne undefined →
+    // sql-schema est conservé.
+    ['drizzle-schema', 'sqlSchema'],
   ]
   for (const [detectorName, snapshotField] of mapping) {
     const value = results[detectorName]
