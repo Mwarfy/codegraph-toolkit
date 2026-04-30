@@ -40,7 +40,7 @@
 
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
-- `packages/codegraph/src/core/types.ts` (in: 58)
+- `packages/codegraph/src/core/types.ts` (in: 58) · gov by ADR-006
 - `packages/codegraph/src/incremental/database.ts` (in: 20)
 - `packages/salsa/dist/index.d.ts` (in: 19)
 - `packages/codegraph/src/incremental/queries.ts` (in: 17)
@@ -53,7 +53,6 @@
 
 Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `// ADR-NNN`** dans le code. Intentionnel ? Sinon poser un marqueur ou créer un ADR :
 
-- **58** `packages/codegraph/src/core/types.ts` _(top-hub)_
 - **20** `packages/codegraph/src/incremental/database.ts` _(top-hub)_
 - **19** `packages/salsa/dist/index.d.ts` _(top-hub)_
 - **17** `packages/codegraph/src/incremental/queries.ts` _(top-hub)_
@@ -99,6 +98,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+7bb2997 docs(adr-006): core/types.ts est canonical contract — pas de breaking change
 467b4e0 refactor(codegraph): extract 2 sections from analyze() god-file
 812d7bd refactor(codegraph): move 3 fns from detectors/ to extractors/
 04e3f2d feat(codegraph-mcp): nouveau MCP server exposant les queries codegraph
@@ -110,7 +110,6 @@ be1553e docs+test: ADR-005 pattern détecteurs + test parité legacy/incremental
 2244034 perf(codegraph): Phase 3 partielle — discoverFiles cache + ts-imports Salsa wired [Sprint 10+11.1]
 2a9043e docs(phase-2): refresh boot brief post-Sprint 8+9 — Phase 2 livrée
 7a57eef feat(codegraph): watcher mode `codegraph watch` [Sprint 9 — Phase 2]
-77d2053 feat(salsa,codegraph): delta saves — append-only deltas + auto-compact [Sprint 8]
 ```
 
 ## Comment contribuer à ce brief

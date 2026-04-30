@@ -17,6 +17,16 @@
   "engines": {
     "node": ">=22"
   },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Mwarfy/codegraph-toolkit.git",
+    "directory": "packages/codegraph"
+  },
+  "license": "MIT",
+  "keywords": ["typescript", "static-analysis", "code-intelligence", "codegraph", "ai", "claude-code", "monorepo"],
   "scripts": {
     "build": "tsc -b",
     "dev": "tsc -b --watch",

@@ -185,6 +185,48 @@ import { analyze, buildSynopsis, collectAdrMarkers } from '@liby/codegraph'
 cat .claude/settings.json
 ```
 
+## codegraph-mcp — architecture queryable on-demand
+
+Au-delà du push automatique via hook, `@liby/codegraph-mcp` expose le snapshot codegraph comme MCP server. 5 outils architecturaux complémentent un éventuel LSP MCP :
+
+| Tool | Use case |
+|---|---|
+| `codegraph_context(file)` | Bloc de contexte d'un fichier on-demand (HIGH-RISK header, importers, exports problématiques, cycles, truth-points, long fns, magic, coverage). |
+| `codegraph_who_imports(file)` | Liste FILE-level des dépendants (≠ LSP find_references qui est SYMBOL-level). |
+| `codegraph_truth_point_for(file)` | Participation aux truth-points (writers/readers/mirrors par concept). |
+| `codegraph_recent(file, weeks?)` | Git archaeology : commits, top contributor, file age. |
+| `codegraph_uncovered(critical_only?)` | Fichiers sans test rankés par criticité (truth-point writers + hubs). |
+
+Wire dans le `.mcp.json` du consommateur :
+
+```json
+{
+  "mcpServers": {
+    "codegraph": {
+      "command": "codegraph-mcp",
+      "cwd": "/path/to/your/project"
+    }
+  }
+}
+```
+
+LSP fait du **sémantique fin-grained** (symbols, types, refs). codegraph-mcp fait du **structurel coarse-grained** (fichiers, ADRs, SSOT, dette). Les deux ensemble : architecture push+pull symétrique.
+
+## Mode incremental (Salsa)
+
+`codegraph analyze --incremental` route le pipeline via `@liby/salsa` (runtime de computation incrémentale maison, ~600 LOC pure-TS). Sur Sentinel : warm 149ms (vs 21s legacy → 99% plus rapide). Mode `codegraph watch` daemon avec fs.watch + persistence disque + delta saves pour usage IDE/dev local.
+
+14/14 détecteurs Salsa-isés. Mode legacy entièrement préservé pour les outils qui en dépendent.
+
+## Détecteurs déterministes additionnels
+
+En plus de la cartographie de base, codegraph capture les signaux de dette assumée :
+
+- **todos** — TODO/FIXME/HACK/XXX/NOTE markers avec file + line + message.
+- **long-functions** — fonctions/méthodes >100 LOC (configurable). Complement de cyclomatic complexity.
+- **magic-numbers** — littéraux hardcodés en positions suspectes (timeouts, thresholds, ratios). Candidats migration env-driven.
+- **test-coverage** — coverage structurel (pas runtime) : pour chaque fichier source, liste les tests qui le couvrent (par naming convention OU par import).
+
 ## Pièges connus
 
 - **`workspace:*`** : npm ne supporte pas le protocole pnpm. Utiliser `"*"` pour les deps inter-workspaces.
@@ -238,12 +280,14 @@ npx adr-toolkit bootstrap --mode sdk --max 5
 
 ## Roadmap
 
-- **Détecteurs additionnels** pour bootstrap (fsm, write-isolation, hub).
-- **Spawn parallèle** des agents (actuellement séquentiel).
-- **Publication npm registry** — pour passer du `npm link` vers `npm install @liby/...`.
+- **Détecteurs additionnels** pour bootstrap (`fsm`, `write-isolation`, `hub`).
+- **Spawn parallèle** des agents bootstrap (actuellement séquentiel).
+- **Publication npm registry** — passer du `npm link` vers `npm install @liby/...`. Setup en place (cf. `.npmrc`, `publishConfig`), publication elle-même attend décision.
+- **Refactor profond `core/analyzer.ts`** — pattern visiteur / detector registry pour découper le god-file (1188 LOC, fonction `analyze()` à 591 LOC). 2 sections déjà extraites en helpers (Sprint avril 2026), reste 13+ blocs.
+- **Test invariants pour `core/types.ts`** (cf. ADR-006) — vérifier qu'aucun champ documenté dans `GraphSnapshot` n'a été retiré sans deprecation cycle.
 
 ## Consommateurs
 
-- **Sentinel** (référence) — 18 ADRs, 47 marqueurs, 11 ts-morph asserts.
+- **Sentinel** (référence) — 22 ADRs, 47+ marqueurs, 11 ts-morph asserts, 4 hooks Claude Code (PreToolUse ADR check + PostToolUse codegraph context + 2 MCP servers : LSP + codegraph).
 - **Morovar** (en cours) — MMORPG TS.
 - **<ton projet ?>** — ouvre une issue avec ton retour.

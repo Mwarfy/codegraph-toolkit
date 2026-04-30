@@ -12,6 +12,16 @@
   "engines": {
     "node": ">=18"
   },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Mwarfy/codegraph-toolkit.git",
+    "directory": "packages/codegraph-mcp"
+  },
+  "license": "MIT",
+  "keywords": ["mcp", "model-context-protocol", "claude-code", "codegraph", "code-intelligence"],
   "scripts": {
     "build": "tsc -b",
     "dev": "tsc -b --watch"

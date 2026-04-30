@@ -1,12 +1,16 @@
 # Phase 1 — Salsa migration plan
 
-> **Pour Claude qui reprend dans une nouvelle session :** lis CE FICHIER EN
-> ENTIER avant toute action. Il contient l'état exact, les décisions prises,
-> les pièges rencontrés, et le plan pas-à-pas des Sprints 2-4.
+> **STATUS : LIVRÉ** (Phases 1 + 2 + 3, avril 2026). Document conservé
+> pour référence historique sur l'architecture, les bugs sémantiques
+> Salsa rencontrés, et les décisions prises. Salsa runtime + 14/14
+> détecteurs Salsa-isés + watcher mode + persistence disque + delta
+> saves sont tous opérationnels. Mesures Sentinel : warm 149ms (vs
+> legacy 21s → -99%). Voir aussi `SPRINT-11-2-UNUSED-EXPORTS-PLAN.md`
+> pour le dernier sprint livré.
 >
-> Ne fais PAS de discovery — tout est ici. Vérifie juste que les commits
-> mentionnés existent encore avec `git log --oneline | head -20` côté
-> codegraph-toolkit ET côté Sentinel.
+> Si tu reprends : ne PAS suivre le plan Sprints 2-4 ci-dessous, c'est
+> du passé. Pour Phase 4 hypothétique (event-bus/db-tables/etc en
+> Salsa) ou autres améliorations, voir le README à la racine du toolkit.
 
 ## Contexte global
 
