@@ -41,6 +41,16 @@ export class Database {
   private hitCount: Map<QueryId, number> = new Map()
   private missCount: Map<QueryId, number> = new Map()
 
+  /**
+   * Cells modifiées depuis le dernier `markPersisted()` — set de
+   * `${queryId}\x00${encodedKey}` (Sprint 8 — delta saves).
+   *
+   * Une cell est marquée dirty à chaque `setCell()`. `markPersisted()`
+   * clear le set après une sauvegarde réussie. `serializeDirty()`
+   * permet d'écrire seulement les cells modifiées.
+   */
+  private dirtyKeys: Set<string> = new Set()
+
   // ─── Revision ─────────────────────────────────────────────────────────
 
   currentRevision(): Revision {
@@ -69,6 +79,7 @@ export class Database {
       this.cells.set(cell.queryId, inner)
     }
     inner.set(cell.encodedKey, cell)
+    this.dirtyKeys.add(cell.queryId + '\x00' + cell.encodedKey)
   }
 
   hasQuery(queryId: QueryId): boolean {
@@ -234,6 +245,79 @@ export class Database {
       }
       this.setCell(cell)
     }
+    // Restauration ≠ modification : on est aligné avec le disque.
+    this.dirtyKeys.clear()
+  }
+
+  // ─── Delta saves (Sprint 8) ─────────────────────────────────────────
+
+  /**
+   * Sérialise UNIQUEMENT les cells modifiées depuis le dernier
+   * `markPersisted()`. Beaucoup plus rapide que `serializeState()`
+   * complet quand peu de fichiers ont changé.
+   *
+   * Le caller doit ensuite appeler `markPersisted()` pour confirmer
+   * que la sauvegarde a réussi (et clear le set dirty).
+   */
+  serializeDirty(): SerializedDelta {
+    const cells: SerializedCell[] = []
+    for (const dkey of this.dirtyKeys) {
+      const sep = dkey.indexOf('\x00')
+      const queryId = dkey.slice(0, sep)
+      const encodedKey = dkey.slice(sep + 1)
+      const cell = this.getCell(queryId, encodedKey)
+      if (!cell) continue
+      cells.push({
+        queryId, encodedKey,
+        value: serializeValue(cell.value),
+        deps: cell.deps,
+        changedAt: cell.changedAt,
+        computedAt: cell.computedAt,
+        verifiedAt: cell.verifiedAt,
+      })
+    }
+    return {
+      version: SERIALIZE_VERSION,
+      revision: this.revision,
+      cells,
+    }
+  }
+
+  /**
+   * Applique un delta sérialisé sur l'état courant : merge cells +
+   * update revision. Utilisé au load après chargement du baseline.
+   */
+  applyDelta(delta: SerializedDelta): void {
+    if (delta.version !== SERIALIZE_VERSION) {
+      throw new SalsaError(
+        'persistence.version',
+        `delta version ${delta.version} != expected ${SERIALIZE_VERSION}`,
+      )
+    }
+    this.revision = delta.revision  // monotone — la dernière revision écrite gagne
+    for (const sc of delta.cells) {
+      const cell: Cell = {
+        queryId: sc.queryId,
+        encodedKey: sc.encodedKey,
+        value: deserializeValue(sc.value),
+        deps: sc.deps,
+        changedAt: sc.changedAt,
+        computedAt: sc.computedAt,
+        verifiedAt: sc.verifiedAt,
+      }
+      this.setCell(cell)
+    }
+    this.dirtyKeys.clear()
+  }
+
+  /** Nombre de cells dirty depuis le dernier markPersisted(). */
+  dirtyCount(): number {
+    return this.dirtyKeys.size
+  }
+
+  /** Marque toutes les cells comme persistées (clear dirty). */
+  markPersisted(): void {
+    this.dirtyKeys.clear()
   }
 }
 
@@ -254,6 +338,14 @@ export interface SerializedState {
   revision: Revision
   cells: SerializedCell[]
 }
+
+/**
+ * Delta = sous-ensemble de SerializedState qui ne contient que les
+ * cells modifiées depuis le dernier markPersisted(). Le format est
+ * structurellement identique à SerializedState — au load, on peut
+ * appliquer un delta sur un état existant via `applyDelta()`.
+ */
+export type SerializedDelta = SerializedState
 
 /**
  * Convertit Map/Set en représentation JSON-safe avec marqueur `__type`.

@@ -28,6 +28,7 @@ export {
   deserializeValue,
   type SerializedState,
   type SerializedCell,
+  type SerializedDelta,
 } from './database.js'
 export { input, derived } from './runtime.js'
 export type { InputQuery, DerivedQuery } from './runtime.js'
