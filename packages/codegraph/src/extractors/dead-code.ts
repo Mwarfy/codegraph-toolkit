@@ -26,6 +26,9 @@ export type DeadCodeKind =
   | 'identical-subexpressions'
   | 'return-then-else'
   | 'switch-fallthrough'
+  | 'switch-no-default'
+  | 'switch-empty'
+  | 'controlling-expression-constant'
 
 export interface DeadCodeFinding {
   kind: DeadCodeKind
@@ -85,6 +88,87 @@ export function extractDeadCodeFileBundle(
       message: `expression ${op} avec les 2 cotes identiques (${truncate(left, 30)}) — bug ou redondance`,
       details: { operator: op, expression: truncate(left, 60) },
     })
+  }
+
+  // ─── Pattern 4 : switch-empty / switch-no-default (Tier 6, MISRA 16.6) ───
+  // - switch vide (0 case) = bug-prone (probable refactor inachevé)
+  // - switch sans clause `default` = oubli d'un cas, comportement
+  //   silencieux. Skip si le switch est sur une discriminated union
+  //   exhaustive (impossible à détecter sans typecheck — donc on
+  //   préfère flagger et laisser le user grandfather si exhaustif).
+  for (const sw of sf.getDescendantsOfKind(SyntaxKind.SwitchStatement)) {
+    const clauses = sw.getCaseBlock().getClauses()
+    const line = sw.getStartLineNumber()
+    if (isExempt(line)) continue
+    if (clauses.length === 0) {
+      findings.push({
+        kind: 'switch-empty',
+        file: relPath,
+        line,
+        message: `switch vide (0 case) — refactor inacheve ?`,
+      })
+      continue
+    }
+    const hasDefault = clauses.some((c) => Node.isDefaultClause(c))
+    if (!hasDefault) {
+      findings.push({
+        kind: 'switch-no-default',
+        file: relPath,
+        line,
+        message: `switch sans clause default — comportement silencieux si valeur inattendue`,
+      })
+    }
+  }
+
+  // ─── Pattern 5 : controlling-expression-constant (Tier 6, MISRA 14.3) ───
+  // `if (true && X)`, `if (false || X)`, `if (X || true)`, `if (true)`
+  // — la valeur du test est connue statiquement. Constant folding lite.
+  // Skip `while (true)` (boucle infinie volontaire), `do {} while(false)`
+  // (forme idiomatique).
+  const isLiteralBool = (n: Node, value: boolean): boolean => {
+    if (Node.isTrueLiteral(n)) return value === true
+    if (Node.isFalseLiteral(n)) return value === false
+    return false
+  }
+  const checkControlling = (cond: Node | undefined, line: number): void => {
+    if (!cond || isExempt(line)) return
+    // `if (true)` ou `if (false)` direct.
+    if (isLiteralBool(cond, true) || isLiteralBool(cond, false)) {
+      findings.push({
+        kind: 'controlling-expression-constant',
+        file: relPath,
+        line,
+        message: `condition constante (${cond.getText()}) — branche dead ou code mort`,
+      })
+      return
+    }
+    // `cond && true/false` ou `true/false && cond` ou `||` variants.
+    if (Node.isBinaryExpression(cond)) {
+      const op = cond.getOperatorToken().getText()
+      if (op !== '&&' && op !== '||') return
+      const left = cond.getLeft()
+      const right = cond.getRight()
+      // `X && true` redondant ; `X && false` toujours faux ; `X || true`
+      // toujours vrai ; `X || false` redondant. Tous les 4 = controlling
+      // expression simplifiable.
+      const litLeft = Node.isTrueLiteral(left) || Node.isFalseLiteral(left)
+      const litRight = Node.isTrueLiteral(right) || Node.isFalseLiteral(right)
+      if (litLeft || litRight) {
+        findings.push({
+          kind: 'controlling-expression-constant',
+          file: relPath,
+          line,
+          message: `expression ${op} avec un cote constant — simplifier`,
+          details: { operator: op },
+        })
+      }
+    }
+  }
+  for (const ifStmt of sf.getDescendantsOfKind(SyntaxKind.IfStatement)) {
+    checkControlling(ifStmt.getExpression(), ifStmt.getStartLineNumber())
+  }
+  for (const cond of sf.getDescendantsOfKind(SyntaxKind.ConditionalExpression)) {
+    checkControlling(cond.getCondition(), cond.getStartLineNumber())
   }
 
   // ─── Pattern 3 : switch-fallthrough (Tier 4) ───────────────────────

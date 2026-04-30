@@ -1,0 +1,26 @@
+// NO-CONTROLLING-EXPRESSION-CONSTANT — MISRA 14.3 (safety-critical C).
+//
+// Pourquoi : `if (true)`, `if (false)`, `if (cond && true)`,
+// `if (cond || false)` — la valeur de la condition est connue
+// statiquement. La branche est soit toujours executee, soit toujours
+// dead. Reliquat presque toujours d'un debug oublie ou d'un refactor
+// inacheve.
+//
+// Inspiration : MISRA C 14.3 (control expressions doivent etre
+// non-invariant). Linters tooling : ESLint `no-constant-condition`.
+//
+// L'extracteur skip deja :
+//   - Sites avec `// dead-code-ok: <reason>` ligne precedente
+//     (ex: `while (true)` boucle volontaire, `do {} while(false)`).
+//   - Fichiers de test.
+//
+// Source des facts : `DeadCode(file, line, "controlling-expression-constant")`.
+//
+// Pattern ratchet : grandfather par (file, line).
+
+.decl ControllingConstantGrandfathered(file: symbol, line: number)
+
+Violation("NO-CONTROLLING-EXPRESSION-CONSTANT", File, Line,
+  "condition statique (true/false ou X && true/X || false) — branche dead ou code mort") :-
+    DeadCode(File, Line, "controlling-expression-constant"),
+    !ControllingConstantGrandfathered(File, Line).

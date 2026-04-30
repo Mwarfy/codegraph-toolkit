@@ -43,8 +43,8 @@ describe('sql-naming — table snake_case', () => {
   })
 
   it('skip snake_case correct', () => {
-    const v = findSqlNamingViolations(schema({ tables: [{ name: 'user_sessions' }] }))
-    expect(v).toEqual([])
+    const v = findSqlNamingViolations(schema({ tables: [{ name: 'user_settings' }] }))
+    expect(v.filter((x) => x.kind === 'table-not-snake-case')).toEqual([])
   })
 })
 
@@ -67,16 +67,16 @@ describe('sql-naming — column snake_case', () => {
 describe('sql-naming — timestamp _at suffix', () => {
   it('flag column TIMESTAMP sans _at', () => {
     const v = findSqlNamingViolations(schema({
-      tables: [{ name: 'events', cols: [{ name: 'happened', type: 'TIMESTAMPTZ' }] }],
+      tables: [{ name: 'metrics', cols: [{ name: 'happened', type: 'TIMESTAMPTZ' }] }],
     }))
     expect(v[0].kind).toBe('timestamp-missing-at-suffix')
   })
 
   it('skip column TIMESTAMP avec _at', () => {
     const v = findSqlNamingViolations(schema({
-      tables: [{ name: 'events', cols: [{ name: 'created_at', type: 'TIMESTAMPTZ' }] }],
+      tables: [{ name: 'metrics', cols: [{ name: 'created_at', type: 'TIMESTAMPTZ' }] }],
     }))
-    expect(v).toEqual([])
+    expect(v.filter((x) => x.kind === 'timestamp-missing-at-suffix')).toEqual([])
   })
 
   it('skip column avec suffix _date (alternative sémantique)', () => {
@@ -97,17 +97,68 @@ describe('sql-naming — timestamp _at suffix', () => {
 describe('sql-naming — FK _id suffix', () => {
   it('flag FK column sans _id suffix', () => {
     const v = findSqlNamingViolations(schema({
-      tables: [{ name: 'orders', cols: [{ name: 'customer', type: 'INT' }] }],
-      fks: [{ fromTable: 'orders', fromCol: 'customer' }],
+      tables: [{ name: 'metrics', cols: [{ name: 'customer', type: 'INT' }] }],
+      fks: [{ fromTable: 'metrics', fromCol: 'customer' }],
     }))
-    expect(v[0].kind).toBe('fk-missing-id-suffix')
+    expect(v.find((x) => x.kind === 'fk-missing-id-suffix')).toBeDefined()
   })
 
   it('skip FK column avec _id', () => {
     const v = findSqlNamingViolations(schema({
-      tables: [{ name: 'orders', cols: [{ name: 'customer_id', type: 'INT' }] }],
-      fks: [{ fromTable: 'orders', fromCol: 'customer_id' }],
+      tables: [{ name: 'metrics', cols: [{ name: 'customer_id', type: 'INT' }] }],
+      fks: [{ fromTable: 'metrics', fromCol: 'customer_id' }],
     }))
-    expect(v).toEqual([])
+    expect(v.filter((x) => x.kind === 'fk-missing-id-suffix')).toEqual([])
+  })
+})
+
+describe('sql-naming — audit columns required (Tier 6)', () => {
+  it('flag table audit-required sans created_at', () => {
+    const v = findSqlNamingViolations(schema({
+      tables: [{ name: 'orders', cols: [
+        { name: 'id', type: 'SERIAL' },
+        { name: 'updated_at', type: 'TIMESTAMPTZ' },
+      ] }],
+    }))
+    expect(v.find((x) => x.kind === 'audit-column-missing-created-at')).toBeDefined()
+  })
+
+  it('flag table mutable audit-required sans updated_at', () => {
+    const v = findSqlNamingViolations(schema({
+      tables: [{ name: 'orders', cols: [
+        { name: 'id', type: 'SERIAL' },
+        { name: 'created_at', type: 'TIMESTAMPTZ' },
+      ] }],
+    }))
+    expect(v.find((x) => x.kind === 'audit-column-missing-updated-at')).toBeDefined()
+  })
+
+  it('skip updated_at pour table append-only (events / log / history)', () => {
+    const v = findSqlNamingViolations(schema({
+      tables: [{ name: 'audit_events', cols: [
+        { name: 'id', type: 'SERIAL' },
+        { name: 'created_at', type: 'TIMESTAMPTZ' },
+      ] }],
+    }))
+    expect(v.filter((x) => x.kind === 'audit-column-missing-updated-at')).toEqual([])
+  })
+
+  it('skip si table non-audit (ex: settings, config)', () => {
+    const v = findSqlNamingViolations(schema({
+      tables: [{ name: 'settings', cols: [{ name: 'key', type: 'TEXT' }] }],
+    }))
+    expect(v.filter((x) =>
+      x.kind === 'audit-column-missing-created-at' ||
+      x.kind === 'audit-column-missing-updated-at',
+    )).toEqual([])
+  })
+
+  it('flag table avec pattern ORDERS sans aucune audit column', () => {
+    const v = findSqlNamingViolations(schema({
+      tables: [{ name: 'orders', cols: [{ name: 'id', type: 'SERIAL' }] }],
+    }))
+    const kinds = v.map((x) => x.kind).sort()
+    expect(kinds).toContain('audit-column-missing-created-at')
+    expect(kinds).toContain('audit-column-missing-updated-at')
   })
 })

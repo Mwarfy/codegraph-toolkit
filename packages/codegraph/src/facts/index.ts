@@ -556,6 +556,24 @@ export async function exportFacts(
   }
   relations.push(sqlMigOrderRel)
 
+  // ─── ResourceImbalance (Tier 6) ──────────────────────────────────────
+  const resourceImbalanceRel: RelationDef = {
+    name: 'ResourceImbalance',
+    decl: '(file:symbol, line:number, containingSymbol:symbol, pair:symbol, acquireCount:number, releaseCount:number)',
+    rows: [],
+  }
+  for (const r of snapshot.resourceImbalances ?? []) {
+    resourceImbalanceRel.rows.push([
+      sym(r.file),
+      num(r.line),
+      sym(r.containingSymbol || '_'),
+      sym(r.pair),
+      num(r.acquireCount),
+      num(r.releaseCount),
+    ])
+  }
+  relations.push(resourceImbalanceRel)
+
   // ─── Write to disk ────────────────────────────────────────────────────
   await fs.mkdir(options.outDir, { recursive: true })
 

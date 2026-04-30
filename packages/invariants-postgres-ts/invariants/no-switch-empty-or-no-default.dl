@@ -1,0 +1,26 @@
+// NO-SWITCH-EMPTY-OR-NO-DEFAULT — MISRA 16.6 (safety-critical C).
+//
+// Pourquoi : un switch sans default a un comportement silencieux pour
+// les valeurs inattendues — bug-prone classique. Un switch vide est
+// presque toujours un refactor inacheve. MISRA C exige explicitement
+// `default` pour TOUTE switch (norme automotive embedded).
+//
+// Skip si la rule discriminated-union exhaustiveness est respectee
+// (impossible a detecter sans typecheck — d'ou l'option grandfather
+// pour ces cas).
+//
+// Source des facts : `DeadCode(file, line, "switch-empty")` ou
+// `DeadCode(file, line, "switch-no-default")`.
+
+.decl SwitchDefaultGrandfathered(file: symbol, line: number)
+
+// Le parser Datalog n'accepte pas les disjunctions d'egalite inline.
+// On regroupe via une relation intermediaire alimentee par 2 rules.
+.decl SwitchProblematic(file: symbol, line: number)
+SwitchProblematic(F, L) :- DeadCode(F, L, "switch-empty").
+SwitchProblematic(F, L) :- DeadCode(F, L, "switch-no-default").
+
+Violation("NO-SWITCH-EMPTY-OR-NO-DEFAULT", File, Line,
+  "switch sans default ou vide — comportement silencieux si valeur inattendue") :-
+    SwitchProblematic(File, Line),
+    !SwitchDefaultGrandfathered(File, Line).

@@ -2,7 +2,7 @@
 
 Standard Datalog invariants for **TypeScript + Postgres** projects, drop-in for [`codegraph-toolkit`](https://github.com/Mwarfy/codegraph-toolkit).
 
-Sixteen invariants, all 100% portable across TS/Postgres projects:
+Twenty invariants, all 100% portable across TS/Postgres projects:
 
 | Invariant | What it catches |
 |---|---|
@@ -22,6 +22,10 @@ Sixteen invariants, all 100% portable across TS/Postgres projects:
 | `no-new-articulation-point` | Hidden architectural hubs — files whose removal would disconnect the import graph (Tarjan O(V+E)). Ratchet on `file`. |
 | `sql-naming-convention` | snake_case for tables/columns, `_at` for timestamps, `_id` for FKs (Codd / Postgres style). Ratchet on `(file, line, kind)`. |
 | `sql-migration-order` | FK forward-references — migration declares FK before target table is created (topological sort). Ratchet on `(file, line)`. |
+| `no-switch-empty-or-no-default` | switch without default or empty switch (MISRA 16.6 — silent behavior on unexpected values). Ratchet on `(file, line)`. |
+| `no-controlling-expression-constant` | `if (true)`, `if (X && true)` and similar (MISRA 14.3, ESLint no-constant-condition). Ratchet on `(file, line)`. |
+| `sql-audit-columns` | Business-critical tables (`*_events`, `orders`, `payments`, ...) must have `created_at` (and `updated_at` if mutable). Audit trail discipline. Ratchet on `(table, kind)`. |
+| `no-resource-imbalance` | acquire/release counts mismatch in same function (lock/unlock, setInterval/clearInterval, etc.) — Reed-Solomon-style parity. Ratchet on `(file, symbol)`. |
 
 ## Why these two
 

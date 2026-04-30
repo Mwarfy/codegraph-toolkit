@@ -276,3 +276,101 @@ describe('dead-code — switch-fallthrough (Tier 4)', () => {
     expect(findings.filter((x) => x.kind === 'switch-fallthrough')).toEqual([])
   })
 })
+
+describe('dead-code — switch-empty / switch-no-default (Tier 6)', () => {
+  it('flag un switch vide', () => {
+    const { sf, name } = fileFromText(`
+      export function f(x: string) {
+        switch (x) {}
+      }
+    `)
+    const { findings } = extractDeadCodeFileBundle(sf, name)
+    expect(findings.find((x) => x.kind === 'switch-empty')).toBeDefined()
+  })
+
+  it('flag un switch sans default', () => {
+    const { sf, name } = fileFromText(`
+      export function f(x: string) {
+        switch (x) {
+          case 'a': return 1
+          case 'b': return 2
+        }
+      }
+    `)
+    const { findings } = extractDeadCodeFileBundle(sf, name)
+    expect(findings.find((x) => x.kind === 'switch-no-default')).toBeDefined()
+  })
+
+  it('skip un switch avec default', () => {
+    const { sf, name } = fileFromText(`
+      export function f(x: string) {
+        switch (x) {
+          case 'a': return 1
+          default: return 0
+        }
+      }
+    `)
+    const { findings } = extractDeadCodeFileBundle(sf, name)
+    expect(findings.filter((x) => x.kind === 'switch-no-default')).toEqual([])
+  })
+})
+
+describe('dead-code — controlling-expression-constant (Tier 6)', () => {
+  it('flag if (true)', () => {
+    const { sf, name } = fileFromText(`
+      export function f() {
+        if (true) doStuff()
+      }
+    `)
+    const { findings } = extractDeadCodeFileBundle(sf, name)
+    expect(findings.find((x) => x.kind === 'controlling-expression-constant')).toBeDefined()
+  })
+
+  it('flag if (false)', () => {
+    const { sf, name } = fileFromText(`
+      export function f() {
+        if (false) deadBranch()
+      }
+    `)
+    const { findings } = extractDeadCodeFileBundle(sf, name)
+    expect(findings.find((x) => x.kind === 'controlling-expression-constant')).toBeDefined()
+  })
+
+  it('flag if (true && X)', () => {
+    const { sf, name } = fileFromText(`
+      export function f(x: number) {
+        if (true && x > 0) doStuff()
+      }
+    `)
+    const { findings } = extractDeadCodeFileBundle(sf, name)
+    expect(findings.find((x) => x.kind === 'controlling-expression-constant')).toBeDefined()
+  })
+
+  it('flag if (X || true)', () => {
+    const { sf, name } = fileFromText(`
+      export function f(x: number) {
+        if (x > 0 || true) doStuff()
+      }
+    `)
+    const { findings } = extractDeadCodeFileBundle(sf, name)
+    expect(findings.find((x) => x.kind === 'controlling-expression-constant')).toBeDefined()
+  })
+
+  it('skip if (cond) normal', () => {
+    const { sf, name } = fileFromText(`
+      export function f(x: number) {
+        if (x > 0) doStuff()
+      }
+    `)
+    const { findings } = extractDeadCodeFileBundle(sf, name)
+    expect(findings.filter((x) => x.kind === 'controlling-expression-constant')).toEqual([])
+  })
+
+  it('flag dans ternary', () => {
+    const { sf, name } = fileFromText(`
+      export const v = true ? 1 : 2
+    `)
+    const { findings } = extractDeadCodeFileBundle(sf, name)
+    expect(findings.find((x) => x.kind === 'controlling-expression-constant')).toBeDefined()
+  })
+})

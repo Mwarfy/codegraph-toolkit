@@ -1,0 +1,39 @@
+// SQL-AUDIT-COLUMNS — Tables business-critiques doivent avoir
+// `created_at` (et `updated_at` si mutables).
+//
+// Pourquoi : audit trail = pouvoir reconstruire l'historique. GDPR,
+// finance, troubleshooting prod — toutes ces situations exigent de
+// pouvoir repondre a "quand cette ligne a ete ecrite ?". Sans
+// `created_at` la reponse est impossible apres incident. Inspiration :
+// audit trail discipline (financial systems, GDPR).
+//
+// L'extracteur sql-naming detecte automatiquement les tables business-
+// critiques par pattern naming :
+//   - audit-required (created_at requis) :
+//     events, logs, history, audit, orders, invoices, transactions,
+//     payments, approvals, sessions, tokens
+//   - mutable (updated_at requis aussi) : tous SAUF append-only
+//     (events/logs/history/audit sont append-only par convention)
+//
+// Source des facts : `SqlNamingViolation(file, line, table, column,
+// kind)` ou `kind` est `audit-column-missing-created-at` ou
+// `audit-column-missing-updated-at`.
+//
+// Pattern ratchet : grandfather par (table) — souvent on accepte
+// l'absence de `updated_at` sur des tables specifiques (ex: cache
+// tables qui sont reset periodiquement, derived materialized views).
+
+.decl AuditColumnGrandfathered(table: symbol, kind: symbol)
+
+// Relation intermediaire — le parser Datalog n'accepte pas les
+// disjunctions d'egalite inline. On regroupe via 2 rules d'union.
+.decl AuditMissing(file: symbol, line: number, table: symbol, kind: symbol)
+AuditMissing(F, L, T, "audit-column-missing-created-at") :-
+    SqlNamingViolation(F, L, T, _, "audit-column-missing-created-at").
+AuditMissing(F, L, T, "audit-column-missing-updated-at") :-
+    SqlNamingViolation(F, L, T, _, "audit-column-missing-updated-at").
+
+Violation("SQL-AUDIT-COLUMNS", File, Line,
+  "table business-critique sans audit column — voir kind (created_at / updated_at)") :-
+    AuditMissing(File, Line, Table, Kind),
+    !AuditColumnGrandfathered(Table, Kind).

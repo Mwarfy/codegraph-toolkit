@@ -32,6 +32,7 @@
 .decl ArticulationPoint(file: symbol, severity: number)
 .decl SqlNamingViolation(file: symbol, line: number, table: symbol, column: symbol, kind: symbol)
 .decl SqlMigrationOrderViolation(file: symbol, line: number, fromTable: symbol, fromCol: symbol, toTable: symbol, fkMig: number, targetMig: number)
+.decl ResourceImbalance(file: symbol, line: number, containingSymbol: symbol, pair: symbol, acquireCount: number, releaseCount: number)
 
 .input File
 .input FileTag
@@ -55,6 +56,7 @@
 .input ArticulationPoint
 .input SqlNamingViolation
 .input SqlMigrationOrderViolation
+.input ResourceImbalance
 
 // La relation cible commune : tous les fichiers de rules écrivent ici.
 .decl Violation(adr: symbol, file: symbol, line: number, msg: symbol)

@@ -23,6 +23,8 @@ export type SqlNamingViolationKind =
   | 'column-not-snake-case'
   | 'timestamp-missing-at-suffix'
   | 'fk-missing-id-suffix'
+  | 'audit-column-missing-created-at'
+  | 'audit-column-missing-updated-at'
 
 export interface SqlNamingViolation {
   kind: SqlNamingViolationKind
@@ -61,6 +63,15 @@ const SNAKE_CASE_RE = /^[a-z][a-z0-9_]*$/
 // On reste large : timestamp, timestamptz, date, time. NOT le `interval`
 // (= durée, pas un instant).
 const TEMPORAL_TYPE_RE = /^(timestamp|timestamptz|date|time)(\s|$)/i
+
+// Tables audit-required : pattern naming OU rôle business detectable
+// par le nom. Les tables qui matchent ces patterns devraient avoir
+// `created_at` au minimum, et `updated_at` si elles sont mutables.
+// Inspiration : audit trail discipline (financial systems, GDPR).
+const AUDIT_REQUIRED_NAME_RE = /(^|_)(events?|logs?|history|audit|orders?|invoices?|transactions?|payments?|approvals?|sessions?|tokens?)(_|$)/i
+
+// Patterns où `created_at` suffit (table append-only par convention).
+const APPEND_ONLY_NAME_RE = /(^|_)(events?|logs?|history|audit)(_|$)/i
 
 export function findSqlNamingViolations(
   schema: SqlSchema,
@@ -119,6 +130,35 @@ export function findSqlNamingViolations(
           column: col.name,
           file: table.file,
           line: col.line,
+        })
+      }
+    }
+
+    // ─── Audit columns required (Tier 6) ──────────────────────────
+    // Tables business-critiques (matching pattern audit-required)
+    // doivent avoir `created_at`. Si non append-only, aussi
+    // `updated_at`.
+    if (AUDIT_REQUIRED_NAME_RE.test(table.name)) {
+      const colNames = new Set(table.columns.map((c) => c.name))
+      if (!colNames.has('created_at')) {
+        violations.push({
+          kind: 'audit-column-missing-created-at',
+          table: table.name,
+          column: '',
+          file: table.file,
+          line: table.line,
+        })
+      }
+      // updated_at requis seulement pour les tables MUTABLES (non
+      // append-only). events/logs/history/audit sont append-only par
+      // convention.
+      if (!APPEND_ONLY_NAME_RE.test(table.name) && !colNames.has('updated_at')) {
+        violations.push({
+          kind: 'audit-column-missing-updated-at',
+          table: table.name,
+          column: '',
+          file: table.file,
+          line: table.line,
         })
       }
     }

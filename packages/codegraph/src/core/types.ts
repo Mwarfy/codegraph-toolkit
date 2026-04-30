@@ -498,10 +498,18 @@ export interface GraphSnapshot {
    * - identical-subexpressions : `a > 0 && a > 0` (Sonar S1764)
    * - return-then-else : `if (x) return; else { ... }` (Sonar S1126)
    * - switch-fallthrough : case sans break/return/throw (gcc -Wimplicit-fallthrough)
-   * Cf. extractors/dead-code.ts (Phase 4 Tier 3 + Tier 4).
+   * - switch-empty / switch-no-default (Tier 6, MISRA 16.6)
+   * - controlling-expression-constant (Tier 6, MISRA 14.3)
+   * Cf. extractors/dead-code.ts (Phase 4 Tier 3-6).
    */
   deadCode?: Array<{
-    kind: 'identical-subexpressions' | 'return-then-else' | 'switch-fallthrough'
+    kind:
+      | 'identical-subexpressions'
+      | 'return-then-else'
+      | 'switch-fallthrough'
+      | 'switch-empty'
+      | 'switch-no-default'
+      | 'controlling-expression-constant'
     file: string
     line: number
     message: string
@@ -545,10 +553,17 @@ export interface GraphSnapshot {
 
   /**
    * SQL naming convention violations (Codd-era / Postgres best
-   * practices). Cf. extractors/sql-naming.ts (Phase 4 Tier 5).
+   * practices) + audit columns (Tier 6).
+   * Cf. extractors/sql-naming.ts (Phase 4 Tier 5 + Tier 6).
    */
   sqlNamingViolations?: Array<{
-    kind: 'table-not-snake-case' | 'column-not-snake-case' | 'timestamp-missing-at-suffix' | 'fk-missing-id-suffix'
+    kind:
+      | 'table-not-snake-case'
+      | 'column-not-snake-case'
+      | 'timestamp-missing-at-suffix'
+      | 'fk-missing-id-suffix'
+      | 'audit-column-missing-created-at'
+      | 'audit-column-missing-updated-at'
     table: string
     column: string
     file: string
@@ -568,6 +583,20 @@ export interface GraphSnapshot {
     toTable: string
     fkMigrationNumber: number
     targetMigrationNumber: number
+  }>
+
+  /**
+   * Resource balance imbalances — fonctions où acquire/release counts
+   * ne matchent pas (lock/unlock, open/close, setInterval/clearInterval, …).
+   * Cf. extractors/resource-balance.ts (Phase 4 Tier 6).
+   */
+  resourceImbalances?: Array<{
+    file: string
+    containingSymbol: string
+    line: number
+    pair: string
+    acquireCount: number
+    releaseCount: number
   }>
 }
 

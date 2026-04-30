@@ -1,0 +1,34 @@
+// NO-RESOURCE-IMBALANCE — acquire/release counts doivent matcher
+// dans une meme fonction.
+//
+// Pourquoi : un mismatch intra-fonction (ex: 2 setInterval, 1
+// clearInterval dans la meme fn) est presque toujours un leak. Reed-
+// Solomon-style parity : pour chaque acquire il doit y avoir un
+// release.
+//
+// L'extracteur skip deja le pattern start/stop split (pure-acquire
+// dans `startX`, pure-release dans `stopX` au sein du meme fichier mais
+// fonctions separees) — on ne flag QUE les fonctions ou les DEUX
+// existent avec counts differents. Cela elimine l'enorme majorite des
+// faux-positifs.
+//
+// Pairs reconnus :
+//   acquire/release, lock/unlock, connect/disconnect, open/close,
+//   subscribe/unsubscribe, setInterval/clearInterval,
+//   addEventListener/removeEventListener
+//
+// Source des facts : `ResourceImbalance(file, line, containingSymbol,
+// pair, acquireCount, releaseCount)`.
+//
+// Pattern ratchet : grandfather par (file, containingSymbol). Pour
+// resoudre :
+//   - Equilibrer les counts dans la fonction OU
+//   - Ajouter `// resource-balance-ok: <reason>` ligne precedente
+//     (l'extracteur skip directement, le grandfather devient obsolete).
+
+.decl ResourceImbalanceGrandfathered(file: symbol, containingSymbol: symbol)
+
+Violation("NO-RESOURCE-IMBALANCE", File, Line,
+  "acquire/release counts mismatch dans la meme fonction — leak probable") :-
+    ResourceImbalance(File, Line, Sym, _, _, _),
+    !ResourceImbalanceGrandfathered(File, Sym).

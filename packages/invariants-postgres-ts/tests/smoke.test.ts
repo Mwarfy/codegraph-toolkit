@@ -544,6 +544,147 @@ describe('sql-migration-order', () => {
   })
 })
 
+describe('no-switch-empty-or-no-default', () => {
+  it('flag switch-empty', async () => {
+    const facts = new Map([
+      ['DeadCode', 'src/router.ts\t10\tswitch-empty'],
+    ])
+    const { violations } = await runRule({ ruleName: 'no-switch-empty-or-no-default.dl', facts })
+    expect(violations).toHaveLength(1)
+  })
+
+  it('flag switch-no-default', async () => {
+    const facts = new Map([
+      ['DeadCode', 'src/router.ts\t20\tswitch-no-default'],
+    ])
+    const { violations } = await runRule({ ruleName: 'no-switch-empty-or-no-default.dl', facts })
+    expect(violations).toHaveLength(1)
+  })
+
+  it('skip si grandfathered', async () => {
+    const schema = await loadRule('schema-subset.dl')
+    const baseRule = await loadRule('no-switch-empty-or-no-default.dl')
+    const customRule = baseRule + '\nSwitchDefaultGrandfathered("src/router.ts", 10).\n'
+    const program = mergePrograms([
+      { name: 'schema.dl', content: schema },
+      { name: 'rule.dl', content: customRule },
+    ])
+    const facts = new Map([
+      ['DeadCode', 'src/router.ts\t10\tswitch-empty'],
+    ])
+    const db = loadFacts(program.decls, { factsByRelation: facts })
+    const result = evaluate(program, db, { allowRecursion: true })
+    expect(result.outputs.get('Violation') ?? []).toEqual([])
+  })
+})
+
+describe('no-controlling-expression-constant', () => {
+  it('flag controlling-expression-constant', async () => {
+    const facts = new Map([
+      ['DeadCode', 'src/foo.ts\t5\tcontrolling-expression-constant'],
+    ])
+    const { violations } = await runRule({ ruleName: 'no-controlling-expression-constant.dl', facts })
+    expect(violations).toHaveLength(1)
+  })
+
+  it('skip si grandfathered', async () => {
+    const schema = await loadRule('schema-subset.dl')
+    const baseRule = await loadRule('no-controlling-expression-constant.dl')
+    const customRule = baseRule + '\nControllingConstantGrandfathered("src/foo.ts", 5).\n'
+    const program = mergePrograms([
+      { name: 'schema.dl', content: schema },
+      { name: 'rule.dl', content: customRule },
+    ])
+    const facts = new Map([
+      ['DeadCode', 'src/foo.ts\t5\tcontrolling-expression-constant'],
+    ])
+    const db = loadFacts(program.decls, { factsByRelation: facts })
+    const result = evaluate(program, db, { allowRecursion: true })
+    expect(result.outputs.get('Violation') ?? []).toEqual([])
+  })
+})
+
+describe('sql-audit-columns', () => {
+  it('flag audit-column-missing-created-at', async () => {
+    const facts = new Map([
+      ['SqlNamingViolation',
+        'db/schema.sql\t5\torders\t_\taudit-column-missing-created-at'],
+    ])
+    const { violations } = await runRule({ ruleName: 'sql-audit-columns.dl', facts })
+    expect(violations).toHaveLength(1)
+  })
+
+  it('flag audit-column-missing-updated-at', async () => {
+    const facts = new Map([
+      ['SqlNamingViolation',
+        'db/schema.sql\t5\torders\t_\taudit-column-missing-updated-at'],
+    ])
+    const { violations } = await runRule({ ruleName: 'sql-audit-columns.dl', facts })
+    expect(violations).toHaveLength(1)
+  })
+
+  it('skip si grandfathered par (table, kind)', async () => {
+    const schema = await loadRule('schema-subset.dl')
+    const baseRule = await loadRule('sql-audit-columns.dl')
+    const customRule = baseRule +
+      '\nAuditColumnGrandfathered("orders", "audit-column-missing-updated-at").\n'
+    const program = mergePrograms([
+      { name: 'schema.dl', content: schema },
+      { name: 'rule.dl', content: customRule },
+    ])
+    const facts = new Map([
+      ['SqlNamingViolation',
+        'db/schema.sql\t5\torders\t_\taudit-column-missing-updated-at'],
+    ])
+    const db = loadFacts(program.decls, { factsByRelation: facts })
+    const result = evaluate(program, db, { allowRecursion: true })
+    expect(result.outputs.get('Violation') ?? []).toEqual([])
+  })
+
+  it('ne flag PAS un naming violation classique (kind discriminé)', async () => {
+    const facts = new Map([
+      ['SqlNamingViolation',
+        'db/schema.sql\t5\torders\tcustomer\tfk-missing-id-suffix'],
+    ])
+    const { violations } = await runRule({ ruleName: 'sql-audit-columns.dl', facts })
+    expect(violations).toEqual([])
+  })
+})
+
+describe('no-resource-imbalance', () => {
+  it('0 violations sur facts vides', async () => {
+    const { violations } = await runRule({ ruleName: 'no-resource-imbalance.dl' })
+    expect(violations).toEqual([])
+  })
+
+  it('flag une imbalance', async () => {
+    const facts = new Map([
+      ['ResourceImbalance',
+        'src/foo.ts\t10\thandle\tsetInterval/clearInterval\t2\t1'],
+    ])
+    const { violations } = await runRule({ ruleName: 'no-resource-imbalance.dl', facts })
+    expect(violations).toHaveLength(1)
+  })
+
+  it('skip si grandfathered par (file, symbol)', async () => {
+    const schema = await loadRule('schema-subset.dl')
+    const baseRule = await loadRule('no-resource-imbalance.dl')
+    const customRule = baseRule +
+      '\nResourceImbalanceGrandfathered("src/foo.ts", "handle").\n'
+    const program = mergePrograms([
+      { name: 'schema.dl', content: schema },
+      { name: 'rule.dl', content: customRule },
+    ])
+    const facts = new Map([
+      ['ResourceImbalance',
+        'src/foo.ts\t10\thandle\tsetInterval/clearInterval\t2\t1'],
+    ])
+    const db = loadFacts(program.decls, { factsByRelation: facts })
+    const result = evaluate(program, db, { allowRecursion: true })
+    expect(result.outputs.get('Violation') ?? []).toEqual([])
+  })
+})
+
 describe('schema-subset.dl est valide', () => {
   it('parse sans erreur et déclare les relations attendues', async () => {
     const schema = await loadRule('schema-subset.dl')
@@ -565,6 +706,7 @@ describe('schema-subset.dl est valide', () => {
     expect(program.decls.has('ArticulationPoint')).toBe(true)
     expect(program.decls.has('SqlNamingViolation')).toBe(true)
     expect(program.decls.has('SqlMigrationOrderViolation')).toBe(true)
+    expect(program.decls.has('ResourceImbalance')).toBe(true)
     expect(program.decls.has('Violation')).toBe(true)
     // Toutes les input relations sont marquées .input
     expect(program.decls.get('CycleNode')!.isInput).toBe(true)

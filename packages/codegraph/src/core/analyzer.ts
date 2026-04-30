@@ -52,6 +52,7 @@ import { analyzeDeprecatedUsage, type DeprecatedDeclaration, type DeprecatedUsag
 import { analyzeArticulationPoints, type ArticulationPoint } from '../extractors/articulation-points.js'
 import { findSqlNamingViolations, type SqlNamingViolation } from '../extractors/sql-naming.js'
 import { findMigrationOrderViolations, type MigrationOrderViolation } from '../extractors/sql-migration-order.js'
+import { analyzeResourceBalance, type ResourceImbalance } from '../extractors/resource-balance.js'
 import { analyzeLongFunctions, type LongFunction } from '../extractors/long-functions.js'
 import { analyzeMagicNumbers, type MagicNumber } from '../extractors/magic-numbers.js'
 import { analyzeTestCoverage, type TestCoverageReport } from '../extractors/test-coverage.js'
@@ -573,6 +574,7 @@ async function runDeterministicDetectors(
   let articulationPoints: ArticulationPoint[] | undefined
   let sqlNamingViolations: SqlNamingViolation[] | undefined
   let sqlMigrationOrderViolations: MigrationOrderViolation[] | undefined
+  let resourceImbalances: ResourceImbalance[] | undefined
 
   const tTodos = performance.now()
   try {
@@ -720,6 +722,15 @@ async function runDeterministicDetectors(
     console.error(`  ✗ sql-migration-order failed: ${err}`)
   }
 
+  const tResBalance = performance.now()
+  try {
+    resourceImbalances = await analyzeResourceBalance(config.rootDir, files, sharedProject)
+    timing.detectors['resource-balance'] = performance.now() - tResBalance
+  } catch (err) {
+    timing.detectors['resource-balance'] = performance.now() - tResBalance
+    console.error(`  ✗ resource-balance failed: ${err}`)
+  }
+
   if (todos) snapshot.todos = todos
   if (longFunctions) snapshot.longFunctions = longFunctions
   if (magicNumbers) snapshot.magicNumbers = magicNumbers
@@ -735,6 +746,7 @@ async function runDeterministicDetectors(
   if (articulationPoints) snapshot.articulationPoints = articulationPoints
   if (sqlNamingViolations) snapshot.sqlNamingViolations = sqlNamingViolations
   if (sqlMigrationOrderViolations) snapshot.sqlMigrationOrderViolations = sqlMigrationOrderViolations
+  if (resourceImbalances) snapshot.resourceImbalances = resourceImbalances
 }
 
 /**
