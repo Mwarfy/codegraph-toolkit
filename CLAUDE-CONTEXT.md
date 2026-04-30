@@ -36,8 +36,8 @@
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
 - `packages/codegraph/src/core/types.ts` (in: 58)
-- `packages/salsa/dist/index.d.ts` (in: 17)
-- `packages/codegraph/src/incremental/database.ts` (in: 16)
+- `packages/codegraph/src/incremental/database.ts` (in: 18)
+- `packages/salsa/dist/index.d.ts` (in: 18)
 - `packages/codegraph/src/incremental/queries.ts` (in: 15)
 - `packages/adr-toolkit/src/config.ts` (in: 9) · gov by ADR-002
 - `packages/codegraph/src/diff/types.ts` (in: 8)
@@ -49,8 +49,8 @@
 Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `// ADR-NNN`** dans le code. Intentionnel ? Sinon poser un marqueur ou créer un ADR :
 
 - **58** `packages/codegraph/src/core/types.ts` _(top-hub)_
-- **17** `packages/salsa/dist/index.d.ts` _(top-hub)_
-- **16** `packages/codegraph/src/incremental/database.ts` _(top-hub)_
+- **18** `packages/codegraph/src/incremental/database.ts` _(top-hub)_
+- **18** `packages/salsa/dist/index.d.ts` _(top-hub)_
 - **15** `packages/codegraph/src/incremental/queries.ts` _(top-hub)_
 
 ## Tensions actives — invitations à explorer
@@ -94,6 +94,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+e65edee feat(salsa,codegraph): disk persistence for cross-process cache hit [Sprint 7]
 29dc4d4 docs(phase-1): refresh boot brief post-Sprint 6 — cible <500ms warm ATTEINTE
 5254819 perf(codegraph): ts-imports reuses sharedProject in incremental mode [Sprint 6]
 7815a4d feat(codegraph): expose --incremental flag in CLI [Sprint 4]
@@ -105,7 +106,6 @@ cb6309d feat(codegraph): incremental mode — batch 3 (typed-calls, cycles, data
 4756b92 feat(codegraph): incremental mode — batch 2 (complexity, state-machines, truth-points) [Sprint 3]
 92eabe3 feat(codegraph): incremental mode — batch 1 (event-emit-sites, package-deps, barrels) [Sprint 3]
 0c36ea1 docs(phase-1): refresh boot brief post-Sprint 2
-ca6d610 feat(codegraph): incremental mode — env-usage + oauth-scope-literals via Salsa (Sprint 2)
 ```
 
 ## Comment contribuer à ce brief

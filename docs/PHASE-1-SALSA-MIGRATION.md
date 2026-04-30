@@ -22,16 +22,16 @@ But Phase 1 : passer en **incremental** via @liby/salsa. Sur changement
 d'1 fichier, seul ce qui dépend de ce fichier recompute. Cible : <1s par
 commit incrémental.
 
-## État à reprise (après Sprint 6 — cible <500ms warm ATTEINTE)
+## État à reprise (après Sprint 7 — Phase 1 fonctionnellement complète)
 
 ### Commits livrés sur cette chaîne (codegraph-toolkit)
 
 ```
+e65edee feat(salsa,codegraph): disk persistence for cross-process cache hit [Sprint 7]
+29dc4d4 docs(phase-1): refresh boot brief post-Sprint 6 — cible <500ms warm ATTEINTE
 5254819 perf(codegraph): ts-imports reuses sharedProject in incremental mode [Sprint 6]
 7815a4d feat(codegraph): expose --incremental flag in CLI [Sprint 4]
-4dfd6cc docs(phase-1): refresh boot brief post-Sprint 5
 f3af3cb perf(codegraph): warm path optimizations — mtime-aware + Project reuse + skip-set [Sprint 5]
-e875f5e docs(phase-1): refresh boot brief post-Sprint 3
 b6c2bb6 feat(codegraph): incremental mode — batch 4 final (symbol-refs, taint, metrics) [Sprint 3]
 cb6309d feat(codegraph): incremental mode — batch 3 (typed-calls, cycles, data-flows) [Sprint 3]
 4756b92 feat(codegraph): incremental mode — batch 2 (complexity, state-machines, truth-points) [Sprint 3]
@@ -64,11 +64,33 @@ bc26f4f feat(invariants): ADR-017 migré vers Datalog déclaratif (M3)
 - Smoke E2E sur Sentinel : counts identiques cross-mode (60 envs, 8 oauth,
   51 events, 19 pkg, 6 barrels, 71 truthPoints, 3 fsm, 521 sigs, 750 edges,
   1 cycle, 160 dataFlows, 1179 symbolRefs)
-- Cold incremental **~9.7s**, warm **~493ms** (vs ~8s avant Sprint 6),
-  legacy ~21s. Warm vs legacy : **-98%**.
-- ts-imports warm : **108ms** (vs 7400ms avant Sprint 6 → -98.5%).
-- CLI cold (process neuf) : ~10.3s. Persistence disque pour cross-process
-  reportée Sprint 7+.
+**Mesures Sentinel après Sprint 7 :**
+- Same-process : cold ~9.7s, **warm ~524ms** (vs legacy ~21s → -98%).
+- CLI cross-process : 1er run (no cache) 11.5s, **2e run (cache disk) 7.1s**
+  (-39% via persistence Sprint 7).
+- ts-imports warm : 108ms (vs 7400ms avant Sprint 6 → -98.5%).
+- Cache disque file : `.codegraph/salsa-cache.json` ~7.6 MB sur Sentinel.
+
+### Ce qui est NEUF dans Sprint 7
+
+**Persistence disque DB Salsa** (commit `e65edee`) :
+  - `@liby/salsa` : `Database.serializeState()` / `loadState()`. Map/Set
+    marqués `__type` pour round-trip JSON. `serializeValue` /
+    `deserializeValue` exportés.
+  - `incremental/persistence.ts` : `loadPersistedCache()` /
+    `savePersistedCache()` / `clearPersistedCache()`. Fichier
+    `.codegraph/salsa-cache.json`, écriture atomique (tmp + rename).
+  - `analyze()` mode incremental : load au boot (étape 3), save à la
+    fin. Échec save = pas bloquant.
+  - Persiste aussi le mtime cache via `getMtimeMap()` / `loadMtimeMap()`.
+
+Bottleneck restant en CLI cross-process (~7s) :
+  - `createSharedProject` ts-morph parse ~3-5s (non caché disque)
+  - File discovery ~500ms-1s
+  - Détecteurs base + buildGraph ~1-2s
+  - Load JSON 7.6 MB ~500ms-1s
+  Pour atteindre <500ms via CLI : il faudrait sérialiser les ASTs
+  ts-morph eux-mêmes — refactor profond, hors scope Phase 1.
 
 ### Ce qui est NEUF dans Sprint 6
 
@@ -608,6 +630,40 @@ Ne jamais "skipper" un test qui pète.
 - **Project ts-morph reste global** au moins pour Sprint 2 (compromis).
   Sprint 3 ou 4 verra si on l'incrémentalise.
 
+## Phase 1 — État final (post-Sprint 7)
+
+**Fonctionnellement complet.** Le mode `--incremental` est exposé en CLI,
+13/14 détecteurs sont Salsa-isés (unused-exports profite indirectement
+du Project cache), le warm same-process est <1s, le warm cross-process
+via CLI gagne 39% via la persistence disque.
+
+### Sprints reportés (utilité marginale ou refactor profond)
+
+- **Sprint 8** (retire factsOnly) : risqué tant que CLI cold (~11s) >
+  factsOnly (~7s). Si Sentinel veut basculer le pre-commit : passer le
+  hook à `--incremental`, accepter le 1er run +4s, gagner sur les
+  suivants. Mais aucune obligation — `factsOnly` continue de marcher.
+- **Sprint 9** (migrer event-bus/http/bullmq/db-tables) : bench montre
+  ces détecteurs cumulent <50ms warm. Gain marginal, risque de cassage
+  non justifié.
+- **Sprint 10** (unused-exports en queries fines) : warm 168ms déjà OK
+  via Project cache. Refactor en `isImportedBy(symbol)` apporterait du
+  gain en cas de modif locale d'un seul fichier dans un gros projet,
+  mais pour Sentinel c'est négligeable.
+
+### Sprints "next" si Phase 2 voulue
+
+- **AST persistence** : sérialiser les ASTs ts-morph dans le cache
+  disque pour skip le `createSharedProject` au cold CLI (~3-5s gain).
+  Refactor profond, demande de bien gérer la version de ts-morph et
+  l'invalidation. Cible : warm CLI <2s.
+- **Delta saves** : ne sauver que les cells modifiées au lieu du
+  fichier complet (économie de I/O). Justifié si le cache dépasse
+  ~50 MB.
+- **Watcher mode** : `codegraph watch` qui maintient le sharedProject
+  + DB en RAM et émet les invalidations sur changements fs. Cible :
+  warm <50ms.
+
 ## Reprise rapide checklist
 
 Quand tu reprends dans une nouvelle session :
@@ -616,19 +672,9 @@ Quand tu reprends dans une nouvelle session :
 2. [ ] `git log --oneline | head -20` côté codegraph-toolkit + Sentinel
 3. [ ] Vérifier que `npx vitest run` côté toolkit passe (106/106 attendus)
 4. [ ] Vérifier que les invariants Sentinel passent (659/659)
-5. [ ] **Sprint 7** hypothétique : persistence disque DB Salsa pour
-       atteindre warm <500ms via CLI (process neuf). Sérialiser cells +
-       revision dans `.codegraph/salsa-cache.json`. Charger au démarrage,
-       sauver à la fin de analyze().
-6. [ ] **Sprint 8** : retirer factsOnly + --regen (cold via CLI doit
-       battre factsOnly d'abord — soit via persistence Sprint 7, soit
-       via une autre optim).
-7. [ ] **Sprint 9** : migrer event-bus / http-routes / bullmq-queues /
-       db-tables en Salsa (faible priorité — ces détecteurs sont déjà
-       rapides via le shared Project Sprint 6).
-8. [ ] **Sprint 10** : refactor unused-exports en queries Salsa fines
-       (`isImportedBy(symbol)`) si on veut sortir du recompute global
-       sur changement.
+5. [ ] Décider la suite parmi : Phase 2 (AST persistence / watcher),
+       Sprint 8 (retire factsOnly + bascule pre-commit), ou autre
+       chantier (Sentinel / nouveau pack).
 
 Si un step ne matche plus exactement la réalité (ex: nouveau commit
 intercalé), adapte mais reste fidèle au principe : Salsa partout,
