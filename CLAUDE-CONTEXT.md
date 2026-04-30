@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+294de4a feat(adr-toolkit): init détecte la stack DB et active les bons détecteurs
 fffe142 feat(codegraph): Drizzle schema detector — mêmes facts que sql-schema
 7defd9b feat(codegraph): SQL schema detector — FK sans index + 5 facts Datalog
 a934947 feat(codegraph-mcp): codegraph_changes_since MCP tool — diff live vs post-commit
@@ -111,7 +112,6 @@ c9da515 feat(codegraph): co-change extractor + codegraph_co_changed MCP tool
 b0b7cfa feat(codegraph): FSM detectionConfidence — observed vs declared-only
 63b9a45 feat(codegraph): émission CycleNode facts + boot brief enrichissement 5 axes
 ff7cd93 refactor(codegraph): Phase C — analyze() à 157 LOC via 4 helpers d'orchestration
-6029444 refactor(codegraph): Phase B — migration des 13 détecteurs restants vers Detector/Registry
 ```
 
 ## Comment contribuer à ce brief
