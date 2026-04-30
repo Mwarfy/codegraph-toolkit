@@ -29,6 +29,7 @@ import { codegraphUncovered } from './tools/uncovered.js'
 import { codegraphCoChanged } from './tools/co-changed.js'
 import { codegraphWhoCalls } from './tools/who-calls.js'
 import { codegraphExtractCandidates } from './tools/extract-candidates.js'
+import { codegraphAffected } from './tools/affected.js'
 
 const server = new Server(
   {
@@ -192,6 +193,39 @@ const TOOLS = [
       required: ['file_path'],
     },
   },
+  {
+    name: 'codegraph_affected',
+    description:
+      'BFS reverse from a list of files to find ALL files transitively impacted ' +
+      'by their modification. Separates affected tests for selective test running. ' +
+      'Use to answer "what should I re-test after changing these files?" or ' +
+      '"what is the blast radius of my current edits?". Pre-commit selector: ' +
+      '`git diff --name-only` → affected → tests subset → `vitest run <list>`.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        files: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'List of modified files (absolute or relative-to-repo paths).',
+        },
+        repo_root: { type: 'string' },
+        include_indirect: {
+          type: 'boolean',
+          description: 'Include event/queue/db-table edges in addition to imports? Default false.',
+        },
+        max_depth: {
+          type: 'number',
+          description: 'Max BFS depth (default Infinity). Set 1 for direct importers only.',
+        },
+        separate_tests: {
+          type: 'boolean',
+          description: 'Return affected tests separately? Default true.',
+        },
+      },
+      required: ['files'],
+    },
+  },
 ]
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -227,6 +261,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break
       case 'codegraph_extract_candidates':
         result = codegraphExtractCandidates(args as any)
+        break
+      case 'codegraph_affected':
+        result = codegraphAffected(args as any)
         break
       default:
         return {

@@ -559,6 +559,215 @@ program
     console.log()
   })
 
+// ─── affected ────────────────────────────────────────────────────────────
+
+program
+  .command('affected')
+  .description('BFS reverse depuis les fichiers donnés — liste tout ce qui est impacté transitivement')
+  .argument('[files...]', 'Files modifiés (relatifs au repo). Si vide, lit `git diff --name-only HEAD`')
+  .option('-c, --config <path>', 'Path to codegraph config file')
+  .option('--include-indirect', 'Inclure event/queue/db-table edges en plus des imports')
+  .option('--max-depth <n>', 'Profondeur BFS max (défaut: pas de cap)', '0')
+  .option('--tests-only', 'Output uniquement les fichiers tests parmi les affected')
+  .option('--tests-glob <pattern>', 'Scanne ces fichiers tests à la volée (regex import) pour les croiser avec affected. Ex: "sentinel-core/tests/**/*.test.ts". Nécessaire si la config codegraph exclut les tests du snapshot.')
+  .option('--json', 'Output JSON')
+  .action(async (files: string[], opts) => {
+    const snapshot = await loadSnapshot(undefined, opts)
+
+    // Si aucun fichier passé, fallback git diff --name-only HEAD
+    let inputs = files
+    if (inputs.length === 0) {
+      try {
+        const { execSync } = await import('node:child_process')
+        const out = execSync('git diff --name-only HEAD', { encoding: 'utf-8' }).trim()
+        inputs = out.length > 0 ? out.split('\n') : []
+      } catch {
+        console.error(chalk.yellow('  No files passed and `git diff --name-only HEAD` failed.'))
+        process.exitCode = 1
+        return
+      }
+    }
+    if (inputs.length === 0) {
+      console.error(chalk.dim('  No modified files. Nothing affected.'))
+      return
+    }
+
+    const maxDepth = parseInt(opts.maxDepth, 10) || Infinity
+    const includeIndirect = !!opts.includeIndirect
+    const result = computeAffectedFromCli(snapshot, inputs, { includeIndirect, maxDepth })
+
+    // Optionnel : scan des tests à la volée si --tests-glob fourni (utile
+    // quand la config codegraph exclut les tests du snapshot, ex Sentinel).
+    if (opts.testsGlob) {
+      const extraTests = await scanTestsImportingAffected(
+        opts.testsGlob,
+        new Set(result.affectedFiles),
+      )
+      // Add extra tests to affectedTests + affectedFiles (déduplication via Set)
+      const allTests = new Set([...result.affectedTests, ...extraTests])
+      result.affectedTests = [...allTests].sort()
+      const allFiles = new Set([...result.affectedFiles, ...extraTests])
+      result.affectedFiles = [...allFiles].sort()
+    }
+
+    const out = opts.testsOnly ? result.affectedTests : result.affectedFiles
+
+    if (opts.json) {
+      console.log(JSON.stringify({
+        inputs,
+        affectedFiles: result.affectedFiles,
+        affectedTests: result.affectedTests,
+        unknownInputs: result.unknownInputs,
+        maxDepthReached: result.maxDepthReached,
+      }, null, 2))
+      return
+    }
+
+    if (opts.testsOnly) {
+      // Mode pipe-friendly : un fichier par ligne, sans cosmétique
+      for (const f of out) console.log(f)
+      return
+    }
+
+    console.log(chalk.bold(`\n  Affected from ${inputs.length} input(s)\n`))
+    console.log(`  ${result.affectedFiles.length} file(s) impacted (${result.affectedTests.length} test(s))`)
+    if (result.unknownInputs.length > 0) {
+      console.log(chalk.yellow(`  ${result.unknownInputs.length} unknown input(s) (not in graph):`))
+      for (const u of result.unknownInputs) console.log(`    - ${u}`)
+    }
+    console.log()
+    console.log(chalk.bold('  Tests to run:'))
+    for (const t of result.affectedTests) console.log(`    ${t}`)
+    if (result.affectedTests.length === 0) {
+      console.log(chalk.dim('    (none)'))
+    }
+    console.log()
+  })
+
+/**
+ * Scan tests à la volée : pour chaque fichier matchant `testsGlob`, lit son
+ * source, extrait les imports relatifs, résout vers un chemin, et marque le
+ * test si l'un de ses imports résolus est dans `affectedFiles`.
+ *
+ * Nécessaire quand la config codegraph exclut les tests du snapshot.
+ * Approche regex-based (rapide, ~10ms/fichier sur Sentinel) — pas de
+ * ts-morph load pour ça.
+ */
+async function scanTestsImportingAffected(
+  testsGlob: string,
+  affectedFiles: Set<string>,
+): Promise<string[]> {
+  const fastGlob = await import('node:fs/promises')
+  const path = await import('node:path')
+
+  // Discover test files via simple recursive walk + minimatch
+  const minimatchMod = await import('minimatch')
+  const minimatch = (minimatchMod as any).minimatch ?? (minimatchMod as any).default
+  const cwd = process.cwd()
+
+  const candidates: string[] = []
+  async function walk(dir: string): Promise<void> {
+    try {
+      const entries = await fastGlob.readdir(dir, { withFileTypes: true })
+      for (const e of entries) {
+        const full = path.join(dir, e.name)
+        if (e.isDirectory()) {
+          if (e.name === 'node_modules' || e.name === 'dist' || e.name === '.git') continue
+          await walk(full)
+        } else {
+          const rel = path.relative(cwd, full).replace(/\\/g, '/')
+          if (minimatch(rel, testsGlob)) candidates.push(rel)
+        }
+      }
+    } catch {}
+  }
+  await walk(cwd)
+
+  // Pour chaque test, parse imports + résout
+  const importsRe = /^\s*(?:import|export)\s+(?:[^'"]+from\s+)?['"]([^'"]+)['"]/gm
+  const matchingTests: string[] = []
+  for (const test of candidates) {
+    let content: string
+    try { content = await fastGlob.readFile(path.join(cwd, test), 'utf-8') } catch { continue }
+    const importPaths = new Set<string>()
+    let m: RegExpExecArray | null
+    importsRe.lastIndex = 0
+    while ((m = importsRe.exec(content)) !== null) {
+      importPaths.add(m[1])
+    }
+    // Résolution simple : pour chaque import relatif, calcule le path résolu.
+    const testDir = path.dirname(test)
+    for (const imp of importPaths) {
+      if (!imp.startsWith('.')) continue
+      // Strip .js extension (ESM-style imports d'un .ts)
+      const stripped = imp.replace(/\.js$/, '')
+      const resolvedNoExt = path.normalize(path.join(testDir, stripped)).replace(/\\/g, '/')
+      // Try .ts, .tsx, /index.ts
+      const candidatesResolved = [
+        resolvedNoExt + '.ts',
+        resolvedNoExt + '.tsx',
+        resolvedNoExt + '/index.ts',
+      ]
+      for (const c of candidatesResolved) {
+        if (affectedFiles.has(c)) {
+          matchingTests.push(test)
+          break
+        }
+      }
+      if (matchingTests[matchingTests.length - 1] === test) break
+    }
+  }
+  return [...new Set(matchingTests)].sort()
+}
+
+function computeAffectedFromCli(
+  snapshot: any,
+  files: string[],
+  options: { includeIndirect?: boolean; maxDepth?: number },
+): { affectedFiles: string[]; affectedTests: string[]; maxDepthReached: number; unknownInputs: string[] } {
+  const includeIndirect = options.includeIndirect ?? false
+  const maxDepth = options.maxDepth ?? Infinity
+  type Edge = { from: string; to: string; type: string }
+  const edges: Edge[] = snapshot.edges ?? []
+  const nodeIds = new Set<string>((snapshot.nodes ?? []).map((n: any) => n.id))
+
+  const importerOf = new Map<string, Set<string>>()
+  for (const e of edges) {
+    if (e.type !== 'import' && !(includeIndirect && (e.type === 'event' || e.type === 'queue' || e.type === 'db-table'))) continue
+    if (!importerOf.has(e.to)) importerOf.set(e.to, new Set())
+    importerOf.get(e.to)!.add(e.from)
+  }
+
+  const affected = new Set<string>()
+  const unknownInputs: string[] = []
+  const queue: Array<{ file: string; depth: number }> = []
+  for (const input of files) {
+    const norm = input.replace(/\\/g, '/')
+    if (!nodeIds.has(norm)) { unknownInputs.push(norm); continue }
+    affected.add(norm)
+    queue.push({ file: norm, depth: 0 })
+  }
+
+  let maxDepthReached = 0
+  while (queue.length > 0) {
+    const { file, depth } = queue.shift()!
+    if (depth >= maxDepth) continue
+    const importers = importerOf.get(file)
+    if (!importers) continue
+    for (const importer of importers) {
+      if (affected.has(importer)) continue
+      affected.add(importer)
+      maxDepthReached = Math.max(maxDepthReached, depth + 1)
+      if (depth + 1 < maxDepth) queue.push({ file: importer, depth: depth + 1 })
+    }
+  }
+
+  const affectedFiles = [...affected].sort()
+  const testRe = /(\.test\.tsx?|\.spec\.tsx?|^tests?\/|\/tests?\/)/
+  const affectedTests = affectedFiles.filter((f) => testRe.test(f))
+  return { affectedFiles, affectedTests, maxDepthReached, unknownInputs }
+}
+
 // ─── exports ─────────────────────────────────────────────────────────────
 
 program
