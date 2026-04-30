@@ -685,6 +685,141 @@ describe('no-resource-imbalance', () => {
   })
 })
 
+describe('composite-eval-in-http-route (Tier 7)', () => {
+  it('flag eval dans un fichier qui declare une http-route', async () => {
+    const facts = new Map([
+      ['EvalCall', 'src/api.ts\t10\teval\thandler'],
+      ['EntryPoint', 'src/api.ts\thttp-route\tPOST /api/run'],
+    ])
+    const { violations } = await runRule({ ruleName: 'composite-eval-in-http-route.dl', facts })
+    expect(violations).toHaveLength(1)
+    expect(violations[0][0]).toBe('COMPOSITE-EVAL-IN-HTTP-ROUTE')
+  })
+
+  it('skip si eval mais pas dans http-route', async () => {
+    const facts = new Map([
+      ['EvalCall', 'src/sandbox.ts\t10\teval\thandler'],
+    ])
+    const { violations } = await runRule({ ruleName: 'composite-eval-in-http-route.dl', facts })
+    expect(violations).toEqual([])
+  })
+
+  it('skip si http-route mais pas eval', async () => {
+    const facts = new Map([
+      ['EntryPoint', 'src/api.ts\thttp-route\tPOST /api/run'],
+    ])
+    const { violations } = await runRule({ ruleName: 'composite-eval-in-http-route.dl', facts })
+    expect(violations).toEqual([])
+  })
+})
+
+describe('composite-fk-chain-without-index (Tier 7)', () => {
+  it('flag FK source d\\u0027une chaine transitive sans index', async () => {
+    // Chaine A → B → C, A→B sans index.
+    const facts = new Map([
+      ['SqlForeignKey', [
+        'orders\tcustomer_id\tcustomers\tid\tdb/schema.sql\t10',
+        'customers\tcompany_id\tcompanies\tid\tdb/schema.sql\t20',
+      ].join('\n')],
+      ['SqlFkWithoutIndex', 'orders\tcustomer_id\tcustomers\tid'],
+    ])
+    const { violations } = await runRule({ ruleName: 'composite-fk-chain-without-index.dl', facts })
+    expect(violations.length).toBeGreaterThan(0)
+    expect(violations[0][0]).toBe('COMPOSITE-FK-CHAIN-WITHOUT-INDEX')
+  })
+
+  it('skip si FK isole (pas de chaine)', async () => {
+    const facts = new Map([
+      ['SqlForeignKey', 'orders\tcustomer_id\tcustomers\tid\tdb/schema.sql\t10'],
+      ['SqlFkWithoutIndex', 'orders\tcustomer_id\tcustomers\tid'],
+    ])
+    const { violations } = await runRule({ ruleName: 'composite-fk-chain-without-index.dl', facts })
+    // Pas de chaine A→B→C donc pas de violation par cette rule
+    // (sql-fk-needs-index attrape l'isolated case).
+    expect(violations).toEqual([])
+  })
+
+  it('skip si chaine indexee', async () => {
+    const facts = new Map([
+      ['SqlForeignKey', [
+        'orders\tcustomer_id\tcustomers\tid\tdb/schema.sql\t10',
+        'customers\tcompany_id\tcompanies\tid\tdb/schema.sql\t20',
+      ].join('\n')],
+      // SqlFkWithoutIndex vide = tout est indexé
+    ])
+    const { violations } = await runRule({ ruleName: 'composite-fk-chain-without-index.dl', facts })
+    expect(violations).toEqual([])
+  })
+})
+
+describe('composite-high-critical-untested (Tier 7)', () => {
+  it('flag intersection des 3 conditions', async () => {
+    const facts = new Map([
+      ['ArticulationPoint', 'src/hub.ts\t5'],
+      ['TruthPointWriter', 'visual_renders\tsrc/hub.ts'],
+      // TestedFile vide = pas de test pour src/hub.ts
+    ])
+    const { violations } = await runRule({ ruleName: 'composite-high-critical-untested.dl', facts })
+    expect(violations).toHaveLength(1)
+    expect(violations[0][0]).toBe('COMPOSITE-HIGH-CRITICAL-UNTESTED')
+    expect(violations[0][1]).toBe('src/hub.ts')
+  })
+
+  it('skip si tested', async () => {
+    const facts = new Map([
+      ['ArticulationPoint', 'src/hub.ts\t5'],
+      ['TruthPointWriter', 'concept\tsrc/hub.ts'],
+      ['TestedFile', 'src/hub.ts'],
+    ])
+    const { violations } = await runRule({ ruleName: 'composite-high-critical-untested.dl', facts })
+    expect(violations).toEqual([])
+  })
+
+  it('skip si pas truth-point writer', async () => {
+    const facts = new Map([
+      ['ArticulationPoint', 'src/hub.ts\t5'],
+    ])
+    const { violations } = await runRule({ ruleName: 'composite-high-critical-untested.dl', facts })
+    expect(violations).toEqual([])
+  })
+
+  it('skip si pas articulation point', async () => {
+    const facts = new Map([
+      ['TruthPointWriter', 'concept\tsrc/hub.ts'],
+    ])
+    const { violations } = await runRule({ ruleName: 'composite-high-critical-untested.dl', facts })
+    expect(violations).toEqual([])
+  })
+})
+
+describe('composite-double-drift-wrapper-boolean (Tier 7)', () => {
+  it('flag wrapper-superfluous + boolean param meme line', async () => {
+    const facts = new Map([
+      ['DriftSignalFact', 'src/wrap.ts\t10\twrapper-superfluous'],
+      ['BooleanParam', 'src/wrap.ts\t10\tsendMessage\turgent\t1\t2'],
+    ])
+    const { violations } = await runRule({ ruleName: 'composite-double-drift-wrapper-boolean.dl', facts })
+    expect(violations).toHaveLength(1)
+    expect(violations[0][0]).toBe('COMPOSITE-DOUBLE-DRIFT-WRAPPER-BOOLEAN')
+  })
+
+  it('skip si juste wrapper sans boolean param', async () => {
+    const facts = new Map([
+      ['DriftSignalFact', 'src/wrap.ts\t10\twrapper-superfluous'],
+    ])
+    const { violations } = await runRule({ ruleName: 'composite-double-drift-wrapper-boolean.dl', facts })
+    expect(violations).toEqual([])
+  })
+
+  it('skip si juste boolean param sans wrapper', async () => {
+    const facts = new Map([
+      ['BooleanParam', 'src/api.ts\t10\tsendMessage\turgent\t1\t2'],
+    ])
+    const { violations } = await runRule({ ruleName: 'composite-double-drift-wrapper-boolean.dl', facts })
+    expect(violations).toEqual([])
+  })
+})
+
 describe('schema-subset.dl est valide', () => {
   it('parse sans erreur et déclare les relations attendues', async () => {
     const schema = await loadRule('schema-subset.dl')
@@ -707,6 +842,11 @@ describe('schema-subset.dl est valide', () => {
     expect(program.decls.has('SqlNamingViolation')).toBe(true)
     expect(program.decls.has('SqlMigrationOrderViolation')).toBe(true)
     expect(program.decls.has('ResourceImbalance')).toBe(true)
+    expect(program.decls.has('TruthPointWriter')).toBe(true)
+    expect(program.decls.has('TruthPointReader')).toBe(true)
+    expect(program.decls.has('TestedFile')).toBe(true)
+    expect(program.decls.has('DriftSignalFact')).toBe(true)
+    expect(program.decls.has('CoChange')).toBe(true)
     expect(program.decls.has('Violation')).toBe(true)
     // Toutes les input relations sont marquées .input
     expect(program.decls.get('CycleNode')!.isInput).toBe(true)

@@ -1,0 +1,35 @@
+// COMPOSITE-DOUBLE-DRIFT-WRAPPER-BOOLEAN — fonction qui est wrapper
+// superflu ET prend un boolean positionnel = double dette agentique.
+//
+// Pourquoi : chacun isolement est un drift signal mineur (severity 1).
+// Mais COMBINES dans la meme fonction = signal fort que c'est un
+// reliquat de refactor automatique : un wrapper qui forward un
+// boolean qu'il n'utilise meme pas pour transformer. Supprimer le
+// wrapper resout les 2 dettes d'un coup (les call-sites passeront
+// directement la fonction interne avec leur propre signature options
+// object).
+//
+// Composite multi-relation (Tier 7) :
+//   DriftSignalFact(file, _, "wrapper-superfluous")
+//   ∧ BooleanParam(file, _, sameName, _, _, _)
+//
+// Source : DriftSignalFact (Tier 7 promotion) + BooleanParam (Tier 2).
+//
+// Pattern ratchet : grandfather par (file, name). Vrais cas attendus
+// rares. La rule capture une opportunite de refactor a 2 coups gratuit.
+
+.decl DoubleDriftGrandfathered(file: symbol, name: symbol)
+
+// Relation intermediaire pour matcher fonction par nom.
+.decl WrapperFnLine(file: symbol, line: number)
+WrapperFnLine(F, L) :- DriftSignalFact(F, L, "wrapper-superfluous").
+
+.decl WrapperWithBoolParam(file: symbol, line: number, name: symbol)
+WrapperWithBoolParam(F, L, N) :-
+    WrapperFnLine(F, L),
+    BooleanParam(F, L, N, _, _, _).
+
+Violation("COMPOSITE-DOUBLE-DRIFT-WRAPPER-BOOLEAN", File, Line,
+  "fonction wrapper superflu ET prend boolean positionnel — supprimer le wrapper resout les 2") :-
+    WrapperWithBoolParam(File, Line, Name),
+    !DoubleDriftGrandfathered(File, Name).

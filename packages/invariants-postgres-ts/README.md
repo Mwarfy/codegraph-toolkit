@@ -2,7 +2,7 @@
 
 Standard Datalog invariants for **TypeScript + Postgres** projects, drop-in for [`codegraph-toolkit`](https://github.com/Mwarfy/codegraph-toolkit).
 
-Twenty invariants, all 100% portable across TS/Postgres projects:
+Twenty-four invariants (20 mono-relation + 4 multi-relation composites), all 100% portable across TS/Postgres projects:
 
 | Invariant | What it catches |
 |---|---|
@@ -26,6 +26,17 @@ Twenty invariants, all 100% portable across TS/Postgres projects:
 | `no-controlling-expression-constant` | `if (true)`, `if (X && true)` and similar (MISRA 14.3, ESLint no-constant-condition). Ratchet on `(file, line)`. |
 | `sql-audit-columns` | Business-critical tables (`*_events`, `orders`, `payments`, ...) must have `created_at` (and `updated_at` if mutable). Audit trail discipline. Ratchet on `(table, kind)`. |
 | `no-resource-imbalance` | acquire/release counts mismatch in same function (lock/unlock, setInterval/clearInterval, etc.) — Reed-Solomon-style parity. Ratchet on `(file, symbol)`. |
+
+### Composites multi-relation (Tier 7)
+
+These rules cross-reference 2+ fact relations to detect signals that no single rule can capture.
+
+| Composite | What it catches |
+|---|---|
+| `composite-eval-in-http-route` | `eval()` + `EntryPoint(http-route)` in same file = RCE chemin court via `req.body`. Ratchet on `(file, line)`. |
+| `composite-fk-chain-without-index` | Transitive FK chain `A → B → C` where source has no index = pathological CASCADE on entire path. Ratchet on `(table, col)`. |
+| `composite-high-critical-untested` | `ArticulationPoint ∧ TruthPointWriter ∧ ¬TestedFile` = max blast radius without safety net. Ratchet on `file`. |
+| `composite-double-drift-wrapper-boolean` | `wrapper-superfluous` drift signal + `BooleanParam` on same function = double dette agentique, supprimer le wrapper résout les 2. Ratchet on `(file, name)`. |
 
 ## Why these two
 

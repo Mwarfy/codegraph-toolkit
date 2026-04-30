@@ -1,0 +1,33 @@
+// COMPOSITE-HIGH-CRITICAL-UNTESTED — fichier articulation point ET
+// truth-point writer ET sans test direct = HIGH-CRITICAL absolu.
+//
+// Pourquoi : 3 signaux orthogonaux qui ne capturent rien isolement
+// mais combines designent les fichiers ou un bug aurait le maximum de
+// blast radius :
+//   - articulation point : le retirer DECONNECTE le graphe
+//   - truth-point writer : muter ce fichier change le SSOT business
+//   - sans test direct : aucun safety net contre regression
+//
+// Composite multi-relation (Tier 7) — INTERSECTION de 3 sets :
+//   ArticulationPoint(file, _) ∧ TruthPointWriter(_, file)
+//   ∧ !TestedFile(file)
+//
+// Aucune rule individuelle ne capture ca. Aucun outil au monde non
+// plus — c'est ce que les 32 facts emis permettent de raisonner.
+//
+// Source : ArticulationPoint (Tier 5) + TruthPointWriter (Tier 7
+// promotion) + TestedFile (Tier 7 promotion).
+//
+// Pattern ratchet : grandfather par (file). Vrais cas extremement
+// rares (Sentinel : 2 sites). Quand ca declenche c'est URGENT a fix
+// — soit ajouter un test direct, soit casser l'articulation, soit
+// extraire le truth-point writing dans un fichier separe testable.
+
+.decl HighCriticalUntestedGrandfathered(file: symbol)
+
+Violation("COMPOSITE-HIGH-CRITICAL-UNTESTED", File, 0,
+  "articulation point + truth-point writer + aucun test direct — blast radius maximum") :-
+    ArticulationPoint(File, _),
+    TruthPointWriter(_, File),
+    !TestedFile(File),
+    !HighCriticalUntestedGrandfathered(File).

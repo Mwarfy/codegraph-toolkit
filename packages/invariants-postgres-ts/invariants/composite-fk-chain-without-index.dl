@@ -1,0 +1,48 @@
+// COMPOSITE-FK-CHAIN-WITHOUT-INDEX — chaine de FK transitive avec
+// au moins un maillon non-indexe = DELETE CASCADE pathologique
+// sur tout le chemin.
+//
+// Pourquoi : sql-fk-needs-index seul flagge les FK individuels sans
+// index. Mais quand A → B → C est une CHAINE de FK et qu'un maillon
+// n'a pas d'index, un DELETE FROM C sur la table source declenche un
+// CASCADE qui full-scan TOUT le chemin. Le danger est plus grand
+// qu'un FK sans index isolé.
+//
+// Composite multi-relation (Tier 7) — closure transitive :
+//   FkReachable(A, B) :- SqlForeignKey(A, _, B, _, _, _).
+//   FkReachable(A, C) :- FkReachable(A, B), SqlForeignKey(B, _, C, _, _, _).
+//
+// Puis flag les chaines dont la SOURCE elle-meme n'est pas indexee
+// (le maillon le plus a risque). On focus sur la source pour ne pas
+// dupliquer avec sql-fk-needs-index sur les maillons internes.
+//
+// Source des facts : SqlForeignKey + SqlFkWithoutIndex (Tier 1).
+//
+// Pattern ratchet : grandfather par (fromTable, fromCol). Vraie dette
+// chere a fix au plus tot.
+
+.decl FkChainGrandfathered(fromTable: symbol, fromCol: symbol)
+
+.decl FkReachable(fromTable: symbol, toTable: symbol)
+FkReachable(A, B) :- SqlForeignKey(A, _, B, _, _, _).
+FkReachable(A, C) :- FkReachable(A, B), SqlForeignKey(B, _, C, _, _, _).
+
+// Note : le parser Datalog n'accepte pas `A != T`. On utilise une
+// relation auxiliaire `FkReachable2Plus` qui exige une chaine d'au
+// moins 2 hops (donc terminus distinct par construction).
+.decl FkReachable2Plus(fromTable: symbol, toTable: symbol)
+FkReachable2Plus(A, C) :- SqlForeignKey(A, _, B, _, _, _),
+                          SqlForeignKey(B, _, C, _, _, _).
+FkReachable2Plus(A, D) :- FkReachable2Plus(A, C),
+                          SqlForeignKey(C, _, D, _, _, _).
+
+.decl ChainedFkUnindexed(fromTable: symbol, fromCol: symbol, terminusTable: symbol)
+ChainedFkUnindexed(A, FromCol, T) :-
+    SqlFkWithoutIndex(A, FromCol, _, _),
+    FkReachable2Plus(A, T).
+
+Violation("COMPOSITE-FK-CHAIN-WITHOUT-INDEX", File, Line,
+  "FK source d'une chaine transitive sans index — DELETE CASCADE pathologique sur tout le chemin") :-
+    ChainedFkUnindexed(FromT, FromC, _),
+    SqlForeignKey(FromT, FromC, _, _, File, Line),
+    !FkChainGrandfathered(FromT, FromC).

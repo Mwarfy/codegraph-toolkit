@@ -1,0 +1,26 @@
+// COMPOSITE-EVAL-IN-HTTP-ROUTE — eval(...) directement dans un fichier
+// qui declare une http-route = RCE chemin court via user input.
+//
+// Pourquoi : `eval()` seul est deja un signal (capture par no-eval).
+// Mais `eval()` DANS un fichier qui handle une http-route est un
+// vecteur RCE direct si l'argument vient de req.body / req.query —
+// scenario d'attaque trivial. La combinaison capture le RISQUE
+// ELEVE specifique sans bruiter les rares usages eval legitimes
+// (sandbox, REPL backend non-HTTP).
+//
+// Composite multi-relation (Tier 7) :
+//   EvalCall(file, line, _, _) ∧ EntryPoint(file, "http-route", _)
+//
+// Source des facts : EvalCall (Tier 1) + EntryPoint (Phase 4 axe 2).
+//
+// Pattern ratchet : grandfather par (file, line). Vrais cas extremement
+// rares — la rule devrait rester silencieuse en pratique. Quand ca
+// declenche, c'est un signal a investiger en priorite.
+
+.decl EvalInHttpRouteGrandfathered(file: symbol, line: number)
+
+Violation("COMPOSITE-EVAL-IN-HTTP-ROUTE", File, Line,
+  "eval/Function dans fichier http-route — vecteur RCE chemin court via req.body") :-
+    EvalCall(File, Line, _, _),
+    EntryPoint(File, "http-route", _),
+    !EvalInHttpRouteGrandfathered(File, Line).

@@ -24,7 +24,22 @@
 
 .decl SqlNamingGrandfathered(file: symbol, line: number, kind: symbol)
 
+// Relation intermediaire — gere les 4 kinds de naming sans les
+// audit-column-missing-* (qui ont leur propre rule sql-audit-columns).
+// Tier 6 a ajoute audit-column-missing-* a SqlNamingViolation ; cette
+// rule reste focalisee sur les conventions de nom strictes pour
+// eviter la double-detection avec sql-audit-columns.dl.
+.decl NamingProblematic(file: symbol, line: number, kind: symbol)
+NamingProblematic(F, L, "table-not-snake-case") :-
+    SqlNamingViolation(F, L, _, _, "table-not-snake-case").
+NamingProblematic(F, L, "column-not-snake-case") :-
+    SqlNamingViolation(F, L, _, _, "column-not-snake-case").
+NamingProblematic(F, L, "timestamp-missing-at-suffix") :-
+    SqlNamingViolation(F, L, _, _, "timestamp-missing-at-suffix").
+NamingProblematic(F, L, "fk-missing-id-suffix") :-
+    SqlNamingViolation(F, L, _, _, "fk-missing-id-suffix").
+
 Violation("SQL-NAMING-CONVENTION", File, Line,
   "convention SQL : voir kind (snake_case, _at suffix, _id suffix)") :-
-    SqlNamingViolation(File, Line, _, _, Kind),
+    NamingProblematic(File, Line, Kind),
     !SqlNamingGrandfathered(File, Line, Kind).
