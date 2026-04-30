@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+e61268d feat(phase4-axe2): SymbolCallEdge / SymbolSignature / EntryPoint facts
 6a2da32 feat(phase4-axe1): codegraph_datalog_query — Datalog ad hoc query MCP tool
 2494798 docs: PHASE-4-AGENT-FIRST-PLAN — boot brief pour reprise à froid
 7c16751 docs: README rewrite — clearer setup path + Phase 1+2+3 features
@@ -111,7 +112,6 @@ a934947 feat(codegraph-mcp): codegraph_changes_since MCP tool — diff live vs p
 26159fc feat(codegraph): reverse-deps BFS — codegraph_affected MCP tool + CLI affected
 f65f5c7 docs: clôture du plan d'enrichissement 5 axes — Axe 3 obsolète
 1a239bd feat(codegraph-mcp): codegraph_who_calls + codegraph_extract_candidates
-c9da515 feat(codegraph): co-change extractor + codegraph_co_changed MCP tool
 ```
 
 ## Comment contribuer à ce brief

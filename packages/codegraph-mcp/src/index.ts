@@ -32,6 +32,7 @@ import { codegraphExtractCandidates } from './tools/extract-candidates.js'
 import { codegraphAffected } from './tools/affected.js'
 import { codegraphChangesSince } from './tools/changes-since.js'
 import { codegraphDatalogQuery } from './tools/datalog-query.js'
+import { codegraphMemoryRecall, codegraphMemoryMark } from './tools/memory.js'
 
 const server = new Server(
   {
@@ -249,6 +250,77 @@ const TOOLS = [
     },
   },
   {
+    name: 'codegraph_memory_recall',
+    description:
+      'Recall persistent inter-session memory — false-positives marked, ' +
+      'decisions taken without an ADR, incident fingerprints. Without this ' +
+      'I rediscover everything each session and the user repeats themselves. ' +
+      'CALL THIS at start of session, or before flagging something that the ' +
+      'user might already have marked as false-positive in a prior session. ' +
+      'Returns a SCOPED projection (never the full store dump).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        kind: {
+          type: 'string',
+          enum: ['false-positive', 'decision', 'incident'],
+          description: 'Filter by entry type.',
+        },
+        file: { type: 'string', description: 'Filter by scope.file (exact match, relative-to-repo).' },
+        detector: { type: 'string', description: 'Filter by scope.detector (e.g. "truth-points", "cycles").' },
+        include_obsolete: { type: 'boolean', description: 'Include entries marked obsolete (default false).' },
+        repo_root: { type: 'string' },
+      },
+    },
+  },
+  {
+    name: 'codegraph_memory_mark',
+    description:
+      'Save an entry to inter-session memory so future sessions can recall it. ' +
+      'Use AFTER the user confirms something: a false-positive ("this signal ' +
+      'is not actionable"), a decision ("we chose X over Y because Z"), or ' +
+      'an incident ("this race condition was fixed in PR#NNN"). Idempotent ' +
+      '— same (kind, fingerprint) updates the existing entry. To remove an ' +
+      'entry, call again with obsolete=true.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        kind: {
+          type: 'string',
+          enum: ['false-positive', 'decision', 'incident'],
+          description: 'Type of entry.',
+        },
+        fingerprint: {
+          type: 'string',
+          description:
+            'Unique identifier within (kind). Conventions: ' +
+            'false-positive → "<detector>:<file>:<sub-target>"; ' +
+            'decision → "<topic-slug>"; ' +
+            'incident → "<area>:<symptom>:<date>".',
+        },
+        reason: {
+          type: 'string',
+          description: 'Human reason — 1-3 sentences. Shown verbatim in future recalls.',
+        },
+        scope_file: { type: 'string', description: 'Optional file scope (relative to repo).' },
+        scope_detector: { type: 'string', description: 'Optional detector scope.' },
+        scope_tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional free tags for ad hoc filtering.',
+        },
+        obsolete: {
+          type: 'boolean',
+          description:
+            'If true, mark the entry obsolete instead of adding/updating ' +
+            '(looked up by kind+fingerprint).',
+        },
+        repo_root: { type: 'string' },
+      },
+      required: ['kind', 'fingerprint', 'reason'],
+    },
+  },
+  {
     name: 'codegraph_datalog_query',
     description:
       'Execute an ad hoc Datalog rule against the emitted facts ' +
@@ -327,6 +399,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break
       case 'codegraph_datalog_query':
         result = codegraphDatalogQuery(args as any)
+        break
+      case 'codegraph_memory_recall':
+        result = await codegraphMemoryRecall(args as any)
+        break
+      case 'codegraph_memory_mark':
+        result = await codegraphMemoryMark(args as any)
         break
       default:
         return {

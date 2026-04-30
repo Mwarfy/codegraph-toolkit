@@ -29,3 +29,12 @@ export type {
 } from './synopsis/builder.js'
 
 export { collectAdrMarkers } from './synopsis/adr-markers.js'
+
+export {
+  loadMemoryRaw, addEntry, markObsolete, deleteEntry, recall,
+  memoryPathFor, memoryDir, entryId,
+} from './memory/store.js'
+export type {
+  MemoryEntry, MemoryEntryKind, MemoryEntryScope, MemoryStore,
+  RecallScope, AddEntryArgs,
+} from './memory/store.js'

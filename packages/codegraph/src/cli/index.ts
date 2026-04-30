@@ -28,6 +28,10 @@ import { computeDsm } from '../graph/dsm.js'
 import { renderDsm, aggregateByContainer } from '../map/dsm-renderer.js'
 import { exportFacts } from '../facts/index.js'
 import { CodeGraphWatcher } from '../incremental/watcher.js'
+import {
+  loadMemoryRaw, addEntry, markObsolete, deleteEntry, recall,
+  memoryPathFor, memoryDir,
+} from '../memory/store.js'
 
 const program = new Command()
 
@@ -1461,6 +1465,142 @@ program
     console.log()
     console.log(chalk.dim(`  Total: ${totalTuples} tuples across ${result.relations.length} relations`))
     console.log()
+  })
+
+// ─── memory ───────────────────────────────────────────────────────────────
+
+const memoryCmd = program
+  .command('memory')
+  .description('Inter-session memory: false-positives, decisions, incident fingerprints')
+
+memoryCmd
+  .command('list')
+  .description('List memory entries for the current project')
+  .option('-r, --root <path>', 'Project root (default: cwd)')
+  .option('-k, --kind <kind>', 'Filter by kind (false-positive | decision | incident)')
+  .option('-f, --file <file>', 'Filter by scope.file')
+  .option('--include-obsolete', 'Include obsoleted entries')
+  .option('--json', 'Output raw JSON instead of formatted text')
+  .action(async (opts) => {
+    const root = opts.root ?? process.cwd()
+    const entries = await recall(root, {
+      kind: opts.kind,
+      file: opts.file,
+      includeObsolete: opts.includeObsolete,
+    })
+    if (opts.json) {
+      console.log(JSON.stringify(entries, null, 2))
+      return
+    }
+    console.log(chalk.bold(`\n  Memory — ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}`))
+    console.log(chalk.dim(`  Store: ${memoryPathFor(root)}\n`))
+    if (entries.length === 0) {
+      console.log(chalk.dim('  (empty)\n'))
+      return
+    }
+    for (const e of entries) {
+      const obsoleteTag = e.obsoleteAt ? chalk.yellow(' [OBSOLETE]') : ''
+      console.log(`  ${chalk.cyan('[' + e.kind + ']')} ${chalk.bold(e.fingerprint)}${obsoleteTag}`)
+      console.log(`    ${e.reason}`)
+      if (e.scope) {
+        const bits: string[] = []
+        if (e.scope.file) bits.push(`file=${e.scope.file}`)
+        if (e.scope.detector) bits.push(`detector=${e.scope.detector}`)
+        if (e.scope.tags && e.scope.tags.length > 0) bits.push(`tags=${e.scope.tags.join(',')}`)
+        if (bits.length > 0) console.log(chalk.dim(`    scope: ${bits.join(', ')}`))
+      }
+      console.log(chalk.dim(`    id: ${e.id}  ·  added: ${e.addedAt.slice(0, 10)}`))
+      console.log()
+    }
+  })
+
+memoryCmd
+  .command('mark <kind> <fingerprint> <reason>')
+  .description('Add (or update) a memory entry')
+  .option('-r, --root <path>', 'Project root (default: cwd)')
+  .option('--scope-file <file>', 'Scope: relative file path')
+  .option('--scope-detector <detector>', 'Scope: detector name')
+  .option('--scope-tags <tags>', 'Scope: comma-separated tags')
+  .action(async (kind, fingerprint, reason, opts) => {
+    if (!['false-positive', 'decision', 'incident'].includes(kind)) {
+      console.error(chalk.red(`Invalid kind: ${kind}. Must be one of: false-positive, decision, incident`))
+      process.exit(1)
+    }
+    const root = opts.root ?? process.cwd()
+    const scope = (opts.scopeFile || opts.scopeDetector || opts.scopeTags)
+      ? {
+          file: opts.scopeFile,
+          detector: opts.scopeDetector,
+          tags: opts.scopeTags ? String(opts.scopeTags).split(',') : undefined,
+        }
+      : undefined
+    const e = await addEntry(root, { kind, fingerprint, reason, scope })
+    console.log(chalk.green('  ✓ saved'))
+    console.log(chalk.dim(`    id: ${e.id}  ·  ${memoryPathFor(root)}`))
+  })
+
+memoryCmd
+  .command('obsolete <id>')
+  .description('Mark an entry as obsolete (keeps audit trail)')
+  .option('-r, --root <path>', 'Project root (default: cwd)')
+  .action(async (id, opts) => {
+    const root = opts.root ?? process.cwd()
+    const ok = await markObsolete(root, id)
+    if (!ok) {
+      console.error(chalk.red(`No entry found with id: ${id}`))
+      process.exit(1)
+    }
+    console.log(chalk.yellow('  ✓ obsoleted'))
+  })
+
+memoryCmd
+  .command('delete <id>')
+  .description('Hard-delete an entry (no audit trail)')
+  .option('-r, --root <path>', 'Project root (default: cwd)')
+  .action(async (id, opts) => {
+    const root = opts.root ?? process.cwd()
+    const ok = await deleteEntry(root, id)
+    if (!ok) {
+      console.error(chalk.red(`No entry found with id: ${id}`))
+      process.exit(1)
+    }
+    console.log(chalk.green('  ✓ deleted'))
+  })
+
+memoryCmd
+  .command('prune')
+  .description('Hard-delete all obsolete entries (keeps active ones)')
+  .option('-r, --root <path>', 'Project root (default: cwd)')
+  .action(async (opts) => {
+    const root = opts.root ?? process.cwd()
+    const store = await loadMemoryRaw(root)
+    const obsoleteIds = store.entries.filter((e) => e.obsoleteAt !== null).map((e) => e.id)
+    if (obsoleteIds.length === 0) {
+      console.log(chalk.dim('  No obsolete entries to prune.'))
+      return
+    }
+    for (const id of obsoleteIds) await deleteEntry(root, id)
+    console.log(chalk.green(`  ✓ pruned ${obsoleteIds.length} obsolete entr${obsoleteIds.length === 1 ? 'y' : 'ies'}`))
+  })
+
+memoryCmd
+  .command('export')
+  .description('Dump the raw memory store as JSON (for backup / inspection)')
+  .option('-r, --root <path>', 'Project root (default: cwd)')
+  .action(async (opts) => {
+    const root = opts.root ?? process.cwd()
+    const store = await loadMemoryRaw(root)
+    console.log(JSON.stringify(store, null, 2))
+  })
+
+memoryCmd
+  .command('where')
+  .description('Print the memory store path for the current project')
+  .option('-r, --root <path>', 'Project root (default: cwd)')
+  .action((opts) => {
+    const root = opts.root ?? process.cwd()
+    console.log(memoryPathFor(root))
+    console.log(chalk.dim(`  (memory dir: ${memoryDir()})`))
   })
 
 // ─── serve ────────────────────────────────────────────────────────────────
