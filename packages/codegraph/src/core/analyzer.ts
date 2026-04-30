@@ -16,24 +16,40 @@ import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
 import { minimatch } from 'minimatch'
 import { CodeGraph } from './graph.js'
-import type { CodeGraphConfig, DetectorContext, DetectedLink, GraphSnapshot } from './types.js'
+import type {
+  CodeGraphConfig,
+  DetectorContext,
+  DetectedLink,
+  GraphSnapshot,
+  EnvVarUsage,
+  PackageDepsIssue,
+  BarrelInfo,
+  TypedCalls,
+  Cycle,
+  TruthPoint,
+  DataFlow,
+  StateMachine,
+  TaintViolation,
+} from './types.js'
 import { createDetectors } from '../detectors/index.js'
-import { analyzeExports, createSharedProject } from '../extractors/unused-exports.js'
-import { analyzeComplexity } from '../extractors/complexity.js'
-import { analyzeSymbolRefs } from '../extractors/symbol-refs.js'
-import { analyzeTypedCalls } from '../extractors/typed-calls.js'
-import { analyzeCycles } from '../extractors/cycles.js'
-import { analyzeTruthPoints } from '../extractors/truth-points.js'
-import { analyzeDataFlows } from '../extractors/data-flows.js'
-import { analyzeStateMachines } from '../extractors/state-machines.js'
-import { analyzeEnvUsage } from '../extractors/env-usage.js'
-import { analyzePackageDeps } from '../extractors/package-deps.js'
-import { analyzeBarrels } from '../extractors/barrels.js'
-import { analyzeTaint } from '../extractors/taint.js'
-import { analyzeEventEmitSites } from '../extractors/event-emit-sites.js'
+import { createSharedProject } from '../extractors/unused-exports.js'
+import type { EventEmitSite } from '../extractors/event-emit-sites.js'
 import type { OauthScopeLiteral } from '../extractors/oauth-scope-literals.js'
 import { DetectorRegistry, type DetectorRunContext } from './detector-registry.js'
 import { OauthScopeLiteralsDetector } from './detectors/oauth-scope-literals-detector.js'
+import { EventEmitSitesDetector } from './detectors/event-emit-sites-detector.js'
+import { EnvUsageDetector } from './detectors/env-usage-detector.js'
+import { PackageDepsDetector } from './detectors/package-deps-detector.js'
+import { BarrelsDetector } from './detectors/barrels-detector.js'
+import { UnusedExportsDetector } from './detectors/unused-exports-detector.js'
+import { ComplexityDetector } from './detectors/complexity-detector.js'
+import { SymbolRefsDetector, type SymbolRefEdge } from './detectors/symbol-refs-detector.js'
+import { TypedCallsDetector } from './detectors/typed-calls-detector.js'
+import { CyclesDetector } from './detectors/cycles-detector.js'
+import { TruthPointsDetector } from './detectors/truth-points-detector.js'
+import { DataFlowsDetector } from './detectors/data-flows-detector.js'
+import { StateMachinesDetector } from './detectors/state-machines-detector.js'
+import { TaintDetector } from './detectors/taint-detector.js'
 import { analyzeTodos, type TodoMarker } from '../extractors/todos.js'
 import { analyzeLongFunctions, type LongFunction } from '../extractors/long-functions.js'
 import { analyzeMagicNumbers, type MagicNumber } from '../extractors/magic-numbers.js'
@@ -54,11 +70,6 @@ import {
   savePersistedCache as incSavePersistedCache,
 } from '../incremental/persistence.js'
 import { sharedDb as incSharedDb } from '../incremental/database.js'
-import { allEnvUsage as incAllEnvUsage } from '../incremental/env-usage.js'
-import { allEventEmitSites as incAllEventEmitSites } from '../incremental/event-emit-sites.js'
-import { allPackageDeps as incAllPackageDeps } from '../incremental/package-deps.js'
-import { allBarrels as incAllBarrels } from '../incremental/barrels.js'
-import { allComplexity as incAllComplexity } from '../incremental/complexity.js'
 import {
   allStateMachines as incAllStateMachines,
   sqlDefaultsInput as incSqlDefaults,
@@ -68,28 +79,8 @@ import {
   discoverSqlFilesForIncremental,
   type WriteSignal as StateMachineWriteSignal,
 } from '../extractors/state-machines.js'
-import {
-  allTruthPoints as incAllTruthPoints,
-  graphEdgesInput as incGraphEdges,
-} from '../incremental/truth-points.js'
-import { allTypedCalls as incAllTypedCalls } from '../incremental/typed-calls.js'
-import { allCycles as incAllCycles } from '../incremental/cycles.js'
-import {
-  allDataFlows as incAllDataFlows,
-  typedCallsInput as incTypedCallsInput,
-} from '../incremental/data-flows.js'
-import { allSymbolRefs as incAllSymbolRefs } from '../incremental/symbol-refs.js'
-import {
-  allUnusedExports as incAllUnusedExports,
-  testFilesIndexInput as incTestFilesIndex,
-} from '../incremental/unused-exports.js'
-import { buildTestFilesIndex } from '../extractors/unused-exports.js'
 import { allTsImports as incAllTsImports } from '../incremental/ts-imports.js'
 import { setTsImportPrebuiltProject } from '../detectors/ts-imports.js'
-import {
-  allTaintViolations as incAllTaint,
-  taintRulesInput as incTaintRules,
-} from '../incremental/taint.js'
 import {
   allModuleMetrics as incAllModuleMetrics,
   allComponentMetrics as incAllComponentMetrics,
@@ -101,7 +92,6 @@ import {
   discoverManifests as discoverPackageManifests,
   findClosestManifest as findClosestPackageManifest,
 } from '../extractors/package-deps.js'
-import type { TaintRules } from './types.js'
 import { computeModuleMetrics } from '../metrics/module-metrics.js'
 import { computeComponentMetrics } from '../metrics/component-metrics.js'
 import { computeDsm } from '../graph/dsm.js'
@@ -314,9 +304,7 @@ export async function analyze(
 
   timing.graphBuild = performance.now() - tGraph
 
-  // ─── 5. Analyze exports (function-level granularity) ───────────────
-
-  const tExports = performance.now()
+  // ─── 5. tsconfig resolution + shared Project ───────────────────────
 
   // Find tsconfig for alias resolution. Priorité :
   //   1. config.tsconfigPath (depuis CodeGraphConfig — projet-spécifique)
@@ -390,462 +378,65 @@ export async function analyze(
     sharedProject = createSharedProject(config.rootDir, files, tsConfigPath)
   }
 
-  if (!factsOnly) {
-    let exportInfos
-    if (incremental) {
-      // Sprint 11.2 : route via Salsa. Set le testFilesIndex async puis
-      // get l'agrégat (cached + per-file invalidation).
-      const testIdx = await buildTestFilesIndex(config.rootDir)
-      incSetInputIfChanged(incTestFilesIndex, 'all', testIdx)
-      exportInfos = incAllUnusedExports.get('all')
-    } else {
-      exportInfos = await analyzeExports(config.rootDir, files, tsConfigPath, sharedProject)
-    }
-
-    // Patch export data into the graph nodes
-    for (const info of exportInfos) {
-      const node = graph.getNodeById(info.file)
-      if (node) {
-        graph.setNodeExports(info.file, info.exports, info.totalCount)
-      }
-    }
-
-    timing.detectors['unused-exports'] = performance.now() - tExports
-
-    // ─── 5b. Cyclomatic complexity par fonction ────────────────────────
-    // Parcours des AST pour calculer la complexité cyclomatique. Résultats
-    // mergés dans node.meta pour rester compatibles avec les consommateurs
-    // actuels (le schéma GraphNode n'a pas besoin de champ dédié).
-
-    const tComplexity = performance.now()
-    try {
-      const complexityInfos = incremental
-        ? incAllComplexity.get('all')
-        : await analyzeComplexity(config.rootDir, files, tsConfigPath, sharedProject)
-      for (const info of complexityInfos) {
-        graph.setNodeMeta(info.file, {
-          complexity: {
-            topFunctions: info.topFunctions,
-            maxComplexity: info.maxComplexity,
-            avgComplexity: info.avgComplexity,
-            totalFunctions: info.totalFunctions,
-          },
-        })
-      }
-      timing.detectors['complexity'] = performance.now() - tComplexity
-    } catch (err) {
-      timing.detectors['complexity'] = performance.now() - tComplexity
-      console.error(`  ✗ complexity failed: ${err}`)
-    }
-  }
-
-  // ─── 5c. Symbol-level references (aider-style) ─────────────────────
-  // Construit le graphe function→function : edges (from, to, line) où from/to
-  // sont "file:symbolName". Permet :
-  //   1. PageRank symbol-level en aval (ranking de fonctions, pas de fichiers).
-  //   2. find_references précis sans grep (on a les lignes exactes d'appel
-  //      dans les corps de fonctions, plus l'info "appelé depuis quelle fn").
-  //
-  // Dépend du sharedProject — 3e passage AST mais zero overhead mémoire car
-  // on réutilise le même Project.
-
-  const tSymbolRefs = performance.now()
-  let symbolRefs: { from: string; to: string; line: number }[] | undefined
-  if (!factsOnly) try {
-    const result = incremental
-      ? incAllSymbolRefs.get('all')
-      : await analyzeSymbolRefs(config.rootDir, files, sharedProject)
-    symbolRefs = result.refs
-    timing.detectors['symbol-refs'] = performance.now() - tSymbolRefs
-  } catch (err) {
-    timing.detectors['symbol-refs'] = performance.now() - tSymbolRefs
-    console.error(`  ✗ symbol-refs failed: ${err}`)
-  }
-
-  // ─── 5d. Typed calls (structural map phase 1.2) ────────────────────
-  // Signatures d'exports + call edges avec types aux sites d'appel. Fondation
-  // des extracteurs de flux / cycles / FSM / truth-points. Désactivable via
-  // config.detectorOptions.typedCalls.enabled = false (default on).
-
-  const typedCallsEnabled =
-    !factsOnly &&
-    ((config.detectorOptions?.['typedCalls']?.['enabled'] as boolean | undefined) ?? true)
-
-  const tTypedCalls = performance.now()
-  let typedCalls: Awaited<ReturnType<typeof analyzeTypedCalls>> | undefined
-  if (typedCallsEnabled) {
-    try {
-      typedCalls = incremental
-        ? incAllTypedCalls.get('all')
-        : await analyzeTypedCalls(config.rootDir, files, sharedProject)
-      timing.detectors['typed-calls'] = performance.now() - tTypedCalls
-    } catch (err) {
-      timing.detectors['typed-calls'] = performance.now() - tTypedCalls
-      console.error(`  ✗ typed-calls failed: ${err}`)
-    }
-  }
-
-  // ─── 5e. Cycles (structural map phase 1.3) ─────────────────────────
-  // Tarjan SCC sur graphe combiné (import + event + queue + dynamic-load).
-  // Désactivable via config.detectorOptions.cycles.enabled = false.
-
-  const cyclesEnabled =
-    !factsOnly &&
-    ((config.detectorOptions?.['cycles']?.['enabled'] as boolean | undefined) ?? true)
-
-  const tCycles = performance.now()
-  let cycles: Awaited<ReturnType<typeof analyzeCycles>> | undefined
-  if (cyclesEnabled) {
-    try {
-      const cycleOptions = config.detectorOptions?.['cycles'] ?? {}
-      if (incremental) {
-        // graphEdgesInput est déjà set en mode incremental (cf. truth-points
-        // path qui le set juste avant). edgeTypes/gateNames custom non
-        // supportés (defaults suffisent pour Sentinel).
-        if (!incGraphEdges.has('all')) {
-          incSetInputIfChanged(incGraphEdges, 'all', graph.getAllEdges())
-        }
-        cycles = incAllCycles.get('all')
-      } else {
-        cycles = await analyzeCycles(
-          config.rootDir,
-          files,
-          graph.getAllEdges(),
-          sharedProject,
-          {
-            edgeTypes: cycleOptions['edgeTypes'] as any,
-            gateNames: cycleOptions['gateNames'] as string[] | undefined,
-          },
-        )
-      }
-      timing.detectors['cycles'] = performance.now() - tCycles
-    } catch (err) {
-      timing.detectors['cycles'] = performance.now() - tCycles
-      console.error(`  ✗ cycles failed: ${err}`)
-    }
-  }
-
-  // ─── 5f. Truth points (structural map phase 1.4) ───────────────────
-  // Pour chaque concept de donnée partagée : canonical table + mirrors
-  // (redis / memory) + writers / readers / exposed. Désactivable via
-  // config.detectorOptions.truthPoints.enabled = false.
-
-  const truthPointsEnabled =
-    !factsOnly &&
-    ((config.detectorOptions?.['truthPoints']?.['enabled'] as boolean | undefined) ?? true)
-
-  const tTruthPoints = performance.now()
-  let truthPoints: Awaited<ReturnType<typeof analyzeTruthPoints>> | undefined
-  if (truthPointsEnabled) {
-    try {
-      const tpOptions = config.detectorOptions?.['truthPoints'] ?? {}
-      if (incremental) {
-        // Salsa path : feed graph edges + delegate to allTruthPoints.
-        // conceptAliases / redisVarNames / etc. custom non supportés
-        // (defaults suffisent pour Sentinel).
-        incSetInputIfChanged(incGraphEdges, 'all', graph.getAllEdges())
-        truthPoints = incAllTruthPoints.get('all')
-      } else {
-        truthPoints = await analyzeTruthPoints(
-          config.rootDir,
-          files,
-          sharedProject,
-          graph.getAllEdges(),
-          {
-            conceptAliases: tpOptions['conceptAliases'] as Record<string, string[]> | undefined,
-            redisVarNames: tpOptions['redisVarNames'] as string[] | undefined,
-            memoryCacheSuffixes: tpOptions['memoryCacheSuffixes'] as string[] | undefined,
-            memoryCacheCtors: tpOptions['memoryCacheCtors'] as string[] | undefined,
-            exposedPrefixes: tpOptions['exposedPrefixes'] as string[] | undefined,
-          },
-        )
-      }
-      timing.detectors['truth-points'] = performance.now() - tTruthPoints
-    } catch (err) {
-      timing.detectors['truth-points'] = performance.now() - tTruthPoints
-      console.error(`  ✗ truth-points failed: ${err}`)
-    }
-  }
-
-  // ─── 5g. Data flows (structural map phase 1.5) ─────────────────────
-  // Trajectoires entry-point → sinks via BFS sur typedCalls. Dépend de
-  // typedCalls : si désactivé, data-flows skip.
-
-  const dataFlowsEnabled =
-    !factsOnly &&
-    ((config.detectorOptions?.['dataFlows']?.['enabled'] as boolean | undefined) ?? true)
-
-  const tDataFlows = performance.now()
-  let dataFlows: Awaited<ReturnType<typeof analyzeDataFlows>> | undefined
-  if (dataFlowsEnabled && typedCalls) {
-    try {
-      const dfOptions = config.detectorOptions?.['dataFlows'] ?? {}
-      if (incremental) {
-        // Salsa path : alimente typedCallsInput puis appelle allDataFlows.
-        // Custom options (maxDepth, queryFnNames, etc.) non supportés —
-        // defaults suffisent pour Sentinel.
-        incSetInputIfChanged(incTypedCallsInput, 'all', typedCalls)
-        dataFlows = incAllDataFlows.get('all')
-      } else {
-        dataFlows = await analyzeDataFlows(
-          config.rootDir,
-          files,
-          sharedProject,
-          typedCalls,
-          graph.getAllEdges(),
-          {
-            maxDepth: dfOptions['maxDepth'] as number | undefined,
-            downstreamDepth: dfOptions['downstreamDepth'] as number | undefined,
-            queryFnNames: dfOptions['queryFnNames'] as string[] | undefined,
-            emitFnNames: dfOptions['emitFnNames'] as string[] | undefined,
-            listenFnNames: dfOptions['listenFnNames'] as string[] | undefined,
-            httpResponseFnNames: dfOptions['httpResponseFnNames'] as string[] | undefined,
-            bullmqEnqueueFnNames: dfOptions['bullmqEnqueueFnNames'] as string[] | undefined,
-            mcpToolsPathFragment: dfOptions['mcpToolsPathFragment'] as string | undefined,
-          },
-        )
-      }
-      timing.detectors['data-flows'] = performance.now() - tDataFlows
-    } catch (err) {
-      timing.detectors['data-flows'] = performance.now() - tDataFlows
-      console.error(`  ✗ data-flows failed: ${err}`)
-    }
-  }
-
-  // ─── 5h. State machines (structural map phase 1.6) ─────────────────
-  // Enums + type aliases avec suffixe *Status|*State|*Phase|*Stage + writes
-  // (SQL SET / INSERT VALUES + object literals) + trigger (listener, route,
-  // init). Désactivable via config.detectorOptions.stateMachines.enabled.
-
-  const stateMachinesEnabled =
-    !factsOnly &&
-    ((config.detectorOptions?.['stateMachines']?.['enabled'] as boolean | undefined) ?? true)
-
-  const tStateMachines = performance.now()
-  let stateMachines: Awaited<ReturnType<typeof analyzeStateMachines>> | undefined
-  if (stateMachinesEnabled) {
-    try {
-      const smOptions = config.detectorOptions?.['stateMachines'] ?? {}
-      if (incremental) {
-        // Salsa path : bundle per-file cached + agrégat global.
-        // suffixes/listenFnNames custom non supportés (defaults
-        // suffisent pour Sentinel).
-        stateMachines = incAllStateMachines.get('all')
-      } else {
-        stateMachines = await analyzeStateMachines(
-          config.rootDir,
-          files,
-          sharedProject,
-          {
-            suffixes: smOptions['suffixes'] as string[] | undefined,
-            listenFnNames: smOptions['listenFnNames'] as string[] | undefined,
-          },
-        )
-      }
-      timing.detectors['state-machines'] = performance.now() - tStateMachines
-    } catch (err) {
-      timing.detectors['state-machines'] = performance.now() - tStateMachines
-      console.error(`  ✗ state-machines failed: ${err}`)
-    }
-  }
-
-  // ─── 5i. Env usage (structural map phase 3.6 B.5) ──────────────────
-  // `process.env.X` / `process.env['X']` → section envUsage (readers par
-  // nom, marquage secret heuristique).
-
-  const envUsageEnabled =
-    (config.detectorOptions?.['envUsage']?.['enabled'] as boolean | undefined) ?? true
-
-  const tEnvUsage = performance.now()
-  let envUsage: Awaited<ReturnType<typeof analyzeEnvUsage>> | undefined
-  if (envUsageEnabled) {
-    try {
-      const euOptions = config.detectorOptions?.['envUsage'] ?? {}
-      if (incremental) {
-        // Salsa path : agrégat global, cache hit per-file si fileContent
-        // n'a pas bougé. NB : `secretTokens` custom non supporté ici,
-        // on prend le default — Sentinel n'override jamais ce champ.
-        // Si un consumer en a besoin, refactorer en input Salsa.
-        envUsage = incAllEnvUsage.get('all')
-      } else {
-        envUsage = await analyzeEnvUsage(
-          config.rootDir,
-          files,
-          sharedProject,
-          {
-            secretTokens: euOptions['secretTokens'] as string[] | undefined,
-          },
-        )
-      }
-      timing.detectors['env-usage'] = performance.now() - tEnvUsage
-    } catch (err) {
-      timing.detectors['env-usage'] = performance.now() - tEnvUsage
-      console.error(`  ✗ env-usage failed: ${err}`)
-    }
-  }
-
-  // ─── 5j. Package deps hygiene (phase 3.8 #7) ───────────────────────
-  // `package.json` declared vs observed imports → declared-unused / missing /
-  // devOnly. Multi-manifest (chaque package.json découvert = scope propre).
-  // Désactivable via config.detectorOptions.packageDeps.enabled = false.
-
-  const packageDepsEnabled =
-    !factsOnly &&
-    ((config.detectorOptions?.['packageDeps']?.['enabled'] as boolean | undefined) ?? true)
-
-  const tPackageDeps = performance.now()
-  let packageDeps: Awaited<ReturnType<typeof analyzePackageDeps>> | undefined
-  if (packageDepsEnabled) {
-    try {
-      const pdOptions = config.detectorOptions?.['packageDeps'] ?? {}
-      if (incremental) {
-        // Salsa path : packageRefsOfFile cached per-file via fileContent.
-        // L'agrégat dépend aussi de packageManifestsInput (set ci-dessus
-        // après discovery async).
-        packageDeps = incAllPackageDeps.get('all')
-      } else {
-        packageDeps = await analyzePackageDeps(
-          config.rootDir,
-          files,
-          sharedProject,
-          {
-            testPatterns: pdOptions['testPatterns'] as RegExp[] | undefined,
-          },
-        )
-      }
-      timing.detectors['package-deps'] = performance.now() - tPackageDeps
-    } catch (err) {
-      timing.detectors['package-deps'] = performance.now() - tPackageDeps
-      console.error(`  ✗ package-deps failed: ${err}`)
-    }
-  }
-
-  // ─── 5k. Barrels (phase 3.8 #7) ────────────────────────────────────
-  // Fichiers 100 % ré-exports → `lowValue` si consumers < threshold.
-
-  const barrelsEnabled =
-    !factsOnly &&
-    ((config.detectorOptions?.['barrels']?.['enabled'] as boolean | undefined) ?? true)
-
-  const tBarrels = performance.now()
-  let barrels: Awaited<ReturnType<typeof analyzeBarrels>> | undefined
-  if (barrelsEnabled) {
-    try {
-      const bOptions = config.detectorOptions?.['barrels'] ?? {}
-      if (incremental) {
-        // Salsa path : barrelInfoOfFile + importTargetsOfFile per-file,
-        // agrégat global re-tourne mais lit du cache. minConsumers
-        // custom non supporté ici (default 2 suffit pour Sentinel).
-        barrels = incAllBarrels.get('all')
-      } else {
-        barrels = await analyzeBarrels(
-          config.rootDir,
-          files,
-          sharedProject,
-          {
-            minConsumers: bOptions['minConsumers'] as number | undefined,
-          },
-        )
-      }
-      timing.detectors['barrels'] = performance.now() - tBarrels
-    } catch (err) {
-      timing.detectors['barrels'] = performance.now() - tBarrels
-      console.error(`  ✗ barrels failed: ${err}`)
-    }
-  }
-
-  // ─── 5k-bis. Event emit sites (Datalog facts) ──────────────────────
-  // Classification AST des appels emit({ type: ... }) — literal vs
-  // eventConstRef vs dynamic. Source des facts `EmitsEventLiteral` /
-  // `EmitsEventConst` pour les invariants ADR-017-style. Pas de coût ts-morph
-  // additionnel car on réutilise le sharedProject.
-
-  const eventEmitSitesEnabled =
-    (config.detectorOptions?.['eventEmitSites']?.['enabled'] as boolean | undefined) ?? true
-
-  const tEventEmitSites = performance.now()
-  let eventEmitSites: Awaited<ReturnType<typeof analyzeEventEmitSites>> | undefined
-  if (eventEmitSitesEnabled) {
-    try {
-      const eesOptions = config.detectorOptions?.['eventEmitSites'] ?? {}
-      if (incremental) {
-        // Salsa path : scan AST par fichier cached. emitFnNames custom
-        // non supporté ici (Sentinel n'override jamais).
-        eventEmitSites = incAllEventEmitSites.get('all')
-      } else {
-        eventEmitSites = await analyzeEventEmitSites(
-          config.rootDir,
-          files,
-          sharedProject,
-          {
-            emitFnNames: eesOptions['emitFnNames'] as string[] | undefined,
-          },
-        )
-      }
-      timing.detectors['event-emit-sites'] = performance.now() - tEventEmitSites
-    } catch (err) {
-      timing.detectors['event-emit-sites'] = performance.now() - tEventEmitSites
-      console.error(`  ✗ event-emit-sites failed: ${err}`)
-    }
-  }
-
-  // ─── 5k-ter. OAuth scope literals (via DetectorRegistry — Phase A refactor) ──
-  // Premier détecteur migré au pattern Detector/Registry. Logique 1:1 avec le
-  // legacy. Ajout de nouveaux détecteurs au registry → Phase B.
-  // Cf. core/detector-registry.ts + core/detectors/oauth-scope-literals-detector.ts
+  // ─── 5. Detectors via Registry (Phase B refactor terminé) ──────────
+  // Tous les détecteurs Phase 5 sont migrés au pattern Detector/Registry.
+  // L'ordre d'enregistrement détermine l'ordre d'exécution : typed-calls
+  // doit tourner avant data-flows (qui le lit via ctx.results).
 
   const detectorRegistry = new DetectorRegistry()
+    .register(new UnusedExportsDetector())
+    .register(new ComplexityDetector())
+    .register(new SymbolRefsDetector())
+    .register(new TypedCallsDetector())
+    .register(new CyclesDetector())
+    .register(new TruthPointsDetector())
+    .register(new DataFlowsDetector())
+    .register(new StateMachinesDetector())
+    .register(new EnvUsageDetector())
+    .register(new PackageDepsDetector())
+    .register(new BarrelsDetector())
+    .register(new EventEmitSitesDetector())
     .register(new OauthScopeLiteralsDetector())
+    .register(new TaintDetector())
 
   const detectorCtx: DetectorRunContext = {
     config,
     files,
     sharedProject,
+    graph,
+    tsConfigPath,
+    readFile,
     options: { factsOnly, incremental },
     results: {},
   }
   await detectorRegistry.runAll(detectorCtx, timing.detectors)
 
+  const symbolRefs = detectorCtx.results['symbol-refs'] as
+    | SymbolRefEdge[]
+    | undefined
+  const typedCalls = detectorCtx.results['typed-calls'] as
+    | TypedCalls
+    | undefined
+  const cycles = detectorCtx.results['cycles'] as Cycle[] | undefined
+  const truthPoints = detectorCtx.results['truth-points'] as TruthPoint[] | undefined
+  const dataFlows = detectorCtx.results['data-flows'] as DataFlow[] | undefined
+  const stateMachines = detectorCtx.results['state-machines'] as StateMachine[] | undefined
+  const envUsage = detectorCtx.results['env-usage'] as
+    | EnvVarUsage[]
+    | undefined
+  const packageDeps = detectorCtx.results['package-deps'] as
+    | PackageDepsIssue[]
+    | undefined
+  const barrels = detectorCtx.results['barrels'] as
+    | BarrelInfo[]
+    | undefined
+  const eventEmitSites = detectorCtx.results['event-emit-sites'] as
+    | EventEmitSite[]
+    | undefined
   const oauthScopeLiterals = detectorCtx.results['oauth-scope-literals'] as
     | OauthScopeLiteral[]
     | undefined
-
-  // ─── 5l. Taint analysis (phase 3.8 #3) ─────────────────────────────
-  // Flux source non-trusté → sink dangereux sans passage par un sanitizer.
-  // Désactivé par default — activer via `detectorOptions.taint.enabled: true`
-  // et fournir `detectorOptions.taint.rulesPath` ou laisser le default
-  // `<rootDir>/taint-rules.json` / `<rootDir>/codegraph/taint-rules.json`.
-
-  const taintEnabled =
-    !factsOnly &&
-    ((config.detectorOptions?.['taint']?.['enabled'] as boolean | undefined) ?? false)
-
-  const tTaint = performance.now()
-  let taintViolations: Awaited<ReturnType<typeof analyzeTaint>> | undefined
-  if (taintEnabled) {
-    try {
-      const rulesPath = (config.detectorOptions?.['taint']?.['rulesPath'] as string | undefined)
-        ?? await findTaintRules(config.rootDir)
-      if (rulesPath) {
-        const raw = JSON.parse(await fs.readFile(rulesPath, 'utf-8'))
-        const rules: TaintRules = {
-          sources: raw.sources ?? [],
-          sinks: raw.sinks ?? [],
-          sanitizers: raw.sanitizers ?? [],
-        }
-        if (incremental) {
-          incSetInputIfChanged(incTaintRules, 'all', rules)
-          taintViolations = incAllTaint.get('all')
-        } else {
-          taintViolations = await analyzeTaint(config.rootDir, files, sharedProject, rules)
-        }
-      }
-      timing.detectors['taint'] = performance.now() - tTaint
-    } catch (err) {
-      timing.detectors['taint'] = performance.now() - tTaint
-      console.error(`  ✗ taint failed: ${err}`)
-    }
-  }
+  const taintViolations = detectorCtx.results['taint'] as TaintViolation[] | undefined
 
   // ─── 6. Generate snapshot ──────────────────────────────────────────
 
@@ -1143,21 +734,6 @@ async function runDeterministicDetectors(
   if (longFunctions) snapshot.longFunctions = longFunctions
   if (magicNumbers) snapshot.magicNumbers = magicNumbers
   if (testCoverage) snapshot.testCoverage = testCoverage
-}
-
-/**
- * Recherche `taint-rules.json` dans les emplacements conventionnels.
- * Retourne le chemin absolu du premier trouvé, ou null.
- */
-async function findTaintRules(rootDir: string): Promise<string | null> {
-  const candidates = [
-    path.join(rootDir, 'taint-rules.json'),
-    path.join(rootDir, 'codegraph', 'taint-rules.json'),
-  ]
-  for (const c of candidates) {
-    try { await fs.access(c); return c } catch {}
-  }
-  return null
 }
 
 // ─── File Discovery ─────────────────────────────────────────────────────

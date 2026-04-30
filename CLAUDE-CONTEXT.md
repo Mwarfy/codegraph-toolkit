@@ -41,7 +41,7 @@
 
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
-- `packages/codegraph/src/core/types.ts` (in: 58) · gov by ADR-006
+- `packages/codegraph/src/core/types.ts` (in: 59) · gov by ADR-006
 - `packages/codegraph/src/incremental/database.ts` (in: 20)
 - `packages/salsa/dist/index.d.ts` (in: 19)
 - `packages/codegraph/src/incremental/queries.ts` (in: 17)
@@ -99,6 +99,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+2807c3e refactor(codegraph): Phase A — pattern visiteur Detector/Registry pour analyze()
 f0f9ca3 feat(adr-toolkit): détecteur fsm — unions string literals + write sites observables
 41f0d10 docs: boot briefs SPRINT-13-FSM + REFACTOR-ANALYZER pour reprise à froid
 08534fb release: v0.2.0 — bootstrap detectors + types invariant + install.sh moderne
@@ -110,7 +111,6 @@ b28b910 chore: rename @liby/ → @liby-tools/ pour publication npm
 812d7bd refactor(codegraph): move 3 fns from detectors/ to extractors/
 04e3f2d feat(codegraph-mcp): nouveau MCP server exposant les queries codegraph
 20b3709 feat(codegraph): 4 nouveaux détecteurs déterministes + fix cycles bullmq
-be1553e docs+test: ADR-005 pattern détecteurs + test parité legacy/incremental
 ```
 
 ## Comment contribuer à ce brief

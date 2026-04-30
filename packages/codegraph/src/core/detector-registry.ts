@@ -24,6 +24,7 @@
 
 import type { CodeGraphConfig } from './types.js'
 import type { Project } from 'ts-morph'
+import type { CodeGraph } from './graph.js'
 
 export interface DetectorRunContext {
   /** Config du projet courant */
@@ -32,6 +33,17 @@ export interface DetectorRunContext {
   files: string[]
   /** Project ts-morph partagé (déjà construit) */
   sharedProject: Project
+  /**
+   * Graph builé (nodes + edges + orphan status). Les détecteurs aval
+   * (cycles, truth-points, data-flows) en lisent `getAllEdges()` ; les
+   * détecteurs unused-exports/complexity en mutent les nodes via
+   * `setNodeExports` / `setNodeMeta`.
+   */
+  graph: CodeGraph
+  /** tsconfig.json path résolu (pour aliases). undefined si non trouvé. */
+  tsConfigPath: string | undefined
+  /** readFile helper (fileCache-backed) — utilisé par certains détecteurs deterministes. */
+  readFile: (relativePath: string) => Promise<string>
   /** Options runtime (factsOnly, incremental, etc.) */
   options: { factsOnly?: boolean; incremental?: boolean }
   /**
