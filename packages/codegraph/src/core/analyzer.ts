@@ -237,63 +237,11 @@ export async function analyze(
   }
 
   // ─── 3b. Pre-build shared Project (incremental mode only, Sprint 6) ──
-  // En mode incremental, on pré-construit le sharedProject AVANT la
-  // boucle des détecteurs pour que TsImportDetector puisse le réutiliser
-  // (vs créer son propre Project — qui doublait le coût parse, ~7s sur
-  // Sentinel warm).
   let preBuiltSharedProject: ReturnType<typeof createSharedProject> | null = null
   if (incremental) {
-    let earlyTsConfigPath: string | undefined
-    const earlyCandidates: string[] = []
-    if (config.tsconfigPath) {
-      earlyCandidates.push(
-        path.isAbsolute(config.tsconfigPath)
-          ? config.tsconfigPath
-          : path.join(config.rootDir, config.tsconfigPath),
-      )
-    }
-    earlyCandidates.push(path.join(config.rootDir, 'tsconfig.json'))
-    for (const candidate of earlyCandidates) {
-      try { await fs.access(candidate); earlyTsConfigPath = candidate; break } catch {}
-    }
-
-    const previousMtimes = new Map<string, number>()
-    for (const f of files) {
-      const m = incGetCachedMtime(f)
-      if (m !== undefined) previousMtimes.set(f, m)
-    }
-
-    preBuiltSharedProject = await incGetOrBuildProject(
-      config.rootDir, files, earlyTsConfigPath, previousMtimes, fileCache,
+    preBuiltSharedProject = await prebuildSharedProjectIncremental(
+      config, files, fileCache,
     )
-    setIncrementalContext({ project: preBuiltSharedProject, rootDir: config.rootDir })
-    setTsImportPrebuiltProject(preBuiltSharedProject)
-
-    // Sprint 11 : alimenter fileContent + projectFiles AVANT la boucle
-    // des détecteurs pour que `allTsImports.get('all')` puisse être
-    // utilisé en remplacement du détecteur legacy ts-imports
-    // (ts-imports warm 109ms → <10ms via cache Salsa per-file).
-    for (const f of files) {
-      const absPath = path.join(config.rootDir, f)
-      let mtime: number | undefined
-      try {
-        const stat = await fs.stat(absPath)
-        mtime = stat.mtimeMs
-      } catch {}
-      const cachedMtime = incGetCachedMtime(f)
-      const cellExists = incFileContent.has(f)
-      if (mtime !== undefined && cachedMtime === mtime && cellExists) continue
-      let content = fileCache.get(f)
-      if (content === undefined) {
-        try {
-          content = await fs.readFile(absPath, 'utf-8')
-          fileCache.set(f, content)
-        } catch { content = '' }
-      }
-      incFileContent.set(f, content)
-      if (mtime !== undefined) incSetCachedMtime(f, mtime)
-    }
-    incSetInputIfChanged(incProjectFiles, 'all', files)
   }
 
   // ─── 4. Run detectors ──────────────────────────────────────────────
@@ -952,56 +900,8 @@ export async function analyze(
   }
 
   // ─── 6b. New deterministic detectors (Sprint 12) ───────────────────
-  // TODO/FIXME, long functions, magic numbers, test coverage. Pas de
-  // dépendance lourde, pas de wrapper Salsa pour l'instant — pattern
-  // ADR-005 prévu en suivi.
-
   if (!factsOnly) {
-    let todos: TodoMarker[] | undefined
-    let longFunctions: LongFunction[] | undefined
-    let magicNumbers: MagicNumber[] | undefined
-    let testCoverage: TestCoverageReport | undefined
-
-    const tTodos = performance.now()
-    try {
-      todos = await analyzeTodos(config.rootDir, files, readFile)
-      timing.detectors['todos'] = performance.now() - tTodos
-    } catch (err) {
-      timing.detectors['todos'] = performance.now() - tTodos
-      console.error(`  ✗ todos failed: ${err}`)
-    }
-
-    const tLongFns = performance.now()
-    try {
-      longFunctions = await analyzeLongFunctions(config.rootDir, files, sharedProject)
-      timing.detectors['long-functions'] = performance.now() - tLongFns
-    } catch (err) {
-      timing.detectors['long-functions'] = performance.now() - tLongFns
-      console.error(`  ✗ long-functions failed: ${err}`)
-    }
-
-    const tMagic = performance.now()
-    try {
-      magicNumbers = await analyzeMagicNumbers(config.rootDir, files, sharedProject)
-      timing.detectors['magic-numbers'] = performance.now() - tMagic
-    } catch (err) {
-      timing.detectors['magic-numbers'] = performance.now() - tMagic
-      console.error(`  ✗ magic-numbers failed: ${err}`)
-    }
-
-    const tCov = performance.now()
-    try {
-      testCoverage = await analyzeTestCoverage(config.rootDir, files, snapshot.edges)
-      timing.detectors['test-coverage'] = performance.now() - tCov
-    } catch (err) {
-      timing.detectors['test-coverage'] = performance.now() - tCov
-      console.error(`  ✗ test-coverage failed: ${err}`)
-    }
-
-    if (todos) snapshot.todos = todos
-    if (longFunctions) snapshot.longFunctions = longFunctions
-    if (magicNumbers) snapshot.magicNumbers = magicNumbers
-    if (testCoverage) snapshot.testCoverage = testCoverage
+    await runDeterministicDetectors(config, files, readFile, sharedProject, snapshot, timing)
   }
 
   // ─── 7. Module metrics (phase 3.7 #5 + #6) ─────────────────────────
@@ -1121,6 +1021,140 @@ export async function analyze(
   timing.total = performance.now() - t0
 
   return { snapshot, timing }
+}
+
+/**
+ * Pre-build le sharedProject ts-morph en mode incremental.
+ *
+ * Sprint 6 : on construit le Project AVANT la boucle des détecteurs
+ * pour que TsImportDetector puisse le réutiliser (vs créer son propre
+ * Project — qui doublait le coût parse, ~7s sur Sentinel warm).
+ *
+ * Sprint 11 : on alimente aussi fileContent + projectFiles AVANT la
+ * boucle pour que `allTsImports.get('all')` puisse remplacer le
+ * détecteur legacy ts-imports (warm 109ms → <10ms via cache Salsa).
+ */
+async function prebuildSharedProjectIncremental(
+  config: CodeGraphConfig,
+  files: string[],
+  fileCache: Map<string, string>,
+): Promise<ReturnType<typeof createSharedProject>> {
+  // Find tsconfig
+  let earlyTsConfigPath: string | undefined
+  const earlyCandidates: string[] = []
+  if (config.tsconfigPath) {
+    earlyCandidates.push(
+      path.isAbsolute(config.tsconfigPath)
+        ? config.tsconfigPath
+        : path.join(config.rootDir, config.tsconfigPath),
+    )
+  }
+  earlyCandidates.push(path.join(config.rootDir, 'tsconfig.json'))
+  for (const candidate of earlyCandidates) {
+    try { await fs.access(candidate); earlyTsConfigPath = candidate; break } catch {}
+  }
+
+  // Capture previous mtimes for Project cache reuse
+  const previousMtimes = new Map<string, number>()
+  for (const f of files) {
+    const m = incGetCachedMtime(f)
+    if (m !== undefined) previousMtimes.set(f, m)
+  }
+
+  const project = await incGetOrBuildProject(
+    config.rootDir, files, earlyTsConfigPath, previousMtimes, fileCache,
+  )
+  setIncrementalContext({ project, rootDir: config.rootDir })
+  setTsImportPrebuiltProject(project)
+
+  // Feed fileContent + projectFiles inputs so Salsa queries can hit cache
+  for (const f of files) {
+    const absPath = path.join(config.rootDir, f)
+    let mtime: number | undefined
+    try {
+      const stat = await fs.stat(absPath)
+      mtime = stat.mtimeMs
+    } catch {}
+    const cachedMtime = incGetCachedMtime(f)
+    const cellExists = incFileContent.has(f)
+    if (mtime !== undefined && cachedMtime === mtime && cellExists) continue
+    let content = fileCache.get(f)
+    if (content === undefined) {
+      try {
+        content = await fs.readFile(absPath, 'utf-8')
+        fileCache.set(f, content)
+      } catch { content = '' }
+    }
+    incFileContent.set(f, content)
+    if (mtime !== undefined) incSetCachedMtime(f, mtime)
+  }
+  incSetInputIfChanged(incProjectFiles, 'all', files)
+
+  return project
+}
+
+/**
+ * Run les détecteurs déterministes ajoutés Sprint 12 (TODO/FIXME, long
+ * functions, magic numbers, test coverage). Pattern uniforme : timing
+ * tracké, errors loguées sans bloquer le pipeline, results patché dans
+ * le snapshot.
+ *
+ * Pas de dépendance lourde, pas de wrapper Salsa pour l'instant —
+ * pattern ADR-005 prévu en suivi.
+ */
+async function runDeterministicDetectors(
+  config: CodeGraphConfig,
+  files: string[],
+  readFile: (relativePath: string) => Promise<string>,
+  sharedProject: ReturnType<typeof createSharedProject>,
+  snapshot: GraphSnapshot,
+  timing: AnalyzeResult['timing'],
+): Promise<void> {
+  let todos: TodoMarker[] | undefined
+  let longFunctions: LongFunction[] | undefined
+  let magicNumbers: MagicNumber[] | undefined
+  let testCoverage: TestCoverageReport | undefined
+
+  const tTodos = performance.now()
+  try {
+    todos = await analyzeTodos(config.rootDir, files, readFile)
+    timing.detectors['todos'] = performance.now() - tTodos
+  } catch (err) {
+    timing.detectors['todos'] = performance.now() - tTodos
+    console.error(`  ✗ todos failed: ${err}`)
+  }
+
+  const tLongFns = performance.now()
+  try {
+    longFunctions = await analyzeLongFunctions(config.rootDir, files, sharedProject)
+    timing.detectors['long-functions'] = performance.now() - tLongFns
+  } catch (err) {
+    timing.detectors['long-functions'] = performance.now() - tLongFns
+    console.error(`  ✗ long-functions failed: ${err}`)
+  }
+
+  const tMagic = performance.now()
+  try {
+    magicNumbers = await analyzeMagicNumbers(config.rootDir, files, sharedProject)
+    timing.detectors['magic-numbers'] = performance.now() - tMagic
+  } catch (err) {
+    timing.detectors['magic-numbers'] = performance.now() - tMagic
+    console.error(`  ✗ magic-numbers failed: ${err}`)
+  }
+
+  const tCov = performance.now()
+  try {
+    testCoverage = await analyzeTestCoverage(config.rootDir, files, snapshot.edges)
+    timing.detectors['test-coverage'] = performance.now() - tCov
+  } catch (err) {
+    timing.detectors['test-coverage'] = performance.now() - tCov
+    console.error(`  ✗ test-coverage failed: ${err}`)
+  }
+
+  if (todos) snapshot.todos = todos
+  if (longFunctions) snapshot.longFunctions = longFunctions
+  if (magicNumbers) snapshot.magicNumbers = magicNumbers
+  if (testCoverage) snapshot.testCoverage = testCoverage
 }
 
 /**

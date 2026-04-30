@@ -96,6 +96,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+812d7bd refactor(codegraph): move 3 fns from detectors/ to extractors/
 04e3f2d feat(codegraph-mcp): nouveau MCP server exposant les queries codegraph
 20b3709 feat(codegraph): 4 nouveaux détecteurs déterministes + fix cycles bullmq
 be1553e docs+test: ADR-005 pattern détecteurs + test parité legacy/incremental
@@ -107,7 +108,6 @@ be1553e docs+test: ADR-005 pattern détecteurs + test parité legacy/incremental
 7a57eef feat(codegraph): watcher mode `codegraph watch` [Sprint 9 — Phase 2]
 77d2053 feat(salsa,codegraph): delta saves — append-only deltas + auto-compact [Sprint 8]
 52b6fc7 docs(phase-1): refresh boot brief post-Sprint 7 — Phase 1 fonctionnellement complète
-e65edee feat(salsa,codegraph): disk persistence for cross-process cache hit [Sprint 7]
 ```
 
 ## Comment contribuer à ce brief
