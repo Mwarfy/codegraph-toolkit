@@ -6,10 +6,16 @@ prévus pour alimenter le bootstrap des ADRs. Status :
 
 | Detector | Status | Pattern | Output |
 |---|---|---|---|
-| `singleton` | ✅ Livré | private static instance + getInstance | candidate ADR sur la classe |
+| `singleton` | ✅ Livré v0.1.0 | private static instance + getInstance | candidate ADR sur la classe |
+| `write-isolation` | ✅ Livré v0.2.0 | un seul writer pour un truth-point (depuis snapshot.truthPoints) | candidate ADR sur la propriété d'isolation |
+| `hub` | ✅ Livré v0.2.0 | fichier avec in-degree ≥ N (default 20) sans marqueur ADR | candidate ADR sur le contract hub |
 | `fsm` | ⏳ À faire | union string literals avec suffixe `Status\|State\|Phase\|Stage` + writes observables | candidate ADR sur transitions |
-| `write-isolation` | ⏳ À faire | un seul writer DB pour une table donnée (extracted from truthPoints) | candidate ADR sur la propriété d'isolation |
-| `hub` | ⏳ À faire | fichier avec in-degree ≥ N (default 20) sans marqueur ADR | candidate ADR sur le contract hub |
+
+**Pour le détecteur fsm restant** : voir le **plan détaillé** dans
+`SPRINT-13-FSM-DETECTOR-PLAN.md` (boot brief dédié pour reprise à froid).
+Estimé 3-4h dédiées. Heuristique de détection complète, fixtures de test,
+pièges connus (suffix-only false positives, numeric enums, cross-référencement),
+prompt template, plan d'attaque en 6 étapes.
 
 ## Pourquoi ces 3 détecteurs en particulier
 

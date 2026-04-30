@@ -281,9 +281,9 @@ npx adr-toolkit bootstrap --mode sdk --max 5
 
 ## Roadmap
 
-- **Détecteur `fsm`** — union string literals (`Status`, `State`, `Phase`, `Stage`) avec writes observables. AST analysis non-triviale, ~3-4h.
+- **Détecteur `fsm`** — union string literals (`Status`, `State`, `Phase`, `Stage`) avec writes observables. AST analysis non-triviale, ~3-4h. **Plan détaillé** : [`docs/SPRINT-13-FSM-DETECTOR-PLAN.md`](docs/SPRINT-13-FSM-DETECTOR-PLAN.md).
 - **Spawn parallèle** des agents bootstrap (actuellement séquentiel).
-- **Refactor profond `core/analyzer.ts`** — pattern visiteur / detector registry pour découper le god-file (1188 LOC, fonction `analyze()` à 855 lignes brutes / 591 LOC effectives). 2 sections déjà extraites en helpers, reste 13+ blocs. 1-2 jours dédiés, tests parité critiques.
+- **Refactor profond `core/analyzer.ts`** — pattern visiteur / detector registry pour découper le god-file (1188 LOC, fonction `analyze()` à 855 lignes brutes / 591 LOC effectives). 1-2 jours dédiés, tests parité critiques. **Plan détaillé** : [`docs/REFACTOR-ANALYZER-PLAN.md`](docs/REFACTOR-ANALYZER-PLAN.md).
 
 ## Done en v0.2.0
 
