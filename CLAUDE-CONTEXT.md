@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+806fb0f feat(phase4-tier4): floating-promises + switch-fallthrough + deprecated-usage
 dfc3a9f feat(phase4-tier3): dead-code patterns (Sonar S1764 + S1126)
 2f3d214 feat(phase4-tier2): 4 invariants + 2 drift patterns lift de Sonar/Bandit
 3c94c2d fix(sql-schema): strip les commentaires SQL avant splitTopLevel
@@ -111,7 +112,6 @@ e61268d feat(phase4-axe2): SymbolCallEdge / SymbolSignature / EntryPoint facts
 6a2da32 feat(phase4-axe1): codegraph_datalog_query — Datalog ad hoc query MCP tool
 2494798 docs: PHASE-4-AGENT-FIRST-PLAN — boot brief pour reprise à froid
 7c16751 docs: README rewrite — clearer setup path + Phase 1+2+3 features
-294de4a feat(adr-toolkit): init détecte la stack DB et active les bons détecteurs
 ```
 
 ## Comment contribuer à ce brief

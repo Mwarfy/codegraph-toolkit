@@ -509,6 +509,53 @@ export async function exportFacts(
   }
   relations.push(deprecatedDeclRel, deprecatedUsageRel)
 
+  // ─── ArticulationPoint (Tier 5) ──────────────────────────────────────
+  const articulationPointRel: RelationDef = {
+    name: 'ArticulationPoint',
+    decl: '(file:symbol, severity:number)',
+    rows: [],
+  }
+  for (const ap of snapshot.articulationPoints ?? []) {
+    articulationPointRel.rows.push([sym(ap.file), num(ap.severity)])
+  }
+  relations.push(articulationPointRel)
+
+  // ─── SqlNamingViolation (Tier 5) ─────────────────────────────────────
+  const sqlNamingViolationRel: RelationDef = {
+    name: 'SqlNamingViolation',
+    decl: '(file:symbol, line:number, table:symbol, column:symbol, kind:symbol)',
+    rows: [],
+  }
+  for (const v of snapshot.sqlNamingViolations ?? []) {
+    sqlNamingViolationRel.rows.push([
+      sym(v.file),
+      num(v.line),
+      sym(v.table),
+      sym(v.column || '_'),
+      sym(v.kind),
+    ])
+  }
+  relations.push(sqlNamingViolationRel)
+
+  // ─── SqlMigrationOrderViolation (Tier 5) ────────────────────────────
+  const sqlMigOrderRel: RelationDef = {
+    name: 'SqlMigrationOrderViolation',
+    decl: '(file:symbol, line:number, fromTable:symbol, fromCol:symbol, toTable:symbol, fkMig:number, targetMig:number)',
+    rows: [],
+  }
+  for (const v of snapshot.sqlMigrationOrderViolations ?? []) {
+    sqlMigOrderRel.rows.push([
+      sym(v.file),
+      num(v.line),
+      sym(v.fromTable),
+      sym(v.fromColumn),
+      sym(v.toTable),
+      num(v.fkMigrationNumber),
+      num(v.targetMigrationNumber),
+    ])
+  }
+  relations.push(sqlMigOrderRel)
+
   // ─── Write to disk ────────────────────────────────────────────────────
   await fs.mkdir(options.outDir, { recursive: true })
 

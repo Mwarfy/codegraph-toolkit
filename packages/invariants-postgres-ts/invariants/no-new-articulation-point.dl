@@ -1,0 +1,28 @@
+// NO-NEW-ARTICULATION-POINT — Pas de nouveau hub caché.
+//
+// Pourquoi : un articulation point est un fichier dont la suppression
+// déconnecte le graphe d'imports en plusieurs composantes. Hub caché
+// architectural — pas forcément top-importé (donc absent du HIGH-RISK
+// header existant), mais dont la modification a un blast radius
+// silencieux maximum. Algo Tarjan O(V+E).
+//
+// Inspiration : algorithmes graphe classiques (PERT, gestion de
+// projet, réseau telecom — chemin critique).
+//
+// Politique : on ne BLOQUE pas les articulation points existants
+// (refactor architectural global hors scope d'un commit). On bloque
+// les NOUVEAUX qui apparaissent — signal qu'un refactor récent a créé
+// un hub critique.
+//
+// Source : `ArticulationPoint(file, severity)`. severity = nombre de
+// composantes obtenues après retrait.
+//
+// Pattern ratchet : grandfather TOUS les articulation points actuels
+// au moment du premier run. La rule attrape uniquement les nouveaux.
+
+.decl ArticulationPointGrandfathered(file: symbol)
+
+Violation("NO-NEW-ARTICULATION-POINT", File, 0,
+  "fichier devenu cut-vertex du graphe d'imports — sa suppression deconnecterait des packs entiers") :-
+    ArticulationPoint(File, _),
+    !ArticulationPointGrandfathered(File).

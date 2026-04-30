@@ -1,0 +1,30 @@
+// SQL-NAMING-CONVENTION — Conventions Postgres / Codd-era classiques.
+//
+// Une rule unique pour les 4 kinds de violations émis par
+// l'extractor sql-naming :
+//   - table-not-snake-case
+//   - column-not-snake-case
+//   - timestamp-missing-at-suffix (column TIMESTAMP/DATE/TIME sans `_at`)
+//   - fk-missing-id-suffix (FK column sans `_id`)
+//
+// Pourquoi : ces conventions Postgres rendent le schema lisible sans
+// avoir à connaître chaque table. `created_at` annonce un instant.
+// `customer_id` annonce une FK. `userOrders` annonce qu'on a oublié
+// la convention. Inspiration : Codd 1970+ + Postgres style guides.
+//
+// Si ton projet utilise camelCase volontairement (rare en SQL pur,
+// fréquent en projets ORM-first), grandfather toutes les violations
+// table/column-not-snake-case d'un coup OU skip la rule entièrement.
+//
+// Source : `SqlNamingViolation(file, line, table, column, kind)`.
+//
+// Pattern ratchet : grandfather par (file, line, kind) — fine-grained
+// pour absorber les conventions internes (ex: `last_X` au lieu de
+// `X_at`).
+
+.decl SqlNamingGrandfathered(file: symbol, line: number, kind: symbol)
+
+Violation("SQL-NAMING-CONVENTION", File, Line,
+  "convention SQL : voir kind (snake_case, _at suffix, _id suffix)") :-
+    SqlNamingViolation(File, Line, _, _, Kind),
+    !SqlNamingGrandfathered(File, Line, Kind).

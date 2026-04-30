@@ -1,0 +1,30 @@
+// SQL-MIGRATION-ORDER — Pas de FK forward reference dans les migrations.
+//
+// Pourquoi : une migration N qui déclare un FK vers une table créée à
+// la migration N+M (M > 0) plante au déploiement avec
+// "relation 'X' does not exist". Postgres applique les migrations dans
+// l'ordre — un FK forward reference est un bug que tu vois UNIQUEMENT
+// au push prod (en dev tu as tout déjà appliqué donc tout marche).
+//
+// Inspiration : topological sort lite. Le DAG des dépendances FK doit
+// être respecté par l'ordre numérique des migrations.
+//
+// L'extracteur reconnaît les patterns de numérotation classiques :
+//   - `NNN_xxx.sql`         (séquentiel : 001, 002, 050)
+//   - `NNNN_xxx.sql`        (4 chiffres)
+//   - `YYYYMMDD_xxx.sql`    (date-based : 20240115)
+//   - et toute combinaison commençant par `\d+[_-]`
+//
+// Source : `SqlMigrationOrderViolation(file, line, fromTable, fromCol,
+// toTable, fkMig, targetMig)`.
+//
+// Pattern ratchet : grandfather par (file, line) — VRAIE dette à fix
+// au plus vite (la prod plantera). Le ratchet est un dernier recours
+// pour ne pas bloquer un commit en attendant le fix.
+
+.decl MigrationOrderGrandfathered(file: symbol, line: number)
+
+Violation("SQL-MIGRATION-ORDER", File, Line,
+  "FK forward-reference : la table cible est creee dans une migration ulterieure") :-
+    SqlMigrationOrderViolation(File, Line, _, _, _, _, _),
+    !MigrationOrderGrandfathered(File, Line).

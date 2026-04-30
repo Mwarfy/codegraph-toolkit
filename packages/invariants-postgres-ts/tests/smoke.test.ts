@@ -438,6 +438,112 @@ describe('no-deprecated-usage', () => {
   })
 })
 
+describe('no-new-articulation-point', () => {
+  it('0 violations sur facts vides', async () => {
+    const { violations } = await runRule({ ruleName: 'no-new-articulation-point.dl' })
+    expect(violations).toEqual([])
+  })
+
+  it('flag un articulation point non grandfathered', async () => {
+    const facts = new Map([
+      ['ArticulationPoint', 'src/hub.ts\t3'],
+    ])
+    const { violations } = await runRule({ ruleName: 'no-new-articulation-point.dl', facts })
+    expect(violations).toHaveLength(1)
+    expect(violations[0][0]).toBe('NO-NEW-ARTICULATION-POINT')
+    expect(violations[0][1]).toBe('src/hub.ts')
+  })
+
+  it('skip si grandfathered', async () => {
+    const schema = await loadRule('schema-subset.dl')
+    const baseRule = await loadRule('no-new-articulation-point.dl')
+    const customRule = baseRule + '\nArticulationPointGrandfathered("src/hub.ts").\n'
+    const program = mergePrograms([
+      { name: 'schema.dl', content: schema },
+      { name: 'rule.dl', content: customRule },
+    ])
+    const facts = new Map([
+      ['ArticulationPoint', 'src/hub.ts\t3'],
+    ])
+    const db = loadFacts(program.decls, { factsByRelation: facts })
+    const result = evaluate(program, db, { allowRecursion: true })
+    expect(result.outputs.get('Violation') ?? []).toEqual([])
+  })
+})
+
+describe('sql-naming-convention', () => {
+  it('0 violations sur facts vides', async () => {
+    const { violations } = await runRule({ ruleName: 'sql-naming-convention.dl' })
+    expect(violations).toEqual([])
+  })
+
+  it('flag chacun des 4 kinds', async () => {
+    const facts = new Map([
+      ['SqlNamingViolation', [
+        'db/schema.sql\t5\tuserOrders\t_\ttable-not-snake-case',
+        'db/schema.sql\t10\tusers\tfirstName\tcolumn-not-snake-case',
+        'db/schema.sql\t15\tevents\thappened\ttimestamp-missing-at-suffix',
+        'db/schema.sql\t20\torders\tcustomer\tfk-missing-id-suffix',
+      ].join('\n')],
+    ])
+    const { violations } = await runRule({ ruleName: 'sql-naming-convention.dl', facts })
+    expect(violations).toHaveLength(4)
+  })
+
+  it('skip si grandfathered par (file, line, kind)', async () => {
+    const schema = await loadRule('schema-subset.dl')
+    const baseRule = await loadRule('sql-naming-convention.dl')
+    const customRule = baseRule +
+      '\nSqlNamingGrandfathered("db/schema.sql", 15, "timestamp-missing-at-suffix").\n'
+    const program = mergePrograms([
+      { name: 'schema.dl', content: schema },
+      { name: 'rule.dl', content: customRule },
+    ])
+    const facts = new Map([
+      ['SqlNamingViolation',
+        'db/schema.sql\t15\tevents\thappened\ttimestamp-missing-at-suffix'],
+    ])
+    const db = loadFacts(program.decls, { factsByRelation: facts })
+    const result = evaluate(program, db, { allowRecursion: true })
+    expect(result.outputs.get('Violation') ?? []).toEqual([])
+  })
+})
+
+describe('sql-migration-order', () => {
+  it('0 violations sur facts vides', async () => {
+    const { violations } = await runRule({ ruleName: 'sql-migration-order.dl' })
+    expect(violations).toEqual([])
+  })
+
+  it('flag un FK forward-reference', async () => {
+    const facts = new Map([
+      ['SqlMigrationOrderViolation',
+        'db/010_orders.sql\t12\torders\tuser_id\tusers\t10\t50'],
+    ])
+    const { violations } = await runRule({ ruleName: 'sql-migration-order.dl', facts })
+    expect(violations).toHaveLength(1)
+    expect(violations[0][0]).toBe('SQL-MIGRATION-ORDER')
+  })
+
+  it('skip si grandfathered', async () => {
+    const schema = await loadRule('schema-subset.dl')
+    const baseRule = await loadRule('sql-migration-order.dl')
+    const customRule = baseRule +
+      '\nMigrationOrderGrandfathered("db/010_orders.sql", 12).\n'
+    const program = mergePrograms([
+      { name: 'schema.dl', content: schema },
+      { name: 'rule.dl', content: customRule },
+    ])
+    const facts = new Map([
+      ['SqlMigrationOrderViolation',
+        'db/010_orders.sql\t12\torders\tuser_id\tusers\t10\t50'],
+    ])
+    const db = loadFacts(program.decls, { factsByRelation: facts })
+    const result = evaluate(program, db, { allowRecursion: true })
+    expect(result.outputs.get('Violation') ?? []).toEqual([])
+  })
+})
+
 describe('schema-subset.dl est valide', () => {
   it('parse sans erreur et déclare les relations attendues', async () => {
     const schema = await loadRule('schema-subset.dl')
@@ -456,6 +562,9 @@ describe('schema-subset.dl est valide', () => {
     expect(program.decls.has('FloatingPromise')).toBe(true)
     expect(program.decls.has('DeprecatedDecl')).toBe(true)
     expect(program.decls.has('DeprecatedUsage')).toBe(true)
+    expect(program.decls.has('ArticulationPoint')).toBe(true)
+    expect(program.decls.has('SqlNamingViolation')).toBe(true)
+    expect(program.decls.has('SqlMigrationOrderViolation')).toBe(true)
     expect(program.decls.has('Violation')).toBe(true)
     // Toutes les input relations sont marquées .input
     expect(program.decls.get('CycleNode')!.isInput).toBe(true)

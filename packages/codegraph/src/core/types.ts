@@ -531,6 +531,44 @@ export interface GraphSnapshot {
     declarations: Array<{ name: string; file: string; line: number; reason: string }>
     sites: Array<{ file: string; line: number; callee: string; containingSymbol: string }>
   }
+
+  /**
+   * Articulation points — fichiers dont la suppression déconnecte le
+   * graphe d'imports en plusieurs composantes. Hubs cachés
+   * architecturaux. Algo Tarjan O(V+E).
+   * Cf. extractors/articulation-points.ts (Phase 4 Tier 5).
+   */
+  articulationPoints?: Array<{
+    file: string
+    severity: number
+  }>
+
+  /**
+   * SQL naming convention violations (Codd-era / Postgres best
+   * practices). Cf. extractors/sql-naming.ts (Phase 4 Tier 5).
+   */
+  sqlNamingViolations?: Array<{
+    kind: 'table-not-snake-case' | 'column-not-snake-case' | 'timestamp-missing-at-suffix' | 'fk-missing-id-suffix'
+    table: string
+    column: string
+    file: string
+    line: number
+  }>
+
+  /**
+   * SQL migration order violations — FK déclaré dans une migration
+   * AVANT la création de la table cible (forward reference).
+   * Cf. extractors/sql-migration-order.ts (Phase 4 Tier 5).
+   */
+  sqlMigrationOrderViolations?: Array<{
+    file: string
+    line: number
+    fromTable: string
+    fromColumn: string
+    toTable: string
+    fkMigrationNumber: number
+    targetMigrationNumber: number
+  }>
 }
 
 /** Re-export du type produit par `extractors/oauth-scope-literals`. */

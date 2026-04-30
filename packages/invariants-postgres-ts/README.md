@@ -2,7 +2,7 @@
 
 Standard Datalog invariants for **TypeScript + Postgres** projects, drop-in for [`codegraph-toolkit`](https://github.com/Mwarfy/codegraph-toolkit).
 
-Thirteen invariants, all 100% portable across TS/Postgres projects:
+Sixteen invariants, all 100% portable across TS/Postgres projects:
 
 | Invariant | What it catches |
 |---|---|
@@ -19,6 +19,9 @@ Thirteen invariants, all 100% portable across TS/Postgres projects:
 | `no-switch-fallthrough` | `case X: doStuff()` without break/return/throw (gcc -Wimplicit-fallthrough). Ratchet on `(file, line)`. |
 | `no-floating-promise` | Async function called without await/then/catch (rustc unused_must_use, ESLint no-floating-promises). Ratchet on `(file, line)`. |
 | `no-deprecated-usage` | Call-sites of `@deprecated` symbols (Go SA1019, Pascal H2061, Java @Deprecated). Ratchet on `(file, line)`. |
+| `no-new-articulation-point` | Hidden architectural hubs — files whose removal would disconnect the import graph (Tarjan O(V+E)). Ratchet on `file`. |
+| `sql-naming-convention` | snake_case for tables/columns, `_at` for timestamps, `_id` for FKs (Codd / Postgres style). Ratchet on `(file, line, kind)`. |
+| `sql-migration-order` | FK forward-references — migration declares FK before target table is created (topological sort). Ratchet on `(file, line)`. |
 
 ## Why these two
 

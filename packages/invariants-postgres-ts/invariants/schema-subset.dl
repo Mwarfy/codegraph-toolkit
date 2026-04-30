@@ -29,6 +29,9 @@
 .decl FloatingPromise(file: symbol, line: number, callee: symbol, containingSymbol: symbol)
 .decl DeprecatedDecl(name: symbol, file: symbol, line: number)
 .decl DeprecatedUsage(file: symbol, line: number, callee: symbol)
+.decl ArticulationPoint(file: symbol, severity: number)
+.decl SqlNamingViolation(file: symbol, line: number, table: symbol, column: symbol, kind: symbol)
+.decl SqlMigrationOrderViolation(file: symbol, line: number, fromTable: symbol, fromCol: symbol, toTable: symbol, fkMig: number, targetMig: number)
 
 .input File
 .input FileTag
@@ -49,6 +52,9 @@
 .input FloatingPromise
 .input DeprecatedDecl
 .input DeprecatedUsage
+.input ArticulationPoint
+.input SqlNamingViolation
+.input SqlMigrationOrderViolation
 
 // La relation cible commune : tous les fichiers de rules écrivent ici.
 .decl Violation(adr: symbol, file: symbol, line: number, msg: symbol)

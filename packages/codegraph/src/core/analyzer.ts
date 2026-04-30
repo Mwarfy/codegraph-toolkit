@@ -49,6 +49,9 @@ import { analyzeBooleanParams, type BooleanParamSite } from '../extractors/boole
 import { analyzeDeadCode, type DeadCodeFinding } from '../extractors/dead-code.js'
 import { analyzeFloatingPromises, type FloatingPromiseSite } from '../extractors/floating-promises.js'
 import { analyzeDeprecatedUsage, type DeprecatedDeclaration, type DeprecatedUsageSite } from '../extractors/deprecated-usage.js'
+import { analyzeArticulationPoints, type ArticulationPoint } from '../extractors/articulation-points.js'
+import { findSqlNamingViolations, type SqlNamingViolation } from '../extractors/sql-naming.js'
+import { findMigrationOrderViolations, type MigrationOrderViolation } from '../extractors/sql-migration-order.js'
 import { analyzeLongFunctions, type LongFunction } from '../extractors/long-functions.js'
 import { analyzeMagicNumbers, type MagicNumber } from '../extractors/magic-numbers.js'
 import { analyzeTestCoverage, type TestCoverageReport } from '../extractors/test-coverage.js'
@@ -567,6 +570,9 @@ async function runDeterministicDetectors(
   let deadCode: DeadCodeFinding[] | undefined
   let floatingPromises: FloatingPromiseSite[] | undefined
   let deprecatedUsage: { declarations: DeprecatedDeclaration[]; sites: DeprecatedUsageSite[] } | undefined
+  let articulationPoints: ArticulationPoint[] | undefined
+  let sqlNamingViolations: SqlNamingViolation[] | undefined
+  let sqlMigrationOrderViolations: MigrationOrderViolation[] | undefined
 
   const tTodos = performance.now()
   try {
@@ -683,6 +689,37 @@ async function runDeterministicDetectors(
     console.error(`  ✗ deprecated-usage failed: ${err}`)
   }
 
+  const tArtic = performance.now()
+  try {
+    articulationPoints = await analyzeArticulationPoints(snapshot)
+    timing.detectors['articulation-points'] = performance.now() - tArtic
+  } catch (err) {
+    timing.detectors['articulation-points'] = performance.now() - tArtic
+    console.error(`  ✗ articulation-points failed: ${err}`)
+  }
+
+  const tSqlNaming = performance.now()
+  try {
+    if (snapshot.sqlSchema) {
+      sqlNamingViolations = findSqlNamingViolations(snapshot.sqlSchema)
+    }
+    timing.detectors['sql-naming'] = performance.now() - tSqlNaming
+  } catch (err) {
+    timing.detectors['sql-naming'] = performance.now() - tSqlNaming
+    console.error(`  ✗ sql-naming failed: ${err}`)
+  }
+
+  const tMigOrder = performance.now()
+  try {
+    if (snapshot.sqlSchema) {
+      sqlMigrationOrderViolations = findMigrationOrderViolations(snapshot.sqlSchema)
+    }
+    timing.detectors['sql-migration-order'] = performance.now() - tMigOrder
+  } catch (err) {
+    timing.detectors['sql-migration-order'] = performance.now() - tMigOrder
+    console.error(`  ✗ sql-migration-order failed: ${err}`)
+  }
+
   if (todos) snapshot.todos = todos
   if (longFunctions) snapshot.longFunctions = longFunctions
   if (magicNumbers) snapshot.magicNumbers = magicNumbers
@@ -695,6 +732,9 @@ async function runDeterministicDetectors(
   if (deadCode) snapshot.deadCode = deadCode
   if (floatingPromises) snapshot.floatingPromises = floatingPromises
   if (deprecatedUsage) snapshot.deprecatedUsage = deprecatedUsage
+  if (articulationPoints) snapshot.articulationPoints = articulationPoints
+  if (sqlNamingViolations) snapshot.sqlNamingViolations = sqlNamingViolations
+  if (sqlMigrationOrderViolations) snapshot.sqlMigrationOrderViolations = sqlMigrationOrderViolations
 }
 
 /**
