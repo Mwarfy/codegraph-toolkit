@@ -13,7 +13,10 @@
   "bin": {
     "codegraph": "./dist/cli/index.js"
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "engines": {
     "node": ">=22"
   },
@@ -26,14 +29,22 @@
     "directory": "packages/codegraph"
   },
   "license": "MIT",
-  "keywords": ["typescript", "static-analysis", "code-intelligence", "codegraph", "ai", "claude-code", "monorepo"],
+  "keywords": [
+    "typescript",
+    "static-analysis",
+    "code-intelligence",
+    "codegraph",
+    "ai",
+    "claude-code",
+    "monorepo"
+  ],
   "scripts": {
     "build": "tsc -b",
     "dev": "tsc -b --watch",
     "test": "vitest run"
   },
   "dependencies": {
-    "@liby/salsa": "*",
+    "@liby/salsa": "^0.1.0",
     "ts-morph": "^25.0.0",
     "graphology": "^0.26.0",
     "graphology-metrics": "^2.3.0",

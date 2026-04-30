@@ -98,6 +98,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+8935e31 docs: README codegraph-mcp + npm publish setup + bootstrap backlog
 7bb2997 docs(adr-006): core/types.ts est canonical contract — pas de breaking change
 467b4e0 refactor(codegraph): extract 2 sections from analyze() god-file
 812d7bd refactor(codegraph): move 3 fns from detectors/ to extractors/
@@ -109,7 +110,6 @@ be1553e docs+test: ADR-005 pattern détecteurs + test parité legacy/incremental
 66a4ae6 docs(phase-3): refresh boot brief — Phase 3 partielle, prochaines étapes
 2244034 perf(codegraph): Phase 3 partielle — discoverFiles cache + ts-imports Salsa wired [Sprint 10+11.1]
 2a9043e docs(phase-2): refresh boot brief post-Sprint 8+9 — Phase 2 livrée
-7a57eef feat(codegraph): watcher mode `codegraph watch` [Sprint 9 — Phase 2]
 ```
 
 ## Comment contribuer à ce brief
