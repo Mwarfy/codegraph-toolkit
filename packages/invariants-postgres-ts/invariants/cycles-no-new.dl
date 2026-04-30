@@ -1,0 +1,37 @@
+// CYCLES — Pas de nouveaux cycles d'import non-gated
+//
+// Rule : aucun fichier ne doit participer à un cycle d'import non-gated
+// (cycle.gated == "false"). Un cycle "gated" = entouré d'un gate
+// explicite (env var, feature flag, dynamic import conditionnel) — il
+// reste un cycle au sens topo mais est intentionnel et breakable par
+// config, donc autorisé.
+//
+// Source des facts : cycle detector du codegraph (Tarjan SCC sur graphe
+// combiné import + event + queue + dynamic-load). Émis dans
+// `.codegraph/facts/CycleNode.facts` par `codegraph analyze`.
+//
+// Pattern ratchet (cf. ADR-022 du codegraph-toolkit) :
+//   - Si ton projet a déjà des cycles : les grandfather explicitement.
+//   - Le ratchet `CyclesGrandfathered(cycleId)` exempte un cycle entier
+//     (pas un fichier) — un cycle est un objet topo, le grandfather
+//     marche au niveau cycle.
+//   - Pour casser un grandfather : casser le cycle (extraire un module
+//     partagé, ou ajouter un gate `if (env.X)` autour de l'import).
+//
+// Exemple ratchet :
+//   .decl CyclesGrandfathered(cycleId: symbol)
+//   CyclesGrandfathered("c-abc123def").  // cycle entre src/a.ts et src/b.ts
+//
+// Puis remplacer la rule ci-dessous par :
+//   Violation("CYCLES", File, 0, "...") :-
+//       CycleNode(File, CycleId, "false"),
+//       !CyclesGrandfathered(CycleId).
+
+.decl CyclesGrandfathered(cycleId: symbol)
+
+// Rule : violation pour tout file dans un cycle non-gated, sauf si
+// grandfathered explicitement.
+Violation("CYCLES", File, 0,
+  "fichier dans un cycle d'import non-gated — extraire un module partage OU gater explicitement") :-
+    CycleNode(File, CycleId, "false"),
+    !CyclesGrandfathered(CycleId).

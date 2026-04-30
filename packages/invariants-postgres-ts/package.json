@@ -1,0 +1,44 @@
+{
+  "name": "@liby-tools/invariants-postgres-ts",
+  "version": "0.1.0",
+  "description": "Standard Datalog invariants for TypeScript + Postgres projects — drop-in for codegraph-toolkit",
+  "type": "module",
+  "files": [
+    "invariants",
+    "README.md"
+  ],
+  "exports": {
+    "./invariants/*": "./invariants/*"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Mwarfy/codegraph-toolkit.git",
+    "directory": "packages/invariants-postgres-ts"
+  },
+  "license": "MIT",
+  "keywords": [
+    "datalog",
+    "invariants",
+    "codegraph",
+    "claude-code",
+    "postgres",
+    "typescript"
+  ],
+  "scripts": {
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@liby-tools/codegraph": "^0.2.0",
+    "@liby-tools/datalog": "^0.2.0"
+  },
+  "devDependencies": {
+    "@liby-tools/datalog": "^0.2.0",
+    "vitest": "^4.1.0"
+  }
+}

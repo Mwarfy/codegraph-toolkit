@@ -1,0 +1,39 @@
+// Schema subset utilisé par les rules de @liby-tools/invariants-postgres-ts.
+//
+// Le consumer doit avoir un schema.dl plus large (typiquement émis par
+// `codegraph facts`) qui couvre TOUTES les relations utilisées par TOUS
+// ses invariants. Ce fichier est fourni en référence — si le consumer
+// n'a pas encore de schema.dl, copier ce fichier ET le compléter avec
+// les autres relations qu'on consomme.
+//
+// IMPORTANT : ne PAS copier ce schema-subset.dl tel quel à côté du
+// schema.dl du consumer — Datalog refuse les double-déclarations. Soit
+// on copie ce fichier comme schema.dl unique, soit on merge à la main.
+
+.decl File(file: symbol)
+.decl FileTag(file: symbol, tag: symbol)
+.decl Imports(from: symbol, to: symbol)
+.decl ImportEdge(from: symbol, to: symbol, line: number)
+.decl ModuleFanIn(file: symbol, count: number)
+.decl CycleNode(file: symbol, cycleId: symbol, gated: symbol)
+.decl SqlTable(name: symbol, file: symbol, line: number)
+.decl SqlColumn(table: symbol, column: symbol, type: symbol, file: symbol, line: number)
+.decl SqlForeignKey(fromTable: symbol, fromCol: symbol, toTable: symbol, toCol: symbol, file: symbol, line: number)
+.decl SqlIndex(name: symbol, table: symbol, firstCol: symbol, file: symbol, line: number)
+.decl SqlFkWithoutIndex(fromTable: symbol, fromCol: symbol, toTable: symbol, toCol: symbol)
+
+.input File
+.input FileTag
+.input Imports
+.input ImportEdge
+.input ModuleFanIn
+.input CycleNode
+.input SqlTable
+.input SqlColumn
+.input SqlForeignKey
+.input SqlIndex
+.input SqlFkWithoutIndex
+
+// La relation cible commune : tous les fichiers de rules écrivent ici.
+.decl Violation(adr: symbol, file: symbol, line: number, msg: symbol)
+.output Violation

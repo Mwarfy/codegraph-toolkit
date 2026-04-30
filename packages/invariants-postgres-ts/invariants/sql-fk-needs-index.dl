@@ -1,0 +1,35 @@
+// SQL-FK-INDEX — Tout foreign key Postgres doit avoir un index sur sa
+// colonne source.
+//
+// Pourquoi : sans index, un DELETE CASCADE depuis la table parent
+// déclenche un full scan de la table child pour chaque ligne supprimée.
+// En prod sur tables de plusieurs millions de lignes, c'est un disaster
+// perf (timeout, lock contention, replication lag). Pareil pour les
+// SELECT/UPDATE qui filtrent sur la colonne FK.
+//
+// Source des facts : extracteur sql-schema (raw SQL migrations) ou
+// drizzle-schema (Drizzle ORM) du codegraph-toolkit. Émis dans
+// `.codegraph/facts/SqlFkWithoutIndex.facts` par `codegraph analyze`
+// (dédupliqué par paire fromTable.fromCol).
+//
+// Pattern ratchet (cf. ADR-022 du codegraph-toolkit) :
+//   - Si ton projet a déjà des FK non-indexés : les grandfather
+//     explicitement avec `SqlFkIndexGrandfathered(table, col)`.
+//   - Pour résoudre un grandfather : ajouter `CREATE INDEX idx_X_Y ON
+//     X (Y);` dans une migration, puis retirer la ligne grandfathered
+//     correspondante.
+//
+// Exemple ratchet :
+//   SqlFkIndexGrandfathered("orders", "customer_id").
+//   SqlFkIndexGrandfathered("invoices", "order_id").
+
+.decl SqlFkIndexGrandfathered(table: symbol, col: symbol)
+
+// Rule : violation pour tout FK sans index qui n'est PAS grandfathered.
+// On joint avec SqlForeignKey pour récupérer le file:line de la
+// déclaration FK (utile au reviewer pour aller fix).
+Violation("SQL-FK-INDEX", File, Line,
+  "FK non indexe — DELETE CASCADE = full scan ; ajouter CREATE INDEX") :-
+    SqlFkWithoutIndex(FromT, FromC, _, _),
+    SqlForeignKey(FromT, FromC, _, _, File, Line),
+    !SqlFkIndexGrandfathered(FromT, FromC).

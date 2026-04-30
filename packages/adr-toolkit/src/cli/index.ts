@@ -35,9 +35,20 @@ program
   .command('init')
   .description('Scaffold ADR toolkit dans le projet courant')
   .option('--with-claude-settings', 'Ajoute aussi .claude/settings.json avec le hook PreToolUse adr-hook', false)
+  .option(
+    '--with-invariants <flavor>',
+    'Copie les rules Datalog de @liby-tools/invariants-<flavor>-ts. V1: postgres. ' +
+      'Le package doit être installé (npm install --save-dev) avant.',
+  )
   .action(async (opts) => {
+    const withInvariants = opts.withInvariants
+    if (withInvariants && withInvariants !== 'postgres') {
+      console.error(chalk.red(`Flavor invalide: ${withInvariants}. Disponible: postgres`))
+      process.exit(1)
+    }
     const result = await initProject(process.cwd(), {
       withClaudeSettings: !!opts.withClaudeSettings,
+      withInvariants: withInvariants as 'postgres' | undefined,
     })
     console.log(chalk.dim(`Layout détecté : ${result.layout}`))
     if (result.created.length > 0) {

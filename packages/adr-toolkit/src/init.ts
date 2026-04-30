@@ -38,6 +38,13 @@ interface InitResult {
 export interface InitOptions {
   /** Si true, écrit aussi `.claude/settings.json` avec le hook PreToolUse. */
   withClaudeSettings?: boolean
+  /**
+   * Si fourni, copie les rules Datalog du package
+   * `@liby-tools/invariants-<flavor>` dans `<projet>/invariants/` et
+   * crée le test runner générique. Flavors V1 : `postgres`.
+   * Le package doit déjà être installé (npm install) — sinon warning.
+   */
+  withInvariants?: 'postgres'
 }
 
 type LayoutKind = 'simple' | 'fullstack-monorepo' | 'workspaces-monorepo' | 'flat'
@@ -337,6 +344,11 @@ export async function initProject(
     result.warnings.push('Pas de .git/ — set core.hooksPath manuellement après git init')
   }
 
+  // 5b. Invariants standards (optionnel)
+  if (opts.withInvariants) {
+    await wireInvariantsPackage(rootDir, opts.withInvariants, result)
+  }
+
   // 6. .claude/settings.json (optionnel)
   if (opts.withClaudeSettings) {
     const claudeDir = path.join(rootDir, '.claude')
@@ -369,4 +381,65 @@ export async function initProject(
   }
 
   return result
+}
+
+/**
+ * Copie les rules .dl depuis `node_modules/@liby-tools/invariants-<flavor>/invariants/`
+ * vers `<rootDir>/invariants/`. Skip schema-subset.dl (le projet doit déjà
+ * avoir un schema.dl, sinon copie-le comme schema.dl).
+ *
+ * Si le package n'est pas installé : warning, pas d'erreur. Le user doit
+ * `npm install --save-dev @liby-tools/invariants-postgres-ts` puis
+ * relancer init.
+ */
+async function wireInvariantsPackage(
+  rootDir: string,
+  flavor: 'postgres',
+  result: InitResult,
+): Promise<void> {
+  const pkgName = `@liby-tools/invariants-${flavor}-ts`
+  const pkgDir = path.join(rootDir, 'node_modules', pkgName)
+  const pkgInvariants = path.join(pkgDir, 'invariants')
+
+  if (!(await exists(pkgInvariants))) {
+    result.warnings.push(
+      `${pkgName} pas installé — run \`npm install --save-dev ${pkgName}\` puis relance init`,
+    )
+    return
+  }
+
+  const targetDir = path.join(rootDir, 'invariants')
+  await mkdir(targetDir, { recursive: true })
+
+  // Copier les rules .dl du package, sauf schema-subset.dl.
+  const { readdir } = await import('node:fs/promises')
+  const ruleFiles = (await readdir(pkgInvariants)).filter(
+    (f) => f.endsWith('.dl') && f !== 'schema-subset.dl',
+  )
+
+  for (const rule of ruleFiles) {
+    const target = path.join(targetDir, rule)
+    if (await exists(target)) {
+      result.skipped.push(`invariants/${rule}`)
+      continue
+    }
+    await copyFile(path.join(pkgInvariants, rule), target)
+    result.created.push(`invariants/${rule}`)
+  }
+
+  // Si pas de schema.dl dans le projet, copier le schema-subset.dl du
+  // package en tant que schema.dl initial.
+  const schemaTarget = path.join(targetDir, 'schema.dl')
+  const schemaSource = path.join(pkgInvariants, 'schema-subset.dl')
+  if (!(await exists(schemaTarget)) && (await exists(schemaSource))) {
+    await copyFile(schemaSource, schemaTarget)
+    result.created.push('invariants/schema.dl')
+    result.warnings.push(
+      `invariants/schema.dl créé depuis le subset minimal — étendre si tu ajoutes des invariants qui consomment d'autres relations`,
+    )
+  } else if (await exists(schemaTarget)) {
+    result.warnings.push(
+      `invariants/schema.dl existe — vérifier qu'il déclare CycleNode, SqlFkWithoutIndex, SqlForeignKey (cf. ${pkgName}/invariants/schema-subset.dl)`,
+    )
+  }
 }

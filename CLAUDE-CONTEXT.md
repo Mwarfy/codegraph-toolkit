@@ -47,7 +47,7 @@
 - `packages/salsa/dist/index.d.ts` (in: 19)
 - `packages/codegraph/src/core/detector-registry.ts` (in: 17)
 - `packages/adr-toolkit/src/config.ts` (in: 10) · gov by ADR-002
-- `packages/codegraph-mcp/src/snapshot-loader.ts` (in: 8)
+- `packages/codegraph-mcp/src/snapshot-loader.ts` (in: 9)
 - `packages/codegraph/src/diff/types.ts` (in: 8)
 
 ## ⚠ ADR anchor suggestions
@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+3e2f4bc feat(phase4-axe4): drift agentique — 3 patterns V1 + MCP tool
 c423a80 feat(phase4-axe3): mémoire inter-sessions — store + MCP tools + CLI
 e61268d feat(phase4-axe2): SymbolCallEdge / SymbolSignature / EntryPoint facts
 6a2da32 feat(phase4-axe1): codegraph_datalog_query — Datalog ad hoc query MCP tool
@@ -111,7 +112,6 @@ fffe142 feat(codegraph): Drizzle schema detector — mêmes facts que sql-schema
 a934947 feat(codegraph-mcp): codegraph_changes_since MCP tool — diff live vs post-commit
 3807758 feat(codegraph): watcher écrit snapshot-live.json + facts à chaque update
 26159fc feat(codegraph): reverse-deps BFS — codegraph_affected MCP tool + CLI affected
-f65f5c7 docs: clôture du plan d'enrichissement 5 axes — Axe 3 obsolète
 ```
 
 ## Comment contribuer à ce brief
