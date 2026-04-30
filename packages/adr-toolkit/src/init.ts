@@ -55,6 +55,67 @@ interface DetectedLayout {
   hasGit: boolean
 }
 
+/**
+ * Stack DB détectée — utilisée pour activer les bons détecteurs codegraph.
+ * Plusieurs flags peuvent être true simultanément (projet hybride).
+ */
+interface DetectedStack {
+  hasRawSqlMigrations: boolean  // .sql files dans **/migrations/* ou **/db/*
+  hasDrizzle: boolean           // drizzle-orm dans un package.json
+  hasPrisma: boolean            // prisma ou @prisma/client
+}
+
+async function detectStack(rootDir: string): Promise<DetectedStack> {
+  const stack: DetectedStack = {
+    hasRawSqlMigrations: false,
+    hasDrizzle: false,
+    hasPrisma: false,
+  }
+
+  // 1. Cherche les package.json (root + sub-packages communs)
+  const candidates = [
+    'package.json',
+    'backend/package.json',
+    'frontend/package.json',
+    'shared/package.json',
+    'apps/backend/package.json',
+    'sentinel-core/package.json',
+    'sentinel-web/package.json',
+  ]
+  for (const rel of candidates) {
+    const p = path.join(rootDir, rel)
+    if (!(await exists(p))) continue
+    try {
+      const pkg = JSON.parse(await readFile(p, 'utf-8'))
+      const allDeps = {
+        ...(pkg.dependencies ?? {}),
+        ...(pkg.devDependencies ?? {}),
+      }
+      if (allDeps['drizzle-orm']) stack.hasDrizzle = true
+      if (allDeps['prisma'] || allDeps['@prisma/client']) stack.hasPrisma = true
+    } catch { /* malformed package.json, skip */ }
+  }
+
+  // 2. Cherche des fichiers .sql dans les emplacements typiques
+  const sqlPaths = [
+    'migrations',
+    'db/migrations',
+    'sentinel-core/src/db/migrations',
+    'backend/migrations',
+    'backend/src/db/migrations',
+    'src/db/migrations',
+  ]
+  for (const rel of sqlPaths) {
+    const p = path.join(rootDir, rel)
+    if (await exists(p)) {
+      stack.hasRawSqlMigrations = true
+      break
+    }
+  }
+
+  return stack
+}
+
 async function detectLayout(rootDir: string): Promise<DetectedLayout> {
   const has = (p: string) => exists(path.join(rootDir, p))
   const hasGit = await has('.git')
@@ -160,7 +221,11 @@ export async function initProject(
 ): Promise<InitResult> {
   const result: InitResult = { created: [], skipped: [], warnings: [], layout: 'simple' }
   const layout = await detectLayout(rootDir)
+  const stack = await detectStack(rootDir)
   result.layout = layout.kind
+  if (stack.hasDrizzle) result.warnings.push('Drizzle ORM détecté → drizzle-schema detector activé')
+  if (stack.hasRawSqlMigrations) result.warnings.push('Migrations .sql détectées → sql-schema detector activé')
+  if (stack.hasPrisma) result.warnings.push('Prisma détecté → pas encore supporté (FK invariants seulement raw SQL + Drizzle pour l\'instant)')
 
   // 1. .codegraph-toolkit.json
   const adrConfigPath = path.join(rootDir, CONFIG_FILENAME)
@@ -187,6 +252,13 @@ export async function initProject(
   if (await exists(codegraphConfigPath)) {
     result.skipped.push('codegraph.config.json')
   } else {
+    // Détecteurs SQL/Drizzle activés selon stack détectée. Si la stack
+    // n'a pas de DB, le détecteur tournera quand même mais retournera
+    // tables.length === 0 (overhead minime ~50ms, OK).
+    const detectorOptions: Record<string, Record<string, unknown>> = {}
+    detectorOptions.sqlSchema = { enabled: stack.hasRawSqlMigrations }
+    detectorOptions.drizzleSchema = { enabled: stack.hasDrizzle }
+
     const codegraphConfig = {
       rootDir: '.',
       include: layout.codegraphInclude,
@@ -202,6 +274,7 @@ export async function initProject(
       ],
       entryPoints: layout.codegraphEntryPoints,
       detectors: ['ts-imports', 'event-bus', 'http-routes', 'bullmq-queues', 'db-tables'],
+      detectorOptions,
       snapshotDir: '.codegraph',
       maxSnapshots: 50,
       tsconfigPath: layout.tsconfigPath,

@@ -45,7 +45,7 @@
 - `packages/codegraph/src/incremental/queries.ts` (in: 22)
 - `packages/codegraph/src/incremental/database.ts` (in: 20)
 - `packages/salsa/dist/index.d.ts` (in: 19)
-- `packages/codegraph/src/core/detector-registry.ts` (in: 16)
+- `packages/codegraph/src/core/detector-registry.ts` (in: 17)
 - `packages/adr-toolkit/src/config.ts` (in: 10) · gov by ADR-002
 - `packages/codegraph-mcp/src/snapshot-loader.ts` (in: 8)
 - `packages/codegraph/src/diff/types.ts` (in: 8)
@@ -57,7 +57,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 - **22** `packages/codegraph/src/incremental/queries.ts` _(top-hub)_
 - **20** `packages/codegraph/src/incremental/database.ts` _(top-hub)_
 - **19** `packages/salsa/dist/index.d.ts` _(top-hub)_
-- **16** `packages/codegraph/src/core/detector-registry.ts` _(top-hub)_
+- **17** `packages/codegraph/src/core/detector-registry.ts` _(top-hub)_
 
 ## Tensions actives — invitations à explorer
 
@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+fffe142 feat(codegraph): Drizzle schema detector — mêmes facts que sql-schema
 7defd9b feat(codegraph): SQL schema detector — FK sans index + 5 facts Datalog
 a934947 feat(codegraph-mcp): codegraph_changes_since MCP tool — diff live vs post-commit
 3807758 feat(codegraph): watcher écrit snapshot-live.json + facts à chaque update
@@ -111,7 +112,6 @@ b0b7cfa feat(codegraph): FSM detectionConfidence — observed vs declared-only
 63b9a45 feat(codegraph): émission CycleNode facts + boot brief enrichissement 5 axes
 ff7cd93 refactor(codegraph): Phase C — analyze() à 157 LOC via 4 helpers d'orchestration
 6029444 refactor(codegraph): Phase B — migration des 13 détecteurs restants vers Detector/Registry
-2807c3e refactor(codegraph): Phase A — pattern visiteur Detector/Registry pour analyze()
 ```
 
 ## Comment contribuer à ce brief
