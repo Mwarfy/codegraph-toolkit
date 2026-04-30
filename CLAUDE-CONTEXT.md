@@ -35,10 +35,10 @@
 
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
-- `packages/codegraph/src/core/types.ts` (in: 57)
-- `packages/salsa/dist/index.d.ts` (in: 16)
-- `packages/codegraph/src/incremental/database.ts` (in: 15)
-- `packages/codegraph/src/incremental/queries.ts` (in: 14)
+- `packages/codegraph/src/core/types.ts` (in: 58)
+- `packages/salsa/dist/index.d.ts` (in: 17)
+- `packages/codegraph/src/incremental/database.ts` (in: 16)
+- `packages/codegraph/src/incremental/queries.ts` (in: 15)
 - `packages/adr-toolkit/src/config.ts` (in: 9) · gov by ADR-002
 - `packages/codegraph/src/diff/types.ts` (in: 8)
 - `packages/datalog/src/types.ts` (in: 8)
@@ -48,9 +48,10 @@
 
 Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `// ADR-NNN`** dans le code. Intentionnel ? Sinon poser un marqueur ou créer un ADR :
 
-- **57** `packages/codegraph/src/core/types.ts` _(top-hub)_
-- **16** `packages/salsa/dist/index.d.ts` _(top-hub)_
-- **15** `packages/codegraph/src/incremental/database.ts` _(top-hub)_
+- **58** `packages/codegraph/src/core/types.ts` _(top-hub)_
+- **17** `packages/salsa/dist/index.d.ts` _(top-hub)_
+- **16** `packages/codegraph/src/incremental/database.ts` _(top-hub)_
+- **15** `packages/codegraph/src/incremental/queries.ts` _(top-hub)_
 
 ## Tensions actives — invitations à explorer
 
@@ -93,6 +94,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+5254819 perf(codegraph): ts-imports reuses sharedProject in incremental mode [Sprint 6]
 7815a4d feat(codegraph): expose --incremental flag in CLI [Sprint 4]
 4dfd6cc docs(phase-1): refresh boot brief post-Sprint 5
 f3af3cb perf(codegraph): warm path optimizations — mtime-aware + Project reuse + skip-set [Sprint 5]
@@ -104,7 +106,6 @@ cb6309d feat(codegraph): incremental mode — batch 3 (typed-calls, cycles, data
 0c36ea1 docs(phase-1): refresh boot brief post-Sprint 2
 ca6d610 feat(codegraph): incremental mode — env-usage + oauth-scope-literals via Salsa (Sprint 2)
 84c8287 fix(salsa): add Database.resetState() — preserve registry across reset
-0a3c571 docs: PHASE-1-SALSA-MIGRATION.md — boot brief pour reprendre Sprints 2-4
 ```
 
 ## Comment contribuer à ce brief

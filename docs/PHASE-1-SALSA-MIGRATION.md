@@ -22,18 +22,20 @@ But Phase 1 : passer en **incremental** via @liby/salsa. Sur changement
 d'1 fichier, seul ce qui dépend de ce fichier recompute. Cible : <1s par
 commit incrémental.
 
-## État à reprise (après Sprint 5)
+## État à reprise (après Sprint 6 — cible <500ms warm ATTEINTE)
 
 ### Commits livrés sur cette chaîne (codegraph-toolkit)
 
 ```
+5254819 perf(codegraph): ts-imports reuses sharedProject in incremental mode [Sprint 6]
+7815a4d feat(codegraph): expose --incremental flag in CLI [Sprint 4]
+4dfd6cc docs(phase-1): refresh boot brief post-Sprint 5
 f3af3cb perf(codegraph): warm path optimizations — mtime-aware + Project reuse + skip-set [Sprint 5]
 e875f5e docs(phase-1): refresh boot brief post-Sprint 3
 b6c2bb6 feat(codegraph): incremental mode — batch 4 final (symbol-refs, taint, metrics) [Sprint 3]
 cb6309d feat(codegraph): incremental mode — batch 3 (typed-calls, cycles, data-flows) [Sprint 3]
 4756b92 feat(codegraph): incremental mode — batch 2 (complexity, state-machines, truth-points) [Sprint 3]
 92eabe3 feat(codegraph): incremental mode — batch 1 (event-emit-sites, package-deps, barrels) [Sprint 3]
-0c36ea1 docs(phase-1): refresh boot brief post-Sprint 2
 ca6d610 feat(codegraph): incremental mode — env-usage + oauth-scope-literals via Salsa (Sprint 2)
 84c8287 fix(salsa): add Database.resetState() — preserve registry across reset
 5d90920 feat(salsa): @liby/salsa runtime — Salsa-style incremental computation (Sprint 1)
@@ -62,8 +64,31 @@ bc26f4f feat(invariants): ADR-017 migré vers Datalog déclaratif (M3)
 - Smoke E2E sur Sentinel : counts identiques cross-mode (60 envs, 8 oauth,
   51 events, 19 pkg, 6 barrels, 71 truthPoints, 3 fsm, 521 sigs, 750 edges,
   1 cycle, 160 dataFlows, 1179 symbolRefs)
-- Cold incremental ~16s, warm **~8s** (-50% vs cold après Sprint 5),
-  legacy 20s. Warm vs legacy : **-60%**.
+- Cold incremental **~9.7s**, warm **~493ms** (vs ~8s avant Sprint 6),
+  legacy ~21s. Warm vs legacy : **-98%**.
+- ts-imports warm : **108ms** (vs 7400ms avant Sprint 6 → -98.5%).
+- CLI cold (process neuf) : ~10.3s. Persistence disque pour cross-process
+  reportée Sprint 7+.
+
+### Ce qui est NEUF dans Sprint 6
+
+**ts-imports réutilise le sharedProject** (commit `5254819`) :
+  - `extractors/ts-imports.ts` → `scanImportsInSourceFile()` exporté +
+    `setTsImportPrebuiltProject(project)` setter neutre.
+  - `incremental/ts-imports.ts` → wrapper Salsa `tsImportsOfFile(path)`
+    + `allTsImports(label)` (gardé pour usage futur, pas wiré dans
+    analyze() actuel).
+  - `analyze()` mode incremental : pré-construit le sharedProject
+    AVANT la boucle des détecteurs et set le prebuilt sur
+    TsImportDetector. Évite le double-parse qui coûtait 7s warm.
+
+Diagnostic clé : ce détecteur dominait le warm (95% du temps). En le
+faisant réutiliser le sharedProject déjà construit pour les autres
+détecteurs, on passe de 7.4s à 108ms (-98.5%).
+
+**Sprint 4 partiel** (commit `7815a4d`) :
+  - CLI `codegraph analyze --incremental` exposé.
+  - `factsOnly` / `--regen` conservés tant que cold-via-CLI > factsOnly.
 
 ### Ce qui est NEUF dans Sprint 5
 
@@ -591,15 +616,19 @@ Quand tu reprends dans une nouvelle session :
 2. [ ] `git log --oneline | head -20` côté codegraph-toolkit + Sentinel
 3. [ ] Vérifier que `npx vitest run` côté toolkit passe (106/106 attendus)
 4. [ ] Vérifier que les invariants Sentinel passent (659/659)
-5. [ ] Reprendre **Sprint 4** : décommissionner factsOnly + exposer le
-       flag `--incremental` en CLI + bench warm sur le pre-commit hook.
-6. [ ] Si Sprint 4 done, attaquer **Sprint 6** : refactor unused-exports
-       en queries Salsa fines (`isImportedBy(symbol)`).
-7. [ ] **Sprint 7+** hypothétique :
-       - Migrer les 5 détecteurs base (ts-imports, event-bus, http,
-         bullmq, db-tables) — gain estimé ~3-4s sur warm
-       - Persistence disque DB Salsa (cross-process cache)
-       - File discovery cachée (gain ~500ms-1s)
+5. [ ] **Sprint 7** hypothétique : persistence disque DB Salsa pour
+       atteindre warm <500ms via CLI (process neuf). Sérialiser cells +
+       revision dans `.codegraph/salsa-cache.json`. Charger au démarrage,
+       sauver à la fin de analyze().
+6. [ ] **Sprint 8** : retirer factsOnly + --regen (cold via CLI doit
+       battre factsOnly d'abord — soit via persistence Sprint 7, soit
+       via une autre optim).
+7. [ ] **Sprint 9** : migrer event-bus / http-routes / bullmq-queues /
+       db-tables en Salsa (faible priorité — ces détecteurs sont déjà
+       rapides via le shared Project Sprint 6).
+8. [ ] **Sprint 10** : refactor unused-exports en queries Salsa fines
+       (`isImportedBy(symbol)`) si on veut sortir du recompute global
+       sur changement.
 
 Si un step ne matche plus exactement la réalité (ex: nouveau commit
 intercalé), adapte mais reste fidèle au principe : Salsa partout,
