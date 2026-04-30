@@ -49,16 +49,22 @@ program
   .option('-d, --detectors <names>', 'Comma-separated detector names to run')
   .option('--no-save', 'Print to stdout instead of saving to file')
   .option('--map', 'Also write MAP.md (structural map) at project root')
+  .option('--incremental',
+    'Use Salsa-cached path (Phase 1). Sub-2x speedup on warm runs in the ' +
+    'same process. Outputs identical to legacy mode (verified bit-for-bit ' +
+    'on Sentinel).')
   .action(async (opts) => {
     const config = await loadConfig(opts)
 
+    const incremental = Boolean(opts.incremental)
     console.log(chalk.bold('\n🔍 CodeGraph — Analyzing...\n'))
     console.log(`  Root:       ${config.rootDir}`)
     console.log(`  Include:    ${config.include.join(', ')}`)
     console.log(`  Detectors:  ${config.detectors.join(', ')}`)
+    if (incremental) console.log(`  Mode:       ${chalk.cyan('incremental (Salsa)')}`)
     console.log()
 
-    const result = await analyze(config)
+    const result = await analyze(config, { incremental })
     const { snapshot, timing } = result
 
     // Print summary
