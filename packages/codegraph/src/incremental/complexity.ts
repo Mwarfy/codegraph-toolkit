@@ -6,7 +6,7 @@
  * fileContent.
  */
 
-import { derived } from '@liby/salsa'
+import { derived } from '@liby-tools/salsa'
 import { analyzeComplexityInSourceFile } from '../extractors/complexity.js'
 import type { FileComplexityInfo } from '../extractors/complexity.js'
 import { sharedDb as db } from './database.js'

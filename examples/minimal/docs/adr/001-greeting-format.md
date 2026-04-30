@@ -19,7 +19,7 @@ ponctuation, casse). Centraliser permet aussi de localiser plus tard.
 
 ## Anchored in
 
-<!-- AUTO-GÉNÉRÉ depuis les marqueurs ADR-NNN du code source. Voir @liby/adr-toolkit. NE PAS éditer à la main. -->
+<!-- AUTO-GÉNÉRÉ depuis les marqueurs ADR-NNN du code source. Voir @liby-tools/adr-toolkit. NE PAS éditer à la main. -->
 
 - `src/greeting.ts` — format canonique des salutations
 

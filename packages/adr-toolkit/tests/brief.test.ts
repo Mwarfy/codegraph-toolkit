@@ -35,7 +35,7 @@ describe('generateBrief', () => {
     expect(content).toContain('ADR-002')
     expect(content).toContain('src/services/state-service.ts')
     expect(content).toContain('src/core/event-bus.ts')
-    expect(content).toContain('AUTO-GÉNÉRÉ par @liby/adr-toolkit')
+    expect(content).toContain('AUTO-GÉNÉRÉ par @liby-tools/adr-toolkit')
     await rm(root, { recursive: true, force: true })
   })
 

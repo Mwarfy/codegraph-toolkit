@@ -2,7 +2,7 @@
  * Contract test pour `collectAdrMarkers`.
  *
  * Vérifie que les marqueurs `// ADR-NNN` du code source sont correctement
- * détectés selon la convention partagée avec @liby/adr-toolkit
+ * détectés selon la convention partagée avec @liby-tools/adr-toolkit
  * (cf. plan §3.8 — start-of-comment uniquement, pas de prose match).
  */
 

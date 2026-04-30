@@ -1,6 +1,6 @@
 # minimal-example
 
-Hello-world consommateur de `@liby/codegraph` + `@liby/adr-toolkit`.
+Hello-world consommateur de `@liby-tools/codegraph` + `@liby-tools/adr-toolkit`.
 
 Démontre le scénario "j'ai un projet TS vierge, je veux poser un premier ADR
 gouverné par marqueurs et un boot brief auto-généré".

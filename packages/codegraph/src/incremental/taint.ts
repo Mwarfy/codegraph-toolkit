@@ -4,7 +4,7 @@
  * input Salsa (set par analyze() après lecture du JSON config).
  */
 
-import { derived, input } from '@liby/salsa'
+import { derived, input } from '@liby-tools/salsa'
 import { scanTaintInSourceFile } from '../extractors/taint.js'
 import type { TaintViolation, TaintRules } from '../core/types.js'
 import { sharedDb as db } from './database.js'

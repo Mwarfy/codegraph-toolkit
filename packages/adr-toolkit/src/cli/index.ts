@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * @liby/adr-toolkit CLI
+ * @liby-tools/adr-toolkit CLI
  *
  * Commands :
  *   init                           Scaffold un projet pour utiliser le toolkit
@@ -80,7 +80,7 @@ program
     }
     if (opts.check) {
       if (result.drift) {
-        console.error(chalk.red(`✗ Drift détecté — run 'npx @liby/adr-toolkit regen' puis re-commit`))
+        console.error(chalk.red(`✗ Drift détecté — run 'npx @liby-tools/adr-toolkit regen' puis re-commit`))
         process.exit(1)
       }
       console.log(chalk.green(`✓ Anchors sync (${result.totalMarkers} marqueurs, ${result.adrsWithMarkers} ADRs)`))

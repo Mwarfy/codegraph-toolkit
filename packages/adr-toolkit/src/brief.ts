@@ -255,7 +255,7 @@ export async function generateBrief(opts: GenerateBriefOptions): Promise<Generat
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([file, adrNums]) => `- \`${file}\` → ${adrNums.sort().map(n => `ADR-${n}`).join(', ')}`)
 
-  const md = `<!-- AUTO-GÉNÉRÉ par @liby/adr-toolkit — NE PAS éditer à la main -->
+  const md = `<!-- AUTO-GÉNÉRÉ par @liby-tools/adr-toolkit — NE PAS éditer à la main -->
 
 # Boot Brief — ${projectName}
 
@@ -277,7 +277,7 @@ ${tests.length > 0 ? tests.map(t => `- \`${t}\``).join('\n') : '- (aucun invaria
 ${sectionsAt('after-invariant-tests')}
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
-${hubs.length > 0 ? hubs.map(h => `- ${h}`).join('\n') : '- (snapshot codegraph absent — `npx @liby/codegraph analyze`)'}
+${hubs.length > 0 ? hubs.map(h => `- ${h}`).join('\n') : '- (snapshot codegraph absent — `npx @liby-tools/codegraph analyze`)'}
 ${adrSuggestions.length > 0 ? `\n## ⚠ ADR anchor suggestions\n\nFichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur \`// ADR-NNN\`** dans le code. Intentionnel ? Sinon poser un marqueur ou créer un ADR :\n\n${adrSuggestions.slice(0, 8).map((s) => `- **${s.inDegree}** \`${s.file}\` _(${s.reason})_`).join('\n')}\n` : ''}
 ## Tensions actives — invitations à explorer
 
@@ -297,9 +297,9 @@ ${sectionsAt('after-recent-activity')}
 ## Comment contribuer à ce brief
 
 - Une nouvelle décision architecturale ? Crée un ADR via le template :
-  \`@liby/adr-toolkit/templates/_TEMPLATE.md\`
+  \`@liby-tools/adr-toolkit/templates/_TEMPLATE.md\`
 - Le brief sera régénéré au prochain commit.
-- Pour forcer une régen : \`npx @liby/adr-toolkit brief\`
+- Pour forcer une régen : \`npx @liby-tools/adr-toolkit brief\`
 `
 
   const outputPath = path.join(config.rootDir, config.briefPath)

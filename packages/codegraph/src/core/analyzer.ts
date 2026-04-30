@@ -133,7 +133,7 @@ export interface AnalyzeOptions {
   /**
    * Mode "incremental" (Sprint 2 — Phase 1 Salsa migration) : route les
    * détecteurs Salsa-isés (env-usage, oauth-scope-literals à ce stade)
-   * via le runtime @liby/salsa au lieu du chemin batch. Sur deux runs
+   * via le runtime @liby-tools/salsa au lieu du chemin batch. Sur deux runs
    * successifs sans changement, le 2e doit hit le cache (sub-seconde).
    *
    * Les détecteurs non-encore-migrés continuent de tourner en batch

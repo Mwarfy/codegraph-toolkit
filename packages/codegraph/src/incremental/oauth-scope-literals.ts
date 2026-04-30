@@ -11,7 +11,7 @@
  *   - `allOauthScopeLiterals(label)` : agrégat avec tri.
  */
 
-import { derived } from '@liby/salsa'
+import { derived } from '@liby-tools/salsa'
 import {
   scanOauthScopesInContent,
   DEFAULT_OAUTH_SCOPE_RE,

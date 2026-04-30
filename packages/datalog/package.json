@@ -1,5 +1,5 @@
 {
-  "name": "@liby/datalog",
+  "name": "@liby-tools/datalog",
   "version": "0.1.0",
   "description": "Deterministic Datalog interpreter for codegraph invariants — pure TS, zero binary",
   "type": "module",

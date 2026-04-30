@@ -1,5 +1,5 @@
 /**
- * @liby/datalog — public API.
+ * @liby-tools/datalog — public API.
  *
  * Three layers, each independently importable :
  *   - `parse(src)` : `.dl` → AST

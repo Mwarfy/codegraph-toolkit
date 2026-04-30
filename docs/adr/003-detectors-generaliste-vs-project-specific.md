@@ -48,7 +48,7 @@ nouveau détecteur très spécifique nul pour les autres.
 
 ## Anchored in
 
-<!-- AUTO-GÉNÉRÉ depuis les marqueurs ADR-NNN du code source. Voir @liby/adr-toolkit. NE PAS éditer à la main. -->
+<!-- AUTO-GÉNÉRÉ depuis les marqueurs ADR-NNN du code source. Voir @liby-tools/adr-toolkit. NE PAS éditer à la main. -->
 
 - `packages/codegraph/src/detectors/block-loader.ts` — project-specific (opt-in)
 - `packages/codegraph/src/detectors/index.ts` — détecteurs généralistes par défaut, project-specific opt-in

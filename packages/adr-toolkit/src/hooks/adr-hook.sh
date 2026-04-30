@@ -2,10 +2,10 @@
 # ============================================
 # adr-hook.sh — Claude Code PreToolUse hook for Edit/Write/MultiEdit
 # ============================================
-# Generic version (paramétré via env) — installé par `npx @liby/adr-toolkit init`.
+# Generic version (paramétré via env) — installé par `npx @liby-tools/adr-toolkit init`.
 #
 # Reçoit le tool input en JSON sur stdin (Claude Code hook protocol), extrait
-# `file_path`, lance le linker `@liby/adr-toolkit`, injecte les ADRs liés en
+# `file_path`, lance le linker `@liby-tools/adr-toolkit`, injecte les ADRs liés en
 # `additionalContext` (vu par le modèle AVANT l'edit).
 #
 # Sans ce hook, l'agent peut Edit un fichier gouverné par un ADR sans avoir
@@ -58,7 +58,7 @@ case "$FILE_PATH" in
 esac
 
 RELATIVE="${FILE_PATH#$REPO_ROOT/}"
-LINKER_OUTPUT=$(cd "$REPO_ROOT" && npx @liby/adr-toolkit linker "$RELATIVE" 2>/dev/null || true)
+LINKER_OUTPUT=$(cd "$REPO_ROOT" && npx @liby-tools/adr-toolkit linker "$RELATIVE" 2>/dev/null || true)
 
 if [ -z "$LINKER_OUTPUT" ] || echo "$LINKER_OUTPUT" | grep -q "No ADR mentions"; then
   exit 0

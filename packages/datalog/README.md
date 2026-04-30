@@ -1,4 +1,4 @@
-# @liby/datalog
+# @liby-tools/datalog
 
 Pure-TypeScript Datalog interpreter for codegraph invariants.
 Zero binary dependency, zero JVM, zero C++ runtime.
@@ -61,7 +61,7 @@ invariants and nothing else. If you need any of the above, use Soufflé.
 ## API
 
 ```ts
-import { runFromDirs, runFromString } from '@liby/datalog'
+import { runFromDirs, runFromString } from '@liby-tools/datalog'
 
 // File-system entry point.
 const { result } = await runFromDirs({

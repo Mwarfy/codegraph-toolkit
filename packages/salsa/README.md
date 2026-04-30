@@ -1,4 +1,4 @@
-# @liby/salsa
+# @liby-tools/salsa
 
 Salsa-style incremental computation runtime in pure TypeScript.
 
@@ -24,7 +24,7 @@ from 7s to <1s once everything is migrated.
 ## Quick start
 
 ```ts
-import { Database, input, derived } from '@liby/salsa'
+import { Database, input, derived } from '@liby-tools/salsa'
 
 const db = new Database()
 
@@ -147,7 +147,7 @@ cycle detection, and end-to-end use cases (codegraph-like file graph).
 
 ## Roadmap
 
-This package is the **runtime** only. Migration of @liby/codegraph to
+This package is the **runtime** only. Migration of @liby-tools/codegraph to
 use it (parseFile, importsOf, every detector as a query) is in
 progressive sprints. Cf. ADR-022 + the Sprint 2-4 commits in
 codegraph-toolkit.

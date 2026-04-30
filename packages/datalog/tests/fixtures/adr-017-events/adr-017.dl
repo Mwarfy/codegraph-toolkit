@@ -3,7 +3,7 @@
 // Rule : tout `emit({ type: 'string-literal' })` est une violation.
 // Aucune string littérale n'est autorisée comme valeur de `type`.
 //
-// Source des facts : @liby/codegraph `codegraph facts`.
+// Source des facts : @liby-tools/codegraph `codegraph facts`.
 // Cette règle .dl est l'ADR-017 EXÉCUTABLE — la prose dans le markdown
 // devient redondante. La seule source de vérité est ce fichier.
 

@@ -13,7 +13,7 @@
  * `analyzeExports` legacy (vérifiée par tests + snapshot diff).
  */
 
-import { derived, input } from '@liby/salsa'
+import { derived, input } from '@liby-tools/salsa'
 import {
   extractUnusedExportsFileBundle,
   aggregateBundles,

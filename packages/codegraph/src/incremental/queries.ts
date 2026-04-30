@@ -25,7 +25,7 @@
  */
 
 import type { Project } from 'ts-morph'
-import { input, type InputQuery, type QueryKey } from '@liby/salsa'
+import { input, type InputQuery, type QueryKey } from '@liby-tools/salsa'
 import { sharedDb as db } from './database.js'
 
 // ─── Inputs Salsa ─────────────────────────────────────────────────────

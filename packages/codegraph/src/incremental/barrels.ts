@@ -18,7 +18,7 @@
  * pas modélisée v1.
  */
 
-import { derived } from '@liby/salsa'
+import { derived } from '@liby-tools/salsa'
 import {
   scanBarrelInSourceFile,
   collectImportTargetsRel,

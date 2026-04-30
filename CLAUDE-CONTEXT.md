@@ -1,4 +1,4 @@
-<!-- AUTO-GÉNÉRÉ par @liby/adr-toolkit — NE PAS éditer à la main -->
+<!-- AUTO-GÉNÉRÉ par @liby-tools/adr-toolkit — NE PAS éditer à la main -->
 
 # Boot Brief — codegraph-toolkit
 
@@ -8,9 +8,9 @@
 
 ## Règles architecturales actives (ADRs)
 
-- **ADR-001** — Le synopsis builder (`@liby/codegraph buildSynopsis`) ne fait aucun I/O, > n'invoque aucun LLM, n'utilise aucune source non-déterministe. Même > snapshot d'entrée → même output JSON byte-équivalent.
+- **ADR-001** — Le synopsis builder (`@liby-tools/codegraph buildSynopsis`) ne fait aucun I/O, > n'invoque aucun LLM, n'utilise aucune source non-déterministe. Même > snapshot d'entrée → même output JSON byte-équivalent.
   → [`Synopsis builder = pur, zéro LLM`](docs/adr/001-synopsis-builder-pure.md)
-- **ADR-002** — Aucun path / nom de projet consommateur (Sentinel, Morovar, etc.) ne > doit apparaître dans le code des packages `@liby/codegraph` ou > `@liby/adr-toolkit`. Tout vient de `.codegraph-toolkit.json` ou > `codegraph.config.json` chargés depuis le rootDir du consommateur.
+- **ADR-002** — Aucun path / nom de projet consommateur (Sentinel, Morovar, etc.) ne > doit apparaître dans le code des packages `@liby-tools/codegraph` ou > `@liby-tools/adr-toolkit`. Tout vient de `.codegraph-toolkit.json` ou > `codegraph.config.json` chargés depuis le rootDir du consommateur.
   → [`Config-driven obligatoire — pas de hardcoded projet dans le code des packages`](docs/adr/002-config-driven-no-hardcoded-projects.md)
 - **ADR-003** — Le default detector set (`createDetectors([])` ou `defaultDetectorNames()`) > exclut tous les détecteurs marqués `projectSpecific: true`. Pour les > activer, le consommateur doit les nommer explicitement dans > `codegraph.config.json` → `"detectors": [...]`.
   → [`Détecteurs généralistes par défaut, project-specific opt-in`](docs/adr/003-detectors-generaliste-vs-project-specific.md)
@@ -84,8 +84,8 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer l'état OU ajouter la transition manquante_
 - **FSM-ORPHAN** `NodeStatus#uncertain` — état déclaré mais jamais écrit dans le code  
   _→ supprimer l'état OU ajouter la transition manquante_
-- **DEP-UNUSED** `@liby/codegraph` — déclaré dans packages/adr-toolkit/package.json, jamais importé  
-  _→ npm uninstall @liby/codegraph + npm test_
+- **DEP-UNUSED** `@liby-tools/codegraph` — déclaré dans packages/adr-toolkit/package.json, jamais importé  
+  _→ npm uninstall @liby-tools/codegraph + npm test_
 - **DEP-UNUSED** `typescript` — déclaré dans packages/codegraph-mcp/package.json, jamais importé  
   _→ npm uninstall typescript + npm test_
 - **DEP-UNUSED** `graphology-operators` — déclaré dans packages/codegraph/package.json, jamais importé  
@@ -98,6 +98,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+1be9051 chore(deps): pin intra-workspace deps à ^0.1.0 pour npm publish
 8935e31 docs: README codegraph-mcp + npm publish setup + bootstrap backlog
 7bb2997 docs(adr-006): core/types.ts est canonical contract — pas de breaking change
 467b4e0 refactor(codegraph): extract 2 sections from analyze() god-file
@@ -109,12 +110,11 @@ be1553e docs+test: ADR-005 pattern détecteurs + test parité legacy/incremental
 5b0a379 docs: SPRINT-11-2-UNUSED-EXPORTS-PLAN.md — boot brief dédié pour reprendre Sprint 11.2
 66a4ae6 docs(phase-3): refresh boot brief — Phase 3 partielle, prochaines étapes
 2244034 perf(codegraph): Phase 3 partielle — discoverFiles cache + ts-imports Salsa wired [Sprint 10+11.1]
-2a9043e docs(phase-2): refresh boot brief post-Sprint 8+9 — Phase 2 livrée
 ```
 
 ## Comment contribuer à ce brief
 
 - Une nouvelle décision architecturale ? Crée un ADR via le template :
-  `@liby/adr-toolkit/templates/_TEMPLATE.md`
+  `@liby-tools/adr-toolkit/templates/_TEMPLATE.md`
 - Le brief sera régénéré au prochain commit.
-- Pour forcer une régen : `npx @liby/adr-toolkit brief`
+- Pour forcer une régen : `npx @liby-tools/adr-toolkit brief`

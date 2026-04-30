@@ -225,7 +225,7 @@ export async function exportFacts(
   // utilisateur peuvent `#include "schema.dl"` et écrire seulement les
   // règles + .output Violation.
   const lines: string[] = []
-  lines.push(`// AUTO-GÉNÉRÉ par @liby/codegraph 'codegraph facts'.`)
+  lines.push(`// AUTO-GÉNÉRÉ par @liby-tools/codegraph 'codegraph facts'.`)
   lines.push(`// Source : snapshot ${snapshot.commitHash ?? '(no-commit)'} @ ${snapshot.generatedAt}.`)
   lines.push(`// NE PAS éditer à la main — relancer 'codegraph facts <out>' pour régénérer.`)
   lines.push('')

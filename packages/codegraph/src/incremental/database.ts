@@ -9,6 +9,6 @@
  * → cache hit même au démarrage à froid.
  */
 
-import { Database } from '@liby/salsa'
+import { Database } from '@liby-tools/salsa'
 
 export const sharedDb = new Database()

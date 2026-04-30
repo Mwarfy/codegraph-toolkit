@@ -8,7 +8,7 @@ curl -fsSL https://raw.githubusercontent.com/Mwarfy/codegraph-toolkit/master/ins
 
 # Dans n'importe quel projet TS
 cd ton-projet
-npm link @liby/codegraph @liby/adr-toolkit
+npm link @liby-tools/codegraph @liby-tools/adr-toolkit
 npx adr-toolkit init --with-claude-settings
 ```
 
@@ -77,7 +77,7 @@ nvm use && npm install && npm run build && npm link --workspaces
 
 ```bash
 cd ton-projet
-npm link @liby/codegraph @liby/adr-toolkit
+npm link @liby-tools/codegraph @liby-tools/adr-toolkit
 npx adr-toolkit init --with-claude-settings
 ```
 
@@ -171,9 +171,9 @@ import {
   loadConfig, regenerateAnchors,
   loadADRs, matches, findAdrsForFile,
   checkAsserts, generateBrief, initProject,
-} from '@liby/adr-toolkit'
+} from '@liby-tools/adr-toolkit'
 
-import { analyze, buildSynopsis, collectAdrMarkers } from '@liby/codegraph'
+import { analyze, buildSynopsis, collectAdrMarkers } from '@liby-tools/codegraph'
 ```
 
 ## Hook Claude Code
@@ -187,7 +187,7 @@ cat .claude/settings.json
 
 ## codegraph-mcp — architecture queryable on-demand
 
-Au-delà du push automatique via hook, `@liby/codegraph-mcp` expose le snapshot codegraph comme MCP server. 5 outils architecturaux complémentent un éventuel LSP MCP :
+Au-delà du push automatique via hook, `@liby-tools/codegraph-mcp` expose le snapshot codegraph comme MCP server. 5 outils architecturaux complémentent un éventuel LSP MCP :
 
 | Tool | Use case |
 |---|---|
@@ -214,7 +214,7 @@ LSP fait du **sémantique fin-grained** (symbols, types, refs). codegraph-mcp fa
 
 ## Mode incremental (Salsa)
 
-`codegraph analyze --incremental` route le pipeline via `@liby/salsa` (runtime de computation incrémentale maison, ~600 LOC pure-TS). Sur Sentinel : warm 149ms (vs 21s legacy → 99% plus rapide). Mode `codegraph watch` daemon avec fs.watch + persistence disque + delta saves pour usage IDE/dev local.
+`codegraph analyze --incremental` route le pipeline via `@liby-tools/salsa` (runtime de computation incrémentale maison, ~600 LOC pure-TS). Sur Sentinel : warm 149ms (vs 21s legacy → 99% plus rapide). Mode `codegraph watch` daemon avec fs.watch + persistence disque + delta saves pour usage IDE/dev local.
 
 14/14 détecteurs Salsa-isés. Mode legacy entièrement préservé pour les outils qui en dépendent.
 
@@ -237,7 +237,7 @@ En plus de la cartographie de base, codegraph capture les signaux de dette assum
 
 ## Convention zéro LLM
 
-Le synopsis builder (`@liby/codegraph buildSynopsis`) est **pur** : aucun I/O, aucun LLM, aucun random. Même snapshot → output JSON byte-équivalent. C'est le cœur de la mental map déterministe et reproductible. Test `synopsis-determinism` verrouille cette propriété.
+Le synopsis builder (`@liby-tools/codegraph buildSynopsis`) est **pur** : aucun I/O, aucun LLM, aucun random. Même snapshot → output JSON byte-équivalent. C'est le cœur de la mental map déterministe et reproductible. Test `synopsis-determinism` verrouille cette propriété.
 
 ## Bootstrap agentique (auto-rédaction de drafts)
 
@@ -282,7 +282,7 @@ npx adr-toolkit bootstrap --mode sdk --max 5
 
 - **Détecteurs additionnels** pour bootstrap (`fsm`, `write-isolation`, `hub`).
 - **Spawn parallèle** des agents bootstrap (actuellement séquentiel).
-- **Publication npm registry** — passer du `npm link` vers `npm install @liby/...`. Setup en place (cf. `.npmrc`, `publishConfig`), publication elle-même attend décision.
+- **Publication npm registry** — passer du `npm link` vers `npm install @liby-tools/...`. Setup en place (cf. `.npmrc`, `publishConfig`), publication elle-même attend décision.
 - **Refactor profond `core/analyzer.ts`** — pattern visiteur / detector registry pour découper le god-file (1188 LOC, fonction `analyze()` à 591 LOC). 2 sections déjà extraites en helpers (Sprint avril 2026), reste 13+ blocs.
 - **Test invariants pour `core/types.ts`** (cf. ADR-006) — vérifier qu'aucun champ documenté dans `GraphSnapshot` n'a été retiré sans deprecation cycle.
 

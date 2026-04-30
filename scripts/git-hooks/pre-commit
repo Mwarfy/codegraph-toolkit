@@ -1,8 +1,8 @@
 #!/bin/bash
-# ─── pre-commit guard (générique @liby/adr-toolkit) ───
+# ─── pre-commit guard (générique @liby-tools/adr-toolkit) ───
 #
 # Refuse les commits qui violent les invariants architecturaux. Installé par
-# `npx @liby/adr-toolkit init` dans `<projet>/scripts/git-hooks/pre-commit`.
+# `npx @liby-tools/adr-toolkit init` dans `<projet>/scripts/git-hooks/pre-commit`.
 # Activé via `git config core.hooksPath scripts/git-hooks` (fait par init).
 #
 # Le projet personnalise via env vars (dans le hook lui-même ou via un
@@ -77,7 +77,7 @@ fi
 # 3. ADR anchors regen — SSOT inversée. Les marqueurs `// ADR-NNN` du code
 #    génèrent ## Anchored in. Si drift, on régen + auto-stage.
 echo -e "\033[0;36m  pre-commit\033[0m ADR anchors..."
-ANCHORS_OUT=$(npx @liby/adr-toolkit regen 2>&1) || {
+ANCHORS_OUT=$(npx @liby-tools/adr-toolkit regen 2>&1) || {
   echo -e "\033[0;31m  pre-commit\033[0m ✗ regen anchors a échoué :"
   echo "$ANCHORS_OUT" | tail -10
   exit 1
@@ -91,7 +91,7 @@ fi
 
 # 4. Brief sync
 echo -e "\033[0;36m  pre-commit\033[0m brief sync..."
-npx @liby/adr-toolkit brief > /dev/null 2>&1 || {
+npx @liby-tools/adr-toolkit brief > /dev/null 2>&1 || {
   echo -e "\033[0;31m  pre-commit\033[0m ✗ brief generation failed"
   exit 1
 }

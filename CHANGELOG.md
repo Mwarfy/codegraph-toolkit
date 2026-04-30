@@ -6,8 +6,8 @@ Initial extraction depuis Sentinel.
 
 ### Added
 
-- `@liby/codegraph` — analyseur statique TS extrait du repo Sentinel. 13 sous-commandes CLI (analyze, synopsis, orphans, exports, taint, dsm, deps, diff, check, reach, arch-check, serve, map). API publique : `analyze`, `buildSynopsis`, `collectAdrMarkers`.
-- `@liby/adr-toolkit` — système de gouvernance ADR config-driven : `regenerateAnchors`, `loadADRs`, `findAdrsForFile`, `checkAsserts` (ts-morph), `generateBrief`, `initProject`. CLI : `init`, `regen`, `linker`, `check-asserts`, `brief`, `install-hooks`.
+- `@liby-tools/codegraph` — analyseur statique TS extrait du repo Sentinel. 13 sous-commandes CLI (analyze, synopsis, orphans, exports, taint, dsm, deps, diff, check, reach, arch-check, serve, map). API publique : `analyze`, `buildSynopsis`, `collectAdrMarkers`.
+- `@liby-tools/adr-toolkit` — système de gouvernance ADR config-driven : `regenerateAnchors`, `loadADRs`, `findAdrsForFile`, `checkAsserts` (ts-morph), `generateBrief`, `initProject`. CLI : `init`, `regen`, `linker`, `check-asserts`, `brief`, `install-hooks`.
 - `briefCustomSections` dans la config — permet d'injecter du markdown projet-spécifique dans le brief sans forker le toolkit. Placements : `after-anchored-files`, `after-invariant-tests`, `after-recent-activity`.
 - Hooks templates portables (pre-commit, post-commit, adr-hook.sh) avec sourcing nvm + JSON output protocol pour Claude Code.
 - `examples/minimal` — projet hello-world consommateur, valide le scénario complet init → premier ADR → brief en <10 min.
@@ -20,7 +20,7 @@ Initial extraction depuis Sentinel.
 ### Decisions
 
 - Repo séparé : `~/Documents/codegraph-toolkit/` (vs sous-dossier d'un projet — survit à la mort du consommateur).
-- Scope npm : `@liby/` (nom partagé Marius+Liby qui survit aux projets).
+- Scope npm : `@liby-tools/` (nom partagé Marius+Liby qui survit aux projets).
 - npm workspaces (vs pnpm/Lerna/Turborepo) — alignement npm partout, pas de complexité ajoutée.
 - ts-morph pour les asserts (vs LSIF/SCIP — overkill).
 - Vitest (vs Jest — alignement Sentinel).

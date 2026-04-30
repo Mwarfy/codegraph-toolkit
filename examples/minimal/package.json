@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Hello-world consommateur de @liby/codegraph + @liby/adr-toolkit",
+  "description": "Hello-world consommateur de @liby-tools/codegraph + @liby-tools/adr-toolkit",
   "scripts": {
     "setup": "adr-toolkit install-hooks",
     "regen": "adr-toolkit regen",
@@ -16,8 +16,8 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@liby/codegraph": "*",
-    "@liby/adr-toolkit": "*"
+    "@liby-tools/codegraph": "*",
+    "@liby-tools/adr-toolkit": "*"
   },
   "devDependencies": {
     "typescript": "^5.6.0"

@@ -14,15 +14,15 @@
 
 ## Contexte global
 
-Sentinel (le projet) consomme `@liby/codegraph` + `@liby/adr-toolkit` +
-`@liby/datalog` + `@liby/salsa` (tous dans `~/Documents/codegraph-toolkit/`)
-via npm-link manuels (`node_modules/@liby/<pkg>` → symlinks).
+Sentinel (le projet) consomme `@liby-tools/codegraph` + `@liby-tools/adr-toolkit` +
+`@liby-tools/datalog` + `@liby-tools/salsa` (tous dans `~/Documents/codegraph-toolkit/`)
+via npm-link manuels (`node_modules/@liby-tools/<pkg>` → symlinks).
 
 Le pipeline d'analyse codegraph tourne aujourd'hui en mode **batch** :
 chaque `analyze()` reparcourt tous les fichiers + run tous les détecteurs.
 14s en full, 7s en `factsOnly` (mode introduit en M8 — skip detectors lourds).
 
-But Phase 1 : passer en **incremental** via @liby/salsa. Sur changement
+But Phase 1 : passer en **incremental** via @liby-tools/salsa. Sur changement
 d'1 fichier, seul ce qui dépend de ce fichier recompute. Cible : <1s par
 commit incrémental.
 
@@ -43,7 +43,7 @@ cb6309d feat(codegraph): incremental mode — batch 3 (typed-calls, cycles, data
 92eabe3 feat(codegraph): incremental mode — batch 1 (event-emit-sites, package-deps, barrels) [Sprint 3]
 ca6d610 feat(codegraph): incremental mode — env-usage + oauth-scope-literals via Salsa (Sprint 2)
 84c8287 fix(salsa): add Database.resetState() — preserve registry across reset
-5d90920 feat(salsa): @liby/salsa runtime — Salsa-style incremental computation (Sprint 1)
+5d90920 feat(salsa): @liby-tools/salsa runtime — Salsa-style incremental computation (Sprint 1)
 ```
 
 ### Commits livrés sur Sentinel
@@ -100,7 +100,7 @@ Bottlenecks restants pour atteindre <50ms (Phase 3 hypothétique) :
 ### Ce qui est NEUF dans Sprint 8 (Phase 2)
 
 **Delta saves** (commit `77d2053`) :
-  - `@liby/salsa` Database track `dirtyKeys: Set<string>` modifiées
+  - `@liby-tools/salsa` Database track `dirtyKeys: Set<string>` modifiées
     depuis le dernier `markPersisted()`.
   - `serializeDirty()` retourne juste les cells dirty.
   - `applyDelta(delta)` merge un delta sur l'état existant.
@@ -115,7 +115,7 @@ Bottlenecks restants pour atteindre <50ms (Phase 3 hypothétique) :
 ### Ce qui est NEUF dans Sprint 7
 
 **Persistence disque DB Salsa** (commit `e65edee`) :
-  - `@liby/salsa` : `Database.serializeState()` / `loadState()`. Map/Set
+  - `@liby-tools/salsa` : `Database.serializeState()` / `loadState()`. Map/Set
     marqués `__type` pour round-trip JSON. `serializeValue` /
     `deserializeValue` exportés.
   - `incremental/persistence.ts` : `loadPersistedCache()` /
@@ -202,12 +202,12 @@ pas un wrap.
 
 ### Ce qui est NEUF dans Sprint 2
 
-**@liby/salsa** :
+**@liby-tools/salsa** :
 - `Database.resetState()` — clear cells + revision + stats en gardant le
   registry. Indispensable pour les tests qui utilisent des queries
   module-level (sinon `reset()` casse le wake-up).
 
-**@liby/codegraph** :
+**@liby-tools/codegraph** :
 - `src/incremental/database.ts` — sharedDb singleton process-wide
 - `src/incremental/queries.ts` — `fileContent` (input), `projectFiles`
   (input), `setIncrementalContext()` pour passer le ts-morph Project
@@ -324,27 +324,27 @@ oauth-scope-literals — tous deux ont peu de deps, output stable).
 
 Créer `packages/codegraph/src/incremental/database.ts` :
 ```ts
-import { Database } from '@liby/salsa'
+import { Database } from '@liby-tools/salsa'
 export const sharedDb = new Database()  // ou : passé en paramètre à analyze()
 ```
 
-Ajouter `@liby/salsa` aux deps de `@liby/codegraph` :
+Ajouter `@liby-tools/salsa` aux deps de `@liby-tools/codegraph` :
 ```json
 "dependencies": {
-  "@liby/salsa": "workspace:*",
+  "@liby-tools/salsa": "workspace:*",
   ...
 }
 ```
 
-Lancer `npm install --workspace=@liby/codegraph`. Vérifier que le symlink
-existe : `ls codegraph-toolkit/packages/codegraph/node_modules/@liby/salsa`.
+Lancer `npm install --workspace=@liby-tools/codegraph`. Vérifier que le symlink
+existe : `ls codegraph-toolkit/packages/codegraph/node_modules/@liby-tools/salsa`.
 
 ### Étape 2 — `parseFile` query
 
 Créer `packages/codegraph/src/incremental/queries.ts` :
 
 ```ts
-import { input, derived } from '@liby/salsa'
+import { input, derived } from '@liby-tools/salsa'
 import { Project, type SourceFile } from 'ts-morph'
 import * as fs from 'node:fs'
 import { sharedDb as db } from './database.js'

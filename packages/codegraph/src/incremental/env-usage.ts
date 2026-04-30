@@ -15,7 +15,7 @@
  * fichiers. Cache hit per-file maximal.
  */
 
-import { derived } from '@liby/salsa'
+import { derived } from '@liby-tools/salsa'
 import type { EnvVarUsage, EnvVarReader } from '../core/types.js'
 import {
   scanEnvReadersInSourceFile,

@@ -1,5 +1,5 @@
 {
-  "name": "@liby/salsa",
+  "name": "@liby-tools/salsa",
   "version": "0.1.0",
   "description": "Salsa-style incremental computation runtime in pure TypeScript",
   "type": "module",

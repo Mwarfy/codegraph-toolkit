@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * @liby/codegraph-mcp — MCP server exposing codegraph snapshot queries.
+ * @liby-tools/codegraph-mcp — MCP server exposing codegraph snapshot queries.
  *
  * 5 outils architecturaux complémentaires de LSP MCP :
  *   - codegraph_context        : bloc de contexte d'un fichier (push hook → pull on-demand)

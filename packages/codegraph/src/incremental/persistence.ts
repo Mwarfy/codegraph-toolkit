@@ -34,7 +34,7 @@ import type {
   Database,
   SerializedState,
   SerializedDelta,
-} from '@liby/salsa'
+} from '@liby-tools/salsa'
 
 const PERSIST_VERSION = 1
 const MAX_DELTAS = 10

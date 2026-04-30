@@ -11,7 +11,7 @@
  * fileContent → modif d'1 fichier ne re-scan que ce fichier.
  */
 
-import { derived } from '@liby/salsa'
+import { derived } from '@liby-tools/salsa'
 import { scanImportsInSourceFile } from '../detectors/ts-imports.js'
 import type { DetectedLink } from '../core/types.js'
 import { sharedDb as db } from './database.js'

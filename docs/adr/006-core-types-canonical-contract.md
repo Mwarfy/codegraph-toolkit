@@ -67,7 +67,7 @@ incrémental en bug de prod silencieux. Pas reproduisible.
 
 ## Anchored in
 
-<!-- AUTO-GÉNÉRÉ depuis les marqueurs ADR-NNN du code source. Voir @liby/adr-toolkit. NE PAS éditer à la main. -->
+<!-- AUTO-GÉNÉRÉ depuis les marqueurs ADR-NNN du code source. Voir @liby-tools/adr-toolkit. NE PAS éditer à la main. -->
 
 - `packages/codegraph/src/core/types.ts`
 

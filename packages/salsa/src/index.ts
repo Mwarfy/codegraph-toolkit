@@ -1,12 +1,12 @@
 /**
- * @liby/salsa — public API.
+ * @liby-tools/salsa — public API.
  *
  * Salsa-style incremental computation in pure TypeScript. Pas de macro, pas
  * de codegen — juste deux fonctions : `input(db, id)` et `derived(db, id, fn)`.
  *
  * Quick start :
  *
- *   import { Database, input, derived } from '@liby/salsa'
+ *   import { Database, input, derived } from '@liby-tools/salsa'
  *
  *   const db = new Database()
  *   const fileContent = input<string, string>(db, 'fileContent')

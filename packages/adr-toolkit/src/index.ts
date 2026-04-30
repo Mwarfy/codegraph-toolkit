@@ -1,4 +1,4 @@
-// @liby/adr-toolkit — public API surface
+// @liby-tools/adr-toolkit — public API surface
 //
 // Toutes les opérations de gouvernance ADR (regen anchors, linker file→ADRs,
 // ts-morph asserts, brief generator, init projet) exposées comme fonctions

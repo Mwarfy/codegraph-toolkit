@@ -13,7 +13,7 @@ asserts:
 
 ## Rule
 
-> Le synopsis builder (`@liby/codegraph buildSynopsis`) ne fait aucun I/O,
+> Le synopsis builder (`@liby-tools/codegraph buildSynopsis`) ne fait aucun I/O,
 > n'invoque aucun LLM, n'utilise aucune source non-déterministe. Même
 > snapshot d'entrée → même output JSON byte-équivalent.
 
@@ -38,7 +38,7 @@ sa garantie de reproductibilité.
 
 ## Anchored in
 
-<!-- AUTO-GÉNÉRÉ depuis les marqueurs ADR-NNN du code source. Voir @liby/adr-toolkit. NE PAS éditer à la main. -->
+<!-- AUTO-GÉNÉRÉ depuis les marqueurs ADR-NNN du code source. Voir @liby-tools/adr-toolkit. NE PAS éditer à la main. -->
 
 - `packages/codegraph/src/synopsis/builder.ts` — synopsis builder pur, zéro LLM, déterministe
 - `packages/codegraph/src/synopsis/tensions.ts` — synopsis builder pur, zéro LLM, déterministe — tensions inclus

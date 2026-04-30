@@ -11,7 +11,7 @@
  * qui se cache, et c'est ce qui apporte le speed-up incremental.
  */
 
-import { derived } from '@liby/salsa'
+import { derived } from '@liby-tools/salsa'
 import {
   collectPackageRefsInSourceFile,
   buildPackageDepsIssues,

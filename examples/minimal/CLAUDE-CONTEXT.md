@@ -1,4 +1,4 @@
-<!-- AUTO-GÉNÉRÉ par @liby/adr-toolkit — NE PAS éditer à la main -->
+<!-- AUTO-GÉNÉRÉ par @liby-tools/adr-toolkit — NE PAS éditer à la main -->
 
 # Boot Brief — minimal
 
@@ -21,7 +21,7 @@
 
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
-- (snapshot codegraph absent — `npx @liby/codegraph analyze`)
+- (snapshot codegraph absent — `npx @liby-tools/codegraph analyze`)
 
 ## Activité récente (14 derniers jours)
 
@@ -34,6 +34,6 @@ c4adce8 init: workspaces + tsconfig + skeletons
 ## Comment contribuer à ce brief
 
 - Une nouvelle décision architecturale ? Crée un ADR via le template :
-  `@liby/adr-toolkit/templates/_TEMPLATE.md`
+  `@liby-tools/adr-toolkit/templates/_TEMPLATE.md`
 - Le brief sera régénéré au prochain commit.
-- Pour forcer une régen : `npx @liby/adr-toolkit brief`
+- Pour forcer une régen : `npx @liby-tools/adr-toolkit brief`

@@ -59,7 +59,7 @@ critique, pas une lourdeur.
 
 ## Anchored in
 
-<!-- AUTO-GÉNÉRÉ depuis les marqueurs ADR-NNN du code source. Voir @liby/adr-toolkit. NE PAS éditer à la main. -->
+<!-- AUTO-GÉNÉRÉ depuis les marqueurs ADR-NNN du code source. Voir @liby-tools/adr-toolkit. NE PAS éditer à la main. -->
 
 - `packages/adr-toolkit/src/bootstrap-writer.ts` — 3 rôles séparés (Status: Proposed only, jamais Accepted)
 - `packages/adr-toolkit/src/bootstrap.ts` — 3 rôles séparés (codegraph détecte / LLM rédige / humain valide)

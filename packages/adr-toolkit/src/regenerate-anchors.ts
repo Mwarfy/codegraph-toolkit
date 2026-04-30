@@ -29,7 +29,7 @@ const ADR_NUM = /ADR-(\d{3})/g
 
 // Pas de backticks dans le commentaire HTML — ils confondent le regex
 // d'extraction des paths du linker (qui cherche path.ts entre backticks).
-const AUTOGEN_MARKER = '<!-- AUTO-GÉNÉRÉ depuis les marqueurs ADR-NNN du code source. Voir @liby/adr-toolkit. NE PAS éditer à la main. -->'
+const AUTOGEN_MARKER = '<!-- AUTO-GÉNÉRÉ depuis les marqueurs ADR-NNN du code source. Voir @liby-tools/adr-toolkit. NE PAS éditer à la main. -->'
 
 async function collectMarkers(config: AdrToolkitConfig): Promise<Marker[]> {
   const markers: Marker[] = []

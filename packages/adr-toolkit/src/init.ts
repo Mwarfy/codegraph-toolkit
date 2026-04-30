@@ -1,5 +1,5 @@
 /**
- * `init` — scaffold un projet pour utiliser @liby/adr-toolkit (+ codegraph).
+ * `init` — scaffold un projet pour utiliser @liby-tools/adr-toolkit (+ codegraph).
  *
  * Idempotent : ne réécrit pas un fichier existant.
  *

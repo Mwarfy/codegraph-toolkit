@@ -14,8 +14,8 @@ asserts:
 ## Rule
 
 > Aucun path / nom de projet consommateur (Sentinel, Morovar, etc.) ne
-> doit apparaître dans le code des packages `@liby/codegraph` ou
-> `@liby/adr-toolkit`. Tout vient de `.codegraph-toolkit.json` ou
+> doit apparaître dans le code des packages `@liby-tools/codegraph` ou
+> `@liby-tools/adr-toolkit`. Tout vient de `.codegraph-toolkit.json` ou
 > `codegraph.config.json` chargés depuis le rootDir du consommateur.
 
 ## Why
@@ -45,7 +45,7 @@ l'install.
 
 ## Anchored in
 
-<!-- AUTO-GÉNÉRÉ depuis les marqueurs ADR-NNN du code source. Voir @liby/adr-toolkit. NE PAS éditer à la main. -->
+<!-- AUTO-GÉNÉRÉ depuis les marqueurs ADR-NNN du code source. Voir @liby-tools/adr-toolkit. NE PAS éditer à la main. -->
 
 - `packages/adr-toolkit/src/config.ts` — config-driven obligatoire, pas de hardcoded projet
 

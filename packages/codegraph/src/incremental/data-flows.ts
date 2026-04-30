@@ -10,7 +10,7 @@
  *     avec Salsa) puis appelle buildDataFlowsFromBundles() pure.
  */
 
-import { derived, input } from '@liby/salsa'
+import { derived, input } from '@liby-tools/salsa'
 import {
   extractDataFlowsFileBundle,
   buildDataFlowsFromBundles,

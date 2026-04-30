@@ -17,7 +17,7 @@
  * agrégat re-tourne mais bundles per-file restent en cache.
  */
 
-import { derived, input } from '@liby/salsa'
+import { derived, input } from '@liby-tools/salsa'
 import {
   extractStateMachineFileBundle,
   buildStateMachinesFromBundles,

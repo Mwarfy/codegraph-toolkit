@@ -14,7 +14,7 @@
  * scan) qui restent cached si fileContent ne change pas.
  */
 
-import { derived, input } from '@liby/salsa'
+import { derived, input } from '@liby-tools/salsa'
 import {
   scanGateCallsInSourceFile,
   compileGatePatterns,

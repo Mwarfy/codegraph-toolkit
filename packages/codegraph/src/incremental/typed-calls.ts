@@ -3,7 +3,7 @@
  * agrégé via aggregateTypedCalls qui filtre par knownExports global.
  */
 
-import { derived } from '@liby/salsa'
+import { derived } from '@liby-tools/salsa'
 import {
   extractTypedCallsFileBundle,
   aggregateTypedCalls,

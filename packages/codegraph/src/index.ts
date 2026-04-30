@@ -1,4 +1,4 @@
-// @liby/codegraph — public API surface
+// @liby-tools/codegraph — public API surface
 //
 // Re-exports the analyzer + synopsis builder + ADR markers helper.
 // Internal modules (detectors/, extractors/, graph/, metrics/, etc.) restent

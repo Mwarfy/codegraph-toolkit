@@ -12,7 +12,7 @@ Les 2 packages tournent en parallèle via `tsc -b` (project references). Watch m
 
 ```
 packages/codegraph/      → analyseur statique pur, pas de dépendance projet
-packages/adr-toolkit/    → gouvernance ADR, dépend de @liby/codegraph
+packages/adr-toolkit/    → gouvernance ADR, dépend de @liby-tools/codegraph
 examples/minimal/        → consommateur de validation (workspace)
 ```
 
@@ -20,13 +20,13 @@ examples/minimal/        → consommateur de validation (workspace)
 
 ### 1. Zéro LLM dans le synopsis builder
 
-`@liby/codegraph buildSynopsis` est **pur**. Aucun I/O, aucun LLM, aucun random. Même snapshot → output byte-identique. Test `synopsis-determinism` verrouille cette propriété.
+`@liby-tools/codegraph buildSynopsis` est **pur**. Aucun I/O, aucun LLM, aucun random. Même snapshot → output byte-identique. Test `synopsis-determinism` verrouille cette propriété.
 
 Si tu trouves un raccourci qui demande de l'I/O dans le builder, c'est probablement un bug de design — refactor en passant l'info par `options`.
 
 ### 2. Config-driven, pas hardcoded
 
-`@liby/adr-toolkit` lit `.codegraph-toolkit.json` du projet consommateur. Aucun path Sentinel-spécifique ou Morovar-spécifique ne doit apparaître dans le code du toolkit.
+`@liby-tools/adr-toolkit` lit `.codegraph-toolkit.json` du projet consommateur. Aucun path Sentinel-spécifique ou Morovar-spécifique ne doit apparaître dans le code du toolkit.
 
 ### 3. Tests sur fixtures synthétiques
 
@@ -74,7 +74,7 @@ Avant de bumper une version :
 ## Ajouter un consommateur
 
 1. Le projet doit avoir un `tsconfig.json` à la racine (ou path configurable)
-2. `cd <projet> && npm link @liby/codegraph @liby/adr-toolkit`
+2. `cd <projet> && npm link @liby-tools/codegraph @liby-tools/adr-toolkit`
 3. `npx adr-toolkit init` (idempotent — skip ce qui existe déjà)
 4. Customiser `.codegraph-toolkit.json` si besoin (`srcDirs`, `briefCustomSections`)
 5. Premier ADR avec `_TEMPLATE.md` + marqueur dans le code

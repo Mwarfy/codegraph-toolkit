@@ -5,7 +5,7 @@
  * fileContent.
  */
 
-import { derived } from '@liby/salsa'
+import { derived } from '@liby-tools/salsa'
 import {
   extractSymbolRefsFileBundle,
   type SymbolRefsFileBundle,

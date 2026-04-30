@@ -9,7 +9,7 @@
  * qui drivent ADR-017 (event names typés).
  */
 
-import { derived } from '@liby/salsa'
+import { derived } from '@liby-tools/salsa'
 import {
   scanEmitSitesInSourceFile,
   DEFAULT_EMIT_NAMES,

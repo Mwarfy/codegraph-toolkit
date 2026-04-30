@@ -14,7 +14,7 @@
  * granulaires pour cache hit fin.
  */
 
-import { derived, input } from '@liby/salsa'
+import { derived, input } from '@liby-tools/salsa'
 import { computeModuleMetrics } from '../metrics/module-metrics.js'
 import { computeComponentMetrics } from '../metrics/component-metrics.js'
 import type { GraphNode, GraphEdge, ModuleMetrics, ComponentMetrics } from '../core/types.js'

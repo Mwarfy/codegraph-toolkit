@@ -1,4 +1,4 @@
-# @liby/codegraph-mcp
+# @liby-tools/codegraph-mcp
 
 MCP server exposing codegraph snapshot queries — architectural intelligence for Claude Code.
 
@@ -33,9 +33,9 @@ consumed by hooks (push). With it, queries become callable on-demand
 ### Install
 
 ```bash
-npm install -g @liby/codegraph-mcp
+npm install -g @liby-tools/codegraph-mcp
 # OR if installed via this monorepo:
-npm link --workspace=@liby/codegraph-mcp
+npm link --workspace=@liby-tools/codegraph-mcp
 ```
 
 ### Wire in Claude Code
