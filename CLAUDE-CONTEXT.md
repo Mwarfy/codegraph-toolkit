@@ -35,20 +35,20 @@
 
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
-- `packages/codegraph/src/core/types.ts` (in: 48)
+- `packages/codegraph/src/core/types.ts` (in: 50)
 - `packages/adr-toolkit/src/config.ts` (in: 9) · gov by ADR-002
 - `packages/codegraph/src/diff/types.ts` (in: 8)
 - `packages/datalog/src/types.ts` (in: 8)
 - `packages/codegraph/src/check/types.ts` (in: 7)
-- `packages/salsa/dist/index.d.ts` (in: 4)
-- `packages/salsa/src/types.ts` (in: 4)
-- `packages/adr-toolkit/src/bootstrap.ts` (in: 3) · gov by ADR-004
+- `packages/salsa/dist/index.d.ts` (in: 7)
+- `packages/codegraph/src/incremental/database.ts` (in: 6)
+- `packages/codegraph/src/incremental/queries.ts` (in: 6)
 
 ## ⚠ ADR anchor suggestions
 
 Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `// ADR-NNN`** dans le code. Intentionnel ? Sinon poser un marqueur ou créer un ADR :
 
-- **48** `packages/codegraph/src/core/types.ts` _(top-hub)_
+- **50** `packages/codegraph/src/core/types.ts` _(top-hub)_
 
 ## Tensions actives — invitations à explorer
 
@@ -91,6 +91,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+92eabe3 feat(codegraph): incremental mode — batch 1 (event-emit-sites, package-deps, barrels) [Sprint 3]
 0c36ea1 docs(phase-1): refresh boot brief post-Sprint 2
 ca6d610 feat(codegraph): incremental mode — env-usage + oauth-scope-literals via Salsa (Sprint 2)
 84c8287 fix(salsa): add Database.resetState() — preserve registry across reset
@@ -102,7 +103,6 @@ e75b92b feat(codegraph): factsOnly mode + facts --regen flag (M8)
 216b48f fix(datalog,codegraph): multi-file ref-check + auto-regen facts in analyze (M3 prep)
 b4b7679 feat(datalog): @liby/datalog package — pure-TS interpreter for ADR invariants (M2)
 690865c feat(codegraph): event-emit-sites extractor + Datalog facts export (M1)
-5592ff8 feat(package-deps): downgrade declared-unused to runtime-asset on path refs
 ```
 
 ## Comment contribuer à ce brief

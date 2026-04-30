@@ -42,6 +42,20 @@ import { allOauthScopeLiterals as incAllOauthScopeLiterals } from '../incrementa
 import { allEventEmitSites as incAllEventEmitSites } from '../incremental/event-emit-sites.js'
 import { allPackageDeps as incAllPackageDeps } from '../incremental/package-deps.js'
 import { allBarrels as incAllBarrels } from '../incremental/barrels.js'
+import { allComplexity as incAllComplexity } from '../incremental/complexity.js'
+import {
+  allStateMachines as incAllStateMachines,
+  sqlDefaultsInput as incSqlDefaults,
+} from '../incremental/state-machines.js'
+import {
+  scanSqlColumnDefaultsForIncremental,
+  discoverSqlFilesForIncremental,
+  type WriteSignal as StateMachineWriteSignal,
+} from '../extractors/state-machines.js'
+import {
+  allTruthPoints as incAllTruthPoints,
+  graphEdgesInput as incGraphEdges,
+} from '../incremental/truth-points.js'
 import { packageManifestsInput as incPackageManifests } from '../incremental/queries.js'
 import {
   discoverManifests as discoverPackageManifests,
@@ -255,6 +269,22 @@ export async function analyze(
     } else {
       incPackageManifests.set('all', [])
     }
+
+    // SQL defaults pour state-machines : async file reads ici.
+    // Set en input Salsa pour que allStateMachines puisse les inclure
+    // dans son agrégation sync.
+    const sqlDefaultsBuffer: StateMachineWriteSignal[] = []
+    try {
+      const sqlGlobs = ['**/*.sql']
+      const sqlFiles = await discoverSqlFilesForIncremental(config.rootDir, sqlGlobs)
+      for (const sqlFile of sqlFiles) {
+        try {
+          const content = await fs.readFile(path.join(config.rootDir, sqlFile), 'utf-8')
+          scanSqlColumnDefaultsForIncremental(content, sqlFile, sqlDefaultsBuffer)
+        } catch {}
+      }
+    } catch {}
+    incSqlDefaults.set('all', sqlDefaultsBuffer)
   }
 
   if (!factsOnly) {
@@ -277,7 +307,9 @@ export async function analyze(
 
     const tComplexity = performance.now()
     try {
-      const complexityInfos = await analyzeComplexity(config.rootDir, files, tsConfigPath, sharedProject)
+      const complexityInfos = incremental
+        ? incAllComplexity.get('all')
+        : await analyzeComplexity(config.rootDir, files, tsConfigPath, sharedProject)
       for (const info of complexityInfos) {
         graph.setNodeMeta(info.file, {
           complexity: {
@@ -381,19 +413,27 @@ export async function analyze(
   if (truthPointsEnabled) {
     try {
       const tpOptions = config.detectorOptions?.['truthPoints'] ?? {}
-      truthPoints = await analyzeTruthPoints(
-        config.rootDir,
-        files,
-        sharedProject,
-        graph.getAllEdges(),
-        {
-          conceptAliases: tpOptions['conceptAliases'] as Record<string, string[]> | undefined,
-          redisVarNames: tpOptions['redisVarNames'] as string[] | undefined,
-          memoryCacheSuffixes: tpOptions['memoryCacheSuffixes'] as string[] | undefined,
-          memoryCacheCtors: tpOptions['memoryCacheCtors'] as string[] | undefined,
-          exposedPrefixes: tpOptions['exposedPrefixes'] as string[] | undefined,
-        },
-      )
+      if (incremental) {
+        // Salsa path : feed graph edges + delegate to allTruthPoints.
+        // conceptAliases / redisVarNames / etc. custom non supportés
+        // (defaults suffisent pour Sentinel).
+        incGraphEdges.set('all', graph.getAllEdges())
+        truthPoints = incAllTruthPoints.get('all')
+      } else {
+        truthPoints = await analyzeTruthPoints(
+          config.rootDir,
+          files,
+          sharedProject,
+          graph.getAllEdges(),
+          {
+            conceptAliases: tpOptions['conceptAliases'] as Record<string, string[]> | undefined,
+            redisVarNames: tpOptions['redisVarNames'] as string[] | undefined,
+            memoryCacheSuffixes: tpOptions['memoryCacheSuffixes'] as string[] | undefined,
+            memoryCacheCtors: tpOptions['memoryCacheCtors'] as string[] | undefined,
+            exposedPrefixes: tpOptions['exposedPrefixes'] as string[] | undefined,
+          },
+        )
+      }
       timing.detectors['truth-points'] = performance.now() - tTruthPoints
     } catch (err) {
       timing.detectors['truth-points'] = performance.now() - tTruthPoints
@@ -452,15 +492,22 @@ export async function analyze(
   if (stateMachinesEnabled) {
     try {
       const smOptions = config.detectorOptions?.['stateMachines'] ?? {}
-      stateMachines = await analyzeStateMachines(
-        config.rootDir,
-        files,
-        sharedProject,
-        {
-          suffixes: smOptions['suffixes'] as string[] | undefined,
-          listenFnNames: smOptions['listenFnNames'] as string[] | undefined,
-        },
-      )
+      if (incremental) {
+        // Salsa path : bundle per-file cached + agrégat global.
+        // suffixes/listenFnNames custom non supportés (defaults
+        // suffisent pour Sentinel).
+        stateMachines = incAllStateMachines.get('all')
+      } else {
+        stateMachines = await analyzeStateMachines(
+          config.rootDir,
+          files,
+          sharedProject,
+          {
+            suffixes: smOptions['suffixes'] as string[] | undefined,
+            listenFnNames: smOptions['listenFnNames'] as string[] | undefined,
+          },
+        )
+      }
       timing.detectors['state-machines'] = performance.now() - tStateMachines
     } catch (err) {
       timing.detectors['state-machines'] = performance.now() - tStateMachines

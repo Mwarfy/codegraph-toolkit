@@ -94,7 +94,7 @@ const SQL_EXCLUDE = new Set([
 
 // ─── Raw signals (collectés en pass 1) ──────────────────────────────────────
 
-interface SqlSignal {
+export interface SqlSignal {
   file: string
   table: string
   operation: 'read' | 'write'
@@ -102,7 +102,7 @@ interface SqlSignal {
   symbol: string
 }
 
-interface RedisSignal {
+export interface RedisSignal {
   file: string
   method: string
   key: string
@@ -111,18 +111,29 @@ interface RedisSignal {
   symbol: string
 }
 
-interface MemorySignal {
+export interface MemorySignal {
   file: string
   varName: string
   ctor: string
   line: number
 }
 
-interface ExportedFnSignal {
+export interface ExportedFnSignal {
   file: string
   name: string
   prefix: string  // le préfixe matché ('get', 'find', ...)
   line: number
+}
+
+/**
+ * Bundle de tous les signaux qu'on peut tirer d'UN SourceFile sans
+ * cross-file dependency. Réutilisé par la version Salsa.
+ */
+export interface TruthPointsFileBundle {
+  sql: SqlSignal[]
+  redis: RedisSignal[]
+  memory: MemorySignal[]
+  exportedFns: ExportedFnSignal[]
 }
 
 // ─── Public API ─────────────────────────────────────────────────────────────
@@ -141,7 +152,7 @@ export async function analyzeTruthPoints(
   const aliases = options.conceptAliases ?? {}
   const fileSet = new Set(files)
 
-  // ─── Pass 1 : collect signals ──────────────────────────────────────
+  // ─── Pass 1 : collect signals (per-file, via helper réutilisable) ──
 
   const sqlSignals: SqlSignal[] = []
   const redisSignals: RedisSignal[] = []
@@ -151,40 +162,82 @@ export async function analyzeTruthPoints(
   for (const sf of project.getSourceFiles()) {
     const relPath = relativize(sf.getFilePath(), rootDir)
     if (!relPath || !fileSet.has(relPath)) continue
-
-    const content = sf.getFullText()
-
-    // SQL — scan content regex-based (rapide, couvre template + string literals).
-    collectSqlSignals(content, relPath, sf, sqlSignals)
-
-    // ORM — gated sur import : n'active que si le fichier importe un ORM
-    // connu. Sinon risque fort de faux positifs (`foo.insert(bar)` est très
-    // commun sur des arrays, sets, crypto, etc.).
-    const orm = detectOrmUsage(content)
-    if (orm.drizzle || orm.prisma) {
-      collectOrmSignals(sf, relPath, orm, sqlSignals)
-    }
-
-    // Redis / memory / exports — AST-based.
-    collectAstSignals(
+    const bundle = extractTruthPointsFileBundle(
       sf,
       relPath,
       redisVars,
       memSuffixes,
       memCtors,
       exposedPrefixes,
-      redisSignals,
-      memorySignals,
-      exportedFns,
     )
+    sqlSignals.push(...bundle.sql)
+    redisSignals.push(...bundle.redis)
+    memorySignals.push(...bundle.memory)
+    exportedFns.push(...bundle.exportedFns)
   }
 
-  // ─── Pass 2 : build truth points ───────────────────────────────────
+  return buildTruthPointsFromSignals(
+    files, sqlSignals, redisSignals, memorySignals, exportedFns,
+    allEdges, fileSet, aliases, memSuffixes,
+  )
+}
 
-  // MCP tool names : fichiers matchant `mcp/tools/*.ts` qui exportent un
-  // nom `TOOL_*` ou une fonction handle*. On récupère via les exports
-  // `get`/`list`-style dans ces fichiers — imparfait mais cohérent avec v1.
+/**
+ * Helper réutilisable : tire tous les signaux qu'on peut extraire d'UN
+ * SourceFile (sql, redis, memory, exportedFns) sans cross-file
+ * dependency. Réutilisé par la version Salsa pour cacher tout ça
+ * par-fichier.
+ */
+export function extractTruthPointsFileBundle(
+  sf: SourceFile,
+  relPath: string,
+  redisVars: ReadonlySet<string>,
+  memSuffixes: string[],
+  memCtors: ReadonlySet<string>,
+  exposedPrefixes: string[],
+): TruthPointsFileBundle {
+  const sql: SqlSignal[] = []
+  const redis: RedisSignal[] = []
+  const memory: MemorySignal[] = []
+  const exportedFns: ExportedFnSignal[] = []
 
+  const content = sf.getFullText()
+
+  collectSqlSignals(content, relPath, sf, sql)
+
+  const orm = detectOrmUsage(content)
+  if (orm.drizzle || orm.prisma) {
+    collectOrmSignals(sf, relPath, orm, sql)
+  }
+
+  collectAstSignals(
+    sf, relPath,
+    redisVars as Set<string>,
+    memSuffixes,
+    memCtors as Set<string>,
+    exposedPrefixes,
+    redis, memory, exportedFns,
+  )
+
+  return { sql, redis, memory, exportedFns }
+}
+
+/**
+ * Pure-logic builder : à partir des signaux agrégés + edges du graph,
+ * construit les `TruthPoint[]`. Réutilisé côté Salsa après agrégation
+ * des bundles per-file.
+ */
+export function buildTruthPointsFromSignals(
+  files: string[],
+  sqlSignals: SqlSignal[],
+  redisSignals: RedisSignal[],
+  memorySignals: MemorySignal[],
+  exportedFns: ExportedFnSignal[],
+  allEdges: GraphEdge[],
+  fileSet: ReadonlySet<string>,
+  aliases: Record<string, string[]>,
+  memSuffixes: string[],
+): TruthPoint[] {
   const mcpToolFiles = new Set(files.filter((f) => /\/mcp\/tools\//.test(f)))
 
   // Routes HTTP GET : on les tire des edges `route` existants (label = path).

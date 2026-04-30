@@ -143,7 +143,15 @@ function extractName(node: Node): string {
   return '<anonymous>'
 }
 
-function analyzeSourceFile(sf: SourceFile): FileComplexityInfo | null {
+/**
+ * Helper réutilisable : calcule les stats de complexité pour UN
+ * SourceFile. Le champ `file` est laissé vide — le caller le patche.
+ * Retourne null si aucune fonction n'est détectée.
+ *
+ * Exporté pour la version Salsa (incremental/complexity.ts) qui
+ * cache le résultat per-file via fileContent.
+ */
+export function analyzeComplexityInSourceFile(sf: SourceFile): FileComplexityInfo | null {
   const functions: FunctionComplexity[] = []
 
   // On collecte les fonctions via descendants. Les fonctions imbriquées sont
@@ -233,7 +241,7 @@ export async function analyzeComplexity(
     if (!files.includes(relPath)) continue
 
     try {
-      const info = analyzeSourceFile(sf)
+      const info = analyzeComplexityInSourceFile(sf)
       if (info) {
         info.file = relPath
         results.push(info)

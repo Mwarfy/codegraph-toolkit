@@ -54,14 +54,14 @@ export interface StateMachinesOptions {
   sqlGlobs?: string[] | null
 }
 
-interface StateConcept {
+export interface StateConcept {
   name: string
   states: string[]
   file: string
   line: number
 }
 
-interface WriteSignal {
+export interface WriteSignal {
   value: string
   field?: string
   file: string
@@ -69,10 +69,25 @@ interface WriteSignal {
   container: string  // "file:function"
 }
 
-interface FnRange {
+export interface FnRange {
   start: number
   end: number
   name: string
+}
+
+/**
+ * Bundle de tout ce qu'on peut extraire d'UN SourceFile sans toucher à
+ * d'autres fichiers. Réutilisé par la version Salsa pour cacher tout
+ * le travail AST en une seule query par-fichier.
+ */
+export interface StateMachineFileBundle {
+  concepts: StateConcept[]
+  fnRanges: FnRange[]
+  /** Listeners détectés : container ("file:fnName") → event name. */
+  listenerTriggers: { container: string; eventName: string }[]
+  /** Routes détectées : container → liste de "<METHOD> <path>". */
+  routeTriggers: { container: string; routes: string[] }[]
+  writes: WriteSignal[]
 }
 
 interface TriggerContext {
@@ -94,34 +109,45 @@ export async function analyzeStateMachines(
   const listenFns = new Set(options.listenFnNames ?? ['listen', 'on'])
   const fileSet = new Set(files)
 
-  // ─── Pass 1 : concepts (type alias + enums avec suffixe) ────────────
+  // ─── Per-file extraction (Salsa-isable) ─────────────────────────────
+  // Tous les artefacts qu'on peut tirer d'UN SourceFile sans cross-file
+  // dependency : concepts, fn ranges, listener/route triggers locaux,
+  // writes. Cette structure est calculable en parallèle et cachable
+  // par-fichier (cf. incremental/state-machines.ts).
 
-  const concepts: StateConcept[] = []
-  const conceptNames = new Set<string>()
-
+  const fileBundles = new Map<string, StateMachineFileBundle>()
   for (const sf of project.getSourceFiles()) {
     const relPath = relativize(sf.getFilePath(), rootDir)
     if (!relPath || !fileSet.has(relPath)) continue
+    fileBundles.set(relPath, extractStateMachineFileBundle(sf, relPath, listenFns, suffixes))
+  }
 
-    for (const ta of sf.getTypeAliases()) {
-      const name = ta.getName()
-      if (!hasSuffix(name, suffixes)) continue
-      if (conceptNames.has(name)) continue  // dédup : re-export ou double déclaration.
-      const states = extractUnionStates(ta)
-      if (states.length === 0) continue
-      conceptNames.add(name)
-      concepts.push({ name, states, file: relPath, line: ta.getStartLineNumber() })
-    }
+  // ─── Cross-file aggregation (concepts + triggers + writes) ──────────
 
-    for (const en of sf.getEnums()) {
-      const name = en.getName()
-      if (!hasSuffix(name, suffixes)) continue
-      if (conceptNames.has(name)) continue
-      const states = extractEnumStates(en)
-      if (states.length === 0) continue
-      conceptNames.add(name)
-      concepts.push({ name, states, file: relPath, line: en.getStartLineNumber() })
+  const concepts: StateConcept[] = []
+  const conceptNames = new Set<string>()
+  const triggerCtx: TriggerContext = {
+    listenerTrigger: new Map(),
+    routeTriggers: new Map(),
+  }
+  const writes: WriteSignal[] = []
+
+  for (const [relPath, bundle] of fileBundles) {
+    void relPath
+    for (const c of bundle.concepts) {
+      if (conceptNames.has(c.name)) continue
+      conceptNames.add(c.name)
+      concepts.push(c)
     }
+    for (const lt of bundle.listenerTriggers) {
+      triggerCtx.listenerTrigger.set(lt.container, lt.eventName)
+    }
+    for (const rt of bundle.routeTriggers) {
+      const key = rt.container
+      if (!triggerCtx.routeTriggers.has(key)) triggerCtx.routeTriggers.set(key, [])
+      triggerCtx.routeTriggers.get(key)!.push(...rt.routes)
+    }
+    writes.push(...bundle.writes)
   }
 
   if (concepts.length === 0) return []
@@ -132,40 +158,6 @@ export async function analyzeStateMachines(
     for (const s of c.states) {
       if (!valueToConcept.has(s)) valueToConcept.set(s, c.name)
     }
-  }
-
-  // ─── Pass 2 : fonction ranges + trigger contexts ────────────────────
-
-  const fnRangesByFile = new Map<string, FnRange[]>()
-  const triggerCtx: TriggerContext = {
-    listenerTrigger: new Map(),
-    routeTriggers: new Map(),
-  }
-
-  for (const sf of project.getSourceFiles()) {
-    const relPath = relativize(sf.getFilePath(), rootDir)
-    if (!relPath || !fileSet.has(relPath)) continue
-
-    const ranges = collectFunctionRanges(sf)
-    fnRangesByFile.set(relPath, ranges)
-
-    detectListenerTriggers(sf, relPath, ranges, listenFns, triggerCtx.listenerTrigger)
-    detectRouteTriggers(sf, relPath, ranges, triggerCtx.routeTriggers)
-  }
-
-  // ─── Pass 3 : writes ────────────────────────────────────────────────
-
-  const writes: WriteSignal[] = []
-
-  for (const sf of project.getSourceFiles()) {
-    const relPath = relativize(sf.getFilePath(), rootDir)
-    if (!relPath || !fileSet.has(relPath)) continue
-    const ranges = fnRangesByFile.get(relPath)!
-
-    scanSqlWrites(sf, relPath, ranges, writes)
-    scanObjectWrites(sf, relPath, ranges, writes)
-    scanMethodCallWrites(sf, relPath, ranges, writes)
-    scanClassPropertyInitializers(sf, relPath, writes)
   }
 
   // ─── Pass 3b : SQL schema DEFAULT reading ───────────────────────────
@@ -186,8 +178,20 @@ export async function analyzeStateMachines(
     }
   }
 
-  // ─── Pass 4 : build state machines ──────────────────────────────────
+  return buildStateMachinesFromBundles(concepts, writes, triggerCtx, valueToConcept)
+}
 
+/**
+ * Pure-logic builder : à partir des concepts agrégés + writes + trigger
+ * context, construit les `StateMachine[]`. Réutilisé côté Salsa après
+ * l'agrégation des bundles per-file.
+ */
+export function buildStateMachinesFromBundles(
+  concepts: StateConcept[],
+  writes: WriteSignal[],
+  triggerCtx: TriggerContext,
+  valueToConcept: Map<string, string>,
+): StateMachine[] {
   const machines: StateMachine[] = []
 
   for (const c of concepts) {
@@ -202,8 +206,6 @@ export async function analyzeStateMachines(
       line: w.line,
     }))
 
-    // Dédup : deux writes strictement identiques (même container, même value,
-    // même line) ne créent qu'une transition.
     const seen = new Set<string>()
     const deduped: StateTransition[] = []
     for (const t of transitions) {
@@ -224,9 +226,6 @@ export async function analyzeStateMachines(
     const writtenStates = new Set(deduped.map((t) => t.to))
     const orphanStates = c.states.filter((s) => !writtenStates.has(s))
 
-    // Dead state : écrit (to) mais jamais "from" d'une transition. Comme v1
-    // pose from='*', on détecte les états terminaux (écrits, pas lus dans
-    // le champ from d'une transition). Calibré pour être utile : rare v1.
     const fromStates = new Set(deduped.filter((t) => t.from !== '*').map((t) => t.from as string))
     const deadStates = [...writtenStates].filter((s) => !fromStates.has(s) && fromStates.size > 0)
 
@@ -239,7 +238,6 @@ export async function analyzeStateMachines(
     })
   }
 
-  // Tri : concepts avec transitions d'abord, puis par nom.
   machines.sort((a, b) => {
     const ha = a.transitions.length > 0 ? 0 : 1
     const hb = b.transitions.length > 0 ? 0 : 1
@@ -248,6 +246,66 @@ export async function analyzeStateMachines(
   })
 
   return machines
+}
+
+export type { TriggerContext }
+export {
+  scanSqlColumnDefaults as scanSqlColumnDefaultsForIncremental,
+  discoverSqlFiles as discoverSqlFilesForIncremental,
+  DEFAULT_SUFFIXES as DEFAULT_STATE_MACHINE_SUFFIXES,
+}
+
+/**
+ * Helper réutilisable : tire d'UN SourceFile tous les artefacts qu'on
+ * peut calculer sans toucher d'autres fichiers — concepts (type alias
+ * + enums avec suffixe), fn ranges, listener/route triggers et writes
+ * de tous types (SQL, object, method call, class property).
+ *
+ * Réutilisé par la version Salsa (incremental/state-machines.ts) qui
+ * cache ce bundle entier par fichier.
+ */
+export function extractStateMachineFileBundle(
+  sf: SourceFile,
+  relPath: string,
+  listenFns: ReadonlySet<string>,
+  suffixes: string[] = DEFAULT_SUFFIXES,
+): StateMachineFileBundle {
+  // Concepts (type aliases + enums)
+  const concepts: StateConcept[] = []
+  for (const ta of sf.getTypeAliases()) {
+    const name = ta.getName()
+    if (!hasSuffix(name, suffixes)) continue
+    const states = extractUnionStates(ta)
+    if (states.length === 0) continue
+    concepts.push({ name, states, file: relPath, line: ta.getStartLineNumber() })
+  }
+  for (const en of sf.getEnums()) {
+    const name = en.getName()
+    if (!hasSuffix(name, suffixes)) continue
+    const states = extractEnumStates(en)
+    if (states.length === 0) continue
+    concepts.push({ name, states, file: relPath, line: en.getStartLineNumber() })
+  }
+
+  const fnRanges = collectFunctionRanges(sf)
+
+  // Triggers (listener + route)
+  const listenerMap = new Map<string, string>()
+  detectListenerTriggers(sf, relPath, fnRanges, listenFns as Set<string>, listenerMap)
+  const listenerTriggers = [...listenerMap].map(([container, eventName]) => ({ container, eventName }))
+
+  const routeMap = new Map<string, string[]>()
+  detectRouteTriggers(sf, relPath, fnRanges, routeMap)
+  const routeTriggers = [...routeMap].map(([container, routes]) => ({ container, routes }))
+
+  // Writes
+  const writes: WriteSignal[] = []
+  scanSqlWrites(sf, relPath, fnRanges, writes)
+  scanObjectWrites(sf, relPath, fnRanges, writes)
+  scanMethodCallWrites(sf, relPath, fnRanges, writes)
+  scanClassPropertyInitializers(sf, relPath, writes)
+
+  return { concepts, fnRanges, listenerTriggers, routeTriggers, writes }
 }
 
 // ─── Concept extraction ─────────────────────────────────────────────────────
