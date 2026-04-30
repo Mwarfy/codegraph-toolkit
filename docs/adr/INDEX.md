@@ -13,6 +13,7 @@
 | [003](003-detectors-generaliste-vs-project-specific.md) | Détecteurs généralistes vs project-specific | `packages/codegraph/src/detectors/` |
 | [004](004-bootstrap-trois-roles-separes.md) | Bootstrap = 3 rôles (codegraph détecte / LLM rédige / humain valide) | `packages/adr-toolkit/src/bootstrap*` |
 | [005](005-detector-pattern-bundle-per-file.md) | Détecteurs codegraph = bundle per-file + agrégat pure | `packages/codegraph/src/detectors/`, `packages/codegraph/src/incremental/` |
+| [006](006-core-types-canonical-contract.md) | `core/types.ts` = canonical contract, modifications conservatrices uniquement | `packages/codegraph/src/core/types.ts` |
 
 ## Comment ajouter un ADR
 

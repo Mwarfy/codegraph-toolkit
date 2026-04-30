@@ -18,12 +18,15 @@
   → [`Bootstrap = 3 rôles séparés (codegraph détecte / LLM rédige / humain valide)`](docs/adr/004-bootstrap-trois-roles-separes.md)
 - **ADR-005** — Tout détecteur codegraph qui scanne des fichiers TS expose 4 éléments : > 1. Un helper pure `extractXxxFileBundle(sf, relPath, rootDir, project?)` > qui dérive un bundle sérialisable d'UN seul SourceFile. > 2. Si l'agrégation est non-triviale, un helper pure > `aggregateXxxBundles(bundlesByFile)` qui fusionne sans I/O ni AST. > 3. Une fonction batch publique `analyzeXxx(rootDir, files, ...)` qui > compose les deux ci-dessus en boucle (chemin legacy préservé). > 4. Un wrapper Salsa dans `incremental/xxx.ts` exposant > `xxxBundleOfFile(path)` (derived sur `fileContent`) + > `allXxx(label)` (derived qui agrège). > > Aucun détecteur ne mélange I/O async + AST walk + agrégation globale dans > une même fonction batch monolithique.
   → [`Pattern détecteurs codegraph — bundle per-file + agrégat pure`](docs/adr/005-detector-pattern-bundle-per-file.md)
+- **ADR-006** — `packages/codegraph/src/core/types.ts` est importé par 57+ fichiers > (top hub absolu du toolkit). Tout type exporté depuis ce fichier est > un contrat avec : > - Les détecteurs (extractors/) qui produisent ces structures > - Les consumers (synopsis/, facts/, diff/, check/) qui les lisent > - Le snapshot.json sérialisé sur disque (consommé par Sentinel, > codegraph-mcp, hooks bash, possibles consumers externes) > > RÈGLE : pas de breaking change sans deprecation explicite. On ajoute > des champs optionnels, on ne supprime ni ne modifie la sémantique > d'un champ existant.
+  → [``core/types.ts` est le contract canonique — modifications conservatrices uniquement`](docs/adr/006-core-types-canonical-contract.md)
 
 ## Fichiers gouvernés par un ADR (lookup pré-calculé)
 
 - `packages/adr-toolkit/src/bootstrap-writer.ts` → ADR-004
 - `packages/adr-toolkit/src/bootstrap.ts` → ADR-004
 - `packages/adr-toolkit/src/config.ts` → ADR-002
+- `packages/codegraph/src/core/types.ts` → ADR-006
 - `packages/codegraph/src/detectors/block-loader.ts` → ADR-003
 - `packages/codegraph/src/detectors/index.ts` → ADR-003
 - `packages/codegraph/src/synopsis/builder.ts` → ADR-001
@@ -96,6 +99,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+467b4e0 refactor(codegraph): extract 2 sections from analyze() god-file
 812d7bd refactor(codegraph): move 3 fns from detectors/ to extractors/
 04e3f2d feat(codegraph-mcp): nouveau MCP server exposant les queries codegraph
 20b3709 feat(codegraph): 4 nouveaux détecteurs déterministes + fix cycles bullmq
@@ -107,7 +111,6 @@ be1553e docs+test: ADR-005 pattern détecteurs + test parité legacy/incremental
 2a9043e docs(phase-2): refresh boot brief post-Sprint 8+9 — Phase 2 livrée
 7a57eef feat(codegraph): watcher mode `codegraph watch` [Sprint 9 — Phase 2]
 77d2053 feat(salsa,codegraph): delta saves — append-only deltas + auto-compact [Sprint 8]
-52b6fc7 docs(phase-1): refresh boot brief post-Sprint 7 — Phase 1 fonctionnellement complète
 ```
 
 ## Comment contribuer à ce brief

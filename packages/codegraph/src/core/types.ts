@@ -1,7 +1,16 @@
+// ADR-006
 /**
- * CodeGraph Core Types
+ * CodeGraph Core Types — CANONICAL CONTRACT
  *
- * The type system is designed for three consumers:
+ * ⚠ Top hub (in:57+). Modifications conservatives uniquement.
+ *
+ * Cf. ADR-006 : pas de breaking change sans deprecation cycle. On
+ * ajoute des champs optionnels, on ne supprime ni ne renomme. Tous les
+ * types ici servent de ground-truth schema pour producers (extractors/)
+ * + consumers (synopsis/, facts/, diff/, check/, incremental/) +
+ * snapshot.json sérialisé (Sentinel, codegraph-mcp, hooks externes).
+ *
+ * Three consumers in mind :
  * 1. The CLI (analyze, diff, orphans)
  * 2. The web viewer (Cytoscape.js)
  * 3. An LLM that queries the snapshot JSON to understand the system
