@@ -348,6 +348,96 @@ describe('no-return-then-else', () => {
   })
 })
 
+describe('no-switch-fallthrough', () => {
+  it('0 violations sur facts vides', async () => {
+    const { violations } = await runRule({ ruleName: 'no-switch-fallthrough.dl' })
+    expect(violations).toEqual([])
+  })
+
+  it('flag un switch-fallthrough', async () => {
+    const facts = new Map([
+      ['DeadCode', 'src/router.ts\t42\tswitch-fallthrough'],
+    ])
+    const { violations } = await runRule({ ruleName: 'no-switch-fallthrough.dl', facts })
+    expect(violations).toHaveLength(1)
+    expect(violations[0][0]).toBe('NO-SWITCH-FALLTHROUGH')
+  })
+
+  it('ne flag PAS un return-then-else (kind discriminé)', async () => {
+    const facts = new Map([
+      ['DeadCode', 'src/foo.ts\t42\treturn-then-else'],
+    ])
+    const { violations } = await runRule({ ruleName: 'no-switch-fallthrough.dl', facts })
+    expect(violations).toEqual([])
+  })
+})
+
+describe('no-floating-promise', () => {
+  it('0 violations sur facts vides', async () => {
+    const { violations } = await runRule({ ruleName: 'no-floating-promise.dl' })
+    expect(violations).toEqual([])
+  })
+
+  it('flag une floating promise', async () => {
+    const facts = new Map([
+      ['FloatingPromise', 'src/api.ts\t10\tfetchData\thandleRequest'],
+    ])
+    const { violations } = await runRule({ ruleName: 'no-floating-promise.dl', facts })
+    expect(violations).toHaveLength(1)
+    expect(violations[0][0]).toBe('NO-FLOATING-PROMISE')
+  })
+
+  it('skip si grandfathered', async () => {
+    const schema = await loadRule('schema-subset.dl')
+    const baseRule = await loadRule('no-floating-promise.dl')
+    const customRule = baseRule + '\nFloatingPromiseGrandfathered("src/api.ts", 10).\n'
+    const program = mergePrograms([
+      { name: 'schema.dl', content: schema },
+      { name: 'rule.dl', content: customRule },
+    ])
+    const facts = new Map([
+      ['FloatingPromise', 'src/api.ts\t10\tfetchData\thandleRequest'],
+    ])
+    const db = loadFacts(program.decls, { factsByRelation: facts })
+    const result = evaluate(program, db, { allowRecursion: true })
+    expect(result.outputs.get('Violation') ?? []).toEqual([])
+  })
+})
+
+describe('no-deprecated-usage', () => {
+  it('0 violations sur facts vides', async () => {
+    const { violations } = await runRule({ ruleName: 'no-deprecated-usage.dl' })
+    expect(violations).toEqual([])
+  })
+
+  it('flag un usage de symbole deprecated', async () => {
+    const facts = new Map([
+      ['DeprecatedDecl', 'oldApi\tsrc/legacy.ts\t10'],
+      ['DeprecatedUsage', 'src/consumer.ts\t42\toldApi'],
+    ])
+    const { violations } = await runRule({ ruleName: 'no-deprecated-usage.dl', facts })
+    expect(violations).toHaveLength(1)
+    expect(violations[0][0]).toBe('NO-DEPRECATED-USAGE')
+  })
+
+  it('skip si grandfathered', async () => {
+    const schema = await loadRule('schema-subset.dl')
+    const baseRule = await loadRule('no-deprecated-usage.dl')
+    const customRule = baseRule + '\nDeprecatedUsageGrandfathered("src/consumer.ts", 42).\n'
+    const program = mergePrograms([
+      { name: 'schema.dl', content: schema },
+      { name: 'rule.dl', content: customRule },
+    ])
+    const facts = new Map([
+      ['DeprecatedDecl', 'oldApi\tsrc/legacy.ts\t10'],
+      ['DeprecatedUsage', 'src/consumer.ts\t42\toldApi'],
+    ])
+    const db = loadFacts(program.decls, { factsByRelation: facts })
+    const result = evaluate(program, db, { allowRecursion: true })
+    expect(result.outputs.get('Violation') ?? []).toEqual([])
+  })
+})
+
 describe('schema-subset.dl est valide', () => {
   it('parse sans erreur et déclare les relations attendues', async () => {
     const schema = await loadRule('schema-subset.dl')
@@ -363,6 +453,9 @@ describe('schema-subset.dl est valide', () => {
     expect(program.decls.has('HardcodedSecret')).toBe(true)
     expect(program.decls.has('BooleanParam')).toBe(true)
     expect(program.decls.has('DeadCode')).toBe(true)
+    expect(program.decls.has('FloatingPromise')).toBe(true)
+    expect(program.decls.has('DeprecatedDecl')).toBe(true)
+    expect(program.decls.has('DeprecatedUsage')).toBe(true)
     expect(program.decls.has('Violation')).toBe(true)
     // Toutes les input relations sont marquées .input
     expect(program.decls.get('CycleNode')!.isInput).toBe(true)

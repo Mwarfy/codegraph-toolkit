@@ -180,3 +180,99 @@ describe('dead-code — exemptions', () => {
     expect(findings).toEqual([])
   })
 })
+
+describe('dead-code — switch-fallthrough (Tier 4)', () => {
+  it('flag un case sans break/return/throw', () => {
+    const { sf, name } = fileFromText(`
+      export function f(x: string) {
+        switch (x) {
+          case 'a':
+            doStuff()
+          case 'b':
+            return 1
+        }
+        return 0
+      }
+    `)
+    const { findings } = extractDeadCodeFileBundle(sf, name)
+    const f = findings.find((x) => x.kind === 'switch-fallthrough')
+    expect(f).toBeDefined()
+  })
+
+  it('skip un case avec break', () => {
+    const { sf, name } = fileFromText(`
+      export function f(x: string) {
+        switch (x) {
+          case 'a':
+            doStuff()
+            break
+          case 'b':
+            return 1
+        }
+      }
+    `)
+    const { findings } = extractDeadCodeFileBundle(sf, name)
+    expect(findings.filter((x) => x.kind === 'switch-fallthrough')).toEqual([])
+  })
+
+  it('skip un case avec return', () => {
+    const { sf, name } = fileFromText(`
+      export function f(x: string) {
+        switch (x) {
+          case 'a':
+            return 'A'
+          case 'b':
+            return 'B'
+        }
+      }
+    `)
+    const { findings } = extractDeadCodeFileBundle(sf, name)
+    expect(findings.filter((x) => x.kind === 'switch-fallthrough')).toEqual([])
+  })
+
+  it('skip un case vide (groupage explicite)', () => {
+    const { sf, name } = fileFromText(`
+      export function f(x: string) {
+        switch (x) {
+          case 'a':
+          case 'b':
+          case 'c':
+            return 'group'
+        }
+      }
+    `)
+    const { findings } = extractDeadCodeFileBundle(sf, name)
+    expect(findings.filter((x) => x.kind === 'switch-fallthrough')).toEqual([])
+  })
+
+  it('skip avec comment // fallthrough', () => {
+    const { sf, name } = fileFromText(`
+      export function f(x: string) {
+        switch (x) {
+          case 'a':
+            doStuff()
+            // fallthrough
+          case 'b':
+            return 1
+        }
+      }
+    `)
+    const { findings } = extractDeadCodeFileBundle(sf, name)
+    expect(findings.filter((x) => x.kind === 'switch-fallthrough')).toEqual([])
+  })
+
+  it('skip le DERNIER case (pas de fall-through possible)', () => {
+    const { sf, name } = fileFromText(`
+      export function f(x: string) {
+        switch (x) {
+          case 'a':
+            return 1
+          case 'b':
+            doStuff()
+        }
+      }
+    `)
+    const { findings } = extractDeadCodeFileBundle(sf, name)
+    expect(findings.filter((x) => x.kind === 'switch-fallthrough')).toEqual([])
+  })
+})

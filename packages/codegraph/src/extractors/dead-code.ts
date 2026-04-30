@@ -22,7 +22,10 @@
 
 import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
 
-export type DeadCodeKind = 'identical-subexpressions' | 'return-then-else'
+export type DeadCodeKind =
+  | 'identical-subexpressions'
+  | 'return-then-else'
+  | 'switch-fallthrough'
 
 export interface DeadCodeFinding {
   kind: DeadCodeKind
@@ -82,6 +85,60 @@ export function extractDeadCodeFileBundle(
       message: `expression ${op} avec les 2 cotes identiques (${truncate(left, 30)}) — bug ou redondance`,
       details: { operator: op, expression: truncate(left, 60) },
     })
+  }
+
+  // ─── Pattern 3 : switch-fallthrough (Tier 4) ───────────────────────
+  // gcc -Wimplicit-fallthrough. `case X: doStuff()` sans break / return
+  // / throw / continue → tombe silencieusement dans le case suivant.
+  // Bug-prone classique. Skip le DERNIER case (pas de fall-through
+  // possible) et les cases vides (groupage explicite : `case A: case B:`).
+  for (const sw of sf.getDescendantsOfKind(SyntaxKind.SwitchStatement)) {
+    const clauses = sw.getCaseBlock().getClauses()
+    for (let i = 0; i < clauses.length - 1; i++) {
+      const clause = clauses[i]
+      // Skip default au milieu (rare, mais le check fall-through s'applique).
+      if (Node.isDefaultClause(clause) && i === clauses.length - 1) continue
+      const stmts = clause.getStatements()
+      if (stmts.length === 0) continue       // groupage explicite, OK
+      const last = stmts[stmts.length - 1]
+      if (
+        Node.isBreakStatement(last) ||
+        Node.isReturnStatement(last) ||
+        Node.isThrowStatement(last) ||
+        Node.isContinueStatement(last)
+      ) continue
+      // Block dont le dernier statement exit ?
+      if (Node.isBlock(last)) {
+        const blockStmts = last.getStatements()
+        const blockLast = blockStmts[blockStmts.length - 1]
+        if (
+          blockLast && (
+            Node.isBreakStatement(blockLast) ||
+            Node.isReturnStatement(blockLast) ||
+            Node.isThrowStatement(blockLast) ||
+            Node.isContinueStatement(blockLast)
+          )
+        ) continue
+      }
+
+      const line = clause.getStartLineNumber()
+      if (isExempt(line)) continue
+      // Comment // fallthrough sur la ligne juste après le dernier
+      // statement = exemption explicite (convention C/Java).
+      const lastLine = last.getEndLineNumber()
+      const fallthroughCommentIdx = lastLine + 1   // ligne 1-based, lines[] 0-based
+      if (
+        fallthroughCommentIdx - 1 < lines.length &&
+        /\/\/\s*fallthrough\b/i.test(lines[fallthroughCommentIdx - 1])
+      ) continue
+
+      findings.push({
+        kind: 'switch-fallthrough',
+        file: relPath,
+        line,
+        message: `case sans break/return/throw — fall-through silencieux ; ajouter break ou \`// fallthrough\``,
+      })
+    }
   }
 
   // ─── Pattern 2 : return-then-else ──────────────────────────────────

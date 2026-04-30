@@ -467,6 +467,48 @@ export async function exportFacts(
   }
   relations.push(deadCodeRel)
 
+  // ─── FloatingPromise (Tier 4) ────────────────────────────────────────
+  const floatingPromiseRel: RelationDef = {
+    name: 'FloatingPromise',
+    decl: '(file:symbol, line:number, callee:symbol, containingSymbol:symbol)',
+    rows: [],
+  }
+  for (const fp of snapshot.floatingPromises ?? []) {
+    floatingPromiseRel.rows.push([
+      sym(fp.file),
+      num(fp.line),
+      sym(fp.callee),
+      sym(fp.containingSymbol || '_'),
+    ])
+  }
+  relations.push(floatingPromiseRel)
+
+  // ─── DeprecatedDecl + DeprecatedUsage (Tier 4) ──────────────────────
+  // Deux relations Datalog distinctes pour permettre des rules ad hoc :
+  //   "trouve toutes les declarations deprecated qui n'ont AUCUN
+  //    call-site (sûres à supprimer)"
+  // ou "compte les call-sites par symbole deprecated pour prioriser
+  //    le refactor".
+  const deprecatedDeclRel: RelationDef = {
+    name: 'DeprecatedDecl',
+    decl: '(name:symbol, file:symbol, line:number)',
+    rows: [],
+  }
+  const deprecatedUsageRel: RelationDef = {
+    name: 'DeprecatedUsage',
+    decl: '(file:symbol, line:number, callee:symbol)',
+    rows: [],
+  }
+  if (snapshot.deprecatedUsage) {
+    for (const d of snapshot.deprecatedUsage.declarations) {
+      deprecatedDeclRel.rows.push([sym(d.name), sym(d.file), num(d.line)])
+    }
+    for (const u of snapshot.deprecatedUsage.sites) {
+      deprecatedUsageRel.rows.push([sym(u.file), num(u.line), sym(u.callee)])
+    }
+  }
+  relations.push(deprecatedDeclRel, deprecatedUsageRel)
+
   // ─── Write to disk ────────────────────────────────────────────────────
   await fs.mkdir(options.outDir, { recursive: true })
 

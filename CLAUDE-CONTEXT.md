@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+dfc3a9f feat(phase4-tier3): dead-code patterns (Sonar S1764 + S1126)
 2f3d214 feat(phase4-tier2): 4 invariants + 2 drift patterns lift de Sonar/Bandit
 3c94c2d fix(sql-schema): strip les commentaires SQL avant splitTopLevel
 6f1f454 feat(phase4-tier1): 4 invariants déterministes universels lift cross-stack
@@ -111,7 +112,6 @@ e61268d feat(phase4-axe2): SymbolCallEdge / SymbolSignature / EntryPoint facts
 2494798 docs: PHASE-4-AGENT-FIRST-PLAN — boot brief pour reprise à froid
 7c16751 docs: README rewrite — clearer setup path + Phase 1+2+3 features
 294de4a feat(adr-toolkit): init détecte la stack DB et active les bons détecteurs
-fffe142 feat(codegraph): Drizzle schema detector — mêmes facts que sql-schema
 ```
 
 ## Comment contribuer à ce brief

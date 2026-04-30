@@ -2,7 +2,7 @@
 
 Standard Datalog invariants for **TypeScript + Postgres** projects, drop-in for [`codegraph-toolkit`](https://github.com/Mwarfy/codegraph-toolkit).
 
-Ten invariants, all 100% portable across TS/Postgres projects:
+Thirteen invariants, all 100% portable across TS/Postgres projects:
 
 | Invariant | What it catches |
 |---|---|
@@ -16,6 +16,9 @@ Ten invariants, all 100% portable across TS/Postgres projects:
 | `no-boolean-positional-param` | Boolean trap (Sonar S2301) — prefer options object. Ratchet on `(file, name)`. |
 | `no-identical-subexpressions` | `a OP a` where OP is logical/equality/comparison (Sonar S1764, copy-paste detection). Ratchet on `(file, line)`. |
 | `no-return-then-else` | `if (cond) { return X } else { Y }` — flatten suggestion (Sonar S1126). Ratchet on `(file, line)`. |
+| `no-switch-fallthrough` | `case X: doStuff()` without break/return/throw (gcc -Wimplicit-fallthrough). Ratchet on `(file, line)`. |
+| `no-floating-promise` | Async function called without await/then/catch (rustc unused_must_use, ESLint no-floating-promises). Ratchet on `(file, line)`. |
+| `no-deprecated-usage` | Call-sites of `@deprecated` symbols (Go SA1019, Pascal H2061, Java @Deprecated). Ratchet on `(file, line)`. |
 
 ## Why these two
 

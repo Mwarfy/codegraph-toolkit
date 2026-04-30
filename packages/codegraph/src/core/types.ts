@@ -497,15 +497,40 @@ export interface GraphSnapshot {
    * Dead code findings — patterns redundant ou inatteignable.
    * - identical-subexpressions : `a > 0 && a > 0` (Sonar S1764)
    * - return-then-else : `if (x) return; else { ... }` (Sonar S1126)
-   * Cf. extractors/dead-code.ts (Phase 4 Tier 3).
+   * - switch-fallthrough : case sans break/return/throw (gcc -Wimplicit-fallthrough)
+   * Cf. extractors/dead-code.ts (Phase 4 Tier 3 + Tier 4).
    */
   deadCode?: Array<{
-    kind: 'identical-subexpressions' | 'return-then-else'
+    kind: 'identical-subexpressions' | 'return-then-else' | 'switch-fallthrough'
     file: string
     line: number
     message: string
     details?: Record<string, string | number | boolean>
   }>
+
+  /**
+   * Floating promises — call-sites de fonctions async sans await /
+   * .then / .catch / assignement / return. Inspiration : rustc
+   * unused_must_use, ESLint no-floating-promises.
+   * Cf. extractors/floating-promises.ts (Phase 4 Tier 4).
+   */
+  floatingPromises?: Array<{
+    file: string
+    line: number
+    callee: string
+    containingSymbol: string
+  }>
+
+  /**
+   * Deprecated usage — declarations marquées @deprecated (JSDoc) +
+   * call-sites qui les utilisent. Inspiration : Go SA1019, Pascal
+   * H2061, Java @Deprecated.
+   * Cf. extractors/deprecated-usage.ts (Phase 4 Tier 4).
+   */
+  deprecatedUsage?: {
+    declarations: Array<{ name: string; file: string; line: number; reason: string }>
+    sites: Array<{ file: string; line: number; callee: string; containingSymbol: string }>
+  }
 }
 
 /** Re-export du type produit par `extractors/oauth-scope-literals`. */

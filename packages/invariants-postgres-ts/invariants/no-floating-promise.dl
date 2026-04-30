@@ -1,0 +1,30 @@
+// NO-FLOATING-PROMISE — Pas de Promise non-await/then/catch.
+//
+// Pourquoi : un `await` oublié sur une fonction async = un job qui
+// termine "en succès" alors que la promise rejette en arrière-plan.
+// Erreur silencieuse maximum, presque impossible à debugger sans
+// monitoring. Pire pour Sentinel/backends event-driven : un fail dans
+// un sub-task fait dériver l'état sans alerte.
+//
+// Inspiration : rustc `unused_must_use`, ESLint `no-floating-promises`.
+//
+// L'extracteur skip déjà :
+//   - Sites avec await / .then / .catch / .finally chaînés.
+//   - Sites assignés à variable / retournés / passés en argument.
+//   - Sites précédés de `void` explicit (annotation intentionnelle).
+//   - Fichiers de test.
+//   - Sites avec `// fire-and-forget: <reason>` ligne précédente.
+//   - Noms de callbacks conventionnels (resolve, reject, done, cb...).
+//
+// Source des facts : `FloatingPromise(file, line, callee, containingSymbol)`.
+//
+// Pattern ratchet : grandfather par (file, line) si vrai pattern
+// fire-and-forget intentionnel (telemetry, fire-purge worker). Préférer
+// `// fire-and-forget` dans le source — l'extracteur skip directement.
+
+.decl FloatingPromiseGrandfathered(file: symbol, line: number)
+
+Violation("NO-FLOATING-PROMISE", File, Line,
+  "promise non-await — silent failure si rejet ; ajouter await ou .catch") :-
+    FloatingPromise(File, Line, _, _),
+    !FloatingPromiseGrandfathered(File, Line).

@@ -47,6 +47,8 @@ import { analyzeEvalCalls, type EvalCall } from '../extractors/eval-calls.js'
 import { analyzeHardcodedSecrets, type HardcodedSecret } from '../extractors/hardcoded-secrets.js'
 import { analyzeBooleanParams, type BooleanParamSite } from '../extractors/boolean-params.js'
 import { analyzeDeadCode, type DeadCodeFinding } from '../extractors/dead-code.js'
+import { analyzeFloatingPromises, type FloatingPromiseSite } from '../extractors/floating-promises.js'
+import { analyzeDeprecatedUsage, type DeprecatedDeclaration, type DeprecatedUsageSite } from '../extractors/deprecated-usage.js'
 import { analyzeLongFunctions, type LongFunction } from '../extractors/long-functions.js'
 import { analyzeMagicNumbers, type MagicNumber } from '../extractors/magic-numbers.js'
 import { analyzeTestCoverage, type TestCoverageReport } from '../extractors/test-coverage.js'
@@ -563,6 +565,8 @@ async function runDeterministicDetectors(
   let hardcodedSecrets: HardcodedSecret[] | undefined
   let booleanParams: BooleanParamSite[] | undefined
   let deadCode: DeadCodeFinding[] | undefined
+  let floatingPromises: FloatingPromiseSite[] | undefined
+  let deprecatedUsage: { declarations: DeprecatedDeclaration[]; sites: DeprecatedUsageSite[] } | undefined
 
   const tTodos = performance.now()
   try {
@@ -657,6 +661,28 @@ async function runDeterministicDetectors(
     console.error(`  ✗ dead-code failed: ${err}`)
   }
 
+  const tFloating = performance.now()
+  try {
+    // Lit snapshot.typedCalls (déjà patché par les détecteurs Phase 5
+    // si présent) pour identifier les fonctions retournant Promise.
+    floatingPromises = await analyzeFloatingPromises(
+      config.rootDir, files, sharedProject, snapshot.typedCalls,
+    )
+    timing.detectors['floating-promises'] = performance.now() - tFloating
+  } catch (err) {
+    timing.detectors['floating-promises'] = performance.now() - tFloating
+    console.error(`  ✗ floating-promises failed: ${err}`)
+  }
+
+  const tDeprecated = performance.now()
+  try {
+    deprecatedUsage = await analyzeDeprecatedUsage(config.rootDir, files, sharedProject)
+    timing.detectors['deprecated-usage'] = performance.now() - tDeprecated
+  } catch (err) {
+    timing.detectors['deprecated-usage'] = performance.now() - tDeprecated
+    console.error(`  ✗ deprecated-usage failed: ${err}`)
+  }
+
   if (todos) snapshot.todos = todos
   if (longFunctions) snapshot.longFunctions = longFunctions
   if (magicNumbers) snapshot.magicNumbers = magicNumbers
@@ -667,6 +693,8 @@ async function runDeterministicDetectors(
   if (hardcodedSecrets) snapshot.hardcodedSecrets = hardcodedSecrets
   if (booleanParams) snapshot.booleanParams = booleanParams
   if (deadCode) snapshot.deadCode = deadCode
+  if (floatingPromises) snapshot.floatingPromises = floatingPromises
+  if (deprecatedUsage) snapshot.deprecatedUsage = deprecatedUsage
 }
 
 /**

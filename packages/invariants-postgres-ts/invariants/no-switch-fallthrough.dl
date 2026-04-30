@@ -1,0 +1,26 @@
+// NO-SWITCH-FALLTHROUGH — Pas de case sans break/return/throw.
+//
+// Pourquoi : `case 'X': doStuff()` sans break tombe silencieusement
+// dans le case suivant. Bug-prone classique en C/C++/Java/JS.
+// Inspiration : gcc `-Wimplicit-fallthrough`.
+//
+// L'extracteur skip déjà :
+//   - Le DERNIER case (pas de fall-through possible).
+//   - Les cases vides (groupage explicite : `case A: case B:`).
+//   - Les cases dont le dernier statement = break/return/throw/continue
+//     (y compris au sein d'un block).
+//   - Les sites avec `// fallthrough` ligne suivante (convention C).
+//   - Les sites avec `// dead-code-ok: <reason>` ligne précédente.
+//   - Les fichiers de test.
+//
+// Source des facts : `DeadCode(file, line, "switch-fallthrough")`.
+//
+// Pattern ratchet : grandfather par (file, line) — peu de raisons
+// légitimes hors `// fallthrough` qu'on a déjà côté extracteur.
+
+.decl SwitchFallthroughGrandfathered(file: symbol, line: number)
+
+Violation("NO-SWITCH-FALLTHROUGH", File, Line,
+  "case sans break/return/throw — fall-through silencieux") :-
+    DeadCode(File, Line, "switch-fallthrough"),
+    !SwitchFallthroughGrandfathered(File, Line).

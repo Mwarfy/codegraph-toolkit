@@ -1,0 +1,36 @@
+// NO-DEPRECATED-USAGE — Pas de call-site sur un symbole `@deprecated`.
+//
+// Pourquoi : un symbole tagué `@deprecated` annonce un retrait futur.
+// Sans détection automatique, le tag pourrit dans le JSDoc et personne
+// ne sait quel call-site doit être migré. Une dep externe qui marque
+// `@deprecated` = on doit savoir tout de suite quelles surfaces de
+// notre code sont touchées.
+//
+// Inspiration : Go SA1019 (staticcheck), Pascal H2061, Java
+// `@Deprecated` warning compiler.
+//
+// L'extracteur fait :
+//   - Pass 1 : scan toutes les declarations exportées avec `@deprecated`
+//     dans leur JSDoc. Build un set des noms.
+//   - Pass 2 : scan les call-sites + new expressions. Match par nom seul
+//     (best-effort, faux-positifs rares).
+//
+// Skip déjà côté extracteur :
+//   - Fichiers de test (regression tests appelent intentionnellement
+//     l'ancien API).
+//   - Sites avec `// deprecated-ok: <reason>` ligne précédente
+//     (typique pour code de migration qui pilote la transition).
+//
+// Source des facts :
+//   - `DeprecatedDecl(name, file, line)` — symboles taggés.
+//   - `DeprecatedUsage(file, line, callee)` — call-sites.
+//
+// Pattern ratchet : grandfather par (file, line). Si le projet n'a
+// AUCUN @deprecated, la rule est passive (0 violations garanties).
+
+.decl DeprecatedUsageGrandfathered(file: symbol, line: number)
+
+Violation("NO-DEPRECATED-USAGE", File, Line,
+  "call-site sur symbole @deprecated — migrer vers l'API recommande") :-
+    DeprecatedUsage(File, Line, _),
+    !DeprecatedUsageGrandfathered(File, Line).
