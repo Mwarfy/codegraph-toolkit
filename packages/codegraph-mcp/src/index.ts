@@ -30,6 +30,7 @@ import { codegraphCoChanged } from './tools/co-changed.js'
 import { codegraphWhoCalls } from './tools/who-calls.js'
 import { codegraphExtractCandidates } from './tools/extract-candidates.js'
 import { codegraphAffected } from './tools/affected.js'
+import { codegraphChangesSince } from './tools/changes-since.js'
 
 const server = new Server(
   {
@@ -226,6 +227,26 @@ const TOOLS = [
       required: ['files'],
     },
   },
+  {
+    name: 'codegraph_changes_since',
+    description:
+      'Structural diff between the current snapshot (live if `codegraph watch` ' +
+      'is running, otherwise latest post-commit) and a reference. Default ' +
+      'reference = latest post-commit snapshot. Answers "since the last ' +
+      'commit, what did my uncommitted edits change structurally?". Returns ' +
+      'cycles added/removed, FSMs changed, truth-points modified, dataFlows, ' +
+      'typed-call signatures. Useful before committing to review the impact.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        reference: {
+          type: 'string',
+          description: 'Optional. "post-commit" (default) | "live" | absolute path to a snapshot JSON.',
+        },
+        repo_root: { type: 'string' },
+      },
+    },
+  },
 ]
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -264,6 +285,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break
       case 'codegraph_affected':
         result = codegraphAffected(args as any)
+        break
+      case 'codegraph_changes_since':
+        result = codegraphChangesSince(args as any)
         break
       default:
         return {

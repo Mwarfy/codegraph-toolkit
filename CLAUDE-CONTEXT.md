@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+3807758 feat(codegraph): watcher écrit snapshot-live.json + facts à chaque update
 26159fc feat(codegraph): reverse-deps BFS — codegraph_affected MCP tool + CLI affected
 f65f5c7 docs: clôture du plan d'enrichissement 5 axes — Axe 3 obsolète
 1a239bd feat(codegraph-mcp): codegraph_who_calls + codegraph_extract_candidates
@@ -111,7 +112,6 @@ ff7cd93 refactor(codegraph): Phase C — analyze() à 157 LOC via 4 helpers d'or
 2807c3e refactor(codegraph): Phase A — pattern visiteur Detector/Registry pour analyze()
 f0f9ca3 feat(adr-toolkit): détecteur fsm — unions string literals + write sites observables
 41f0d10 docs: boot briefs SPRINT-13-FSM + REFACTOR-ANALYZER pour reprise à froid
-08534fb release: v0.2.0 — bootstrap detectors + types invariant + install.sh moderne
 ```
 
 ## Comment contribuer à ce brief

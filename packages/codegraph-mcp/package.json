@@ -36,7 +36,8 @@
     "dev": "tsc -b --watch"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0"
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@liby-tools/codegraph": "^0.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

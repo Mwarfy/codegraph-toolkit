@@ -8,7 +8,8 @@
   "exports": {
     ".": "./dist/index.js",
     "./synopsis": "./dist/synopsis/builder.js",
-    "./synopsis/adr-markers": "./dist/synopsis/adr-markers.js"
+    "./synopsis/adr-markers": "./dist/synopsis/adr-markers.js",
+    "./diff": "./dist/diff/index.js"
   },
   "bin": {
     "codegraph": "./dist/cli/index.js"
