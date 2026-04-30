@@ -14,7 +14,7 @@ Without codegraph-mcp, the codegraph snapshot is a static artifact only
 consumed by hooks (push). With it, queries become callable on-demand
 (pull) — the same way LSP exposes semantic queries on-demand.
 
-## 9 Tools
+## 10 Tools
 
 ### File-level (5)
 
@@ -46,6 +46,38 @@ consumed by hooks (push). With it, queries become callable on-demand
 | `codegraph_affected(files, max_depth?, separate_tests?)` | BFS reverse from a list of files to find ALL transitively impacted files. Separates affected tests for selective test running. **Pre-commit selector**: `git diff --name-only` → affected → tests subset → `vitest run <list>`. |
 | `codegraph_changes_since(reference?)` | Structural diff between current snapshot (live if `codegraph watch` running, else latest post-commit) and a reference. **Default reference = last post-commit** → "since last commit, what did my uncommitted edits change structurally?". Cycles, FSMs, truth-points, dataFlows, typed signatures. |
 
+### Datalog (1)
+
+| Tool | Use case |
+|---|---|
+| `codegraph_datalog_query(rule_text, output_relation?, limit?)` | Execute an ad hoc Datalog rule against the emitted facts (`.codegraph/facts/`). For structural questions that don't warrant a custom detector or invariant: transitive imports, anti-joins, aggregation, FileTag filters. Schema (`ImportEdge`, `EmitsLiteral`, `SqlForeignKey`, `CycleNode`, …) is auto-included. Recursion enabled by default. |
+
+#### Datalog quick examples
+
+Transitive importers of `event-bus.ts` (no custom detector needed):
+
+```datalog
+.decl Reach(file:symbol)
+Reach(F) :- ImportEdge(F, "sentinel-core/src/kernel/event-bus.ts", _).
+Reach(F) :- ImportEdge(F, M, _), Reach(M).
+```
+
+Files that emit events but are NOT tagged `audit`:
+
+```datalog
+.decl Untagged(file:symbol)
+Untagged(F) :- EmitsLiteral(F, _, _), !FileTag(F, "audit").
+```
+
+Tables with FK but missing index (already an invariant — query exposes the same fact stream interactively):
+
+```datalog
+.decl Bad(fromTable:symbol, fromCol:symbol)
+Bad(T, C) :- SqlFkWithoutIndex(T, C, _, _).
+```
+
+The tool prepends `schema.dl` automatically. You declare your own `.decl`/rules. The last `.decl` is auto-marked `.output` (override via `output_relation`).
+
 ## Setup
 
 ### Prerequisites
@@ -76,7 +108,7 @@ Add to your project's `.mcp.json`:
 }
 ```
 
-Restart Claude Code. The 9 tools become available as `mcp__codegraph__*`.
+Restart Claude Code. The 10 tools become available as `mcp__codegraph__*`.
 
 ### Verify
 

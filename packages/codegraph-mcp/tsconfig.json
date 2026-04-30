@@ -4,6 +4,9 @@
     "outDir": "./dist",
     "rootDir": "./src"
   },
+  "references": [
+    { "path": "../datalog" }
+  ],
   "include": ["src/**/*"],
   "exclude": ["dist"]
 }

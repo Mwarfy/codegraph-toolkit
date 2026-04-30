@@ -31,6 +31,7 @@ import { codegraphWhoCalls } from './tools/who-calls.js'
 import { codegraphExtractCandidates } from './tools/extract-candidates.js'
 import { codegraphAffected } from './tools/affected.js'
 import { codegraphChangesSince } from './tools/changes-since.js'
+import { codegraphDatalogQuery } from './tools/datalog-query.js'
 
 const server = new Server(
   {
@@ -247,6 +248,41 @@ const TOOLS = [
       },
     },
   },
+  {
+    name: 'codegraph_datalog_query',
+    description:
+      'Execute an ad hoc Datalog rule against the emitted facts ' +
+      '(.codegraph/facts/). Use for structural questions that don\'t warrant ' +
+      'a custom detector or invariant: transitive imports, anti-joins, ' +
+      'aggregation, FileTag filters. The schema (`ImportEdge`, `EmitsLiteral`, ' +
+      '`SqlForeignKey`, `CycleNode`, …) is auto-included — no need to redeclare. ' +
+      'You declare your own `.decl` + rules; the tool auto-marks the last ' +
+      '`.decl` as `.output` (or use output_relation to pick explicitly). ' +
+      'Example rule: ' +
+      '`.decl R(f:symbol)\\nR(F) :- ImportEdge(F, "path/to/file.ts", _).`',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        rule_text: {
+          type: 'string',
+          description:
+            'Datalog rule text. Must contain at least one `.decl` and one rule. ' +
+            'Schema relations are pre-included, do not redeclare them.',
+        },
+        output_relation: {
+          type: 'string',
+          description:
+            'Name of the relation to observe in output. Default: last `.decl` of rule_text.',
+        },
+        repo_root: { type: 'string' },
+        limit: {
+          type: 'number',
+          description: 'Cap on tuples returned (default 200).',
+        },
+      },
+      required: ['rule_text'],
+    },
+  },
 ]
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -288,6 +324,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break
       case 'codegraph_changes_since':
         result = codegraphChangesSince(args as any)
+        break
+      case 'codegraph_datalog_query':
+        result = codegraphDatalogQuery(args as any)
         break
       default:
         return {
