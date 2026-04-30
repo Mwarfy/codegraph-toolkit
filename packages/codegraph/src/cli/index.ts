@@ -27,6 +27,7 @@ import { findReachablePaths, globToRegex } from '../graph/reachability.js'
 import { computeDsm } from '../graph/dsm.js'
 import { renderDsm, aggregateByContainer } from '../map/dsm-renderer.js'
 import { exportFacts } from '../facts/index.js'
+import { CodeGraphWatcher } from '../incremental/watcher.js'
 
 const program = new Command()
 
@@ -202,6 +203,56 @@ program
     } else {
       process.stdout.write(JSON.stringify(snapshot, null, 2))
     }
+  })
+
+// ─── watch ────────────────────────────────────────────────────────────────
+
+program
+  .command('watch')
+  .description(
+    'Watch filesystem and recompute snapshot incrementally on every change. ' +
+    'Maintains the Salsa cache + ts-morph Project in RAM for sub-50ms warm ' +
+    'recomputes (vs ~10s cold via CLI). Cible : dev local, IDE/dashboard ' +
+    'integration. Ctrl+C pour arrêter.',
+  )
+  .option('-c, --config <path>', 'Path to codegraph config file')
+  .option('-r, --root <path>', 'Project root directory (overrides config rootDir)')
+  .option('--debounce <ms>', 'Debounce ms before recompute (default 50)', '50')
+  .action(async (opts) => {
+    const config = await loadConfig(opts)
+    const debounceMs = parseInt(opts.debounce, 10)
+
+    console.log(chalk.bold('\n👁  CodeGraph — Watching\n'))
+    console.log(`  Root:     ${config.rootDir}`)
+    console.log(`  Include:  ${config.include.join(', ')}`)
+    console.log(`  Debounce: ${debounceMs}ms`)
+    console.log(chalk.dim('  (Ctrl+C to stop)\n'))
+
+    const watcher = new CodeGraphWatcher(config, {
+      debounceMs,
+      onUpdate: ({ changedFiles, durationMs }) => {
+        const filesPart = changedFiles.length === 0
+          ? chalk.dim('initial')
+          : changedFiles.length === 1
+            ? changedFiles[0]
+            : `${changedFiles[0]} (+${changedFiles.length - 1} more)`
+        const ms = durationMs.toFixed(0)
+        const msColor = durationMs < 100 ? chalk.green : durationMs < 1000 ? chalk.yellow : chalk.red
+        console.log(`  ${chalk.cyan('•')} ${filesPart} ${msColor(`${ms}ms`)}`)
+      },
+      onError: (err) => {
+        console.error(chalk.red(`  ✗ recompute failed: ${err}`))
+      },
+    })
+
+    process.on('SIGINT', () => {
+      console.log(chalk.dim('\n  Stopping... (saving cache)'))
+      void watcher.stop().then(() => process.exit(0))
+    })
+
+    await watcher.start()
+    // Bloque le process en idle (les fs.watch handlers gardent l'event loop alive)
+    await new Promise(() => {})
   })
 
 // ─── map ──────────────────────────────────────────────────────────────────

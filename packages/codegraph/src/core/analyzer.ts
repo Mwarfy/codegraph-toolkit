@@ -133,6 +133,20 @@ export interface AnalyzeOptions {
    * Compatible avec `factsOnly: true`.
    */
   incremental?: boolean
+
+  /**
+   * Skip le load du cache disque au boot. Utilisé par le watcher mode
+   * (Sprint 9) qui maintient la DB en RAM entre analyzes — relire le
+   * disque chaque fois ajouterait ~500ms de I/O+parse pour rien.
+   */
+  skipPersistenceLoad?: boolean
+
+  /**
+   * Skip le save du cache disque à la fin. Utilisé par le watcher
+   * mode pour ne pas écrire 3-7 MB à chaque change. Le caller est
+   * responsable de save périodiquement / au stop.
+   */
+  skipPersistenceSave?: boolean
 }
 
 export async function analyze(
@@ -141,6 +155,8 @@ export async function analyze(
 ): Promise<AnalyzeResult> {
   const factsOnly = options.factsOnly ?? false
   const incremental = options.incremental ?? false
+  const skipPersistenceLoad = options.skipPersistenceLoad ?? false
+  const skipPersistenceSave = options.skipPersistenceSave ?? false
   const t0 = performance.now()
   const timing: AnalyzeResult['timing'] = {
     total: 0,
@@ -185,7 +201,10 @@ export async function analyze(
   // cells + mtimes AVANT toute autre étape. Permet le warm cross-process
   // via CLI : 2e `codegraph analyze --incremental` benéficie du cache
   // disque même dans un nouveau process.
-  if (incremental) {
+  //
+  // Sprint 9 : skipPersistenceLoad permet au watcher de ne pas relire
+  // le disque entre analyzes (la DB reste en RAM).
+  if (incremental && !skipPersistenceLoad) {
     try {
       const loaded = await incLoadPersistedCache(config.rootDir, incSharedDb)
       if (loaded) {
@@ -997,7 +1016,11 @@ export async function analyze(
   // ─── Persist disk cache (Sprint 7) ───────────────────────────────────
   // À la fin d'un run incremental, sauve cells + mtimes pour qu'un
   // process ultérieur (CLI) bénéficie du warm.
-  if (incremental) {
+  //
+  // Sprint 9 : skipPersistenceSave permet au watcher de ne pas écrire
+  // ~3 MB à chaque change. Le caller du watcher save périodiquement
+  // ou au stop.
+  if (incremental && !skipPersistenceSave) {
     try {
       await incSavePersistedCache(config.rootDir, incGetMtimeMap(), incSharedDb)
     } catch {
