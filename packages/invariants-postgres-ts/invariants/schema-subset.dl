@@ -21,6 +21,8 @@
 .decl SqlForeignKey(fromTable: symbol, fromCol: symbol, toTable: symbol, toCol: symbol, file: symbol, line: number)
 .decl SqlIndex(name: symbol, table: symbol, firstCol: symbol, file: symbol, line: number)
 .decl SqlFkWithoutIndex(fromTable: symbol, fromCol: symbol, toTable: symbol, toCol: symbol)
+.decl SqlPrimaryKey(table: symbol, column: symbol, file: symbol, line: number)
+.decl EvalCall(file: symbol, line: number, kind: symbol, containingSymbol: symbol)
 
 .input File
 .input FileTag
@@ -33,6 +35,8 @@
 .input SqlForeignKey
 .input SqlIndex
 .input SqlFkWithoutIndex
+.input SqlPrimaryKey
+.input EvalCall
 
 // La relation cible commune : tous les fichiers de rules écrivent ici.
 .decl Violation(adr: symbol, file: symbol, line: number, msg: symbol)

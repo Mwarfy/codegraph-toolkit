@@ -1,0 +1,29 @@
+// SQL-ORPHAN-FK — Tout foreign key doit pointer vers une table existante.
+//
+// Pourquoi : un FK vers une table inexistante est généralement un
+// reliquat d'un refactor migration mal nettoyé (la table a été
+// renommée OU droppée mais le FK est resté dans une autre migration).
+// Postgres laisse passer si tu déclares le FK avant la création de la
+// table cible (déclaration différée), mais l'erreur tombe au commit.
+// Catch au moment de l'audit, pas au déploiement.
+//
+// Cas vrai : `ALTER TABLE x ADD CONSTRAINT fk_y FOREIGN KEY (z)
+// REFERENCES nonexistent_table(id)` — passe le linter SQL basique
+// mais explose en prod.
+//
+// Source des facts : SqlForeignKey + SqlTable (anti-jointure).
+//
+// Pattern ratchet : pas vraiment applicable — un FK orphelin doit
+// être fixé, pas grandfather. Mais option fournie pour éviter de
+// bloquer un commit de cleanup en cours.
+
+.decl OrphanFkGrandfathered(fromTable: symbol, fromCol: symbol)
+
+.decl TableExists(t: symbol)
+TableExists(T) :- SqlTable(T, _, _).
+
+Violation("SQL-ORPHAN-FK", File, Line,
+  "FK vers table inexistante — reliquat refactor migration ; supprimer ou corriger le ref") :-
+    SqlForeignKey(FT, FC, TT, _, File, Line),
+    !TableExists(TT),
+    !OrphanFkGrandfathered(FT, FC).

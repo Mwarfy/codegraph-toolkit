@@ -232,6 +232,11 @@ export async function exportFacts(
     decl: '(fromTable:symbol, fromCol:symbol, toTable:symbol, toCol:symbol)',
     rows: [],
   }
+  const sqlPrimaryKeyRel: RelationDef = {
+    name: 'SqlPrimaryKey',
+    decl: '(table:symbol, column:symbol, file:symbol, line:number)',
+    rows: [],
+  }
   if (snapshot.sqlSchema) {
     for (const t of snapshot.sqlSchema.tables) {
       sqlTableRel.rows.push([sym(t.name), sym(t.file), num(t.line)])
@@ -283,8 +288,16 @@ export async function exportFacts(
         sym(fk.toColumn),
       ])
     }
+    for (const pk of snapshot.sqlSchema.primaryKeys ?? []) {
+      sqlPrimaryKeyRel.rows.push([
+        sym(pk.table),
+        sym(pk.column),
+        sym(pk.file),
+        num(pk.line),
+      ])
+    }
   }
-  relations.push(sqlTableRel, sqlColumnRel, sqlForeignKeyRel, sqlIndexRel, sqlFkWithoutIndexRel)
+  relations.push(sqlTableRel, sqlColumnRel, sqlForeignKeyRel, sqlIndexRel, sqlFkWithoutIndexRel, sqlPrimaryKeyRel)
 
   // ─── CycleNode ────────────────────────────────────────────────────────
   // Pour chaque cycle détecté (Tarjan SCC sur graphe combiné import + event +
@@ -382,6 +395,24 @@ export async function exportFacts(
     collectEntries(snapshot.dataFlows as any)
   }
   relations.push(entryPointRel)
+
+  // ─── EvalCall ────────────────────────────────────────────────────────
+  // Phase 4 Tier 1 : `eval(...)` et `new Function(...)` — vecteurs RCE
+  // classiques. Source : extractors/eval-calls.ts.
+  const evalCallRel: RelationDef = {
+    name: 'EvalCall',
+    decl: '(file:symbol, line:number, kind:symbol, containingSymbol:symbol)',
+    rows: [],
+  }
+  for (const ec of snapshot.evalCalls ?? []) {
+    evalCallRel.rows.push([
+      sym(ec.file),
+      num(ec.line),
+      sym(ec.kind),
+      sym(ec.containingSymbol),
+    ])
+  }
+  relations.push(evalCallRel)
 
   // ─── Write to disk ────────────────────────────────────────────────────
   await fs.mkdir(options.outDir, { recursive: true })

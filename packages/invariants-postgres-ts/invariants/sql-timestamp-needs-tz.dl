@@ -1,0 +1,41 @@
+// SQL-TIMESTAMP-NEEDS-TZ — Tout column type TIMESTAMP doit être TIMESTAMPTZ.
+//
+// Pourquoi : `TIMESTAMP` (sans tz) en Postgres stocke la valeur sans
+// fuseau. Tu écris depuis un client à Paris (UTC+2), tu lis depuis
+// un client à NYC (UTC-5), tu obtiens la même string locale —
+// silencieusement décalée de 7h. `TIMESTAMPTZ` stocke en UTC interne
+// et convertit selon le fuseau session, garantissant qu'un instant
+// reste un instant.
+//
+// Les vrais bugs prod arrivent au passage en multi-région ou au
+// changement d'heure été/hiver. Détecter au commit migration plutôt
+// qu'à la première facture mal datée.
+//
+// Source des facts : SqlColumn (relation `SqlColumn(table, column,
+// type, file, line)`). Le type est conservé tel quel par le parser.
+//
+// Pattern ratchet :
+//   .decl TimestampTzGrandfathered(table: symbol, column: symbol)
+//   TimestampTzGrandfathered("legacy_events", "ts").
+//
+// Pour résoudre : migration `ALTER TABLE x ALTER COLUMN ts TYPE
+// TIMESTAMPTZ USING ts AT TIME ZONE 'UTC'` puis retirer le
+// grandfather.
+
+.decl TimestampTzGrandfathered(table: symbol, column: symbol)
+
+// Match les types qui contiennent "TIMESTAMP" mais PAS "TIMESTAMPTZ".
+// Approximation pragmatique : on liste les variantes connues sans-tz
+// (TIMESTAMP, TIMESTAMP WITHOUT TIME ZONE) — Datalog basique sans
+// pattern matching string.
+.decl IsTimestampNoTz(t: symbol)
+IsTimestampNoTz("TIMESTAMP").
+IsTimestampNoTz("timestamp").
+IsTimestampNoTz("TIMESTAMP WITHOUT TIME ZONE").
+IsTimestampNoTz("timestamp without time zone").
+
+Violation("SQL-TIMESTAMP-NEEDS-TZ", File, Line,
+  "column TIMESTAMP sans tz — risque de bug multi-fuseau ; utiliser TIMESTAMPTZ") :-
+    SqlColumn(T, C, Type, File, Line),
+    IsTimestampNoTz(Type),
+    !TimestampTzGrandfathered(T, C).

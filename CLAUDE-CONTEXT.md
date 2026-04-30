@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+d998e49 feat(phase4-axe5): @liby-tools/invariants-postgres-ts — catalogue portable
 3e2f4bc feat(phase4-axe4): drift agentique — 3 patterns V1 + MCP tool
 c423a80 feat(phase4-axe3): mémoire inter-sessions — store + MCP tools + CLI
 e61268d feat(phase4-axe2): SymbolCallEdge / SymbolSignature / EntryPoint facts
@@ -111,7 +112,6 @@ fffe142 feat(codegraph): Drizzle schema detector — mêmes facts que sql-schema
 7defd9b feat(codegraph): SQL schema detector — FK sans index + 5 facts Datalog
 a934947 feat(codegraph-mcp): codegraph_changes_since MCP tool — diff live vs post-commit
 3807758 feat(codegraph): watcher écrit snapshot-live.json + facts à chaque update
-26159fc feat(codegraph): reverse-deps BFS — codegraph_affected MCP tool + CLI affected
 ```
 
 ## Comment contribuer à ce brief

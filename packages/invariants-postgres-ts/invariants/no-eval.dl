@@ -1,0 +1,26 @@
+// NO-EVAL — Pas de `eval(...)` ni `new Function(...)` dans le code.
+//
+// Pourquoi : ces deux primitives compilent et exécutent du code à
+// l'exécution. Vecteurs RCE classiques si l'argument est
+// user-controlled. Aucun usage légitime dans 99% des codebases
+// applicatifs (les rares vrais usages — sandbox, REPL, code-gen —
+// sont volontaires et exemptables).
+//
+// Bandit (Python) a `B102: exec_used` et `B103: set_bad_file_permissions`.
+// ESLint security a `no-eval`. On émet le même invariant côté
+// codegraph-toolkit avec ratchet.
+//
+// Source des facts : extracteur eval-calls.ts du codegraph-toolkit
+// (relation `EvalCall(file, line, kind, containingSymbol)` ; kind ∈
+// {"eval", "function-constructor"}).
+//
+// Pattern ratchet : si tu as un usage volontaire de eval (sandbox,
+// REPL, etc.), grandfather le couple (file, kind) avec une raison
+// inline.
+
+.decl EvalCallGrandfathered(file: symbol, kind: symbol)
+
+Violation("NO-EVAL", File, Line,
+  "eval / new Function — vecteur RCE ; supprimer ou grandfather si sandbox volontaire") :-
+    EvalCall(File, Line, Kind, _),
+    !EvalCallGrandfathered(File, Kind).

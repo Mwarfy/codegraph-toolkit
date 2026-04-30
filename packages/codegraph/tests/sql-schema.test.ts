@@ -216,3 +216,59 @@ describe('analyzeSqlSchema — FK without index detection', () => {
     expect(indexedSet.has('profiles\x00user_id')).toBe(true)
   })
 })
+
+describe('derivePrimaryKeys (Phase 4 Tier 1)', () => {
+  it('dérive PK depuis colonne inline', async () => {
+    const sql = `
+      CREATE TABLE users (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255)
+      );
+    `
+    const { tables, indexes } = parseSqlFile(sql, 'test.sql')
+    const { derivePrimaryKeys } = await import('../src/extractors/sql-schema.js')
+    const pks = derivePrimaryKeys(tables, indexes)
+    expect(pks).toHaveLength(1)
+    expect(pks[0].table).toBe('users')
+    expect(pks[0].column).toBe('id')
+  })
+
+  it('dérive PK composite depuis contrainte table-level', async () => {
+    const sql = `
+      CREATE TABLE pivot (
+        a_id INT,
+        b_id INT,
+        PRIMARY KEY (a_id, b_id)
+      );
+    `
+    const { tables, indexes } = parseSqlFile(sql, 'test.sql')
+    const { derivePrimaryKeys } = await import('../src/extractors/sql-schema.js')
+    const pks = derivePrimaryKeys(tables, indexes)
+    expect(pks).toHaveLength(2)
+    expect(pks.map((pk) => pk.column).sort()).toEqual(['a_id', 'b_id'])
+    expect(pks.every((pk) => pk.table === 'pivot')).toBe(true)
+  })
+
+  it('dédup une PK déclarée 2× (inline + table-level pas applicable mais juste safety)', async () => {
+    const sql = `
+      CREATE TABLE foo (id SERIAL PRIMARY KEY);
+    `
+    const { tables, indexes } = parseSqlFile(sql, 'test.sql')
+    const { derivePrimaryKeys } = await import('../src/extractors/sql-schema.js')
+    const pks = derivePrimaryKeys(tables, indexes)
+    expect(pks).toHaveLength(1)
+  })
+
+  it('table sans PK → pks vides', async () => {
+    const sql = `
+      CREATE TABLE no_pk (
+        a INT,
+        b TEXT
+      );
+    `
+    const { tables, indexes } = parseSqlFile(sql, 'test.sql')
+    const { derivePrimaryKeys } = await import('../src/extractors/sql-schema.js')
+    const pks = derivePrimaryKeys(tables, indexes)
+    expect(pks).toEqual([])
+  })
+})

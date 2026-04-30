@@ -74,11 +74,24 @@ export interface SqlFkWithoutIndex {
   line: number
 }
 
+/**
+ * Une primary key column. Pour les PK composites table-level
+ * `PRIMARY KEY (a, b)`, on émet UNE entrée par column (plus joinable
+ * côté Datalog que une ligne avec liste).
+ */
+export interface SqlPrimaryKey {
+  table: string
+  column: string
+  file: string
+  line: number
+}
+
 export interface SqlSchemaResult {
   tables: SqlTable[]
   indexes: SqlIndex[]
   foreignKeys: SqlForeignKey[]
   fkWithoutIndex: SqlFkWithoutIndex[]
+  primaryKeys: SqlPrimaryKey[]
 }
 
 // ═════════════════════════════════════════════════════════════════════
@@ -140,6 +153,9 @@ export async function analyzeSqlSchema(
   // Cross-FK + index match
   const fkWithoutIndex = computeFkWithoutIndex(foreignKeys, indexes, tables)
 
+  // Dérive primaryKeys depuis tables[].columns + table-level indexes _pkey.
+  const primaryKeys = derivePrimaryKeys(tables, indexes)
+
   // Tri stable
   tables.sort((a, b) => a.file < b.file ? -1 : a.file > b.file ? 1 : a.line - b.line)
   indexes.sort((a, b) => a.file < b.file ? -1 : a.file > b.file ? 1 : a.line - b.line)
@@ -149,8 +165,45 @@ export async function analyzeSqlSchema(
   fkWithoutIndex.sort((a, b) =>
     a.fromTable < b.fromTable ? -1 : a.fromTable > b.fromTable ? 1 :
     a.fromColumn < b.fromColumn ? -1 : a.fromColumn > b.fromColumn ? 1 : 0)
+  primaryKeys.sort((a, b) =>
+    a.table < b.table ? -1 : a.table > b.table ? 1 :
+    a.column < b.column ? -1 : a.column > b.column ? 1 : 0)
 
-  return { tables, indexes, foreignKeys, fkWithoutIndex }
+  return { tables, indexes, foreignKeys, fkWithoutIndex, primaryKeys }
+}
+
+/**
+ * Dérive les primary keys depuis les structures déjà parsées :
+ *   - inline col PK : `id INT PRIMARY KEY`
+ *   - table-level PK : `PRIMARY KEY (a, b)` — émis dans indexes avec
+ *     name=`<table>_pkey` et `implicit: true`
+ * Une PK composite émet une entrée par column.
+ */
+export function derivePrimaryKeys(tables: SqlTable[], indexes: SqlIndex[]): SqlPrimaryKey[] {
+  const pks: SqlPrimaryKey[] = []
+  const seen = new Set<string>()
+  const add = (table: string, column: string, file: string, line: number): void => {
+    const key = table + '\x00' + column
+    if (seen.has(key)) return
+    seen.add(key)
+    pks.push({ table, column, file, line })
+  }
+  // Inline col PK
+  for (const t of tables) {
+    for (const c of t.columns) {
+      if (c.isPrimaryKey) add(t.name, c.name, t.file, c.line)
+    }
+  }
+  // Table-level PK (depuis indexes implicites _pkey)
+  for (const idx of indexes) {
+    if (!idx.implicit) continue
+    if (!idx.name.endsWith('_pkey')) continue
+    for (const col of idx.columns) {
+      if (col.includes('(')) continue   // skip expression-based
+      add(idx.table, col, idx.file, idx.line)
+    }
+  }
+  return pks
 }
 
 /**

@@ -1,0 +1,36 @@
+// SQL-TABLE-NEEDS-PK — Toute table doit avoir une PRIMARY KEY.
+//
+// Pourquoi : une table sans PK est presque toujours un bug Postgres.
+// Sans PK :
+//   - les replicas logiques (logical replication) ne peuvent pas
+//     répliquer les UPDATE/DELETE (Postgres a besoin d'une identité)
+//   - les ORM ne peuvent pas dériver de méthode `.findById`
+//     fiablement
+//   - DELETE FROM tbl WHERE x = y duplique les lignes identiques
+//   - les foreign keys vers cette table sont impossibles
+//
+// Les rares vraies exceptions (tables d'audit append-only sans
+// identité naturelle) doivent être grandfathered explicitement avec
+// raison documentée.
+//
+// Source des facts : extracteur sql-schema OR drizzle-schema du
+// codegraph-toolkit (relation `SqlPrimaryKey`, dérivée de
+// `tables[].columns[].isPrimaryKey` + table-level `_pkey` indexes).
+//
+// Pattern ratchet :
+//   .decl TableNoPkGrandfathered(table: symbol)
+//   TableNoPkGrandfathered("audit_events_2026").
+//
+// Pour résoudre : `ALTER TABLE x ADD PRIMARY KEY (col)` puis retirer
+// la ligne grandfathered.
+
+.decl TableNoPkGrandfathered(table: symbol)
+
+.decl HasPK(table: symbol)
+HasPK(T) :- SqlPrimaryKey(T, _, _, _).
+
+Violation("SQL-TABLE-NEEDS-PK", File, Line,
+  "table sans PRIMARY KEY — replication / ORM / dedup cassent ; ajouter PRIMARY KEY") :-
+    SqlTable(T, File, Line),
+    !HasPK(T),
+    !TableNoPkGrandfathered(T).

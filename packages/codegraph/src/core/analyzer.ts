@@ -43,6 +43,7 @@ import { SqlSchemaDetector } from './detectors/sql-schema-detector.js'
 import { DrizzleSchemaDetector } from './detectors/drizzle-schema-detector.js'
 import { analyzeTodos, type TodoMarker } from '../extractors/todos.js'
 import { analyzeDriftPatterns, type DriftSignal } from '../extractors/drift-patterns.js'
+import { analyzeEvalCalls, type EvalCall } from '../extractors/eval-calls.js'
 import { analyzeLongFunctions, type LongFunction } from '../extractors/long-functions.js'
 import { analyzeMagicNumbers, type MagicNumber } from '../extractors/magic-numbers.js'
 import { analyzeTestCoverage, type TestCoverageReport } from '../extractors/test-coverage.js'
@@ -555,6 +556,7 @@ async function runDeterministicDetectors(
   let testCoverage: TestCoverageReport | undefined
   let coChangePairs: CoChangePair[] | undefined
   let driftSignals: DriftSignal[] | undefined
+  let evalCalls: EvalCall[] | undefined
 
   const tTodos = performance.now()
   try {
@@ -613,12 +615,22 @@ async function runDeterministicDetectors(
     console.error(`  ✗ drift-patterns failed: ${err}`)
   }
 
+  const tEval = performance.now()
+  try {
+    evalCalls = await analyzeEvalCalls(config.rootDir, files, sharedProject)
+    timing.detectors['eval-calls'] = performance.now() - tEval
+  } catch (err) {
+    timing.detectors['eval-calls'] = performance.now() - tEval
+    console.error(`  ✗ eval-calls failed: ${err}`)
+  }
+
   if (todos) snapshot.todos = todos
   if (longFunctions) snapshot.longFunctions = longFunctions
   if (magicNumbers) snapshot.magicNumbers = magicNumbers
   if (testCoverage) snapshot.testCoverage = testCoverage
   if (coChangePairs) snapshot.coChangePairs = coChangePairs
   if (driftSignals) snapshot.driftSignals = driftSignals
+  if (evalCalls) snapshot.evalCalls = evalCalls
 }
 
 /**

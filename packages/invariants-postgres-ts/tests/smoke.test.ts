@@ -95,6 +95,120 @@ describe('sql-fk-needs-index', () => {
   })
 })
 
+describe('sql-table-needs-pk', () => {
+  it('0 violations sur facts vides', async () => {
+    const { violations } = await runRule({ ruleName: 'sql-table-needs-pk.dl' })
+    expect(violations).toEqual([])
+  })
+
+  it('flag une table sans PK', async () => {
+    const facts = new Map([
+      ['SqlTable', 'orders\tdb/schema.sql\t10\nlogs\tdb/schema.sql\t20'],
+      ['SqlPrimaryKey', 'orders\tid\tdb/schema.sql\t10'],
+    ])
+    const { violations } = await runRule({ ruleName: 'sql-table-needs-pk.dl', facts })
+    expect(violations).toHaveLength(1)
+    expect(violations[0][0]).toBe('SQL-TABLE-NEEDS-PK')
+    expect(violations[0][1]).toBe('db/schema.sql')
+    expect(violations[0][2]).toBe(20)
+  })
+
+  it('skip si table grandfathered', async () => {
+    // Crée une rule custom qui contient le grandfather pour `logs`.
+    const schema = await loadRule('schema-subset.dl')
+    const baseRule = await loadRule('sql-table-needs-pk.dl')
+    const customRule = baseRule + '\nTableNoPkGrandfathered("logs").\n'
+    const program = mergePrograms([
+      { name: 'schema.dl', content: schema },
+      { name: 'rule.dl', content: customRule },
+    ])
+    const facts = new Map([
+      ['SqlTable', 'orders\tdb/schema.sql\t10\nlogs\tdb/schema.sql\t20'],
+      ['SqlPrimaryKey', 'orders\tid\tdb/schema.sql\t10'],
+    ])
+    const db = loadFacts(program.decls, { factsByRelation: facts })
+    const result = evaluate(program, db, { allowRecursion: true })
+    expect(result.outputs.get('Violation') ?? []).toEqual([])
+  })
+})
+
+describe('sql-timestamp-needs-tz', () => {
+  it('0 violations sur facts vides', async () => {
+    const { violations } = await runRule({ ruleName: 'sql-timestamp-needs-tz.dl' })
+    expect(violations).toEqual([])
+  })
+
+  it('flag TIMESTAMP sans tz (uppercase)', async () => {
+    const facts = new Map([
+      ['SqlColumn', 'events\tcreated_at\tTIMESTAMP\tdb/schema.sql\t12'],
+    ])
+    const { violations } = await runRule({ ruleName: 'sql-timestamp-needs-tz.dl', facts })
+    expect(violations).toHaveLength(1)
+    expect(violations[0][0]).toBe('SQL-TIMESTAMP-NEEDS-TZ')
+  })
+
+  it('skip TIMESTAMPTZ', async () => {
+    const facts = new Map([
+      ['SqlColumn', 'events\tcreated_at\tTIMESTAMPTZ\tdb/schema.sql\t12'],
+    ])
+    const { violations } = await runRule({ ruleName: 'sql-timestamp-needs-tz.dl', facts })
+    expect(violations).toEqual([])
+  })
+})
+
+describe('sql-orphan-fk', () => {
+  it('0 violations sur facts vides', async () => {
+    const { violations } = await runRule({ ruleName: 'sql-orphan-fk.dl' })
+    expect(violations).toEqual([])
+  })
+
+  it('flag un FK vers table inexistante', async () => {
+    const facts = new Map([
+      ['SqlTable', 'orders\tdb/schema.sql\t10'],
+      ['SqlForeignKey', 'invoices\torder_id\tnonexistent\tid\tdb/migrations/050.sql\t42'],
+    ])
+    const { violations } = await runRule({ ruleName: 'sql-orphan-fk.dl', facts })
+    expect(violations).toHaveLength(1)
+    expect(violations[0][0]).toBe('SQL-ORPHAN-FK')
+    expect(violations[0][2]).toBe(42)
+  })
+
+  it('skip un FK vers table existante', async () => {
+    const facts = new Map([
+      ['SqlTable', 'orders\tdb/schema.sql\t10'],
+      ['SqlForeignKey', 'invoices\torder_id\torders\tid\tdb/migrations/050.sql\t42'],
+    ])
+    const { violations } = await runRule({ ruleName: 'sql-orphan-fk.dl', facts })
+    expect(violations).toEqual([])
+  })
+})
+
+describe('no-eval', () => {
+  it('0 violations sur facts vides', async () => {
+    const { violations } = await runRule({ ruleName: 'no-eval.dl' })
+    expect(violations).toEqual([])
+  })
+
+  it('flag un eval call', async () => {
+    const facts = new Map([
+      ['EvalCall', 'src/runner.ts\t42\teval\trunSandbox'],
+    ])
+    const { violations } = await runRule({ ruleName: 'no-eval.dl', facts })
+    expect(violations).toHaveLength(1)
+    expect(violations[0][0]).toBe('NO-EVAL')
+    expect(violations[0][1]).toBe('src/runner.ts')
+    expect(violations[0][2]).toBe(42)
+  })
+
+  it('flag function-constructor aussi', async () => {
+    const facts = new Map([
+      ['EvalCall', 'src/dynamic.ts\t10\tfunction-constructor\tmakeFn'],
+    ])
+    const { violations } = await runRule({ ruleName: 'no-eval.dl', facts })
+    expect(violations).toHaveLength(1)
+  })
+})
+
 describe('schema-subset.dl est valide', () => {
   it('parse sans erreur et déclare les relations attendues', async () => {
     const schema = await loadRule('schema-subset.dl')
@@ -105,6 +219,8 @@ describe('schema-subset.dl est valide', () => {
     expect(program.decls.has('CycleNode')).toBe(true)
     expect(program.decls.has('SqlFkWithoutIndex')).toBe(true)
     expect(program.decls.has('SqlForeignKey')).toBe(true)
+    expect(program.decls.has('SqlPrimaryKey')).toBe(true)
+    expect(program.decls.has('EvalCall')).toBe(true)
     expect(program.decls.has('Violation')).toBe(true)
     // Toutes les input relations sont marquées .input
     expect(program.decls.get('CycleNode')!.isInput).toBe(true)

@@ -2,12 +2,16 @@
 
 Standard Datalog invariants for **TypeScript + Postgres** projects, drop-in for [`codegraph-toolkit`](https://github.com/Mwarfy/codegraph-toolkit).
 
-Two invariants in V1, both 100% portable across TS/Postgres projects:
+Six invariants, all 100% portable across TS/Postgres projects:
 
 | Invariant | What it catches |
 |---|---|
 | `cycles-no-new` | New non-gated import cycles (Tarjan SCC). Ratchet on `cycleId`. |
 | `sql-fk-needs-index` | Foreign keys without index on source column (CASCADE = full scan). Ratchet on `(table, col)`. |
+| `sql-table-needs-pk` | Tables without PRIMARY KEY (replication / ORM / dedup break). Ratchet on table name. |
+| `sql-timestamp-needs-tz` | `TIMESTAMP` without time zone (multi-region bug). Ratchet on `(table, col)`. |
+| `sql-orphan-fk` | Foreign keys pointing to non-existent tables (refactor reliquats). Ratchet on `(table, col)`. |
+| `no-eval` | `eval(...)` and `new Function(...)` (RCE vector). Ratchet on `(file, kind)`. |
 
 ## Why these two
 

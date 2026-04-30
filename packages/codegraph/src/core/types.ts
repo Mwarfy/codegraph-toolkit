@@ -438,7 +438,24 @@ export interface GraphSnapshot {
       file: string
       line: number
     }>
+    primaryKeys: Array<{
+      table: string
+      column: string
+      file: string
+      line: number
+    }>
   }
+
+  /**
+   * eval / new Function call sites — vecteurs RCE classiques. Optionnel.
+   * Cf. extractors/eval-calls.ts (Phase 4 Tier 1).
+   */
+  evalCalls?: Array<{
+    kind: 'eval' | 'function-constructor'
+    file: string
+    line: number
+    containingSymbol: string
+  }>
 }
 
 /** Re-export du type produit par `extractors/oauth-scope-literals`. */

@@ -20,6 +20,7 @@ import {
   analyzeDrizzleSchema,
   type SqlSchemaResult,
 } from '../../extractors/drizzle-schema.js'
+import { derivePrimaryKeys } from '../../extractors/sql-schema.js'
 
 export class DrizzleSchemaDetector implements Detector<SqlSchemaResult> {
   readonly name = 'drizzle-schema'
@@ -101,5 +102,11 @@ function mergeSqlSchemaResults(
     x.fromTable < y.fromTable ? -1 : x.fromTable > y.fromTable ? 1 :
     x.fromColumn < y.fromColumn ? -1 : x.fromColumn > y.fromColumn ? 1 : 0)
 
-  return { tables, indexes, foreignKeys, fkWithoutIndex }
+  // Re-dérive les PK sur l'union (un PK peut venir de l'un ou l'autre).
+  const primaryKeys = derivePrimaryKeys(tables, indexes)
+  primaryKeys.sort((x, y) =>
+    x.table < y.table ? -1 : x.table > y.table ? 1 :
+    x.column < y.column ? -1 : x.column > y.column ? 1 : 0)
+
+  return { tables, indexes, foreignKeys, fkWithoutIndex, primaryKeys }
 }

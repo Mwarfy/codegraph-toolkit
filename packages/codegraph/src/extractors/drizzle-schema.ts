@@ -44,6 +44,7 @@ import type {
   SqlFkWithoutIndex,
   SqlSchemaResult,
 } from './sql-schema.js'
+import { derivePrimaryKeys } from './sql-schema.js'
 
 export type { SqlSchemaResult } from './sql-schema.js'
 
@@ -91,6 +92,7 @@ export async function analyzeDrizzleSchema(
   }
 
   const fkWithoutIndex = computeFkWithoutIndex(foreignKeys, indexes)
+  const primaryKeys = derivePrimaryKeys(tables, indexes)
 
   // Tri stable
   tables.sort((a, b) => a.file < b.file ? -1 : a.file > b.file ? 1 : a.line - b.line)
@@ -101,8 +103,11 @@ export async function analyzeDrizzleSchema(
   fkWithoutIndex.sort((a, b) =>
     a.fromTable < b.fromTable ? -1 : a.fromTable > b.fromTable ? 1 :
     a.fromColumn < b.fromColumn ? -1 : a.fromColumn > b.fromColumn ? 1 : 0)
+  primaryKeys.sort((a, b) =>
+    a.table < b.table ? -1 : a.table > b.table ? 1 :
+    a.column < b.column ? -1 : a.column > b.column ? 1 : 0)
 
-  return { tables, indexes, foreignKeys, fkWithoutIndex }
+  return { tables, indexes, foreignKeys, fkWithoutIndex, primaryKeys }
 }
 
 /**
