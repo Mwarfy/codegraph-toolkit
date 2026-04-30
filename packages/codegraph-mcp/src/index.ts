@@ -27,6 +27,8 @@ import { codegraphTruthPointFor } from './tools/truth-point.js'
 import { codegraphRecent } from './tools/recent.js'
 import { codegraphUncovered } from './tools/uncovered.js'
 import { codegraphCoChanged } from './tools/co-changed.js'
+import { codegraphWhoCalls } from './tools/who-calls.js'
+import { codegraphExtractCandidates } from './tools/extract-candidates.js'
 
 const server = new Server(
   {
@@ -150,6 +152,46 @@ const TOOLS = [
       required: ['file_path'],
     },
   },
+  {
+    name: 'codegraph_who_calls',
+    description:
+      'List the call sites of a symbol with their observed argument types and ' +
+      'return type at the call site (source: typedCalls.callEdges). ' +
+      'Complementary to lsp_find_references which gives compile-time syntax-level ' +
+      'usage — here you see the *actual types* passed at each call. Useful when ' +
+      'auditing a function\'s contract-of-fact vs declared signature, or when ' +
+      'planning to change a signature and you need to see what types pass through.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        symbol: {
+          type: 'string',
+          description: 'Symbol id. Either "file/path.ts:symbolName" (exact match) or just "symbolName" (matches all *:symbolName).',
+        },
+        repo_root: { type: 'string' },
+        limit: { type: 'number', description: 'Top-N call sites (default 20).' },
+      },
+      required: ['symbol'],
+    },
+  },
+  {
+    name: 'codegraph_extract_candidates',
+    description:
+      'Score the long functions in a file by extract-method candidate strength: ' +
+      'score = loc × (1 + fanIn/5). Favors long AND called-often functions ' +
+      '(high cognitive load × high blast radius). Useful before refactoring a ' +
+      'large file — points at which functions warrant extraction first.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        file_path: { type: 'string' },
+        repo_root: { type: 'string' },
+        limit: { type: 'number', description: 'Top-N candidates (default 5).' },
+        min_loc: { type: 'number', description: 'Minimum LOC to be considered (default 50).' },
+      },
+      required: ['file_path'],
+    },
+  },
 ]
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -179,6 +221,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break
       case 'codegraph_co_changed':
         result = codegraphCoChanged(args as any)
+        break
+      case 'codegraph_who_calls':
+        result = codegraphWhoCalls(args as any)
+        break
+      case 'codegraph_extract_candidates':
+        result = codegraphExtractCandidates(args as any)
         break
       default:
         return {
