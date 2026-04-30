@@ -39,8 +39,15 @@ import {
   getCachedMtime as incGetCachedMtime,
   setCachedMtime as incSetCachedMtime,
   setInputIfChanged as incSetInputIfChanged,
+  getMtimeMap as incGetMtimeMap,
+  loadMtimeMap as incLoadMtimeMap,
 } from '../incremental/queries.js'
 import { getOrBuildSharedProject as incGetOrBuildProject } from '../incremental/project-cache.js'
+import {
+  loadPersistedCache as incLoadPersistedCache,
+  savePersistedCache as incSavePersistedCache,
+} from '../incremental/persistence.js'
+import { sharedDb as incSharedDb } from '../incremental/database.js'
 import { allEnvUsage as incAllEnvUsage } from '../incremental/env-usage.js'
 import { allOauthScopeLiterals as incAllOauthScopeLiterals } from '../incremental/oauth-scope-literals.js'
 import { allEventEmitSites as incAllEventEmitSites } from '../incremental/event-emit-sites.js'
@@ -173,7 +180,23 @@ export async function analyze(
     tsconfigPath: config.tsconfigPath,
   }
 
-  // ─── 3. Pre-build shared Project (incremental mode only, Sprint 6) ──
+  // ─── 3. Load disk cache (Sprint 7) ──────────────────────────────────
+  // Si on a un .codegraph/salsa-cache.json valide, on restaure les
+  // cells + mtimes AVANT toute autre étape. Permet le warm cross-process
+  // via CLI : 2e `codegraph analyze --incremental` benéficie du cache
+  // disque même dans un nouveau process.
+  if (incremental) {
+    try {
+      const loaded = await incLoadPersistedCache(config.rootDir, incSharedDb)
+      if (loaded) {
+        incLoadMtimeMap(loaded.mtimes)
+      }
+    } catch {
+      // Cache corrompu — on continue cold, save écrasera au final.
+    }
+  }
+
+  // ─── 3b. Pre-build shared Project (incremental mode only, Sprint 6) ──
   // En mode incremental, on pré-construit le sharedProject AVANT la
   // boucle des détecteurs pour que TsImportDetector puisse le réutiliser
   // (vs créer son propre Project — qui doublait le coût parse, ~7s sur
@@ -968,6 +991,17 @@ export async function analyze(
     } catch (err) {
       timing.detectors['dsm'] = performance.now() - tDsm
       console.error(`  ✗ dsm failed: ${err}`)
+    }
+  }
+
+  // ─── Persist disk cache (Sprint 7) ───────────────────────────────────
+  // À la fin d'un run incremental, sauve cells + mtimes pour qu'un
+  // process ultérieur (CLI) bénéficie du warm.
+  if (incremental) {
+    try {
+      await incSavePersistedCache(config.rootDir, incGetMtimeMap(), incSharedDb)
+    } catch {
+      // Échec de save = pas bloquant. Le run a réussi.
     }
   }
 

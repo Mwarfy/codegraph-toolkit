@@ -17,7 +17,8 @@
 
 import {
   REVISION_ZERO,
-  type Cell, type EncodedKey, type QueryId, type Revision,
+  SalsaError,
+  type Cell, type Dep, type EncodedKey, type QueryId, type Revision,
 } from './types.js'
 
 export class Database {
@@ -159,4 +160,145 @@ export class Database {
     this.hitCount.clear()
     this.missCount.clear()
   }
+
+  // ─── Persistence (Sprint 7) ──────────────────────────────────────────
+  //
+  // Sérialise l'état observable (cells + revision) en JSON serializable.
+  // Permet de restaurer la DB au démarrage d'un nouveau process pour un
+  // cache hit cross-process via CLI.
+  //
+  // Limites :
+  //   - Les `value` des cells doivent être structured-cloneable (Map,
+  //     Set, plain objects, primitives, arrays). Pas de fonctions, pas
+  //     de classes custom.
+  //   - On NE sérialise PAS les fns derived (pas portable). Au load,
+  //     les wrappers module-level doivent déjà être enregistrés via
+  //     `derived(db, id, fn)` AVANT loadState() — sinon les cells
+  //     pointent vers des queryId sans fn enregistrée et le wake-up
+  //     échoue silencieusement.
+  //   - Les hitCount / missCount NE sont PAS sérialisés (stats
+  //     éphémères).
+
+  /**
+   * Serialise les cells courants en JSON-safe. Map/Set sont marqués
+   * via `__type` pour round-trip via deserializeValue().
+   */
+  serializeState(): SerializedState {
+    const cells: SerializedCell[] = []
+    for (const [queryId, inner] of this.cells) {
+      for (const [encodedKey, cell] of inner) {
+        cells.push({
+          queryId,
+          encodedKey,
+          value: serializeValue(cell.value),
+          deps: cell.deps,
+          changedAt: cell.changedAt,
+          computedAt: cell.computedAt,
+          verifiedAt: cell.verifiedAt,
+        })
+      }
+    }
+    return {
+      version: SERIALIZE_VERSION,
+      revision: this.revision,
+      cells,
+    }
+  }
+
+  /**
+   * Restaure les cells + revision depuis un état sérialisé. Précondition :
+   * tous les `queryId` doivent avoir été enregistrés via `input()` /
+   * `derived()` AVANT cet appel — sinon le wake-up échouera.
+   *
+   * Si la version ne match pas, throw SalsaError 'persistence.version'.
+   * Le caller décide d'ignorer (cold start) ou de propager.
+   */
+  loadState(state: SerializedState): void {
+    if (state.version !== SERIALIZE_VERSION) {
+      throw new SalsaError(
+        'persistence.version',
+        `serialized state version ${state.version} != expected ${SERIALIZE_VERSION}`,
+      )
+    }
+    this.cells.clear()
+    this.revision = state.revision
+    for (const sc of state.cells) {
+      const cell: Cell = {
+        queryId: sc.queryId,
+        encodedKey: sc.encodedKey,
+        value: deserializeValue(sc.value),
+        deps: sc.deps,
+        changedAt: sc.changedAt,
+        computedAt: sc.computedAt,
+        verifiedAt: sc.verifiedAt,
+      }
+      this.setCell(cell)
+    }
+  }
+}
+
+const SERIALIZE_VERSION = 1
+
+export interface SerializedCell {
+  queryId: QueryId
+  encodedKey: EncodedKey
+  value: unknown  // déjà passé par serializeValue
+  deps: Dep[]
+  changedAt: Revision
+  computedAt: Revision
+  verifiedAt: Revision
+}
+
+export interface SerializedState {
+  version: number
+  revision: Revision
+  cells: SerializedCell[]
+}
+
+/**
+ * Convertit Map/Set en représentation JSON-safe avec marqueur `__type`.
+ * Récursif sur les arrays + plain objects.
+ */
+export function serializeValue(v: unknown): unknown {
+  if (v === null || v === undefined) return v
+  if (typeof v !== 'object') return v
+  if (v instanceof Map) {
+    return {
+      __type: 'Map',
+      entries: [...v.entries()].map(([k, val]) => [serializeValue(k), serializeValue(val)]),
+    }
+  }
+  if (v instanceof Set) {
+    return {
+      __type: 'Set',
+      values: [...v].map(serializeValue),
+    }
+  }
+  if (Array.isArray(v)) return v.map(serializeValue)
+  // Plain object
+  const out: Record<string, unknown> = {}
+  for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+    out[k] = serializeValue(val)
+  }
+  return out
+}
+
+export function deserializeValue(v: unknown): unknown {
+  if (v === null || v === undefined) return v
+  if (typeof v !== 'object') return v
+  if (Array.isArray(v)) return v.map(deserializeValue)
+  const obj = v as Record<string, unknown>
+  if (obj.__type === 'Map') {
+    const entries = (obj.entries as [unknown, unknown][]).map(
+      ([k, val]) => [deserializeValue(k), deserializeValue(val)] as [unknown, unknown],
+    )
+    return new Map(entries)
+  }
+  if (obj.__type === 'Set') {
+    const values = (obj.values as unknown[]).map(deserializeValue)
+    return new Set(values)
+  }
+  const out: Record<string, unknown> = {}
+  for (const [k, val] of Object.entries(obj)) out[k] = deserializeValue(val)
+  return out
 }

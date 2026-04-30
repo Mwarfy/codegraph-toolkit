@@ -60,6 +60,17 @@ export function clearMtimeCache(): void {
   mtimeCache.clear()
 }
 
+/** Snapshot read-only du mtime cache, utilisé par la persistence Sprint 7. */
+export function getMtimeMap(): Map<string, number> {
+  return new Map(mtimeCache)
+}
+
+/** Restaure le mtime cache depuis un snapshot persisté (Sprint 7). */
+export function loadMtimeMap(snapshot: Map<string, number>): void {
+  mtimeCache.clear()
+  for (const [k, v] of snapshot) mtimeCache.set(k, v)
+}
+
 /**
  * Sprint 5.3 — Skip-set quand la valeur est deep-equal à la précédente.
  *

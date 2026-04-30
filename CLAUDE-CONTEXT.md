@@ -94,6 +94,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+29dc4d4 docs(phase-1): refresh boot brief post-Sprint 6 — cible <500ms warm ATTEINTE
 5254819 perf(codegraph): ts-imports reuses sharedProject in incremental mode [Sprint 6]
 7815a4d feat(codegraph): expose --incremental flag in CLI [Sprint 4]
 4dfd6cc docs(phase-1): refresh boot brief post-Sprint 5
@@ -105,7 +106,6 @@ cb6309d feat(codegraph): incremental mode — batch 3 (typed-calls, cycles, data
 92eabe3 feat(codegraph): incremental mode — batch 1 (event-emit-sites, package-deps, barrels) [Sprint 3]
 0c36ea1 docs(phase-1): refresh boot brief post-Sprint 2
 ca6d610 feat(codegraph): incremental mode — env-usage + oauth-scope-literals via Salsa (Sprint 2)
-84c8287 fix(salsa): add Database.resetState() — preserve registry across reset
 ```
 
 ## Comment contribuer à ce brief

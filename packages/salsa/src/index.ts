@@ -22,7 +22,13 @@
  * Voir README.md pour la sémantique de validation détaillée.
  */
 
-export { Database } from './database.js'
+export {
+  Database,
+  serializeValue,
+  deserializeValue,
+  type SerializedState,
+  type SerializedCell,
+} from './database.js'
 export { input, derived } from './runtime.js'
 export type { InputQuery, DerivedQuery } from './runtime.js'
 export { encodeKey } from './key-encoder.js'
