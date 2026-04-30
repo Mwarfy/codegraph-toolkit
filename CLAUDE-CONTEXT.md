@@ -96,6 +96,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+20b3709 feat(codegraph): 4 nouveaux détecteurs déterministes + fix cycles bullmq
 be1553e docs+test: ADR-005 pattern détecteurs + test parité legacy/incremental
 9906e22 perf(codegraph): unused-exports en queries Salsa fines [Sprint 11.2]
 5b0a379 docs: SPRINT-11-2-UNUSED-EXPORTS-PLAN.md — boot brief dédié pour reprendre Sprint 11.2
@@ -107,7 +108,6 @@ be1553e docs+test: ADR-005 pattern détecteurs + test parité legacy/incremental
 52b6fc7 docs(phase-1): refresh boot brief post-Sprint 7 — Phase 1 fonctionnellement complète
 e65edee feat(salsa,codegraph): disk persistence for cross-process cache hit [Sprint 7]
 29dc4d4 docs(phase-1): refresh boot brief post-Sprint 6 — cible <500ms warm ATTEINTE
-5254819 perf(codegraph): ts-imports reuses sharedProject in incremental mode [Sprint 6]
 ```
 
 ## Comment contribuer à ce brief

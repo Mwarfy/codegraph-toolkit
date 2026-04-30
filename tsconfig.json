@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "packages/codegraph" },
+    { "path": "packages/codegraph-mcp" },
     { "path": "packages/adr-toolkit" },
     { "path": "packages/datalog" },
     { "path": "packages/salsa" }
