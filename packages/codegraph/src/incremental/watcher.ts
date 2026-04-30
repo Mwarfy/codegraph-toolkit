@@ -30,7 +30,7 @@ import { watch as fsWatch, type FSWatcher } from 'node:fs'
 import * as path from 'node:path'
 import * as fs from 'node:fs/promises'
 import { minimatch } from 'minimatch'
-import { analyze } from '../core/analyzer.js'
+import { analyze, discoverFiles } from '../core/analyzer.js'
 import type { CodeGraphConfig } from '../core/types.js'
 import { savePersistedCache as incSavePersistedCache } from './persistence.js'
 import { sharedDb as incSharedDb } from './database.js'
@@ -56,6 +56,12 @@ export class CodeGraphWatcher {
   private running = false
   private analyzing = false
   private persistTimer: NodeJS.Timeout | null = null
+  /**
+   * Liste des fichiers actifs maintenue en RAM (Sprint 10). Évite le
+   * walk fs récursif à chaque analyze. Mise à jour sur fs event 'add'
+   * / 'remove' détecté via shouldTrack + fs.access.
+   */
+  private files: string[] = []
 
   constructor(config: CodeGraphConfig, options: WatchOptions = {}) {
     this.config = config
@@ -74,6 +80,13 @@ export class CodeGraphWatcher {
   async start(): Promise<void> {
     if (this.running) return
     this.running = true
+
+    // Sprint 10 : pré-discover la liste de fichiers UNE FOIS, puis la
+    // maintenir en RAM via fs events. Skip le walk fs récursif à
+    // chaque analyze (~500ms évités).
+    this.files = await discoverFiles(
+      this.config.rootDir, this.config.include, this.config.exclude,
+    )
 
     // Premier analyze : LOAD le cache disque si dispo (warm cross-process),
     // mais skip le SAVE — le watcher saugarde plus tard via persistTick.
@@ -153,11 +166,24 @@ export class CodeGraphWatcher {
     }
     this.analyzing = true
     const t0 = performance.now()
+
+    // Sprint 10 : sync la liste de fichiers depuis les fs events.
+    // Pour chaque change : si add → push, si remove → splice.
+    for (const f of changedFiles) {
+      const abs = path.join(this.config.rootDir, f)
+      let exists = false
+      try { await fs.access(abs); exists = true } catch {}
+      const idx = this.files.indexOf(f)
+      if (exists && idx === -1) this.files.push(f)
+      else if (!exists && idx !== -1) this.files.splice(idx, 1)
+    }
+
     try {
       await analyze(this.config, {
         incremental: true,
-        skipPersistenceLoad: opts.skipLoad ?? true,  // après le 1er run, DB est en RAM
-        skipPersistenceSave: opts.skipSave ?? true,  // save périodique via persistTimer
+        skipPersistenceLoad: opts.skipLoad ?? true,
+        skipPersistenceSave: opts.skipSave ?? true,
+        preDiscoveredFiles: this.files,
       })
       const durationMs = performance.now() - t0
       this.opts.onUpdate?.({ changedFiles, durationMs })

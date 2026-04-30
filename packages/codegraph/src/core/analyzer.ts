@@ -147,6 +147,14 @@ export interface AnalyzeOptions {
    * responsable de save périodiquement / au stop.
    */
   skipPersistenceSave?: boolean
+
+  /**
+   * Liste de fichiers pré-calculée (relative au rootDir). Si fournie,
+   * skip le `discoverFiles` walk fs récursif (~500ms sur Sentinel).
+   * Utilisé par le watcher mode (Sprint 10) qui maintient la liste
+   * en RAM et la met à jour sur fs events.
+   */
+  preDiscoveredFiles?: string[]
 }
 
 export async function analyze(
@@ -166,9 +174,13 @@ export async function analyze(
   }
 
   // ─── 1. Discover files ──────────────────────────────────────────────
+  // Sprint 10 : si `preDiscoveredFiles` est fourni (par le watcher qui
+  // maintient sa liste en RAM via fs events), skip le walk fs récursif.
+  // Sur Sentinel : ~500ms évités par run warm.
 
   const tFiles = performance.now()
-  const files = await discoverFiles(config.rootDir, config.include, config.exclude)
+  const files = options.preDiscoveredFiles
+    ?? await discoverFiles(config.rootDir, config.include, config.exclude)
   timing.fileDiscovery = performance.now() - tFiles
 
   // ─── 2. Build read cache ────────────────────────────────────────────
@@ -247,6 +259,32 @@ export async function analyze(
     )
     setIncrementalContext({ project: preBuiltSharedProject, rootDir: config.rootDir })
     setTsImportPrebuiltProject(preBuiltSharedProject)
+
+    // Sprint 11 : alimenter fileContent + projectFiles AVANT la boucle
+    // des détecteurs pour que `allTsImports.get('all')` puisse être
+    // utilisé en remplacement du détecteur legacy ts-imports
+    // (ts-imports warm 109ms → <10ms via cache Salsa per-file).
+    for (const f of files) {
+      const absPath = path.join(config.rootDir, f)
+      let mtime: number | undefined
+      try {
+        const stat = await fs.stat(absPath)
+        mtime = stat.mtimeMs
+      } catch {}
+      const cachedMtime = incGetCachedMtime(f)
+      const cellExists = incFileContent.has(f)
+      if (mtime !== undefined && cachedMtime === mtime && cellExists) continue
+      let content = fileCache.get(f)
+      if (content === undefined) {
+        try {
+          content = await fs.readFile(absPath, 'utf-8')
+          fileCache.set(f, content)
+        } catch { content = '' }
+      }
+      incFileContent.set(f, content)
+      if (mtime !== undefined) incSetCachedMtime(f, mtime)
+    }
+    incSetInputIfChanged(incProjectFiles, 'all', files)
   }
 
   // ─── 4. Run detectors ──────────────────────────────────────────────
@@ -254,7 +292,24 @@ export async function analyze(
   const detectors = createDetectors(config.detectors)
   const allLinks: DetectedLink[] = []
 
+  // Sprint 11 : en mode incremental, ts-imports passe par allTsImports
+  // (Salsa cache per-file) au lieu du détecteur legacy. Skip dans la
+  // boucle pour éviter le double-scan.
+  const skipDetectors = new Set<string>()
+  if (incremental) {
+    skipDetectors.add('ts-imports')
+    const tTsImports = performance.now()
+    try {
+      const links = incAllTsImports.get('all')
+      allLinks.push(...links)
+    } catch (err) {
+      console.error(`  ✗ ts-imports (Salsa) failed: ${err}`)
+    }
+    timing.detectors['ts-imports'] = performance.now() - tTsImports
+  }
+
   for (const detector of detectors) {
+    if (skipDetectors.has(detector.name)) continue
     const tDet = performance.now()
     try {
       const links = await detector.detect(ctx)
@@ -335,45 +390,9 @@ export async function analyze(
 
   if (incremental) {
     sharedProject = preBuiltSharedProject!
-
-    // Sprint 5.1 — mtime-aware fileContent : skip readFile + skip
-    // fileContent.set quand mtime fs n'a pas bougé depuis le run
-    // précédent dans CE process. Sur Sentinel, sauve ~600 readFile +
-    // ~600 input.set au warm 2nd run.
-    //
-    // Note : le project-cache (Sprint 5.2) a déjà refresh les
-    // SourceFile pour les fichiers dont mtime a bougé. Ici on
-    // synchronise fileContent + mtimeCache pour le run suivant.
-    for (const f of files) {
-      const absPath = path.join(config.rootDir, f)
-      let mtime: number | undefined
-      try {
-        const stat = await fs.stat(absPath)
-        mtime = stat.mtimeMs
-      } catch {
-        mtime = undefined
-      }
-
-      const cachedMtime = incGetCachedMtime(f)
-      const cellExists = incFileContent.has(f)
-
-      if (mtime !== undefined && cachedMtime === mtime && cellExists) {
-        continue  // Skip : fichier inchangé.
-      }
-
-      let content = fileCache.get(f)
-      if (content === undefined) {
-        try {
-          content = await fs.readFile(absPath, 'utf-8')
-          fileCache.set(f, content)
-        } catch {
-          content = ''
-        }
-      }
-      incFileContent.set(f, content)
-      if (mtime !== undefined) incSetCachedMtime(f, mtime)
-    }
-    incSetInputIfChanged(incProjectFiles, 'all', files)
+    // fileContent + projectFiles déjà set en step 3b (Sprint 11).
+    // Ici : manifests + sqlDefaults qui ne sont nécessaires que pour
+    // les détecteurs Salsa appelés plus tard (package-deps, state-machines).
 
     // Discovery + filter active manifests pour package-deps incremental.
     // C'est async donc fait ici, pas dans une derived query (sync only).
@@ -1050,7 +1069,7 @@ async function findTaintRules(rootDir: string): Promise<string | null> {
 
 // ─── File Discovery ─────────────────────────────────────────────────────
 
-async function discoverFiles(
+export async function discoverFiles(
   rootDir: string,
   include: string[],
   exclude: string[]
