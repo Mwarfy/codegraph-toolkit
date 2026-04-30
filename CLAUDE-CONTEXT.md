@@ -23,6 +23,7 @@
 
 ## Fichiers gouvernés par un ADR (lookup pré-calculé)
 
+- `packages/adr-toolkit/src/bootstrap-fsm.ts` → ADR-004
 - `packages/adr-toolkit/src/bootstrap-writer.ts` → ADR-004
 - `packages/adr-toolkit/src/bootstrap.ts` → ADR-004
 - `packages/adr-toolkit/src/config.ts` → ADR-002
@@ -98,6 +99,8 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+41f0d10 docs: boot briefs SPRINT-13-FSM + REFACTOR-ANALYZER pour reprise à froid
+08534fb release: v0.2.0 — bootstrap detectors + types invariant + install.sh moderne
 b28b910 chore: rename @liby/ → @liby-tools/ pour publication npm
 1be9051 chore(deps): pin intra-workspace deps à ^0.1.0 pour npm publish
 8935e31 docs: README codegraph-mcp + npm publish setup + bootstrap backlog
@@ -108,8 +111,6 @@ b28b910 chore: rename @liby/ → @liby-tools/ pour publication npm
 20b3709 feat(codegraph): 4 nouveaux détecteurs déterministes + fix cycles bullmq
 be1553e docs+test: ADR-005 pattern détecteurs + test parité legacy/incremental
 9906e22 perf(codegraph): unused-exports en queries Salsa fines [Sprint 11.2]
-5b0a379 docs: SPRINT-11-2-UNUSED-EXPORTS-PLAN.md — boot brief dédié pour reprendre Sprint 11.2
-66a4ae6 docs(phase-3): refresh boot brief — Phase 3 partielle, prochaines étapes
 ```
 
 ## Comment contribuer à ce brief

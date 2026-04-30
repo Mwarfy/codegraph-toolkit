@@ -25,6 +25,10 @@ import * as path from 'node:path'
 import Anthropic from '@anthropic-ai/sdk'
 import type { AdrToolkitConfig } from './config.js'
 import { checkAsserts } from './check-asserts.js'
+import { detectFsmCandidates, type FsmCandidate } from './bootstrap-fsm.js'
+
+export { detectFsmCandidates }
+export type { FsmCandidate, FsmWriteSite } from './bootstrap-fsm.js'
 
 // ─── Pattern candidates ─────────────────────────────────────────────────────
 
@@ -284,6 +288,48 @@ TÂCHE LIMITÉE :
    - N'utilise PAS \`type: "class"\` / \`type: "function"\` — ts-morph compare au type TS exact (ex: \`type: "Set<string>"\`, \`type: "string[]"\`).
    - Si tu n'es pas SÛR du type TS exact, ne mets PAS le champ \`type\` du tout.
    - Pour un singleton, 1 seul assert sur la classe suffit. Pas de sur-génération.
+6. Anchors : ce fichier uniquement (l'orchestrateur étendra si besoin).
+
+OUTPUT : utilise OBLIGATOIREMENT l'outil "submit_draft" avec un JSON conforme au schema. Ne réponds rien d'autre.`
+
+const FSM_PROMPT_TEMPLATE = (args: {
+  filePath: string
+  fileContent: string
+  evidence: string
+  modulePrefix: string
+  fsmName: string
+  values: string[]
+  writeSites: FsmCandidate['writeSites']
+}) => `Tu es un assistant d'extraction d'ADR. UN seul fichier, UN seul pattern.
+
+PATTERN DÉTECTÉ : FSM (Finite State Machine — union de string literals)
+FICHIER : ${args.filePath}
+ÉVIDENCE : ${args.evidence}
+
+TYPE FSM : ${args.fsmName}
+VALEURS : ${args.values.map(v => `'${v}'`).join(' | ')}
+WRITE SITES OBSERVÉS (${args.writeSites.length}) :
+${args.writeSites.slice(0, 12).map(s => `  - ${s.file}:${s.line} → '${s.value}'${s.trigger ? ` (in ${s.trigger})` : ''}`).join('\n') || '  (aucun write observé — FSM déclarée mais inactive)'}
+
+CODE (max 200 lignes) :
+\`\`\`typescript
+${args.fileContent.slice(0, 8000)}
+\`\`\`
+
+TÂCHE LIMITÉE :
+1. Confirme le pattern FSM (type ${args.fsmName} = union de string literals avec writes observés) OU réponds avec verdict "skip" si c'est un faux positif (ex: type d'options de config, pas une vraie FSM métier).
+2. Rule : 1 phrase, ≤120 chars, présent indicatif. Doit nommer le type ET la liste des états. Ex: "${args.fsmName} est une FSM avec les états ${args.values.map(v => `'${v}'`).join(', ')}". PAS de "for consistency" / "for maintainability". PAS de transitions ici (V1 ne les déduit pas).
+3. Why : 2 phrases MAX. PRIORITÉ : cite un commentaire en tête de fichier ou de la déclaration (avec numéro de ligne entre parenthèses si possible) qui explique le sens métier de la FSM. Si rien à citer → écrire littéralement "TODO: pourquoi cette FSM ?".
+4. Title : nom court (≤60 chars). Ex: "${args.fsmName} state machine".
+5. Asserts ts-morph — FORMAT OBLIGATOIRE \`module#symbol\` :
+   - \`module\` = path relatif SANS extension. Pour CE fichier : \`${args.modulePrefix}\`
+   - \`symbol\` = SYMBOLE TOP-LEVEL exporté UNIQUEMENT (type, enum, classe, fonction).
+     ⚠ checkAsserts NE SUPPORTE PAS les méthodes de classe.
+   - Pour une FSM, asserter UNIQUEMENT le type/enum top-level : \`${args.modulePrefix}#${args.fsmName}\`
+   - Pour chaque assert, utilise UNIQUEMENT \`exists: true\` (default safe).
+   - N'utilise PAS \`type: "type alias"\` / \`type: "enum"\` — ts-morph compare au type TS exact qui est complexe pour une union.
+   - Si tu n'es pas SÛR du type TS exact, ne mets PAS le champ \`type\` du tout.
+   - 1 seul assert sur le type FSM suffit. Pas de sur-génération.
 6. Anchors : ce fichier uniquement (l'orchestrateur étendra si besoin).
 
 OUTPUT : utilise OBLIGATOIREMENT l'outil "submit_draft" avec un JSON conforme au schema. Ne réponds rien d'autre.`
@@ -570,15 +616,26 @@ export async function bootstrapAdrs(opts: BootstrapOptions): Promise<BootstrapRe
         continue
       }
 
-      const userPrompt =
-        candidate.kind === 'singleton'
-          ? SINGLETON_PROMPT_TEMPLATE({
-              filePath: candidate.relativePath,
-              fileContent,
-              evidence: candidate.evidence,
-              modulePrefix: deriveModulePrefix(candidate.relativePath, config.srcDirs),
-            }) + (mode === 'cli' ? CLI_SCHEMA_HINT : '')
-          : null
+      let userPrompt: string | null = null
+      if (candidate.kind === 'singleton') {
+        userPrompt = SINGLETON_PROMPT_TEMPLATE({
+          filePath: candidate.relativePath,
+          fileContent,
+          evidence: candidate.evidence,
+          modulePrefix: deriveModulePrefix(candidate.relativePath, config.srcDirs),
+        }) + (mode === 'cli' ? CLI_SCHEMA_HINT : '')
+      } else if (candidate.kind === 'fsm') {
+        const fsm = candidate as FsmCandidate
+        userPrompt = FSM_PROMPT_TEMPLATE({
+          filePath: candidate.relativePath,
+          fileContent,
+          evidence: candidate.evidence,
+          modulePrefix: deriveModulePrefix(candidate.relativePath, config.srcDirs),
+          fsmName: fsm.fsmName,
+          values: fsm.values,
+          writeSites: fsm.writeSites,
+        }) + (mode === 'cli' ? CLI_SCHEMA_HINT : '')
+      }
 
       if (!userPrompt) {
         skipped.push({ candidate, reason: `Pattern ${candidate.kind} not yet supported` })

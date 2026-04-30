@@ -32,6 +32,9 @@ export { initProject } from './init.js'
 export {
   bootstrapAdrs,
   detectSingletonCandidates,
+  detectWriteIsolationCandidates,
+  detectHubCandidates,
+  detectFsmCandidates,
 } from './bootstrap.js'
 export type {
   BootstrapOptions,
@@ -39,6 +42,8 @@ export type {
   AdrDraft,
   PatternCandidate,
   PatternKind,
+  FsmCandidate,
+  FsmWriteSite,
 } from './bootstrap.js'
 
 export { applyDrafts } from './bootstrap-writer.js'

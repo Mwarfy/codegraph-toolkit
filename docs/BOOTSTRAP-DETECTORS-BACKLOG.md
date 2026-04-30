@@ -9,13 +9,18 @@ prévus pour alimenter le bootstrap des ADRs. Status :
 | `singleton` | ✅ Livré v0.1.0 | private static instance + getInstance | candidate ADR sur la classe |
 | `write-isolation` | ✅ Livré v0.2.0 | un seul writer pour un truth-point (depuis snapshot.truthPoints) | candidate ADR sur la propriété d'isolation |
 | `hub` | ✅ Livré v0.2.0 | fichier avec in-degree ≥ N (default 20) sans marqueur ADR | candidate ADR sur le contract hub |
-| `fsm` | ⏳ À faire | union string literals avec suffixe `Status\|State\|Phase\|Stage` + writes observables | candidate ADR sur transitions |
+| `fsm` | ✅ Livré v0.3.0 | union string literals avec suffixe `Status\|State\|Phase\|Stage` + writes observables (object literal + assignment) | candidate ADR sur la FSM (transitions = V2) |
 
-**Pour le détecteur fsm restant** : voir le **plan détaillé** dans
-`SPRINT-13-FSM-DETECTOR-PLAN.md` (boot brief dédié pour reprise à froid).
-Estimé 3-4h dédiées. Heuristique de détection complète, fixtures de test,
-pièges connus (suffix-only false positives, numeric enums, cross-référencement),
-prompt template, plan d'attaque en 6 étapes.
+**Set bootstrap complet en v0.3.0.** 4 détecteurs déterministes alimentent le
+runner `bootstrapAdrs`. Mesures sur Sentinel (204 fichiers, 4.5s) :
+3 FSM candidates détectés — `DeployLogPhase` (10 valeurs, 0 writes — confirme
+le FSM-ORPHAN listé dans `CLAUDE-CONTEXT.md`), `ProjectStatus` (3 valeurs,
+6 writes avec triggers `activateProject` / `pauseProject`), `BlockStatus`
+(4 valeurs, 5 writes avec triggers `executePlan` / `getDeployStatus`).
+
+Plan détaillé du sprint dans `SPRINT-13-FSM-DETECTOR-PLAN.md` (boot brief
+préservé pour archive). Reprise V2 (transitions) : reconstruire `read X →
+write Y` depuis control flow analysis.
 
 ## Pourquoi ces 3 détecteurs en particulier
 

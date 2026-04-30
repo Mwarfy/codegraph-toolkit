@@ -281,9 +281,15 @@ npx adr-toolkit bootstrap --mode sdk --max 5
 
 ## Roadmap
 
-- **Détecteur `fsm`** — union string literals (`Status`, `State`, `Phase`, `Stage`) avec writes observables. AST analysis non-triviale, ~3-4h. **Plan détaillé** : [`docs/SPRINT-13-FSM-DETECTOR-PLAN.md`](docs/SPRINT-13-FSM-DETECTOR-PLAN.md).
+- **Reconstruction transitions FSM (V2)** — actuellement le détecteur `fsm` capture les write sites + le contexte fonction. V2 : reconstruire `read state X → write state Y` par control flow analysis pour générer un graphe de transitions valides dans l'ADR.
 - **Spawn parallèle** des agents bootstrap (actuellement séquentiel).
 - **Refactor profond `core/analyzer.ts`** — pattern visiteur / detector registry pour découper le god-file (1188 LOC, fonction `analyze()` à 855 lignes brutes / 591 LOC effectives). 1-2 jours dédiés, tests parité critiques. **Plan détaillé** : [`docs/REFACTOR-ANALYZER-PLAN.md`](docs/REFACTOR-ANALYZER-PLAN.md).
+
+## Done en v0.3.0
+
+- ✅ Détecteur bootstrap `fsm` — union string literals (`Status`, `State`, `Phase`, `Stage`) avec writes observables (object literal + assignment). 7 tests dédiés (cross-ref filter, suffix-only false positives, numeric enums skip, string enums OK). Mesures Sentinel : 3 FSMs détectées (`DeployLogPhase`, `ProjectStatus`, `BlockStatus`) en 4.5s sur 204 fichiers.
+- ✅ Set bootstrap complet (4 détecteurs : singleton + write-isolation + hub + fsm). Plan détaillé du sprint préservé en archive : [`docs/SPRINT-13-FSM-DETECTOR-PLAN.md`](docs/SPRINT-13-FSM-DETECTOR-PLAN.md).
+- ✅ Exports manquants ajoutés à `index.ts` : `detectWriteIsolationCandidates` + `detectHubCandidates` (oubli v0.2.0).
 
 ## Done en v0.2.0
 
