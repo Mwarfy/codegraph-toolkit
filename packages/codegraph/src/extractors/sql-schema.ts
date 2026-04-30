@@ -450,10 +450,11 @@ function extractColsBetweenParens(decl: string): string[] {
  * parenthèses imbriquées).
  */
 function splitTopLevel(s: string, sep: string): string[] {
+  const stripped = stripSqlComments(s)
   const out: string[] = []
   let depth = 0
   let cur = ''
-  for (const c of s) {
+  for (const c of stripped) {
     if (c === '(') depth++
     else if (c === ')') depth--
     if (c === sep && depth === 0) {
@@ -464,6 +465,36 @@ function splitTopLevel(s: string, sep: string): string[] {
     }
   }
   if (cur.length > 0) out.push(cur)
+  return out
+}
+
+/**
+ * Strip les commentaires SQL ligne (`-- ... \n`) en préservant le `\n`
+ * pour ne pas casser les calculs de line:line numbers basés sur
+ * `countNewlines(slice)`. Les caractères du commentaire sont remplacés
+ * par des espaces pour conserver la longueur.
+ *
+ * Pourquoi : sans strip, un commentaire comme `-- API v3 (videos.list)`
+ * contient une parenthèse qui désynchronise le tracker de profondeur
+ * dans `splitTopLevel`. Toutes les decls suivantes sont alors collées
+ * en une seule grosse decl. Bug détecté sur les migrations Sentinel
+ * avec PK composite après des colonnes commentées.
+ */
+function stripSqlComments(s: string): string {
+  let out = ''
+  let i = 0
+  while (i < s.length) {
+    if (s[i] === '-' && s[i + 1] === '-') {
+      // Skip jusqu'à \n (exclusif), remplacer par des espaces.
+      while (i < s.length && s[i] !== '\n') {
+        out += ' '
+        i++
+      }
+    } else {
+      out += s[i]
+      i++
+    }
+  }
   return out
 }
 

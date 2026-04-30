@@ -217,6 +217,32 @@ describe('analyzeSqlSchema — FK without index detection', () => {
   })
 })
 
+describe('parseSqlFile — bug repro : PK composite avec comments inline contenant des parenthèses', () => {
+  it('détecte la PK table-level malgré les commentaires SQL avec parenthèses dans le bloc', () => {
+    const sql = `
+      CREATE TABLE video_metrics_history (
+        published_video_id UUID NOT NULL,
+        collected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        -- Stats basiques (YouTube Data API v3 — videos.list?part=statistics)
+        views BIGINT,
+        favorites BIGINT,                                                   -- deprecated côté YT mais l'API le retourne encore
+        -- Stats avancées (YouTube Analytics API v2 — reports.query)
+        impressions BIGINT,
+        ctr REAL,                                                           -- 0.0-1.0
+        retention_pct REAL,                                                 -- 0.0-1.0 (avg_view_duration / total_duration)
+        raw_payload JSONB,                                                  -- réponse API brute (debug / re-parse futur)
+        PRIMARY KEY (published_video_id, collected_at)
+      );
+    `
+    const { tables, indexes } = parseSqlFile(sql, 'test.sql')
+    expect(tables).toHaveLength(1)
+    // La PK composite doit être détectée comme un index implicite _pkey.
+    const pkey = indexes.find((i) => i.name === 'video_metrics_history_pkey')
+    expect(pkey).toBeDefined()
+    expect(pkey!.columns).toEqual(['published_video_id', 'collected_at'])
+  })
+})
+
 describe('derivePrimaryKeys (Phase 4 Tier 1)', () => {
   it('dérive PK depuis colonne inline', async () => {
     const sql = `
