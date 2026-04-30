@@ -313,6 +313,76 @@ export async function exportFacts(
   }
   relations.push(cycleNodeRel)
 
+  // ─── SymbolCallEdge / SymbolSignature ────────────────────────────────
+  // Phase 4 axe 2 : path queries CFG-level via Datalog. Émet les call edges
+  // typés et les signatures pour permettre des rules taint-analysis lite
+  // (auth-before-write, validate-before-db, etc.) sans coder un détecteur
+  // dédié.
+  // Source : snapshot.typedCalls (callEdges + signatures).
+  const symbolCallEdgeRel: RelationDef = {
+    name: 'SymbolCallEdge',
+    decl: '(fromFile:symbol, fromSymbol:symbol, toFile:symbol, toSymbol:symbol, line:number)',
+    rows: [],
+  }
+  const symbolSignatureRel: RelationDef = {
+    name: 'SymbolSignature',
+    decl: '(file:symbol, name:symbol, kind:symbol, line:number)',
+    rows: [],
+  }
+  if (snapshot.typedCalls) {
+    for (const sig of snapshot.typedCalls.signatures) {
+      symbolSignatureRel.rows.push([
+        sym(sig.file),
+        sym(sig.exportName),
+        sym(sig.kind),
+        num(sig.line),
+      ])
+    }
+    for (const edge of snapshot.typedCalls.callEdges) {
+      // `from` / `to` sont au format "file:symbolName". Le séparateur est
+      // le DERNIER `:` (les noms TS d'export ne contiennent pas `:`).
+      const fromSplit = splitFileSymbol(edge.from)
+      const toSplit = splitFileSymbol(edge.to)
+      if (!fromSplit || !toSplit) continue   // edge dégradé — skip
+      symbolCallEdgeRel.rows.push([
+        sym(fromSplit.file),
+        sym(fromSplit.symbol),
+        sym(toSplit.file),
+        sym(toSplit.symbol),
+        num(edge.line),
+      ])
+    }
+  }
+  relations.push(symbolCallEdgeRel, symbolSignatureRel)
+
+  // ─── EntryPoint ──────────────────────────────────────────────────────
+  // Source : snapshot.dataFlows[].entry. Dédupe par (file, kind, id) car
+  // un handler peut apparaître plusieurs fois (downstream chains).
+  const entryPointRel: RelationDef = {
+    name: 'EntryPoint',
+    decl: '(file:symbol, kind:symbol, id:symbol)',
+    rows: [],
+  }
+  const entryPointSeen = new Set<string>()
+  const collectEntries = (flows: Array<{ entry: { kind: string; id: string; file: string }; downstream?: any[] }>): void => {
+    for (const f of flows) {
+      const key = f.entry.file + '\x00' + f.entry.kind + '\x00' + f.entry.id
+      if (!entryPointSeen.has(key)) {
+        entryPointSeen.add(key)
+        entryPointRel.rows.push([
+          sym(f.entry.file),
+          sym(f.entry.kind),
+          sym(f.entry.id),
+        ])
+      }
+      if (f.downstream && f.downstream.length > 0) collectEntries(f.downstream)
+    }
+  }
+  if (snapshot.dataFlows) {
+    collectEntries(snapshot.dataFlows as any)
+  }
+  relations.push(entryPointRel)
+
   // ─── Write to disk ────────────────────────────────────────────────────
   await fs.mkdir(options.outDir, { recursive: true })
 
@@ -361,6 +431,17 @@ function sym(value: string): string {
 
 function num(n: number): string {
   return String(Math.trunc(n))
+}
+
+/**
+ * Splitte un id symbole `"file/path.ts:symbolName"` en `{ file, symbol }`.
+ * Retourne null si pas de `:` (id dégénéré). Le séparateur est le DERNIER
+ * `:` (un path peut en théorie contenir `:`, en pratique non — paths POSIX).
+ */
+function splitFileSymbol(id: string): { file: string; symbol: string } | null {
+  const idx = id.lastIndexOf(':')
+  if (idx <= 0 || idx === id.length - 1) return null
+  return { file: id.slice(0, idx), symbol: id.slice(idx + 1) }
 }
 
 /**
