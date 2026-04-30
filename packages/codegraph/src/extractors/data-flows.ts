@@ -138,53 +138,66 @@ export async function analyzeDataFlows(
     edgesByFrom.get(e.from)!.push(e)
   }
 
-  // ─── Pass 1 : sinks par fonction container ──────────────────────────
-
-  const sinksByContainer = new Map<string, DataFlowSink[]>()
-  const fnRanges = new Map<string, Array<{ start: number; end: number; name: string }>>()
-
+  // ─── Per-file extraction (Salsa-isable) ─────────────────────────────
+  const fileBundles = new Map<string, DataFlowFileBundle>()
   for (const sf of project.getSourceFiles()) {
     const relPath = relativize(sf.getFilePath(), rootDir)
     if (!relPath || !fileSet.has(relPath)) continue
-
-    const ranges = collectFunctionRanges(sf)
-    fnRanges.set(relPath, ranges)
-
-    scanSinks(sf, relPath, ranges, queryFns, emitFns, httpRespFns, bullmqFns, sinksByContainer)
-    scanHttpOutboundSinks(sf, relPath, ranges, httpOutboundFns, httpOutboundClients, sinksByContainer)
-  }
-
-  // ─── Pass 2 : entry-points ──────────────────────────────────────────
-
-  const entries: DataFlowEntry[] = []
-  const inlineListenerSinks = new Map<string, DataFlowSink[]>()  // pour les arrows inline
-
-  for (const sf of project.getSourceFiles()) {
-    const relPath = relativize(sf.getFilePath(), rootDir)
-    if (!relPath || !fileSet.has(relPath)) continue
-    const ranges = fnRanges.get(relPath)!
-
-    detectHttpEntries(sf, relPath, ranges, entries)
-    detectListenerEntries(
-      sf,
-      relPath,
-      ranges,
-      listenFns,
+    fileBundles.set(relPath, extractDataFlowsFileBundle(sf, relPath, {
       queryFns,
       emitFns,
+      listenFns,
       httpRespFns,
       bullmqFns,
-      entries,
-      inlineListenerSinks,
-    )
-    if (relPath.includes(mcpFragment)) {
-      detectMcpToolEntries(sf, relPath, entries)
-    }
-    detectIntervalEntries(sf, relPath, ranges, intervalFns, entries)
-    detectBullmqWorkerEntries(sf, relPath, ranges, bullmqWorkerCtors, entries)
+      mcpFragment,
+      intervalFns,
+      bullmqWorkerCtors,
+      httpOutboundFns,
+      httpOutboundClients,
+    }))
   }
 
-  // Index : event name → liste d'entries qui l'écoutent (pour downstream).
+  return buildDataFlowsFromBundles(fileBundles, typedCalls, { maxDepth, downstreamDepth })
+}
+
+/**
+ * Pure builder réutilisable : à partir des bundles per-file (déjà
+ * extraits) + typedCalls global, exécute Pass 3 (BFS) + Pass 4
+ * (downstream) + tri. Réutilisé côté Salsa après caching des bundles.
+ */
+export function buildDataFlowsFromBundles(
+  fileBundles: Map<string, DataFlowFileBundle>,
+  typedCalls: TypedCalls,
+  opts: { maxDepth: number; downstreamDepth: number },
+): DataFlow[] {
+  const { maxDepth, downstreamDepth } = opts
+
+  const sigIndex = new Map<string, TypedSignature>()
+  for (const s of typedCalls.signatures) {
+    sigIndex.set(`${s.file}:${s.exportName}`, s)
+  }
+
+  const edgesByFrom = new Map<string, typeof typedCalls.callEdges>()
+  for (const e of typedCalls.callEdges) {
+    if (!edgesByFrom.has(e.from)) edgesByFrom.set(e.from, [])
+    edgesByFrom.get(e.from)!.push(e)
+  }
+
+  const sinksByContainer = new Map<string, DataFlowSink[]>()
+  const entries: DataFlowEntry[] = []
+  const inlineListenerSinks = new Map<string, DataFlowSink[]>()
+  for (const bundle of fileBundles.values()) {
+    for (const [container, sinks] of bundle.sinksByContainer) {
+      if (!sinksByContainer.has(container)) sinksByContainer.set(container, [])
+      sinksByContainer.get(container)!.push(...sinks)
+    }
+    entries.push(...bundle.entries)
+    for (const [container, sinks] of bundle.inlineListenerSinks) {
+      if (!inlineListenerSinks.has(container)) inlineListenerSinks.set(container, [])
+      inlineListenerSinks.get(container)!.push(...sinks)
+    }
+  }
+
   const listenersByEvent = new Map<string, DataFlowEntry[]>()
   for (const e of entries) {
     if (e.kind !== 'event-listener') continue
@@ -193,23 +206,18 @@ export async function analyzeDataFlows(
     listenersByEvent.get(eventName)!.push(e)
   }
 
-  // ─── Pass 3 : BFS par entry ─────────────────────────────────────────
-
   const flows: DataFlow[] = []
-
   for (const entry of entries) {
     const flow = buildFlow(entry, sigIndex, edgesByFrom, sinksByContainer, inlineListenerSinks, maxDepth)
     flows.push(flow)
   }
 
-  // Pass 4 : downstream chaining pour les event-emit sinks.
   if (downstreamDepth > 0) {
     for (const flow of flows) {
       attachDownstream(flow, flows, listenersByEvent, downstreamDepth, new Set())
     }
   }
 
-  // Tri déterministe : par kind (http-route d'abord) puis par id.
   const kindOrder: Record<DataFlowEntryKind, number> = {
     'http-route': 0,
     'mcp-tool': 1,
@@ -226,6 +234,83 @@ export async function analyzeDataFlows(
   })
 
   return flows
+}
+
+/**
+ * Bundle de tout ce qu'on peut extraire d'UN SourceFile sans toucher
+ * au global (sigIndex, edgesByFrom). Utilisé par la version Salsa.
+ */
+export interface DataFlowFileBundle {
+  /** Map: container ("file:fnName") → liste de sinks. */
+  sinksByContainer: Map<string, DataFlowSink[]>
+  /** Entries (http, listener, mcp, interval, worker) détectés. */
+  entries: DataFlowEntry[]
+  /** Sinks inline d'un arrow listener (clé : container synthétique). */
+  inlineListenerSinks: Map<string, DataFlowSink[]>
+}
+
+export interface DataFlowFileBundleOptions {
+  queryFns: ReadonlySet<string>
+  emitFns: ReadonlySet<string>
+  listenFns: ReadonlySet<string>
+  httpRespFns: ReadonlySet<string>
+  bullmqFns: ReadonlySet<string>
+  mcpFragment: string
+  intervalFns: ReadonlySet<string>
+  bullmqWorkerCtors: ReadonlySet<string>
+  httpOutboundFns: ReadonlySet<string>
+  httpOutboundClients: ReadonlySet<string>
+}
+
+/**
+ * Helper réutilisable : extraction Pass 1 (sinks) + Pass 2 (entries)
+ * pour UN SourceFile. Réutilisé par la version Salsa pour cacher
+ * tout ça par-fichier.
+ */
+export function extractDataFlowsFileBundle(
+  sf: SourceFile,
+  relPath: string,
+  opts: DataFlowFileBundleOptions,
+): DataFlowFileBundle {
+  const ranges = collectFunctionRanges(sf)
+
+  const sinksByContainer = new Map<string, DataFlowSink[]>()
+  scanSinks(sf, relPath, ranges, opts.queryFns as Set<string>, opts.emitFns as Set<string>,
+            opts.httpRespFns as Set<string>, opts.bullmqFns as Set<string>, sinksByContainer)
+  scanHttpOutboundSinks(sf, relPath, ranges, opts.httpOutboundFns as Set<string>,
+                        opts.httpOutboundClients as Set<string>, sinksByContainer)
+
+  const entries: DataFlowEntry[] = []
+  const inlineListenerSinks = new Map<string, DataFlowSink[]>()
+
+  detectHttpEntries(sf, relPath, ranges, entries)
+  detectListenerEntries(sf, relPath, ranges,
+    opts.listenFns as Set<string>,
+    opts.queryFns as Set<string>,
+    opts.emitFns as Set<string>,
+    opts.httpRespFns as Set<string>,
+    opts.bullmqFns as Set<string>,
+    entries, inlineListenerSinks)
+  if (relPath.includes(opts.mcpFragment)) {
+    detectMcpToolEntries(sf, relPath, entries)
+  }
+  detectIntervalEntries(sf, relPath, ranges, opts.intervalFns as Set<string>, entries)
+  detectBullmqWorkerEntries(sf, relPath, ranges, opts.bullmqWorkerCtors as Set<string>, entries)
+
+  return { sinksByContainer, entries, inlineListenerSinks }
+}
+
+export const DEFAULT_DATA_FLOWS_OPTS: DataFlowFileBundleOptions = {
+  queryFns: new Set(DEFAULT_QUERY_FNS),
+  emitFns: new Set(DEFAULT_EMIT_FNS),
+  listenFns: new Set(DEFAULT_LISTEN_FNS),
+  httpRespFns: new Set(DEFAULT_HTTP_RESP_FNS),
+  bullmqFns: new Set(DEFAULT_BULLMQ_FNS),
+  mcpFragment: DEFAULT_MCP_FRAGMENT,
+  intervalFns: new Set(DEFAULT_INTERVAL_FNS),
+  bullmqWorkerCtors: new Set(DEFAULT_BULLMQ_WORKER_CTORS),
+  httpOutboundFns: new Set(DEFAULT_HTTP_OUTBOUND_FNS),
+  httpOutboundClients: new Set(DEFAULT_HTTP_OUTBOUND_CLIENTS),
 }
 
 // ─── Function range tracking ────────────────────────────────────────────────

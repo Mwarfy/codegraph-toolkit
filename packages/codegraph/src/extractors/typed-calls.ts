@@ -46,62 +46,90 @@ export async function analyzeTypedCalls(
 ): Promise<TypedCalls> {
   const fileSet = new Set(files)
 
-  // ─── Pass 1 : signatures + index ────────────────────────────────────
-  // On construit `knownExports` ("file:symbol") pour filtrer les call edges
-  // en pass 2 — un edge vers un symbole non-tracké (lib externe, file exclu)
-  // est omis.
-
-  const signatures: TypedSignature[] = []
-  const knownExports = new Set<string>()
-
+  // ─── Per-file extraction (Salsa-isable) ─────────────────────────────
+  const bundles = new Map<string, TypedCallsFileBundle>()
   for (const sf of project.getSourceFiles()) {
     const relPath = relativize(sf.getFilePath(), rootDir)
     if (!relPath || !fileSet.has(relPath)) continue
+    bundles.set(relPath, extractTypedCallsFileBundle(sf, relPath, rootDir))
+  }
 
-    for (const sig of extractSignatures(sf, relPath)) {
+  return aggregateTypedCalls(bundles)
+}
+
+/**
+ * Bundle per-file : signatures déclarées + raw call edges (avant
+ * filtre par knownExports global). L'agrégat filtre.
+ */
+export interface TypedCallsFileBundle {
+  signatures: TypedSignature[]
+  rawCallEdges: TypedCallEdge[]
+}
+
+/**
+ * Helper réutilisable : extrait les signatures + raw call edges d'UN
+ * SourceFile. Le filter global par `knownExports` est fait au niveau
+ * de l'agrégateur (ne dépend pas que de ce fichier).
+ */
+export function extractTypedCallsFileBundle(
+  sf: SourceFile,
+  relPath: string,
+  rootDir: string,
+): TypedCallsFileBundle {
+  const signatures = extractSignatures(sf, relPath)
+
+  const rawCallEdges: TypedCallEdge[] = []
+  const maps = getImportMap(sf, rootDir)
+  if (maps.named.size === 0 && maps.namespace.size === 0) {
+    return { signatures, rawCallEdges }
+  }
+
+  for (const unit of getCallableUnits(sf)) {
+    const fromKey = `${relPath}:${unit.name}`
+    visitCalls(unit.body, (callExpr) => {
+      const resolved = resolveCallee(callExpr, maps)
+      if (!resolved) return
+      const toKey = `${resolved.file}:${resolved.name}`
+      const line = callExpr.getStartLineNumber()
+      const argTypes = extractArgTypes(callExpr)
+      const returnType = extractReturnType(callExpr)
+      rawCallEdges.push({ from: fromKey, to: toKey, argTypes, returnType, line })
+    })
+  }
+
+  return { signatures, rawCallEdges }
+}
+
+/**
+ * Agrège les bundles per-file en `TypedCalls` final : construit
+ * knownExports, filtre les rawCallEdges, dédup, sort.
+ */
+export function aggregateTypedCalls(
+  bundles: Map<string, TypedCallsFileBundle>,
+): TypedCalls {
+  const signatures: TypedSignature[] = []
+  const knownExports = new Set<string>()
+
+  for (const bundle of bundles.values()) {
+    for (const sig of bundle.signatures) {
       signatures.push(sig)
       knownExports.add(`${sig.file}:${sig.exportName}`)
     }
   }
 
-  // ─── Pass 2 : call edges ────────────────────────────────────────────
-
   const callEdges: TypedCallEdge[] = []
   const edgeDedup = new Set<string>()
 
-  for (const sf of project.getSourceFiles()) {
-    const fromFile = relativize(sf.getFilePath(), rootDir)
-    if (!fromFile || !fileSet.has(fromFile)) continue
-
-    const maps = getImportMap(sf, rootDir)
-    if (maps.named.size === 0 && maps.namespace.size === 0) continue
-
-    for (const unit of getCallableUnits(sf)) {
-      const fromKey = `${fromFile}:${unit.name}`
-
-      // Walk body + body itself (arrow avec expression body : body EST le
-      // call expression, forEachDescendant ne le visite pas).
-      visitCalls(unit.body, (callExpr) => {
-        const resolved = resolveCallee(callExpr, maps)
-        if (!resolved) return
-
-        const toKey = `${resolved.file}:${resolved.name}`
-        if (!knownExports.has(toKey)) return
-
-        const line = callExpr.getStartLineNumber()
-        const dedupKey = `${fromKey}->${toKey}@${line}`
-        if (edgeDedup.has(dedupKey)) return
-        edgeDedup.add(dedupKey)
-
-        const argTypes = extractArgTypes(callExpr)
-        const returnType = extractReturnType(callExpr)
-
-        callEdges.push({ from: fromKey, to: toKey, argTypes, returnType, line })
-      })
+  for (const bundle of bundles.values()) {
+    for (const edge of bundle.rawCallEdges) {
+      if (!knownExports.has(edge.to)) continue
+      const dedupKey = `${edge.from}->${edge.to}@${edge.line}`
+      if (edgeDedup.has(dedupKey)) continue
+      edgeDedup.add(dedupKey)
+      callEdges.push(edge)
     }
   }
 
-  // Tri stable — déterminisme du snapshot. Octet-équivalent exigé.
   signatures.sort(compareSignatures)
   callEdges.sort(compareCallEdges)
 

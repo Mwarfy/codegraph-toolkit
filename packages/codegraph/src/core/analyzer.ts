@@ -56,6 +56,12 @@ import {
   allTruthPoints as incAllTruthPoints,
   graphEdgesInput as incGraphEdges,
 } from '../incremental/truth-points.js'
+import { allTypedCalls as incAllTypedCalls } from '../incremental/typed-calls.js'
+import { allCycles as incAllCycles } from '../incremental/cycles.js'
+import {
+  allDataFlows as incAllDataFlows,
+  typedCallsInput as incTypedCallsInput,
+} from '../incremental/data-flows.js'
 import { packageManifestsInput as incPackageManifests } from '../incremental/queries.js'
 import {
   discoverManifests as discoverPackageManifests,
@@ -361,7 +367,9 @@ export async function analyze(
   let typedCalls: Awaited<ReturnType<typeof analyzeTypedCalls>> | undefined
   if (typedCallsEnabled) {
     try {
-      typedCalls = await analyzeTypedCalls(config.rootDir, files, sharedProject)
+      typedCalls = incremental
+        ? incAllTypedCalls.get('all')
+        : await analyzeTypedCalls(config.rootDir, files, sharedProject)
       timing.detectors['typed-calls'] = performance.now() - tTypedCalls
     } catch (err) {
       timing.detectors['typed-calls'] = performance.now() - tTypedCalls
@@ -382,16 +390,26 @@ export async function analyze(
   if (cyclesEnabled) {
     try {
       const cycleOptions = config.detectorOptions?.['cycles'] ?? {}
-      cycles = await analyzeCycles(
-        config.rootDir,
-        files,
-        graph.getAllEdges(),
-        sharedProject,
-        {
-          edgeTypes: cycleOptions['edgeTypes'] as any,
-          gateNames: cycleOptions['gateNames'] as string[] | undefined,
-        },
-      )
+      if (incremental) {
+        // graphEdgesInput est déjà set en mode incremental (cf. truth-points
+        // path qui le set juste avant). edgeTypes/gateNames custom non
+        // supportés (defaults suffisent pour Sentinel).
+        if (!incGraphEdges.has('all')) {
+          incGraphEdges.set('all', graph.getAllEdges())
+        }
+        cycles = incAllCycles.get('all')
+      } else {
+        cycles = await analyzeCycles(
+          config.rootDir,
+          files,
+          graph.getAllEdges(),
+          sharedProject,
+          {
+            edgeTypes: cycleOptions['edgeTypes'] as any,
+            gateNames: cycleOptions['gateNames'] as string[] | undefined,
+          },
+        )
+      }
       timing.detectors['cycles'] = performance.now() - tCycles
     } catch (err) {
       timing.detectors['cycles'] = performance.now() - tCycles
@@ -454,23 +472,31 @@ export async function analyze(
   if (dataFlowsEnabled && typedCalls) {
     try {
       const dfOptions = config.detectorOptions?.['dataFlows'] ?? {}
-      dataFlows = await analyzeDataFlows(
-        config.rootDir,
-        files,
-        sharedProject,
-        typedCalls,
-        graph.getAllEdges(),
-        {
-          maxDepth: dfOptions['maxDepth'] as number | undefined,
-          downstreamDepth: dfOptions['downstreamDepth'] as number | undefined,
-          queryFnNames: dfOptions['queryFnNames'] as string[] | undefined,
-          emitFnNames: dfOptions['emitFnNames'] as string[] | undefined,
-          listenFnNames: dfOptions['listenFnNames'] as string[] | undefined,
-          httpResponseFnNames: dfOptions['httpResponseFnNames'] as string[] | undefined,
-          bullmqEnqueueFnNames: dfOptions['bullmqEnqueueFnNames'] as string[] | undefined,
-          mcpToolsPathFragment: dfOptions['mcpToolsPathFragment'] as string | undefined,
-        },
-      )
+      if (incremental) {
+        // Salsa path : alimente typedCallsInput puis appelle allDataFlows.
+        // Custom options (maxDepth, queryFnNames, etc.) non supportés —
+        // defaults suffisent pour Sentinel.
+        incTypedCallsInput.set('all', typedCalls)
+        dataFlows = incAllDataFlows.get('all')
+      } else {
+        dataFlows = await analyzeDataFlows(
+          config.rootDir,
+          files,
+          sharedProject,
+          typedCalls,
+          graph.getAllEdges(),
+          {
+            maxDepth: dfOptions['maxDepth'] as number | undefined,
+            downstreamDepth: dfOptions['downstreamDepth'] as number | undefined,
+            queryFnNames: dfOptions['queryFnNames'] as string[] | undefined,
+            emitFnNames: dfOptions['emitFnNames'] as string[] | undefined,
+            listenFnNames: dfOptions['listenFnNames'] as string[] | undefined,
+            httpResponseFnNames: dfOptions['httpResponseFnNames'] as string[] | undefined,
+            bullmqEnqueueFnNames: dfOptions['bullmqEnqueueFnNames'] as string[] | undefined,
+            mcpToolsPathFragment: dfOptions['mcpToolsPathFragment'] as string | undefined,
+          },
+        )
+      }
       timing.detectors['data-flows'] = performance.now() - tDataFlows
     } catch (err) {
       timing.detectors['data-flows'] = performance.now() - tDataFlows

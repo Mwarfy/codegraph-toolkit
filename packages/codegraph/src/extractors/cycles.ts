@@ -25,7 +25,7 @@
  *     `sccSize` révèle qu'il y a plus qu'un simple aller-retour.
  */
 
-import { Project, SyntaxKind, type Node } from 'ts-morph'
+import { Project, SyntaxKind, type Node, type SourceFile } from 'ts-morph'
 import { createHash } from 'node:crypto'
 import * as path from 'node:path'
 import type { Cycle, CycleEdge, CycleGate, EdgeType, GraphEdge } from '../core/types.js'
@@ -349,27 +349,7 @@ function detectGates(
     const absPath = path.join(rootDir, file)
     const sf = project.getSourceFile(absPath)
     if (!sf) continue
-
-    sf.forEachDescendant((node: Node) => {
-      const k = node.getKind()
-      if (k !== SyntaxKind.CallExpression && k !== SyntaxKind.NewExpression) return
-      const expr = (node as any).getExpression?.()
-      if (!expr) return
-
-      // Extract the rightmost identifier : foo() → foo, obj.foo() → foo,
-      // this.foo() → foo, ns.sub.foo() → foo.
-      let symbol: string | undefined
-      if (expr.getKind() === SyntaxKind.Identifier) {
-        symbol = expr.getText()
-      } else if (expr.getKind() === SyntaxKind.PropertyAccessExpression) {
-        symbol = (expr as any).getName?.()
-      }
-      if (!symbol) return
-      if (!matchGate(symbol, patterns)) return
-
-      const line = (node as any).getStartLineNumber?.() ?? 0
-      gates.push({ file, symbol, line })
-    })
+    gates.push(...scanGateCallsInSourceFile(sf, file, patterns))
   }
 
   gates.sort((a, b) => {
@@ -379,6 +359,45 @@ function detectGates(
   })
 
   return gates
+}
+
+/**
+ * Helper réutilisable : scanne UN SourceFile et retourne tous les
+ * call sites (CallExpression ou NewExpression) dont le callee matche
+ * un des `patterns`. Réutilisé par la version Salsa.
+ */
+export function scanGateCallsInSourceFile(
+  sf: SourceFile,
+  relPath: string,
+  patterns: GatePattern[],
+): CycleGate[] {
+  const out: CycleGate[] = []
+  sf.forEachDescendant((node: Node) => {
+    const k = node.getKind()
+    if (k !== SyntaxKind.CallExpression && k !== SyntaxKind.NewExpression) return
+    const expr = (node as any).getExpression?.()
+    if (!expr) return
+
+    let symbol: string | undefined
+    if (expr.getKind() === SyntaxKind.Identifier) {
+      symbol = expr.getText()
+    } else if (expr.getKind() === SyntaxKind.PropertyAccessExpression) {
+      symbol = (expr as any).getName?.()
+    }
+    if (!symbol) return
+    if (!matchGate(symbol, patterns)) return
+
+    const line = (node as any).getStartLineNumber?.() ?? 0
+    out.push({ file: relPath, symbol, line })
+  })
+  return out
+}
+
+export {
+  compileGatePatterns,
+  type GatePattern,
+  DEFAULT_GATE_NAMES,
+  DEFAULT_EDGE_TYPES,
 }
 
 // ─── Cycle ID hashing ───────────────────────────────────────────────────────
