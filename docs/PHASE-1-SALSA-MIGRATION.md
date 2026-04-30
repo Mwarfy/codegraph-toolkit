@@ -22,11 +22,13 @@ But Phase 1 : passer en **incremental** via @liby/salsa. Sur changement
 d'1 fichier, seul ce qui dépend de ce fichier recompute. Cible : <1s par
 commit incrémental.
 
-## État à reprise (après Sprint 3)
+## État à reprise (après Sprint 5)
 
 ### Commits livrés sur cette chaîne (codegraph-toolkit)
 
 ```
+f3af3cb perf(codegraph): warm path optimizations — mtime-aware + Project reuse + skip-set [Sprint 5]
+e875f5e docs(phase-1): refresh boot brief post-Sprint 3
 b6c2bb6 feat(codegraph): incremental mode — batch 4 final (symbol-refs, taint, metrics) [Sprint 3]
 cb6309d feat(codegraph): incremental mode — batch 3 (typed-calls, cycles, data-flows) [Sprint 3]
 4756b92 feat(codegraph): incremental mode — batch 2 (complexity, state-machines, truth-points) [Sprint 3]
@@ -34,9 +36,7 @@ cb6309d feat(codegraph): incremental mode — batch 3 (typed-calls, cycles, data
 0c36ea1 docs(phase-1): refresh boot brief post-Sprint 2
 ca6d610 feat(codegraph): incremental mode — env-usage + oauth-scope-literals via Salsa (Sprint 2)
 84c8287 fix(salsa): add Database.resetState() — preserve registry across reset
-0a3c571 docs: PHASE-1-SALSA-MIGRATION.md — boot brief pour reprendre Sprints 2-4
 5d90920 feat(salsa): @liby/salsa runtime — Salsa-style incremental computation (Sprint 1)
-e75b92b feat(codegraph): factsOnly mode + facts --regen flag (M8)
 ```
 
 ### Commits livrés sur Sentinel
@@ -62,7 +62,36 @@ bc26f4f feat(invariants): ADR-017 migré vers Datalog déclaratif (M3)
 - Smoke E2E sur Sentinel : counts identiques cross-mode (60 envs, 8 oauth,
   51 events, 19 pkg, 6 barrels, 71 truthPoints, 3 fsm, 521 sigs, 750 edges,
   1 cycle, 160 dataFlows, 1179 symbolRefs)
-- Cold incremental ~16s, warm ~13s (-21%), legacy 19s
+- Cold incremental ~16s, warm **~8s** (-50% vs cold après Sprint 5),
+  legacy 20s. Warm vs legacy : **-60%**.
+
+### Ce qui est NEUF dans Sprint 5
+
+**Optimisations warm path** (commit `f3af3cb`) :
+
+5.1 — mtime-aware fileContent (`incremental/queries.ts`) :
+  - `mtimeCache` Map<path, mtimeMs> module-level
+  - `getCachedMtime` / `setCachedMtime` / `clearMtimeCache` exportés
+  - analyze() compare fs.stat avec previous run avant readFile.
+    Skip total si identique → ~600 readFile + ~600 input.set
+    deviennent ~600 fs.stat.
+
+5.2 — Project ts-morph cache (`incremental/project-cache.ts`) :
+  - `getOrBuildSharedProject(rootDir, files, tsConfigPath, prevMtimes,
+    fileCache)` réutilise le Project entre runs si rootDir +
+    tsConfigPath identiques
+  - Files added → addSourceFileAtPath ; removed → removeSourceFile ;
+    modifiés → sf.replaceWithText pour invalider l'AST
+  - `resetProjectCache()` exporté pour tests / commande --cold
+  - createSharedProject() ~3-5s sur Sentinel évité en warm
+
+5.3 — setInputIfChanged (`incremental/queries.ts`) :
+  - JSON.stringify la valeur à set, compare avec signature précédente
+  - Si identique → skip set → cell garde changedAt → downstream skip
+  - Appliqué aux inputs lourds : projectFiles, packageManifests,
+    sqlDefaults, graphEdges, typedCalls, taintRules, graphNodes,
+    graphEdgesForMetrics
+  - Élimine l'invalidation massive des agrégats globaux entre runs
 
 ### Ce qui est NEUF dans Sprint 3
 
@@ -563,10 +592,14 @@ Quand tu reprends dans une nouvelle session :
 3. [ ] Vérifier que `npx vitest run` côté toolkit passe (106/106 attendus)
 4. [ ] Vérifier que les invariants Sentinel passent (659/659)
 5. [ ] Reprendre **Sprint 4** : décommissionner factsOnly + exposer le
-       flag `--incremental` en CLI. Si refactor unused-exports en mode
-       Salsa souhaité, le faire avant Sprint 4.
-6. [ ] Sprint 5 hypothétique : optimisations perf warm (persistence
-       disque, set-only-changed-files, inputs granulaires).
+       flag `--incremental` en CLI + bench warm sur le pre-commit hook.
+6. [ ] Si Sprint 4 done, attaquer **Sprint 6** : refactor unused-exports
+       en queries Salsa fines (`isImportedBy(symbol)`).
+7. [ ] **Sprint 7+** hypothétique :
+       - Migrer les 5 détecteurs base (ts-imports, event-bus, http,
+         bullmq, db-tables) — gain estimé ~3-4s sur warm
+       - Persistence disque DB Salsa (cross-process cache)
+       - File discovery cachée (gain ~500ms-1s)
 
 Si un step ne matche plus exactement la réalité (ex: nouveau commit
 intercalé), adapte mais reste fidèle au principe : Salsa partout,
