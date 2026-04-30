@@ -22,13 +22,14 @@ But Phase 1 : passer en **incremental** via @liby/salsa. Sur changement
 d'1 fichier, seul ce qui dépend de ce fichier recompute. Cible : <1s par
 commit incrémental.
 
-## État à reprise (après Sprint 7 — Phase 1 fonctionnellement complète)
+## État à reprise (après Sprint 9 — Phase 1 + Phase 2 livrées)
 
 ### Commits livrés sur cette chaîne (codegraph-toolkit)
 
 ```
+7a57eef feat(codegraph): watcher mode `codegraph watch` [Sprint 9 — Phase 2]
+77d2053 feat(salsa,codegraph): delta saves — append-only deltas + auto-compact [Sprint 8]
 e65edee feat(salsa,codegraph): disk persistence for cross-process cache hit [Sprint 7]
-29dc4d4 docs(phase-1): refresh boot brief post-Sprint 6 — cible <500ms warm ATTEINTE
 5254819 perf(codegraph): ts-imports reuses sharedProject in incremental mode [Sprint 6]
 7815a4d feat(codegraph): expose --incremental flag in CLI [Sprint 4]
 f3af3cb perf(codegraph): warm path optimizations — mtime-aware + Project reuse + skip-set [Sprint 5]
@@ -64,12 +65,48 @@ bc26f4f feat(invariants): ADR-017 migré vers Datalog déclaratif (M3)
 - Smoke E2E sur Sentinel : counts identiques cross-mode (60 envs, 8 oauth,
   51 events, 19 pkg, 6 barrels, 71 truthPoints, 3 fsm, 521 sigs, 750 edges,
   1 cycle, 160 dataFlows, 1179 symbolRefs)
-**Mesures Sentinel après Sprint 7 :**
+**Mesures Sentinel après Sprint 9 :**
 - Same-process : cold ~9.7s, **warm ~524ms** (vs legacy ~21s → -98%).
 - CLI cross-process : 1er run (no cache) 11.5s, **2e run (cache disk) 7.1s**
   (-39% via persistence Sprint 7).
+- **Watcher mode** (`codegraph watch`) : cold 6.3s, warm 400-800ms par
+  change → ~15x speedup. fs.watch + debounce 50ms + persist disque
+  périodique 30s + skip load/save inutiles.
+- Delta saves : 3.2 MB delta vs 7.6 MB full snapshot (-58%).
 - ts-imports warm : 108ms (vs 7400ms avant Sprint 6 → -98.5%).
-- Cache disque file : `.codegraph/salsa-cache.json` ~7.6 MB sur Sentinel.
+
+### Ce qui est NEUF dans Sprint 9 (Phase 2)
+
+**Watcher mode** (`codegraph watch`, commit `7a57eef`) :
+  - `incremental/watcher.ts` : `CodeGraphWatcher` class
+    - fs.watch (recursive macOS, walk-and-watch Linux)
+    - Debounce 50ms pour aggréger les events vim/IDE
+    - Filtrage via include/exclude patterns + skip hidden/temp
+    - persistTimer 30s pour crash recovery
+    - Re-trigger si fs event arrive pendant un analyze
+  - `analyzer.ts` : options `skipPersistenceLoad` / `skipPersistenceSave`
+    pour le watcher (DB en RAM entre runs, save périodique).
+  - CLI : commande `watch` avec `--debounce <ms>`. SIGINT save final.
+
+Bottlenecks restants pour atteindre <50ms (Phase 3 hypothétique) :
+  - discoverFiles (walk fs récursif ~500ms) — non caché
+  - buildGraph + computeOrphanStatus
+  - Détecteurs base loop ré-écrivent à chaque run
+
+### Ce qui est NEUF dans Sprint 8 (Phase 2)
+
+**Delta saves** (commit `77d2053`) :
+  - `@liby/salsa` Database track `dirtyKeys: Set<string>` modifiées
+    depuis le dernier `markPersisted()`.
+  - `serializeDirty()` retourne juste les cells dirty.
+  - `applyDelta(delta)` merge un delta sur l'état existant.
+  - `dirtyCount()` / `markPersisted()` exposés.
+  - `incremental/persistence.ts` : décide auto entre full save
+    (réécrit baseline + cleanup deltas) et delta save (append
+    `salsa-delta-NNN.json`) selon dirty ratio + nombre de deltas.
+  - Threshold : dirtyRatio > 20% ou >=10 deltas → full save.
+  - Best-effort recovery : delta corrompu → s'arrête mais garde le
+    cache jusqu'au précédent.
 
 ### Ce qui est NEUF dans Sprint 7
 
@@ -630,12 +667,13 @@ Ne jamais "skipper" un test qui pète.
 - **Project ts-morph reste global** au moins pour Sprint 2 (compromis).
   Sprint 3 ou 4 verra si on l'incrémentalise.
 
-## Phase 1 — État final (post-Sprint 7)
+## Phase 1 + Phase 2 — État final (post-Sprint 9)
 
 **Fonctionnellement complet.** Le mode `--incremental` est exposé en CLI,
-13/14 détecteurs sont Salsa-isés (unused-exports profite indirectement
-du Project cache), le warm same-process est <1s, le warm cross-process
-via CLI gagne 39% via la persistence disque.
+13/14 détecteurs sont Salsa-isés, le warm same-process est <1s, le
+warm cross-process via CLI gagne 39% via la persistence disque, et le
+mode `codegraph watch` permet ~400-800ms par change pour usage IDE/dev
+local (15x speedup vs cold).
 
 ### Sprints reportés (utilité marginale ou refactor profond)
 
@@ -651,18 +689,18 @@ via CLI gagne 39% via la persistence disque.
   gain en cas de modif locale d'un seul fichier dans un gros projet,
   mais pour Sentinel c'est négligeable.
 
-### Sprints "next" si Phase 2 voulue
+### Sprints "next" si Phase 3 voulue
 
 - **AST persistence** : sérialiser les ASTs ts-morph dans le cache
   disque pour skip le `createSharedProject` au cold CLI (~3-5s gain).
   Refactor profond, demande de bien gérer la version de ts-morph et
   l'invalidation. Cible : warm CLI <2s.
-- **Delta saves** : ne sauver que les cells modifiées au lieu du
-  fichier complet (économie de I/O). Justifié si le cache dépasse
-  ~50 MB.
-- **Watcher mode** : `codegraph watch` qui maintient le sharedProject
-  + DB en RAM et émet les invalidations sur changements fs. Cible :
-  warm <50ms.
+- **discoverFiles cache** : ~500ms de walk fs récursif à chaque
+  analyze(). Cacher le résultat + invalider via fs.watch sur les
+  dirs cibles. Étape vers warm watcher <50ms.
+- **buildGraph incremental** : ne recompute que les edges qui
+  changent (delta sur graph.addEdge / removeEdge). Étape finale
+  pour warm watcher <50ms.
 
 ## Reprise rapide checklist
 

@@ -35,10 +35,10 @@
 
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
-- `packages/codegraph/src/core/types.ts` (in: 58)
-- `packages/codegraph/src/incremental/database.ts` (in: 18)
+- `packages/codegraph/src/core/types.ts` (in: 59)
+- `packages/codegraph/src/incremental/database.ts` (in: 19)
 - `packages/salsa/dist/index.d.ts` (in: 18)
-- `packages/codegraph/src/incremental/queries.ts` (in: 15)
+- `packages/codegraph/src/incremental/queries.ts` (in: 16)
 - `packages/adr-toolkit/src/config.ts` (in: 9) · gov by ADR-002
 - `packages/codegraph/src/diff/types.ts` (in: 8)
 - `packages/datalog/src/types.ts` (in: 8)
@@ -48,10 +48,10 @@
 
 Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `// ADR-NNN`** dans le code. Intentionnel ? Sinon poser un marqueur ou créer un ADR :
 
-- **58** `packages/codegraph/src/core/types.ts` _(top-hub)_
-- **18** `packages/codegraph/src/incremental/database.ts` _(top-hub)_
+- **59** `packages/codegraph/src/core/types.ts` _(top-hub)_
+- **19** `packages/codegraph/src/incremental/database.ts` _(top-hub)_
 - **18** `packages/salsa/dist/index.d.ts` _(top-hub)_
-- **15** `packages/codegraph/src/incremental/queries.ts` _(top-hub)_
+- **16** `packages/codegraph/src/incremental/queries.ts` _(top-hub)_
 
 ## Tensions actives — invitations à explorer
 
@@ -94,6 +94,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+7a57eef feat(codegraph): watcher mode `codegraph watch` [Sprint 9 — Phase 2]
 77d2053 feat(salsa,codegraph): delta saves — append-only deltas + auto-compact [Sprint 8]
 52b6fc7 docs(phase-1): refresh boot brief post-Sprint 7 — Phase 1 fonctionnellement complète
 e65edee feat(salsa,codegraph): disk persistence for cross-process cache hit [Sprint 7]
@@ -105,7 +106,6 @@ f3af3cb perf(codegraph): warm path optimizations — mtime-aware + Project reuse
 e875f5e docs(phase-1): refresh boot brief post-Sprint 3
 b6c2bb6 feat(codegraph): incremental mode — batch 4 final (symbol-refs, taint, metrics) [Sprint 3]
 cb6309d feat(codegraph): incremental mode — batch 3 (typed-calls, cycles, data-flows) [Sprint 3]
-4756b92 feat(codegraph): incremental mode — batch 2 (complexity, state-machines, truth-points) [Sprint 3]
 ```
 
 ## Comment contribuer à ce brief
