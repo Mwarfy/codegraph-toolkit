@@ -69,6 +69,183 @@ export function createSharedProject(
 }
 
 /**
+ * Bundle per-file extrait des AST/regex d'UN sourceFile. Réutilisable
+ * côté Salsa (Sprint 11.2) — la dépendance Salsa unique est `fileContent`,
+ * donc ce bundle est cacheable per-file, et l'agrégation globale
+ * (importUsageMap, namespaceImporters, dynamicSymbolHits) reste pure.
+ *
+ * Structures sérialisables : pas de Set/Map ni références ts-morph.
+ */
+export interface UnusedExportsImportRef {
+  targetFile: string
+  symbol: string  // 'default' ou nom du named import
+}
+
+export interface UnusedExportsDeclaredExport {
+  /** "(default)" pour le default export, sinon le nom. */
+  symbolName: string
+  /** Nom brut tel que retourné par getExportedDeclarations (utile pour lookups). */
+  rawName: string
+  kind: ExportSymbol['kind']
+  line: number
+  isReExport: boolean
+  isUsedLocally: boolean
+}
+
+export interface UnusedExportsFileBundle {
+  /** Imports nommés ou default (statiques + dynamiques destructurés). */
+  importedSymbols: UnusedExportsImportRef[]
+  /** Namespaces importés ou re-exportés depuis ce fichier. */
+  namespaceTargets: string[]
+  /** Symboles candidats trouvés dans des string literals (heuristique dynamic). */
+  stringLiteralSymbols: string[]
+  /** Exports déclarés dans ce fichier. */
+  declaredExports: UnusedExportsDeclaredExport[]
+}
+
+/**
+ * Extrait le bundle per-file. Dépend uniquement du SourceFile + Project
+ * (pour la résolution des `getModuleSpecifierSourceFile`) + rootDir.
+ *
+ * `relPath` est le path relatif du fichier (clé "files" + clé namespace).
+ */
+export function extractUnusedExportsFileBundle(
+  sourceFile: SourceFile,
+  relPath: string,
+  rootDir: string,
+  project: Project,
+): UnusedExportsFileBundle {
+  const importedSymbols: UnusedExportsImportRef[] = []
+  const namespaceTargets: string[] = []
+
+  for (const imp of sourceFile.getImportDeclarations()) {
+    const targetFile = imp.getModuleSpecifierSourceFile()
+    if (!targetFile) continue
+    const targetPath = relativize(targetFile.getFilePath(), rootDir)
+    if (!targetPath) continue
+
+    const nsImport = imp.getNamespaceImport()
+    if (nsImport) {
+      namespaceTargets.push(targetPath)
+      continue
+    }
+
+    const defaultImport = imp.getDefaultImport()
+    if (defaultImport) {
+      importedSymbols.push({ targetFile: targetPath, symbol: 'default' })
+    }
+
+    for (const named of imp.getNamedImports()) {
+      importedSymbols.push({ targetFile: targetPath, symbol: named.getName() })
+    }
+  }
+
+  for (const exp of sourceFile.getExportDeclarations()) {
+    const targetFile = exp.getModuleSpecifierSourceFile()
+    if (!targetFile) continue
+    const targetPath = relativize(targetFile.getFilePath(), rootDir)
+    if (!targetPath) continue
+
+    if (!exp.getNamedExports().length && exp.isNamespaceExport()) {
+      namespaceTargets.push(targetPath)
+      continue
+    }
+
+    for (const named of exp.getNamedExports()) {
+      importedSymbols.push({ targetFile: targetPath, symbol: named.getName() })
+    }
+  }
+
+  // ─── Dynamic imports : `await import('./path.js')` ───
+  //
+  // Fix M-003 : le detector ne voyait que les imports statiques. Les
+  // consumers lazy chargent via `await import(...)` — leurs cibles
+  // étaient faussement marquées "safe-to-remove".
+  for (const callExpr of sourceFile.getDescendantsOfKind(SyntaxKind.CallExpression)) {
+    const expr = callExpr.getExpression()
+    if (expr.getText() !== 'import') continue
+
+    const args = callExpr.getArguments()
+    if (args.length === 0) continue
+
+    const firstArg = args[0]
+    if (!Node.isStringLiteral(firstArg) && !Node.isNoSubstitutionTemplateLiteral(firstArg)) continue
+
+    const specifier = firstArg.getLiteralValue()
+    if (!specifier.startsWith('.')) continue
+
+    const targetPath = resolveDynamicImport(specifier, sourceFile, rootDir, project)
+    if (!targetPath) continue
+
+    let parent: Node | undefined = callExpr.getParent()
+    if (parent && Node.isAwaitExpression(parent)) parent = parent.getParent()
+
+    if (parent && Node.isVariableDeclaration(parent)) {
+      const nameNode = parent.getNameNode()
+
+      if (Node.isObjectBindingPattern(nameNode)) {
+        for (const element of nameNode.getElements()) {
+          const propNameNode = element.getPropertyNameNode()
+          const name = propNameNode ? propNameNode.getText() : element.getNameNode().getText()
+          importedSymbols.push({ targetFile: targetPath, symbol: name })
+        }
+        continue
+      }
+
+      if (Node.isIdentifier(nameNode)) {
+        namespaceTargets.push(targetPath)
+        continue
+      }
+    }
+
+    namespaceTargets.push(targetPath)
+  }
+
+  // ─── String literal hits (dynamic usage heuristic) ───
+  const stringLiteralSymbols: string[] = []
+  const seen = new Set<string>()
+  const text = sourceFile.getFullText()
+  const stringMatches = text.match(/['"`]([A-Za-z_$][A-Za-z0-9_$]*(?:Schema|Params|Handler|Action|Event|Type|Config)?)['"` ]/g)
+  if (stringMatches) {
+    for (const m of stringMatches) {
+      const clean = m.replace(/['"`\s]/g, '')
+      if (clean.length > 2 && !seen.has(clean)) {
+        seen.add(clean)
+        stringLiteralSymbols.push(clean)
+      }
+    }
+  }
+
+  // ─── Declared exports ───
+  const declaredExports: UnusedExportsDeclaredExport[] = []
+  for (const [name, declarations] of sourceFile.getExportedDeclarations()) {
+    for (const decl of declarations) {
+      const kind = classifyDeclaration(decl)
+      const line = decl.getStartLineNumber()
+      const isReExport = decl.getSourceFile() !== sourceFile
+      const symbolName = name === 'default' ? '(default)' : name
+      const isUsedLocally = name !== 'default' && isUsedLocallyOnly(text, name, line)
+
+      declaredExports.push({
+        symbolName,
+        rawName: name,
+        kind,
+        line,
+        isReExport,
+        isUsedLocally,
+      })
+    }
+  }
+
+  return {
+    importedSymbols,
+    namespaceTargets,
+    stringLiteralSymbols,
+    declaredExports,
+  }
+}
+
+/**
  * Analyze all files and return per-file export usage data with smart classification.
  * Si `sharedProject` est fourni, il est réutilisé — sinon un Project est créé.
  */
@@ -83,141 +260,103 @@ export async function analyzeExports(
 
   const project = sharedProject ?? createSharedProject(rootDir, files, tsConfigPath)
 
-  // ─── 2. Build source import map ───────────────────────────────────
+  // ─── 2. Extract per-file bundles (Sprint 11.2) ────────────────────
+  // Bundles sont sérialisables, dérivés d'UN fichier, cacheables côté
+  // Salsa. Ici on les extrait synchronement en boucle.
 
-  // Map: "file:symbolName" → Set of importing source files
-  const importUsageMap = new Map<string, Set<string>>()
-  // Map: file → Set of namespace importers
-  const namespaceImporters = new Map<string, Set<string>>()
+  const bundlesByFile = new Map<string, UnusedExportsFileBundle>()
 
   for (const sourceFile of project.getSourceFiles()) {
-    const importerPath = relativize(sourceFile.getFilePath(), rootDir)
-    if (!importerPath) continue
+    const filePath = relativize(sourceFile.getFilePath(), rootDir)
+    if (!filePath) continue
+    const bundle = extractUnusedExportsFileBundle(sourceFile, filePath, rootDir, project)
+    bundlesByFile.set(filePath, bundle)
+  }
 
-    for (const imp of sourceFile.getImportDeclarations()) {
-      const targetFile = imp.getModuleSpecifierSourceFile()
-      if (!targetFile) continue
-      const targetPath = relativize(targetFile.getFilePath(), rootDir)
-      if (!targetPath) continue
+  // ─── 3. Aggregate bundles → import maps ───────────────────────────
 
-      const nsImport = imp.getNamespaceImport()
-      if (nsImport) {
-        if (!namespaceImporters.has(targetPath)) namespaceImporters.set(targetPath, new Set())
-        namespaceImporters.get(targetPath)!.add(importerPath)
-        continue
+  const { importUsageMap, namespaceImporters, dynamicSymbolHits } =
+    aggregateBundles(bundlesByFile)
+
+  // ─── 4. Scan test files with lightweight regex (no second ts-morph) ─
+
+  const testFilesIndex = await buildTestFilesIndex(rootDir)
+
+  // ─── 5. Classify exports per file using the bundles + global indexes ─
+
+  return classifyExportsFromBundles(
+    files,
+    bundlesByFile,
+    importUsageMap,
+    namespaceImporters,
+    dynamicSymbolHits,
+    testFilesIndex,
+  )
+}
+
+/**
+ * Helper pure : agrège les bundles per-file en maps globales.
+ * Pas de Project ni I/O — réutilisable côté Salsa.
+ */
+export function aggregateBundles(
+  bundlesByFile: Map<string, UnusedExportsFileBundle>,
+): {
+  importUsageMap: Map<string, Set<string>>
+  namespaceImporters: Map<string, Set<string>>
+  dynamicSymbolHits: Set<string>
+} {
+  const importUsageMap = new Map<string, Set<string>>()
+  const namespaceImporters = new Map<string, Set<string>>()
+  const dynamicSymbolHits = new Set<string>()
+
+  for (const [importerFile, bundle] of bundlesByFile) {
+    for (const ref of bundle.importedSymbols) {
+      const key = `${ref.targetFile}:${ref.symbol}`
+      let users = importUsageMap.get(key)
+      if (!users) {
+        users = new Set()
+        importUsageMap.set(key, users)
       }
-
-      const defaultImport = imp.getDefaultImport()
-      if (defaultImport) {
-        const key = `${targetPath}:default`
-        if (!importUsageMap.has(key)) importUsageMap.set(key, new Set())
-        importUsageMap.get(key)!.add(importerPath)
-      }
-
-      for (const named of imp.getNamedImports()) {
-        const name = named.getName()
-        const key = `${targetPath}:${name}`
-        if (!importUsageMap.has(key)) importUsageMap.set(key, new Set())
-        importUsageMap.get(key)!.add(importerPath)
-      }
+      users.add(importerFile)
     }
-
-    for (const exp of sourceFile.getExportDeclarations()) {
-      const targetFile = exp.getModuleSpecifierSourceFile()
-      if (!targetFile) continue
-      const targetPath = relativize(targetFile.getFilePath(), rootDir)
-      if (!targetPath) continue
-
-      if (!exp.getNamedExports().length && exp.isNamespaceExport()) {
-        if (!namespaceImporters.has(targetPath)) namespaceImporters.set(targetPath, new Set())
-        namespaceImporters.get(targetPath)!.add(importerPath)
-        continue
+    for (const target of bundle.namespaceTargets) {
+      let users = namespaceImporters.get(target)
+      if (!users) {
+        users = new Set()
+        namespaceImporters.set(target, users)
       }
-
-      for (const named of exp.getNamedExports()) {
-        const name = named.getName()
-        const key = `${targetPath}:${name}`
-        if (!importUsageMap.has(key)) importUsageMap.set(key, new Set())
-        importUsageMap.get(key)!.add(importerPath)
-      }
+      users.add(importerFile)
     }
-
-    // ─── Dynamic imports : `await import('./path.js')` ───
-    //
-    // Fix M-003 : le detector ne voyait que les imports statiques. Les
-    // consumers lazy (webhook handlers, routes, tests) chargent via
-    // `await import(...)` avec string littérale — leurs cibles étaient
-    // faussement marquées "safe-to-remove".
-    //
-    // Résolution : seul le cas `specifier` = string literal est tracé.
-    // Les template strings avec `${…}` sortent encore en "possibly-dynamic"
-    // via le pass heuristique existant (section 4).
-    for (const callExpr of sourceFile.getDescendantsOfKind(SyntaxKind.CallExpression)) {
-      const expr = callExpr.getExpression()
-      if (expr.getText() !== 'import') continue
-
-      const args = callExpr.getArguments()
-      if (args.length === 0) continue
-
-      const firstArg = args[0]
-      if (!Node.isStringLiteral(firstArg) && !Node.isNoSubstitutionTemplateLiteral(firstArg)) continue
-
-      const specifier = firstArg.getLiteralValue()
-      if (!specifier.startsWith('.')) continue // skip bare/alias pour l'instant — rare en dynamic
-
-      const targetPath = resolveDynamicImport(specifier, sourceFile, rootDir, project)
-      if (!targetPath) continue
-
-      // Chaîne parent : CallExpression → [AwaitExpression] → VariableDeclaration
-      let parent: Node | undefined = callExpr.getParent()
-      if (parent && Node.isAwaitExpression(parent)) parent = parent.getParent()
-
-      if (parent && Node.isVariableDeclaration(parent)) {
-        const nameNode = parent.getNameNode()
-
-        if (Node.isObjectBindingPattern(nameNode)) {
-          // const { X, Y: Alias } = await import('...')
-          for (const element of nameNode.getElements()) {
-            const propNameNode = element.getPropertyNameNode()
-            const name = propNameNode ? propNameNode.getText() : element.getNameNode().getText()
-            const key = `${targetPath}:${name}`
-            if (!importUsageMap.has(key)) importUsageMap.set(key, new Set())
-            importUsageMap.get(key)!.add(importerPath)
-          }
-          continue
-        }
-
-        if (Node.isIdentifier(nameNode)) {
-          // const mod = await import('...') → équivalent namespace
-          if (!namespaceImporters.has(targetPath)) namespaceImporters.set(targetPath, new Set())
-          namespaceImporters.get(targetPath)!.add(importerPath)
-          continue
-        }
-      }
-
-      // Cas non-destructuré (callback .then, expression inline) : conservateur,
-      // on marque le fichier cible comme namespace-consommé pour ne pas
-      // produire de faux "safe-to-remove".
-      if (!namespaceImporters.has(targetPath)) namespaceImporters.set(targetPath, new Set())
-      namespaceImporters.get(targetPath)!.add(importerPath)
+    for (const sym of bundle.stringLiteralSymbols) {
+      dynamicSymbolHits.add(sym)
     }
   }
 
-  // ─── 3. Scan test files with lightweight regex (no second ts-morph) ─
+  return { importUsageMap, namespaceImporters, dynamicSymbolHits }
+}
 
+/**
+ * Test files index — symbols et basenames référencés par les fichiers
+ * de test. Built async par scan regex (pas de second Project ts-morph).
+ *
+ * Sérialisable JSON natif (`Record<string, string[]>`) : utilisable
+ * comme input Salsa avec `setInputIfChanged` (signature JSON stable).
+ */
+export interface TestFilesIndex {
+  /** symbolName → liste de fichiers de test qui le référencent. */
+  symbolHits: Record<string, string[]>
+  /** sourceBasename → liste de fichiers de test qui importent ce module. */
+  fileImports: Record<string, string[]>
+}
+
+export async function buildTestFilesIndex(rootDir: string): Promise<TestFilesIndex> {
   const testFiles = await discoverTestFiles(rootDir)
-  // Map: symbolName → Set of test files that reference it
-  const testSymbolHits = new Map<string, Set<string>>()
-  // Map: sourceFileBasename → Set of test files importing from it
-  const testFileImports = new Map<string, Set<string>>()
+  const symbolHits = new Map<string, Set<string>>()
+  const fileImports = new Map<string, Set<string>>()
 
-  // Regex 1 : import statique — `import { X, Y } from '...'` ou `import X from '...'`
+  // Regex 1 : import statique
   const importRegex = /import\s+(?:\{([^}]+)\}|(\w+))\s+from\s+['"]([^'"]+)['"]/g
-  // Regex 2 : dynamic import — `const { X, Y } = await import('...')` ou `const X = await import('...')`
-  //
-  // Fix M-006 : sans ce deuxième regex, les tests qui chargent leur module
-  // cible en dynamic import (pattern très utilisé pour lazy-load + mock)
-  // n'étaient pas vus. Leurs symboles restaient classés safe-to-remove.
+  // Regex 2 : dynamic import (Fix M-006)
   const dynamicImportRegex = /(?:const|let|var)\s+(?:\{([^}]+)\}|(\w+))\s*=\s*await\s+import\s*\(\s*['"]([^'"]+)['"]\s*\)/g
 
   const processImportMatch = (
@@ -228,23 +367,25 @@ export async function analyzeExports(
   ) => {
     const basename = modulePath.split('/').pop()?.replace(/\.(js|ts|tsx)$/, '') || ''
     if (basename) {
-      if (!testFileImports.has(basename)) testFileImports.set(basename, new Set())
-      testFileImports.get(basename)!.add(testFile)
+      let users = fileImports.get(basename)
+      if (!users) { users = new Set(); fileImports.set(basename, users) }
+      users.add(testFile)
     }
 
     if (namedImports) {
       for (const part of namedImports.split(',')) {
-        // Gère `X: Alias` (rename destructuring) et `X as Alias` (import rename)
         const symbolName = part.trim().split(/\s*[:]|\s+as\s+/)[0].trim()
         if (symbolName) {
-          if (!testSymbolHits.has(symbolName)) testSymbolHits.set(symbolName, new Set())
-          testSymbolHits.get(symbolName)!.add(testFile)
+          let users = symbolHits.get(symbolName)
+          if (!users) { users = new Set(); symbolHits.set(symbolName, users) }
+          users.add(testFile)
         }
       }
     }
     if (identifierImport) {
-      if (!testSymbolHits.has(identifierImport)) testSymbolHits.set(identifierImport, new Set())
-      testSymbolHits.get(identifierImport)!.add(testFile)
+      let users = symbolHits.get(identifierImport)
+      if (!users) { users = new Set(); symbolHits.set(identifierImport, users) }
+      users.add(testFile)
     }
   }
 
@@ -267,110 +408,100 @@ export async function analyzeExports(
     }
   }
 
-  // ─── 4. Build dynamic usage index ─────────────────────────────────
-  // Scan all source files for symbol names appearing in string literals,
-  // template literals, object keys, and known dynamic patterns.
-
-  const dynamicSymbolHits = new Set<string>() // symbol names found in dynamic contexts
-
-  for (const sourceFile of project.getSourceFiles()) {
-    const text = sourceFile.getFullText()
-
-    // Patterns that suggest dynamic symbol usage:
-    // - String literals containing the symbol name (e.g., in TOOL_SCHEMAS, registries)
-    // - Object property access via bracket notation: obj['symbolName']
-    // - Template literals: `${prefix}SymbolName`
-    // We collect candidate symbol names from strings in this file
-    const stringMatches = text.match(/['"`]([A-Za-z_$][A-Za-z0-9_$]*(?:Schema|Params|Handler|Action|Event|Type|Config)?)['"` ]/g)
-    if (stringMatches) {
-      for (const m of stringMatches) {
-        const clean = m.replace(/['"`\s]/g, '')
-        if (clean.length > 2) dynamicSymbolHits.add(clean)
-      }
-    }
+  // Convert Set → array, sorté pour signature JSON stable (Sprint 11.2 :
+  // setInputIfChanged compare via JSON.stringify, l'ordre des entrées
+  // doit être déterministe pour skip-set warm).
+  const symbolHitsRec: Record<string, string[]> = {}
+  for (const k of [...symbolHits.keys()].sort()) {
+    symbolHitsRec[k] = [...symbolHits.get(k)!].sort()
+  }
+  const fileImportsRec: Record<string, string[]> = {}
+  for (const k of [...fileImports.keys()].sort()) {
+    fileImportsRec[k] = [...fileImports.get(k)!].sort()
   }
 
-  // ─── 5. Extract exports and classify ──────────────────────────────
+  return { symbolHits: symbolHitsRec, fileImports: fileImportsRec }
+}
 
+/**
+ * Helper pure : classifie les exports per file à partir des bundles +
+ * index globaux. Pas d'I/O ni Project — réutilisable côté Salsa.
+ */
+export function classifyExportsFromBundles(
+  files: string[],
+  bundlesByFile: Map<string, UnusedExportsFileBundle>,
+  importUsageMap: Map<string, Set<string>>,
+  namespaceImporters: Map<string, Set<string>>,
+  dynamicSymbolHits: Set<string>,
+  testIndex: TestFilesIndex,
+): FileExportInfo[] {
   const results: FileExportInfo[] = []
+  const fileSet = new Set(files)
 
-  for (const sourceFile of project.getSourceFiles()) {
-    const filePath = relativize(sourceFile.getFilePath(), rootDir)
-    if (!filePath) continue
-    if (!files.includes(filePath)) continue
+  for (const [filePath, bundle] of bundlesByFile) {
+    if (!fileSet.has(filePath)) continue
 
     const fileExports: ExportSymbol[] = []
     const nsUsers = namespaceImporters.get(filePath) || new Set<string>()
-    const fileText = sourceFile.getFullText()
 
-    for (const [name, declarations] of sourceFile.getExportedDeclarations()) {
-      for (const decl of declarations) {
-        const kind = classifyDeclaration(decl)
-        const line = decl.getStartLineNumber()
-        const isReExport = decl.getSourceFile() !== sourceFile
-        const symbolName = name === 'default' ? '(default)' : name
+    for (const decl of bundle.declaredExports) {
+      const name = decl.rawName
+      const symbolName = decl.symbolName
+      const line = decl.line
+      const isReExport = decl.isReExport
 
-        // Source usage
-        const key = name === 'default' ? `${filePath}:default` : `${filePath}:${name}`
-        const directUsers = importUsageMap.get(key) || new Set<string>()
-        const allUsers = new Set([...directUsers, ...nsUsers])
-        allUsers.delete(filePath)
+      // Source usage
+      const key = name === 'default' ? `${filePath}:default` : `${filePath}:${name}`
+      const directUsers = importUsageMap.get(key) || new Set<string>()
+      const allUsers = new Set([...directUsers, ...nsUsers])
+      allUsers.delete(filePath)
 
-        // Test usage (lightweight regex-based)
-        const testHits = name !== 'default' ? (testSymbolHits.get(name) || new Set<string>()) : new Set<string>()
-        // Also check if any test imports from this file's basename
-        const fileBasename = path.basename(filePath).replace(/\.(ts|tsx|js|jsx)$/, '')
-        const testFileHits = testFileImports.get(fileBasename) || new Set<string>()
-        const allTestUsers = new Set([...testHits])
+      // Test usage (lightweight regex-based)
+      const testHits = name !== 'default'
+        ? (testIndex.symbolHits[name] || [])
+        : []
+      const allTestUsers = new Set(testHits)
 
-        // Classify confidence
-        let confidence: ExportConfidence = 'used'
-        let reason: string | undefined
+      // Classify confidence
+      let confidence: ExportConfidence = 'used'
+      let reason: string | undefined
 
-        if (allUsers.size > 0 || isReExport) {
-          confidence = 'used'
-        } else if (isNextJsFrameworkExport(filePath, name)) {
-          // Fix M-008 : conventions Next.js (default page/layout, metadata,
-          // viewport, route segment config, etc.) lues par réflexion par le
-          // runtime Next. Pas un dead export.
-          confidence = 'used'
-          reason = 'Next.js framework convention export (read reflectively by runtime)'
-        } else if (isToolConfigExport(filePath, name)) {
-          // Fix M-010 : fichiers de config outillage (vitest.config, tailwind.config,
-          // etc.) — le `default` export est lu par le runner, pas par du code TS.
-          confidence = 'used'
-          reason = 'Tool config (read by runner)'
-        } else if (allTestUsers.size > 0) {
-          confidence = 'test-only'
-          reason = `imported by ${allTestUsers.size} test file(s): ${[...allTestUsers].slice(0, 3).map(f => shortPath(f)).join(', ')}`
-        } else if (name !== 'default' && dynamicSymbolHits.has(name)) {
-          confidence = 'possibly-dynamic'
-          reason = `symbol name "${name}" found in string literals (possible dynamic lookup)`
-        } else if (name !== 'default' && isUsedLocallyOnly(fileText, name, line)) {
-          confidence = 'local-only'
-          reason = `referenced in same file but not imported elsewhere — remove \`export\` keyword`
-        } else if (allUsers.size === 0 && !isReExport) {
-          confidence = 'safe-to-remove'
-          reason = 'no imports in source, tests, or dynamic patterns'
-        }
-
-        fileExports.push({
-          name: symbolName,
-          kind,
-          line,
-          usageCount: allUsers.size,
-          usedBy: allUsers.size > 0 ? [...allUsers].sort() : undefined,
-          reExport: isReExport || undefined,
-          confidence,
-          reason,
-        })
+      if (allUsers.size > 0 || isReExport) {
+        confidence = 'used'
+      } else if (isNextJsFrameworkExport(filePath, name)) {
+        confidence = 'used'
+        reason = 'Next.js framework convention export (read reflectively by runtime)'
+      } else if (isToolConfigExport(filePath, name)) {
+        confidence = 'used'
+        reason = 'Tool config (read by runner)'
+      } else if (allTestUsers.size > 0) {
+        confidence = 'test-only'
+        reason = `imported by ${allTestUsers.size} test file(s): ${[...allTestUsers].slice(0, 3).map(f => shortPath(f)).join(', ')}`
+      } else if (name !== 'default' && dynamicSymbolHits.has(name)) {
+        confidence = 'possibly-dynamic'
+        reason = `symbol name "${name}" found in string literals (possible dynamic lookup)`
+      } else if (decl.isUsedLocally) {
+        confidence = 'local-only'
+        reason = `referenced in same file but not imported elsewhere — remove \`export\` keyword`
+      } else if (allUsers.size === 0 && !isReExport) {
+        confidence = 'safe-to-remove'
+        reason = 'no imports in source, tests, or dynamic patterns'
       }
+
+      fileExports.push({
+        name: symbolName,
+        kind: decl.kind,
+        line,
+        usageCount: allUsers.size,
+        usedBy: allUsers.size > 0 ? [...allUsers].sort() : undefined,
+        reExport: isReExport || undefined,
+        confidence,
+        reason,
+      })
     }
 
     if (fileExports.length > 0) {
       const unusedCount = fileExports.filter(e => e.usageCount === 0 && !e.reExport).length
-
-      // Count by confidence
       const byConfidence: Record<ExportConfidence, number> = {
         'used': 0, 'test-only': 0, 'possibly-dynamic': 0, 'local-only': 0, 'safe-to-remove': 0,
       }

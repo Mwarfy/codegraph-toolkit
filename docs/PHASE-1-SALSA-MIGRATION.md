@@ -689,42 +689,54 @@ local (15x speedup vs cold).
   gain en cas de modif locale d'un seul fichier dans un gros projet,
   mais pour Sentinel c'est négligeable.
 
-### Phase 3 partielle livrée (Sprint 10 + 11.1, commit `2244034`)
+### Phase 3 livrée (Sprint 10 + 11.1 + 11.2)
 
-**Sprint 10 — discoverFiles cache** : `preDiscoveredFiles` option
-+ watcher maintient sa liste en RAM via fs events. Gain mesuré ~50ms
-(le walk était déjà rapide sur Sentinel).
+**Sprint 10 — discoverFiles cache** (commit `2244034`) :
+`preDiscoveredFiles` option + watcher maintient sa liste en RAM via
+fs events. Gain mesuré ~50ms.
 
-**Sprint 11.1 — wire allTsImports Salsa** : ts-imports warm passe
-de 109ms à 0ms (cache per-file finalement consommé en mode incremental).
+**Sprint 11.1 — wire allTsImports Salsa** (commit `2244034`) :
+ts-imports warm passe de 109ms à 0ms.
 
-**Constat Sentinel breakdown warm** : 376ms total, dont :
-- unused-exports : 269ms (84% du restant)
-- détecteurs Salsa : ~5ms
-- fileDiscovery : 30ms
-- graphBuild : 6ms
-- détecteurs base (event-bus, db-tables, etc.) : ~50ms
-- overhead analyze() : ~30ms
+**Sprint 11.2 — unused-exports en queries Salsa fines** :
+14/14 détecteurs migrés. Refactor du détecteur en
+`extractUnusedExportsFileBundle(sf, file, rootDir, project)` per-file
++ helpers pure (`aggregateBundles`, `classifyExportsFromBundles`,
+`buildTestFilesIndex`). Wrapper Salsa
+(`incremental/unused-exports.ts`) cache le bundle per-file via
+`fileContent` dep, et l'agrégat global tourne en O(N) pur Map sans
+walk AST.
 
-### Sprints "next" pour atteindre <50ms watcher (Phase 3 complète)
+**Mesures Sentinel post-Sprint 11.2** :
+- Same-process warm : **149ms** (vs 376ms → -60%)
+- unused-exports warm : **33ms** (vs 269ms → -87%)
+- Watcher steady-state : **~210ms** (vs 400-800ms)
+- Parité bit-pour-bit vérifiée : 238 fichiers, 947 exports, distribution
+  identique (used: 705, local-only: 153, test-only: 51,
+  possibly-dynamic: 11, safe-to-remove: 27), 0 divergence.
 
-- **Sprint 11.2 — refactor unused-exports en queries Salsa fines** :
-  c'est le bottleneck dominant (269ms warm). Refactor profond du
-  détecteur (670 lignes, 4 passes : import map, test scan, dynamic
-  usage, classification confidence). Estimé 3-4h dédiées.
+**Breakdown warm 149ms** :
+- unused-exports : 33ms (était 269ms)
+- event-bus : 29ms ← bottleneck restant
+- fileDiscovery : 28ms
+- db-tables : 8ms
+- graphBuild : 8ms
+- bullmq-queues + http-routes : 6ms
+- module-metrics + dsm + autres Salsa : ~5ms
+- overhead : 29ms
 
-  **PLAN DÉTAILLÉ : voir `docs/SPRINT-11-2-UNUSED-EXPORTS-PLAN.md`.**
-  Ce doc contient l'architecture, les étapes pas-à-pas, les pièges
-  connus (M-003 dynamic imports, M-006 test imports, ESM .js→.ts),
-  les tests de parité bit-pour-bit, et l'estimation d'effort. C'est
-  le boot brief dédié pour reprendre Sprint 11.2 à froid.
-- **Sprint 12 — buildGraph incremental** : gain marginal (~6ms warm).
-  Faible priorité.
+### Sprints "next" pour gain marginal (Phase 4 hypothétique)
+
+- **Migrer event-bus / db-tables / bullmq-queues / http-routes en
+  Salsa** : cumulent ~46ms warm. Pour atteindre <100ms warm il
+  faudrait les migrer. Pattern Sprint 3 standard, 1-2h chacun.
 - **AST persistence** : sérialiser les ASTs ts-morph dans le cache
   disque pour skip le `createSharedProject` au cold CLI (~3-5s gain).
   Refactor profond, gestion fragile de la version ts-morph.
-- **Migrer event-bus / http-routes / bullmq-queues / db-tables en
-  Salsa** : cumulent ~50ms warm, gain marginal vs effort.
+- **Sprint 12 — buildGraph incremental** : gain marginal (~6ms warm).
+  Faible priorité.
+- **Bascule pre-commit Sentinel sur --incremental** : retire
+  factsOnly. Risque limité maintenant que warm <200ms same-process.
 
 ## Reprise rapide checklist
 
@@ -735,13 +747,14 @@ Quand tu reprends dans une nouvelle session :
 3. [ ] Vérifier que `npx vitest run` côté toolkit passe (106/106 attendus)
 4. [ ] Vérifier que les invariants Sentinel passent (659/659)
 5. [ ] Décider la suite parmi :
-   - **Sprint 11.2** (le plus impactant — atteindre <50ms watcher) :
-     suivre `docs/SPRINT-11-2-UNUSED-EXPORTS-PLAN.md` pas-à-pas.
+   - **Phase 4 hypothétique — migrer event-bus/db-tables/etc** :
+     ~46ms cumulés en mode warm. Pattern Sprint 3 standard.
    - **AST persistence** (gain CLI cold) : refactor profond ts-morph.
    - **Bascule pre-commit Sentinel sur --incremental** : retire
-     factsOnly. Risque limité maintenant que warm <500ms same-process.
-   - Autre chantier (Sentinel / nouveau pack) — l'outil est déjà très
-     utilisable en l'état (warm 376ms watcher, 16x speedup).
+     factsOnly. Risque limité maintenant que warm 149ms same-process.
+   - Autre chantier (Sentinel / nouveau pack) — l'outil est déjà
+     très utilisable (warm 149ms same-process, watcher ~210ms,
+     ~30x speedup vs cold).
 
 Si un step ne matche plus exactement la réalité (ex: nouveau commit
 intercalé), adapte mais reste fidèle au principe : Salsa partout,

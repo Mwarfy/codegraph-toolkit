@@ -74,6 +74,11 @@ import {
   typedCallsInput as incTypedCallsInput,
 } from '../incremental/data-flows.js'
 import { allSymbolRefs as incAllSymbolRefs } from '../incremental/symbol-refs.js'
+import {
+  allUnusedExports as incAllUnusedExports,
+  testFilesIndexInput as incTestFilesIndex,
+} from '../incremental/unused-exports.js'
+import { buildTestFilesIndex } from '../detectors/unused-exports.js'
 import { allTsImports as incAllTsImports } from '../incremental/ts-imports.js'
 import { setTsImportPrebuiltProject } from '../detectors/ts-imports.js'
 import {
@@ -433,7 +438,16 @@ export async function analyze(
   }
 
   if (!factsOnly) {
-    const exportInfos = await analyzeExports(config.rootDir, files, tsConfigPath, sharedProject)
+    let exportInfos
+    if (incremental) {
+      // Sprint 11.2 : route via Salsa. Set le testFilesIndex async puis
+      // get l'agrégat (cached + per-file invalidation).
+      const testIdx = await buildTestFilesIndex(config.rootDir)
+      incSetInputIfChanged(incTestFilesIndex, 'all', testIdx)
+      exportInfos = incAllUnusedExports.get('all')
+    } else {
+      exportInfos = await analyzeExports(config.rootDir, files, tsConfigPath, sharedProject)
+    }
 
     // Patch export data into the graph nodes
     for (const info of exportInfos) {

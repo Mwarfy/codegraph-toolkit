@@ -1,9 +1,18 @@
 # Sprint 11.2 — refactor unused-exports en queries Salsa fines
 
-> **Pour Claude qui reprend dans une nouvelle session :** lis CE FICHIER
-> EN ENTIER avant toute action. Lis aussi `PHASE-1-SALSA-MIGRATION.md`
-> pour le contexte global. Sprint 11.2 est l'unique étape restante pour
-> atteindre la cible originale <50ms warm watcher.
+> **STATUS : LIVRÉ** (2026-04-30). Voir `PHASE-1-SALSA-MIGRATION.md`
+> section "Phase 3 livrée" pour les mesures réelles.
+>
+> Mesures Sentinel après livraison :
+> - same-process warm : 149ms (vs 376ms → -60%)
+> - unused-exports warm : 33ms (vs 269ms → -87%)
+> - watcher steady-state : ~210ms (vs 400-800ms)
+> - parité bit-pour-bit confirmée (238 fichiers, 947 exports, 0 divergence)
+>
+> Le doc ci-dessous est conservé pour référence historique sur
+> l'architecture choisie et les pièges rencontrés. Cible <50ms strict
+> non-atteinte, Phase 4 hypothétique (event-bus/db-tables Salsa) pour
+> aller plus loin.
 
 ## Contexte
 
