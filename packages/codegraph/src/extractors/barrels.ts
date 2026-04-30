@@ -30,32 +30,14 @@ export async function analyzeBarrels(
   const threshold = options.minConsumers ?? 2
   const fileSet = new Set(files)
 
-  // ─── 1. Détection barrels ─────────────────────────────────────────
+  // ─── 1. Détection barrels (per-file scan) ─────────────────────────
   const barrels = new Map<string, { reExportCount: number; abs: string }>()
-
   for (const sf of project.getSourceFiles()) {
     const absPath = sf.getFilePath() as string
     const relPath = path.relative(rootDir, absPath).replace(/\\/g, '/')
     if (!fileSet.has(relPath)) continue
-
-    const statements = sf.getStatements()
-    if (statements.length === 0) continue
-
-    let reExports = 0
-    let isBarrel = true
-    for (const stmt of statements) {
-      if (stmt.getKind() !== SyntaxKind.ExportDeclaration) {
-        isBarrel = false
-        break
-      }
-      const mod = (stmt as any).getModuleSpecifierValue?.()
-      if (!mod) { isBarrel = false; break }
-      reExports++
-    }
-
-    if (isBarrel && reExports > 0) {
-      barrels.set(relPath, { reExportCount: reExports, abs: absPath })
-    }
+    const info = scanBarrelInSourceFile(sf)
+    if (info) barrels.set(relPath, { ...info, abs: absPath })
   }
 
   if (barrels.size === 0) return []
@@ -68,21 +50,73 @@ export async function analyzeBarrels(
     const absPath = sf.getFilePath() as string
     const relPath = path.relative(rootDir, absPath).replace(/\\/g, '/')
     if (!fileSet.has(relPath)) continue
-
-    for (const target of collectImportTargets(sf)) {
-      const tAbs = target.getFilePath() as string
-      const tRel = path.relative(rootDir, tAbs).replace(/\\/g, '/')
-      if (tRel === relPath) continue  // auto-import aberrant — ignore
-      if (barrels.has(tRel)) {
-        consumers.get(tRel)!.add(relPath)
-      }
+    for (const tRel of collectImportTargetsRel(sf, rootDir)) {
+      if (tRel === relPath) continue
+      if (barrels.has(tRel)) consumers.get(tRel)!.add(relPath)
     }
   }
 
-  // ─── 3. Build output ─────────────────────────────────────────────
+  return buildBarrelInfos(barrels, consumers, threshold)
+}
+
+/**
+ * Détermine si un SourceFile est un barrel et compte ses re-exports.
+ * Retourne null si le fichier n'est PAS un barrel.
+ */
+export function scanBarrelInSourceFile(
+  sf: SourceFile,
+): { reExportCount: number } | null {
+  const statements = sf.getStatements()
+  if (statements.length === 0) return null
+  let reExports = 0
+  for (const stmt of statements) {
+    if (stmt.getKind() !== SyntaxKind.ExportDeclaration) return null
+    const mod = (stmt as any).getModuleSpecifierValue?.()
+    if (!mod) return null
+    reExports++
+  }
+  if (reExports === 0) return null
+  return { reExportCount: reExports }
+}
+
+/**
+ * Liste des targets d'imports/exports d'un SourceFile, en chemins
+ * relatifs au rootDir. Résolution déléguée à ts-morph (gère
+ * `./foo/index.ts`, etc.). Les imports sans target résolvable sont
+ * ignorés silencieusement.
+ */
+export function collectImportTargetsRel(
+  sf: SourceFile,
+  rootDir: string,
+): string[] {
+  const out: string[] = []
+  for (const decl of sf.getImportDeclarations()) {
+    const target = decl.getModuleSpecifierSourceFile()
+    if (target) {
+      out.push(path.relative(rootDir, target.getFilePath() as string).replace(/\\/g, '/'))
+    }
+  }
+  for (const decl of sf.getExportDeclarations()) {
+    const target = decl.getModuleSpecifierSourceFile()
+    if (target) {
+      out.push(path.relative(rootDir, target.getFilePath() as string).replace(/\\/g, '/'))
+    }
+  }
+  return out
+}
+
+/**
+ * Pure : construit les BarrelInfo à partir des barrels détectés et de
+ * leurs consumers. Réutilisable côté Salsa.
+ */
+export function buildBarrelInfos(
+  barrels: Map<string, { reExportCount: number }>,
+  consumers: Map<string, Set<string>>,
+  threshold: number,
+): BarrelInfo[] {
   const out: BarrelInfo[] = []
   for (const [rel, info] of barrels) {
-    const cs = [...consumers.get(rel)!].sort()
+    const cs = [...(consumers.get(rel) ?? [])].sort()
     out.push({
       file: rel,
       reExportCount: info.reExportCount,
@@ -91,20 +125,8 @@ export async function analyzeBarrels(
       lowValue: cs.length < threshold,
     })
   }
-
   out.sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : 0))
   return out
 }
 
-function collectImportTargets(sf: SourceFile): SourceFile[] {
-  const out: SourceFile[] = []
-  for (const decl of sf.getImportDeclarations()) {
-    const target = decl.getModuleSpecifierSourceFile()
-    if (target) out.push(target)
-  }
-  for (const decl of sf.getExportDeclarations()) {
-    const target = decl.getModuleSpecifierSourceFile()
-    if (target) out.push(target)
-  }
-  return out
-}
+export const DEFAULT_BARREL_THRESHOLD = 2

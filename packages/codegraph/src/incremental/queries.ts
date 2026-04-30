@@ -36,6 +36,19 @@ export const fileContent = input<string, string>(db, 'fileContent')
 /** Liste des fichiers analysés. Label conventionnel : 'all'. */
 export const projectFiles = input<string, readonly string[]>(db, 'projectFiles')
 
+/**
+ * Manifests `package.json` actifs (au moins 1 fichier dans leur scope).
+ * La découverte est async (lecture filesystem), faite dans `analyze()`.
+ * On stocke le résultat ici comme input — l'invalidation est totale à
+ * chaque set, mais c'est OK : la discovery ne change quasi jamais
+ * (rare modif d'un package.json).
+ *
+ * Object.is sur ce tableau de manifests sera FALSE entre runs (nouveau
+ * tableau). Les détecteurs aval gèrent ça via leurs propres caches
+ * per-file qui ne dépendent PAS de ce input.
+ */
+export const packageManifestsInput = input<string, unknown>(db, 'packageManifests')
+
 // ─── Project context (hors-Salsa, module-level) ───────────────────────
 
 let currentProject: Project | null = null

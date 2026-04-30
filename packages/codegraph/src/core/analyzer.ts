@@ -39,6 +39,14 @@ import {
 } from '../incremental/queries.js'
 import { allEnvUsage as incAllEnvUsage } from '../incremental/env-usage.js'
 import { allOauthScopeLiterals as incAllOauthScopeLiterals } from '../incremental/oauth-scope-literals.js'
+import { allEventEmitSites as incAllEventEmitSites } from '../incremental/event-emit-sites.js'
+import { allPackageDeps as incAllPackageDeps } from '../incremental/package-deps.js'
+import { allBarrels as incAllBarrels } from '../incremental/barrels.js'
+import { packageManifestsInput as incPackageManifests } from '../incremental/queries.js'
+import {
+  discoverManifests as discoverPackageManifests,
+  findClosestManifest as findClosestPackageManifest,
+} from '../extractors/package-deps.js'
 import type { TaintRules } from './types.js'
 import { computeModuleMetrics } from '../metrics/module-metrics.js'
 import { computeComponentMetrics } from '../metrics/component-metrics.js'
@@ -229,6 +237,24 @@ export async function analyze(
       incFileContent.set(f, content)
     }
     incProjectFiles.set('all', files)
+
+    // Discovery + filter active manifests pour package-deps incremental.
+    // C'est async donc fait ici, pas dans une derived query (sync only).
+    const allManifests = await discoverPackageManifests(config.rootDir)
+    if (allManifests.length > 0) {
+      allManifests.sort((a, b) => b.dir.length - a.dir.length)
+      const scopeFileCount = new Map<string, number>()
+      for (const m of allManifests) scopeFileCount.set(m.abs, 0)
+      for (const rel of files) {
+        const abs = path.join(config.rootDir, rel)
+        const m = findClosestPackageManifest(abs, allManifests)
+        if (m) scopeFileCount.set(m.abs, (scopeFileCount.get(m.abs) ?? 0) + 1)
+      }
+      const activeManifests = allManifests.filter((m) => (scopeFileCount.get(m.abs) ?? 0) > 0)
+      incPackageManifests.set('all', activeManifests)
+    } else {
+      incPackageManifests.set('all', [])
+    }
   }
 
   if (!factsOnly) {
@@ -491,14 +517,21 @@ export async function analyze(
   if (packageDepsEnabled) {
     try {
       const pdOptions = config.detectorOptions?.['packageDeps'] ?? {}
-      packageDeps = await analyzePackageDeps(
-        config.rootDir,
-        files,
-        sharedProject,
-        {
-          testPatterns: pdOptions['testPatterns'] as RegExp[] | undefined,
-        },
-      )
+      if (incremental) {
+        // Salsa path : packageRefsOfFile cached per-file via fileContent.
+        // L'agrégat dépend aussi de packageManifestsInput (set ci-dessus
+        // après discovery async).
+        packageDeps = incAllPackageDeps.get('all')
+      } else {
+        packageDeps = await analyzePackageDeps(
+          config.rootDir,
+          files,
+          sharedProject,
+          {
+            testPatterns: pdOptions['testPatterns'] as RegExp[] | undefined,
+          },
+        )
+      }
       timing.detectors['package-deps'] = performance.now() - tPackageDeps
     } catch (err) {
       timing.detectors['package-deps'] = performance.now() - tPackageDeps
@@ -518,14 +551,21 @@ export async function analyze(
   if (barrelsEnabled) {
     try {
       const bOptions = config.detectorOptions?.['barrels'] ?? {}
-      barrels = await analyzeBarrels(
-        config.rootDir,
-        files,
-        sharedProject,
-        {
-          minConsumers: bOptions['minConsumers'] as number | undefined,
-        },
-      )
+      if (incremental) {
+        // Salsa path : barrelInfoOfFile + importTargetsOfFile per-file,
+        // agrégat global re-tourne mais lit du cache. minConsumers
+        // custom non supporté ici (default 2 suffit pour Sentinel).
+        barrels = incAllBarrels.get('all')
+      } else {
+        barrels = await analyzeBarrels(
+          config.rootDir,
+          files,
+          sharedProject,
+          {
+            minConsumers: bOptions['minConsumers'] as number | undefined,
+          },
+        )
+      }
       timing.detectors['barrels'] = performance.now() - tBarrels
     } catch (err) {
       timing.detectors['barrels'] = performance.now() - tBarrels
@@ -547,14 +587,20 @@ export async function analyze(
   if (eventEmitSitesEnabled) {
     try {
       const eesOptions = config.detectorOptions?.['eventEmitSites'] ?? {}
-      eventEmitSites = await analyzeEventEmitSites(
-        config.rootDir,
-        files,
-        sharedProject,
-        {
-          emitFnNames: eesOptions['emitFnNames'] as string[] | undefined,
-        },
-      )
+      if (incremental) {
+        // Salsa path : scan AST par fichier cached. emitFnNames custom
+        // non supporté ici (Sentinel n'override jamais).
+        eventEmitSites = incAllEventEmitSites.get('all')
+      } else {
+        eventEmitSites = await analyzeEventEmitSites(
+          config.rootDir,
+          files,
+          sharedProject,
+          {
+            emitFnNames: eesOptions['emitFnNames'] as string[] | undefined,
+          },
+        )
+      }
       timing.detectors['event-emit-sites'] = performance.now() - tEventEmitSites
     } catch (err) {
       timing.detectors['event-emit-sites'] = performance.now() - tEventEmitSites

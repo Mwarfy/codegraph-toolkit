@@ -17,6 +17,7 @@ import * as path from 'node:path'
 import { createSharedProject } from '../src/detectors/unused-exports.js'
 import { analyzeEnvUsage } from '../src/extractors/env-usage.js'
 import { analyzeOauthScopeLiterals } from '../src/extractors/oauth-scope-literals.js'
+import { analyzeEventEmitSites } from '../src/extractors/event-emit-sites.js'
 import { sharedDb } from '../src/incremental/database.js'
 import {
   fileContent,
@@ -28,6 +29,7 @@ import {
   allOauthScopeLiterals,
   oauthScopesOfFile,
 } from '../src/incremental/oauth-scope-literals.js'
+import { allEventEmitSites } from '../src/incremental/event-emit-sites.js'
 
 let fixtureRoot: string
 let files: string[]
@@ -35,12 +37,14 @@ let files: string[]
 const FILE_A = `// @ts-nocheck
 const a = process.env.A_VAR
 const apiKey = 'https://www.googleapis.com/auth/youtube.upload'
+emit({ type: 'render.completed', payload: a })
 `
 
 const FILE_B = `// @ts-nocheck
 function readB() {
   return process.env.B_VAR ?? 'default'
 }
+emit({ type: EVENTS.PUBLISHED })
 `
 
 const FILE_C = `// @ts-nocheck
@@ -188,6 +192,50 @@ describe('incremental oauth-scope-literals', () => {
 
     const afterMisses = sharedDb.stats().misses['oauthScopesOfFile'] ?? 0
     expect(afterMisses - baseline).toBe(1)
+  })
+})
+
+describe('incremental event-emit-sites', () => {
+  it('matches legacy output (parity)', async () => {
+    setupContext()
+    const project = createSharedProject(fixtureRoot, files, path.join(fixtureRoot, 'tsconfig.json'))
+
+    const incrResult = allEventEmitSites.get('all')
+    const legacyResult = await analyzeEventEmitSites(fixtureRoot, files, project)
+
+    expect(JSON.stringify(incrResult)).toBe(JSON.stringify(legacyResult))
+  })
+
+  it('caches per-file scan on second run with no changes', () => {
+    setupContext()
+
+    const first = allEventEmitSites.get('all')
+    expect(first.length).toBe(2) // a.ts literal + b.ts eventConstRef
+
+    const missesAfterFirst = sharedDb.stats().misses['eventEmitSitesOfFile'] ?? 0
+    expect(missesAfterFirst).toBe(3)
+
+    fileContent.set('a.ts', FILE_A)
+    fileContent.set('b.ts', FILE_B)
+    fileContent.set('c.ts', FILE_C)
+    projectFiles.set('all', files)
+
+    const second = allEventEmitSites.get('all')
+    expect(JSON.stringify(second)).toBe(JSON.stringify(first))
+
+    const missesAfterSecond = sharedDb.stats().misses['eventEmitSitesOfFile'] ?? 0
+    expect(missesAfterSecond).toBe(missesAfterFirst)
+  })
+
+  it('classifies kind correctly across file boundary', () => {
+    setupContext()
+    const sites = allEventEmitSites.get('all')
+    const aSite = sites.find((s) => s.file === 'a.ts')
+    const bSite = sites.find((s) => s.file === 'b.ts')
+    expect(aSite?.kind).toBe('literal')
+    expect(aSite?.literalValue).toBe('render.completed')
+    expect(bSite?.kind).toBe('eventConstRef')
+    expect(bSite?.refExpression).toBe('EVENTS.PUBLISHED')
   })
 })
 

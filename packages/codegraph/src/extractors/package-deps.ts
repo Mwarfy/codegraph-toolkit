@@ -115,89 +115,20 @@ export async function analyzePackageDeps(
     const manifest = findClosestManifest(absPath, active)
     if (!manifest) continue
 
-    for (const spec of collectImportSpecifiers(sf)) {
-      const pkg = normalizePackageName(spec)
-      if (!pkg) continue
-      const bucket = importsByManifest.get(manifest.abs)!
-      if (!bucket.has(pkg)) bucket.set(pkg, new Set())
-      bucket.get(pkg)!.add(relPath)
+    const refs = collectPackageRefsInSourceFile(sf)
+    const importBucket = importsByManifest.get(manifest.abs)!
+    for (const pkg of refs.imports) {
+      if (!importBucket.has(pkg)) importBucket.set(pkg, new Set())
+      importBucket.get(pkg)!.add(relPath)
     }
-
-    for (const pkg of collectRuntimeAssetReferences(sf)) {
-      const bucket = runtimeAssetsByManifest.get(manifest.abs)!
-      if (!bucket.has(pkg)) bucket.set(pkg, new Set())
-      bucket.get(pkg)!.add(relPath)
+    const assetBucket = runtimeAssetsByManifest.get(manifest.abs)!
+    for (const pkg of refs.runtimeAssets) {
+      if (!assetBucket.has(pkg)) assetBucket.set(pkg, new Set())
+      assetBucket.get(pkg)!.add(relPath)
     }
   }
 
-  const issues: PackageDepsIssue[] = []
-
-  for (const m of active) {
-    const imports = importsByManifest.get(m.abs)!
-    const runtimeAssets = runtimeAssetsByManifest.get(m.abs)!
-    const importedNames = new Set(imports.keys())
-
-    // declared-unused : déclaré mais jamais importé. On exclut `@types/*` qui
-    // sont utilisés en type-only (non distinguable v1 — filtre explicite).
-    // Si un usage runtime asset est détecté → downgrade vers
-    // `declared-runtime-asset` (review carefully, ne pas uninstall).
-    for (const [name, block] of m.declared) {
-      if (importedNames.has(name)) continue
-      if (name.startsWith('@types/')) continue
-      const runtimeRefs = runtimeAssets.get(name)
-      if (runtimeRefs && runtimeRefs.size > 0) {
-        issues.push({
-          kind: 'declared-runtime-asset',
-          packageName: name,
-          packageJson: m.rel,
-          importers: [],
-          declaredIn: block,
-          runtimeAssetReferences: [...runtimeRefs].sort(),
-        })
-      } else {
-        issues.push({
-          kind: 'declared-unused',
-          packageName: name,
-          packageJson: m.rel,
-          importers: [],
-          declaredIn: block,
-        })
-      }
-    }
-
-    // missing + devOnly
-    for (const [name, importers] of imports) {
-      const block = m.declared.get(name)
-      const importersList = [...importers].sort()
-      const testOnly = importersList.every((f) => testREs.some((r) => r.test(f)))
-
-      if (!block) {
-        issues.push({
-          kind: 'missing',
-          packageName: name,
-          packageJson: m.rel,
-          importers: importersList,
-        })
-      } else if (block === 'dependencies' && testOnly) {
-        issues.push({
-          kind: 'devOnly',
-          packageName: name,
-          packageJson: m.rel,
-          importers: importersList,
-          testImporters: importersList,
-          declaredIn: block,
-        })
-      }
-    }
-  }
-
-  issues.sort((a, b) => {
-    if (a.packageJson !== b.packageJson) return a.packageJson < b.packageJson ? -1 : 1
-    if (a.kind !== b.kind) return a.kind < b.kind ? -1 : 1
-    return a.packageName < b.packageName ? -1 : a.packageName > b.packageName ? 1 : 0
-  })
-
-  return issues
+  return buildPackageDepsIssues(active, importsByManifest, runtimeAssetsByManifest, testREs)
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -280,6 +211,118 @@ function collectImportSpecifiers(sf: SourceFile): string[] {
     if (ms) specs.push(ms)
   }
   return specs
+}
+
+/**
+ * Helper réutilisable pour la migration Salsa : pour UN SourceFile,
+ * retourne la liste des packages externes importés (déjà normalisés)
+ * + la liste des packages référencés en runtime asset.
+ *
+ * Pas de matching contre les manifests ici — c'est le rôle de
+ * l'agrégateur. Cette séparation permet de cacher le scan AST par
+ * fichier indépendamment de la structure des manifests.
+ */
+export function collectPackageRefsInSourceFile(sf: SourceFile): {
+  imports: string[]
+  runtimeAssets: string[]
+} {
+  const importSet = new Set<string>()
+  for (const spec of collectImportSpecifiers(sf)) {
+    const pkg = normalizePackageName(spec)
+    if (pkg) importSet.add(pkg)
+  }
+  const assets = collectRuntimeAssetReferences(sf)
+  return {
+    imports: [...importSet].sort(),
+    runtimeAssets: [...assets].sort(),
+  }
+}
+
+export type { PackageManifest, DepBlock }
+export {
+  discoverManifests,
+  findClosestManifest,
+  DEFAULT_TEST_RES,
+  buildPackageDepsIssues,
+}
+
+/**
+ * Construit les `PackageDepsIssue[]` à partir des manifests + map
+ * `manifest.abs → fichier → {imports, runtimeAssets}`. Pure logique
+ * (matching declared vs imported), réutilisable côté Salsa.
+ *
+ * Précondition : `manifests` est l'output de `discoverManifests()`,
+ * filtré aux active (au moins 1 fichier dans leur scope).
+ */
+function buildPackageDepsIssues(
+  active: PackageManifest[],
+  importsByManifest: Map<string, Map<string, Set<string>>>,
+  runtimeAssetsByManifest: Map<string, Map<string, Set<string>>>,
+  testREs: RegExp[],
+): PackageDepsIssue[] {
+  const issues: PackageDepsIssue[] = []
+
+  for (const m of active) {
+    const imports = importsByManifest.get(m.abs)!
+    const runtimeAssets = runtimeAssetsByManifest.get(m.abs)!
+    const importedNames = new Set(imports.keys())
+
+    for (const [name, block] of m.declared) {
+      if (importedNames.has(name)) continue
+      if (name.startsWith('@types/')) continue
+      const runtimeRefs = runtimeAssets.get(name)
+      if (runtimeRefs && runtimeRefs.size > 0) {
+        issues.push({
+          kind: 'declared-runtime-asset',
+          packageName: name,
+          packageJson: m.rel,
+          importers: [],
+          declaredIn: block,
+          runtimeAssetReferences: [...runtimeRefs].sort(),
+        })
+      } else {
+        issues.push({
+          kind: 'declared-unused',
+          packageName: name,
+          packageJson: m.rel,
+          importers: [],
+          declaredIn: block,
+        })
+      }
+    }
+
+    for (const [name, importers] of imports) {
+      const block = m.declared.get(name)
+      const importersList = [...importers].sort()
+      const testOnly = importersList.every((f) => testREs.some((r) => r.test(f)))
+
+      if (!block) {
+        issues.push({
+          kind: 'missing',
+          packageName: name,
+          packageJson: m.rel,
+          importers: importersList,
+        })
+      } else if (block === 'dependencies' && testOnly) {
+        issues.push({
+          kind: 'devOnly',
+          packageName: name,
+          packageJson: m.rel,
+          importers: importersList,
+          testImporters: importersList,
+          declaredIn: block,
+        })
+      }
+    }
+  }
+
+  issues.sort((a, b) => {
+    if (a.packageJson !== b.packageJson) return a.packageJson < b.packageJson ? -1 : 1
+    if (a.kind !== b.kind) return a.kind < b.kind ? -1 : 1
+    return a.packageName < b.packageName ? -1 : a.packageName > b.packageName ? 1 : 0
+  })
+
+  return issues
 }
 
 /**
