@@ -41,22 +41,23 @@
 
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
-- `packages/codegraph/src/core/types.ts` (in: 59) · gov by ADR-006
+- `packages/codegraph/src/core/types.ts` (in: 68) · gov by ADR-006
+- `packages/codegraph/src/incremental/queries.ts` (in: 22)
 - `packages/codegraph/src/incremental/database.ts` (in: 20)
 - `packages/salsa/dist/index.d.ts` (in: 19)
-- `packages/codegraph/src/incremental/queries.ts` (in: 17)
+- `packages/codegraph/src/core/detector-registry.ts` (in: 15)
 - `packages/adr-toolkit/src/config.ts` (in: 10) · gov by ADR-002
 - `packages/codegraph/src/diff/types.ts` (in: 8)
 - `packages/datalog/src/types.ts` (in: 8)
-- `packages/codegraph/src/check/types.ts` (in: 7)
 
 ## ⚠ ADR anchor suggestions
 
 Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `// ADR-NNN`** dans le code. Intentionnel ? Sinon poser un marqueur ou créer un ADR :
 
+- **22** `packages/codegraph/src/incremental/queries.ts` _(top-hub)_
 - **20** `packages/codegraph/src/incremental/database.ts` _(top-hub)_
 - **19** `packages/salsa/dist/index.d.ts` _(top-hub)_
-- **17** `packages/codegraph/src/incremental/queries.ts` _(top-hub)_
+- **15** `packages/codegraph/src/core/detector-registry.ts` _(top-hub)_
 
 ## Tensions actives — invitations à explorer
 
@@ -99,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+6029444 refactor(codegraph): Phase B — migration des 13 détecteurs restants vers Detector/Registry
 2807c3e refactor(codegraph): Phase A — pattern visiteur Detector/Registry pour analyze()
 f0f9ca3 feat(adr-toolkit): détecteur fsm — unions string literals + write sites observables
 41f0d10 docs: boot briefs SPRINT-13-FSM + REFACTOR-ANALYZER pour reprise à froid
@@ -110,7 +112,6 @@ b28b910 chore: rename @liby/ → @liby-tools/ pour publication npm
 467b4e0 refactor(codegraph): extract 2 sections from analyze() god-file
 812d7bd refactor(codegraph): move 3 fns from detectors/ to extractors/
 04e3f2d feat(codegraph-mcp): nouveau MCP server exposant les queries codegraph
-20b3709 feat(codegraph): 4 nouveaux détecteurs déterministes + fix cycles bullmq
 ```
 
 ## Comment contribuer à ce brief

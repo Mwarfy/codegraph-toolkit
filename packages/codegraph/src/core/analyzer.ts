@@ -21,20 +21,9 @@ import type {
   DetectorContext,
   DetectedLink,
   GraphSnapshot,
-  EnvVarUsage,
-  PackageDepsIssue,
-  BarrelInfo,
-  TypedCalls,
-  Cycle,
-  TruthPoint,
-  DataFlow,
-  StateMachine,
-  TaintViolation,
 } from './types.js'
 import { createDetectors } from '../detectors/index.js'
 import { createSharedProject } from '../extractors/unused-exports.js'
-import type { EventEmitSite } from '../extractors/event-emit-sites.js'
-import type { OauthScopeLiteral } from '../extractors/oauth-scope-literals.js'
 import { DetectorRegistry, type DetectorRunContext } from './detector-registry.js'
 import { OauthScopeLiteralsDetector } from './detectors/oauth-scope-literals-detector.js'
 import { EventEmitSitesDetector } from './detectors/event-emit-sites-detector.js'
@@ -43,7 +32,7 @@ import { PackageDepsDetector } from './detectors/package-deps-detector.js'
 import { BarrelsDetector } from './detectors/barrels-detector.js'
 import { UnusedExportsDetector } from './detectors/unused-exports-detector.js'
 import { ComplexityDetector } from './detectors/complexity-detector.js'
-import { SymbolRefsDetector, type SymbolRefEdge } from './detectors/symbol-refs-detector.js'
+import { SymbolRefsDetector } from './detectors/symbol-refs-detector.js'
 import { TypedCallsDetector } from './detectors/typed-calls-detector.js'
 import { CyclesDetector } from './detectors/cycles-detector.js'
 import { TruthPointsDetector } from './detectors/truth-points-detector.js'
@@ -235,148 +224,17 @@ export async function analyze(
     )
   }
 
-  // ─── 4. Run detectors ──────────────────────────────────────────────
+  // ─── 4. Run base detectors + build graph ───────────────────────────
 
-  const detectors = createDetectors(config.detectors)
-  const allLinks: DetectedLink[] = []
+  const graph = await runBaseDetectorsAndBuildGraph(
+    config, files, fileCache, ctx, incremental, timing,
+  )
 
-  // Sprint 11 : en mode incremental, ts-imports passe par allTsImports
-  // (Salsa cache per-file) au lieu du détecteur legacy. Skip dans la
-  // boucle pour éviter le double-scan.
-  const skipDetectors = new Set<string>()
-  if (incremental) {
-    skipDetectors.add('ts-imports')
-    const tTsImports = performance.now()
-    try {
-      const links = incAllTsImports.get('all')
-      allLinks.push(...links)
-    } catch (err) {
-      console.error(`  ✗ ts-imports (Salsa) failed: ${err}`)
-    }
-    timing.detectors['ts-imports'] = performance.now() - tTsImports
-  }
+  // ─── 5. tsconfig resolution + shared Project + Salsa async inputs ──
 
-  for (const detector of detectors) {
-    if (skipDetectors.has(detector.name)) continue
-    const tDet = performance.now()
-    try {
-      const links = await detector.detect(ctx)
-      allLinks.push(...links)
-      timing.detectors[detector.name] = performance.now() - tDet
-    } catch (err) {
-      const elapsed = performance.now() - tDet
-      timing.detectors[detector.name] = elapsed
-      console.error(`  ✗ ${detector.name} failed (${elapsed.toFixed(0)}ms): ${err}`)
-    }
-  }
-
-  // Reset le prebuilt — autres détecteurs qui en auraient besoin
-  // doivent passer par sharedProject explicitement.
-  if (incremental) setTsImportPrebuiltProject(null)
-
-  // ─── 4. Build graph ────────────────────────────────────────────────
-
-  const tGraph = performance.now()
-  const graph = new CodeGraph(config.rootDir, config.entryPoints)
-
-  // Add all discovered files as nodes
-  for (const file of files) {
-    const content = fileCache.get(file) || ''
-    const loc = content.split('\n').length
-    graph.addFileNode(file, { loc })
-  }
-
-  // Add all detected edges
-  for (const link of allLinks) {
-    // Skip unresolved route targets (placeholder)
-    if (link.to === 'UNRESOLVED_ROUTE') continue
-
-    graph.addEdge(link.from, link.to, link.type, {
-      label: link.label,
-      resolved: link.resolved,
-      line: link.line,
-      meta: link.meta,
-    })
-  }
-
-  // Compute orphan status after all edges are in
-  graph.computeOrphanStatus()
-
-  timing.graphBuild = performance.now() - tGraph
-
-  // ─── 5. tsconfig resolution + shared Project ───────────────────────
-
-  // Find tsconfig for alias resolution. Priorité :
-  //   1. config.tsconfigPath (depuis CodeGraphConfig — projet-spécifique)
-  //   2. Fallback : tsconfig.json à la racine
-  let tsConfigPath: string | undefined
-  const tsConfigCandidates: string[] = []
-  if (config.tsconfigPath) {
-    tsConfigCandidates.push(
-      path.isAbsolute(config.tsconfigPath)
-        ? config.tsconfigPath
-        : path.join(config.rootDir, config.tsconfigPath),
-    )
-  }
-  tsConfigCandidates.push(path.join(config.rootDir, 'tsconfig.json'))
-
-  for (const candidate of tsConfigCandidates) {
-    try {
-      await fs.access(candidate)
-      tsConfigPath = candidate
-      break
-    } catch {}
-  }
-
-  // Projet ts-morph partagé.
-  // En mode incremental : déjà construit en step 3 (preBuiltSharedProject)
-  //   et setIncrementalContext fait. On le réutilise.
-  // En mode legacy : créer un Project frais (pattern actuel).
-  let sharedProject: ReturnType<typeof createSharedProject>
-
-  if (incremental) {
-    sharedProject = preBuiltSharedProject!
-    // fileContent + projectFiles déjà set en step 3b (Sprint 11).
-    // Ici : manifests + sqlDefaults qui ne sont nécessaires que pour
-    // les détecteurs Salsa appelés plus tard (package-deps, state-machines).
-
-    // Discovery + filter active manifests pour package-deps incremental.
-    // C'est async donc fait ici, pas dans une derived query (sync only).
-    const allManifests = await discoverPackageManifests(config.rootDir)
-    if (allManifests.length > 0) {
-      allManifests.sort((a, b) => b.dir.length - a.dir.length)
-      const scopeFileCount = new Map<string, number>()
-      for (const m of allManifests) scopeFileCount.set(m.abs, 0)
-      for (const rel of files) {
-        const abs = path.join(config.rootDir, rel)
-        const m = findClosestPackageManifest(abs, allManifests)
-        if (m) scopeFileCount.set(m.abs, (scopeFileCount.get(m.abs) ?? 0) + 1)
-      }
-      const activeManifests = allManifests.filter((m) => (scopeFileCount.get(m.abs) ?? 0) > 0)
-      incSetInputIfChanged(incPackageManifests, 'all', activeManifests)
-    } else {
-      incSetInputIfChanged(incPackageManifests, 'all', [])
-    }
-
-    // SQL defaults pour state-machines : async file reads ici.
-    // Set en input Salsa pour que allStateMachines puisse les inclure
-    // dans son agrégation sync.
-    const sqlDefaultsBuffer: StateMachineWriteSignal[] = []
-    try {
-      const sqlGlobs = ['**/*.sql']
-      const sqlFiles = await discoverSqlFilesForIncremental(config.rootDir, sqlGlobs)
-      for (const sqlFile of sqlFiles) {
-        try {
-          const content = await fs.readFile(path.join(config.rootDir, sqlFile), 'utf-8')
-          scanSqlColumnDefaultsForIncremental(content, sqlFile, sqlDefaultsBuffer)
-        } catch {}
-      }
-    } catch {}
-    incSetInputIfChanged(incSqlDefaults, 'all', sqlDefaultsBuffer)
-  } else {
-    // Mode legacy : Project frais à chaque appel (pas de cache cross-run).
-    sharedProject = createSharedProject(config.rootDir, files, tsConfigPath)
-  }
+  const { tsConfigPath, sharedProject } = await resolveTsConfigAndSharedProject(
+    config, files, incremental, preBuiltSharedProject,
+  )
 
   // ─── 5. Detectors via Registry (Phase B refactor terminé) ──────────
   // Tous les détecteurs Phase 5 sont migrés au pattern Detector/Registry.
@@ -411,176 +269,20 @@ export async function analyze(
   }
   await detectorRegistry.runAll(detectorCtx, timing.detectors)
 
-  const symbolRefs = detectorCtx.results['symbol-refs'] as
-    | SymbolRefEdge[]
-    | undefined
-  const typedCalls = detectorCtx.results['typed-calls'] as
-    | TypedCalls
-    | undefined
-  const cycles = detectorCtx.results['cycles'] as Cycle[] | undefined
-  const truthPoints = detectorCtx.results['truth-points'] as TruthPoint[] | undefined
-  const dataFlows = detectorCtx.results['data-flows'] as DataFlow[] | undefined
-  const stateMachines = detectorCtx.results['state-machines'] as StateMachine[] | undefined
-  const envUsage = detectorCtx.results['env-usage'] as
-    | EnvVarUsage[]
-    | undefined
-  const packageDeps = detectorCtx.results['package-deps'] as
-    | PackageDepsIssue[]
-    | undefined
-  const barrels = detectorCtx.results['barrels'] as
-    | BarrelInfo[]
-    | undefined
-  const eventEmitSites = detectorCtx.results['event-emit-sites'] as
-    | EventEmitSite[]
-    | undefined
-  const oauthScopeLiterals = detectorCtx.results['oauth-scope-literals'] as
-    | OauthScopeLiteral[]
-    | undefined
-  const taintViolations = detectorCtx.results['taint'] as TaintViolation[] | undefined
-
-  // ─── 6. Generate snapshot ──────────────────────────────────────────
+  // ─── 6. Generate snapshot + patch detector results ────────────────
 
   const snapshot = graph.toSnapshot()
-  if (symbolRefs) {
-    snapshot.symbolRefs = symbolRefs
-  }
-  if (typedCalls) {
-    snapshot.typedCalls = typedCalls
-  }
-  if (cycles) {
-    snapshot.cycles = cycles
-  }
-  if (truthPoints) {
-    snapshot.truthPoints = truthPoints
-  }
-  if (dataFlows) {
-    snapshot.dataFlows = dataFlows
-  }
-  if (stateMachines) {
-    snapshot.stateMachines = stateMachines
-  }
-  if (envUsage) {
-    snapshot.envUsage = envUsage
-  }
-  if (packageDeps) {
-    snapshot.packageDeps = packageDeps
-  }
-  if (barrels) {
-    snapshot.barrels = barrels
-  }
-  if (taintViolations) {
-    snapshot.taintViolations = taintViolations
-  }
-  if (eventEmitSites) {
-    snapshot.eventEmitSites = eventEmitSites
-  }
-  if (oauthScopeLiterals) {
-    snapshot.oauthScopeLiterals = oauthScopeLiterals
-  }
+  patchSnapshotWithDetectorResults(snapshot, detectorCtx.results)
 
   // ─── 6b. New deterministic detectors (Sprint 12) ───────────────────
   if (!factsOnly) {
     await runDeterministicDetectors(config, files, readFile, sharedProject, snapshot, timing)
   }
 
-  // ─── 7. Module metrics (phase 3.7 #5 + #6) ─────────────────────────
-  // PageRank + fan-in/out + Henry-Kafura sur le graphe final (snapshot déjà
-  // construit). Calculé post-graph parce qu'il n'a besoin que de
-  // `snapshot.nodes` et `snapshot.edges`. Toggle via
-  // `detectorOptions.moduleMetrics.enabled` (default on).
-
-  const moduleMetricsEnabled =
-    (config.detectorOptions?.['moduleMetrics']?.['enabled'] as boolean | undefined) ?? true
-
-  const tModuleMetrics = performance.now()
-  if (moduleMetricsEnabled) {
-    try {
-      const mmOptions = config.detectorOptions?.['moduleMetrics'] ?? {}
-      if (incremental) {
-        // Salsa path : nodes+edges déjà construits, on les set en
-        // input puis on calcule via le derived. Custom options
-        // (edgeTypesForCentrality, alpha, tolerance) non supportés —
-        // defaults suffisent pour Sentinel.
-        incSetInputIfChanged(incGraphNodes, 'all', snapshot.nodes)
-        incSetInputIfChanged(incGraphEdgesForMetrics, 'all', snapshot.edges)
-        snapshot.moduleMetrics = incAllModuleMetrics.get('all')
-      } else {
-        snapshot.moduleMetrics = computeModuleMetrics(
-          snapshot.nodes,
-          snapshot.edges,
-          {
-            edgeTypesForCentrality: mmOptions['edgeTypesForCentrality'] as any,
-            pagerankAlpha: mmOptions['pagerankAlpha'] as number | undefined,
-            pagerankTolerance: mmOptions['pagerankTolerance'] as number | undefined,
-          },
-        )
-      }
-      timing.detectors['module-metrics'] = performance.now() - tModuleMetrics
-    } catch (err) {
-      timing.detectors['module-metrics'] = performance.now() - tModuleMetrics
-      console.error(`  ✗ module-metrics failed: ${err}`)
-    }
-  }
-
-  // ─── 7b. Component metrics — Martin I/A/D (phase 3.7 #2) ───────────
-  const componentMetricsEnabled =
-    !factsOnly &&
-    ((config.detectorOptions?.['componentMetrics']?.['enabled'] as boolean | undefined) ?? true)
-
-  const tComponentMetrics = performance.now()
-  if (componentMetricsEnabled) {
-    try {
-      const cmOptions = config.detectorOptions?.['componentMetrics'] ?? {}
-      if (incremental) {
-        // Salsa path : nodes+edges déjà set par module-metrics au-dessus.
-        // Custom options non supportés.
-        if (!incGraphNodes.has('all')) incSetInputIfChanged(incGraphNodes, 'all', snapshot.nodes)
-        if (!incGraphEdgesForMetrics.has('all')) incSetInputIfChanged(incGraphEdgesForMetrics, 'all', snapshot.edges)
-        snapshot.componentMetrics = incAllComponentMetrics.get('all')
-      } else {
-        snapshot.componentMetrics = computeComponentMetrics(
-          snapshot.nodes,
-          snapshot.edges,
-          {
-            depth: cmOptions['depth'] as number | undefined,
-            edgeTypes: cmOptions['edgeTypes'] as any,
-            excludeComponents: cmOptions['excludeComponents'] as string[] | undefined,
-          },
-        )
-      }
-      timing.detectors['component-metrics'] = performance.now() - tComponentMetrics
-    } catch (err) {
-      timing.detectors['component-metrics'] = performance.now() - tComponentMetrics
-      console.error(`  ✗ component-metrics failed: ${err}`)
-    }
-  }
-
-  // ─── 7c. DSM container-level (phase 3.8 #4) ────────────────────────
-  // Précalcul pour le panneau web. File-level pour les gros repos est trop
-  // large en JSON et illisible — le consommateur peut régénérer via `codegraph
-  // dsm --granularity file`. Toggle via `detectorOptions.dsm.enabled`.
-
-  const dsmEnabled =
-    !factsOnly &&
-    ((config.detectorOptions?.['dsm']?.['enabled'] as boolean | undefined) ?? true)
-
-  const tDsm = performance.now()
-  if (dsmEnabled) {
-    try {
-      const dsmOptions = config.detectorOptions?.['dsm'] ?? {}
-      const depth = (dsmOptions['depth'] as number | undefined) ?? 3
-      const fileNodes = snapshot.nodes.filter((n) => n.type === 'file').map((n) => n.id)
-      const importEdges = snapshot.edges
-        .filter((e) => e.type === 'import')
-        .map((e) => ({ from: e.from, to: e.to }))
-      const agg = aggregateByContainer(fileNodes, importEdges, depth)
-      snapshot.dsm = computeDsm(agg.nodes, agg.edges)
-      timing.detectors['dsm'] = performance.now() - tDsm
-    } catch (err) {
-      timing.detectors['dsm'] = performance.now() - tDsm
-      console.error(`  ✗ dsm failed: ${err}`)
-    }
-  }
+  // ─── 7. Post-snapshot metrics phase ────────────────────────────────
+  // module-metrics, component-metrics, dsm. Tournent post-snapshot car
+  // dépendent de snapshot.nodes + snapshot.edges (cf. helper).
+  await runPostSnapshotMetrics(config, snapshot, timing, { factsOnly, incremental })
 
   // ─── Persist disk cache (Sprint 7) ───────────────────────────────────
   // À la fin d'un run incremental, sauve cells + mtimes pour qu'un
@@ -600,6 +302,158 @@ export async function analyze(
   timing.total = performance.now() - t0
 
   return { snapshot, timing }
+}
+
+/**
+ * Run base detectors (ts-imports, event-bus, http-routes, bullmq-queues,
+ * db-tables) + build the file/edge graph + compute orphan status.
+ *
+ * En mode incremental : ts-imports passe par allTsImports (Salsa cache)
+ * au lieu du détecteur legacy — skip dans la boucle pour éviter le
+ * double-scan. Le prebuilt sharedProject est reset à null après cette
+ * phase pour forcer les détecteurs aval à passer par sharedProject
+ * explicitement.
+ */
+async function runBaseDetectorsAndBuildGraph(
+  config: CodeGraphConfig,
+  files: string[],
+  fileCache: Map<string, string>,
+  ctx: DetectorContext,
+  incremental: boolean,
+  timing: AnalyzeResult['timing'],
+): Promise<CodeGraph> {
+  const detectors = createDetectors(config.detectors)
+  const allLinks: DetectedLink[] = []
+
+  const skipDetectors = new Set<string>()
+  if (incremental) {
+    skipDetectors.add('ts-imports')
+    const tTsImports = performance.now()
+    try {
+      const links = incAllTsImports.get('all')
+      allLinks.push(...links)
+    } catch (err) {
+      console.error(`  ✗ ts-imports (Salsa) failed: ${err}`)
+    }
+    timing.detectors['ts-imports'] = performance.now() - tTsImports
+  }
+
+  for (const detector of detectors) {
+    if (skipDetectors.has(detector.name)) continue
+    const tDet = performance.now()
+    try {
+      const links = await detector.detect(ctx)
+      allLinks.push(...links)
+      timing.detectors[detector.name] = performance.now() - tDet
+    } catch (err) {
+      const elapsed = performance.now() - tDet
+      timing.detectors[detector.name] = elapsed
+      console.error(`  ✗ ${detector.name} failed (${elapsed.toFixed(0)}ms): ${err}`)
+    }
+  }
+
+  if (incremental) setTsImportPrebuiltProject(null)
+
+  const tGraph = performance.now()
+  const graph = new CodeGraph(config.rootDir, config.entryPoints)
+  for (const file of files) {
+    const content = fileCache.get(file) || ''
+    const loc = content.split('\n').length
+    graph.addFileNode(file, { loc })
+  }
+  for (const link of allLinks) {
+    if (link.to === 'UNRESOLVED_ROUTE') continue
+    graph.addEdge(link.from, link.to, link.type, {
+      label: link.label,
+      resolved: link.resolved,
+      line: link.line,
+      meta: link.meta,
+    })
+  }
+  graph.computeOrphanStatus()
+  timing.graphBuild = performance.now() - tGraph
+
+  return graph
+}
+
+/**
+ * Résolution tsconfig + setup du sharedProject ts-morph + alimentation
+ * des inputs async Salsa (manifests, sql defaults).
+ *
+ * En mode incremental : réutilise `preBuiltSharedProject` (construit
+ * AVANT la boucle base detectors pour que ts-imports Salsa l'utilise).
+ * Set les inputs `packageManifests` et `sqlDefaults` (async I/O)
+ * pour que les détecteurs Salsa aval (package-deps, state-machines) y
+ * accèdent.
+ *
+ * En mode legacy : crée un Project frais à chaque appel.
+ */
+async function resolveTsConfigAndSharedProject(
+  config: CodeGraphConfig,
+  files: string[],
+  incremental: boolean,
+  preBuiltSharedProject: ReturnType<typeof createSharedProject> | null,
+): Promise<{
+  tsConfigPath: string | undefined
+  sharedProject: ReturnType<typeof createSharedProject>
+}> {
+  // Find tsconfig for alias resolution.
+  let tsConfigPath: string | undefined
+  const tsConfigCandidates: string[] = []
+  if (config.tsconfigPath) {
+    tsConfigCandidates.push(
+      path.isAbsolute(config.tsconfigPath)
+        ? config.tsconfigPath
+        : path.join(config.rootDir, config.tsconfigPath),
+    )
+  }
+  tsConfigCandidates.push(path.join(config.rootDir, 'tsconfig.json'))
+  for (const candidate of tsConfigCandidates) {
+    try {
+      await fs.access(candidate)
+      tsConfigPath = candidate
+      break
+    } catch {}
+  }
+
+  let sharedProject: ReturnType<typeof createSharedProject>
+  if (incremental) {
+    sharedProject = preBuiltSharedProject!
+
+    // Active manifests pour package-deps incremental (filter scope-empty).
+    const allManifests = await discoverPackageManifests(config.rootDir)
+    if (allManifests.length > 0) {
+      allManifests.sort((a, b) => b.dir.length - a.dir.length)
+      const scopeFileCount = new Map<string, number>()
+      for (const m of allManifests) scopeFileCount.set(m.abs, 0)
+      for (const rel of files) {
+        const abs = path.join(config.rootDir, rel)
+        const m = findClosestPackageManifest(abs, allManifests)
+        if (m) scopeFileCount.set(m.abs, (scopeFileCount.get(m.abs) ?? 0) + 1)
+      }
+      const activeManifests = allManifests.filter((m) => (scopeFileCount.get(m.abs) ?? 0) > 0)
+      incSetInputIfChanged(incPackageManifests, 'all', activeManifests)
+    } else {
+      incSetInputIfChanged(incPackageManifests, 'all', [])
+    }
+
+    // SQL defaults pour state-machines (async file reads → input Salsa).
+    const sqlDefaultsBuffer: StateMachineWriteSignal[] = []
+    try {
+      const sqlFiles = await discoverSqlFilesForIncremental(config.rootDir, ['**/*.sql'])
+      for (const sqlFile of sqlFiles) {
+        try {
+          const content = await fs.readFile(path.join(config.rootDir, sqlFile), 'utf-8')
+          scanSqlColumnDefaultsForIncremental(content, sqlFile, sqlDefaultsBuffer)
+        } catch {}
+      }
+    } catch {}
+    incSetInputIfChanged(incSqlDefaults, 'all', sqlDefaultsBuffer)
+  } else {
+    sharedProject = createSharedProject(config.rootDir, files, tsConfigPath)
+  }
+
+  return { tsConfigPath, sharedProject }
 }
 
 /**
@@ -734,6 +588,143 @@ async function runDeterministicDetectors(
   if (longFunctions) snapshot.longFunctions = longFunctions
   if (magicNumbers) snapshot.magicNumbers = magicNumbers
   if (testCoverage) snapshot.testCoverage = testCoverage
+}
+
+/**
+ * Patch les results des détecteurs Phase 5 dans le snapshot final. Le
+ * mapping name (Detector.name) → snapshot field est explicite ici. Si un
+ * détecteur n'a pas produit de résultat (disabled / failed / undefined
+ * return), la clé n'existe pas dans `results` et le snapshot field reste
+ * non-set. Préserve la parité bit-pour-bit avec le legacy
+ * `if (X) snapshot.x = X` répété.
+ */
+function patchSnapshotWithDetectorResults(
+  snapshot: GraphSnapshot,
+  results: Record<string, unknown>,
+): void {
+  const mapping: Array<[string, keyof GraphSnapshot]> = [
+    ['symbol-refs', 'symbolRefs'],
+    ['typed-calls', 'typedCalls'],
+    ['cycles', 'cycles'],
+    ['truth-points', 'truthPoints'],
+    ['data-flows', 'dataFlows'],
+    ['state-machines', 'stateMachines'],
+    ['env-usage', 'envUsage'],
+    ['package-deps', 'packageDeps'],
+    ['barrels', 'barrels'],
+    ['taint', 'taintViolations'],
+    ['event-emit-sites', 'eventEmitSites'],
+    ['oauth-scope-literals', 'oauthScopeLiterals'],
+  ]
+  for (const [detectorName, snapshotField] of mapping) {
+    const value = results[detectorName]
+    if (value !== undefined) {
+      ;(snapshot as any)[snapshotField] = value
+    }
+  }
+}
+
+/**
+ * Phase post-snapshot : métriques qui dépendent de `snapshot.nodes` et
+ * `snapshot.edges`. Pattern Detector ne s'applique pas (ces phases ont
+ * besoin du snapshot final, pas du graph en construction).
+ *
+ *   - module-metrics : PageRank + fan-in/out + Henry-Kafura
+ *   - component-metrics : Martin I/A/D
+ *   - dsm : container-level pré-calcul pour le panneau web
+ *
+ * Toutes désactivables via `detectorOptions.<name>.enabled = false`.
+ * factsOnly skip component-metrics + dsm (mais pas module-metrics —
+ * utilisé pour le ranking dans le boot brief).
+ */
+async function runPostSnapshotMetrics(
+  config: CodeGraphConfig,
+  snapshot: GraphSnapshot,
+  timing: AnalyzeResult['timing'],
+  options: { factsOnly: boolean; incremental: boolean },
+): Promise<void> {
+  const { factsOnly, incremental } = options
+
+  // module-metrics
+  const moduleMetricsEnabled =
+    (config.detectorOptions?.['moduleMetrics']?.['enabled'] as boolean | undefined) ?? true
+  const tModuleMetrics = performance.now()
+  if (moduleMetricsEnabled) {
+    try {
+      const mmOptions = config.detectorOptions?.['moduleMetrics'] ?? {}
+      if (incremental) {
+        incSetInputIfChanged(incGraphNodes, 'all', snapshot.nodes)
+        incSetInputIfChanged(incGraphEdgesForMetrics, 'all', snapshot.edges)
+        snapshot.moduleMetrics = incAllModuleMetrics.get('all')
+      } else {
+        snapshot.moduleMetrics = computeModuleMetrics(
+          snapshot.nodes,
+          snapshot.edges,
+          {
+            edgeTypesForCentrality: mmOptions['edgeTypesForCentrality'] as any,
+            pagerankAlpha: mmOptions['pagerankAlpha'] as number | undefined,
+            pagerankTolerance: mmOptions['pagerankTolerance'] as number | undefined,
+          },
+        )
+      }
+      timing.detectors['module-metrics'] = performance.now() - tModuleMetrics
+    } catch (err) {
+      timing.detectors['module-metrics'] = performance.now() - tModuleMetrics
+      console.error(`  ✗ module-metrics failed: ${err}`)
+    }
+  }
+
+  // component-metrics
+  const componentMetricsEnabled =
+    !factsOnly &&
+    ((config.detectorOptions?.['componentMetrics']?.['enabled'] as boolean | undefined) ?? true)
+  const tComponentMetrics = performance.now()
+  if (componentMetricsEnabled) {
+    try {
+      const cmOptions = config.detectorOptions?.['componentMetrics'] ?? {}
+      if (incremental) {
+        if (!incGraphNodes.has('all')) incSetInputIfChanged(incGraphNodes, 'all', snapshot.nodes)
+        if (!incGraphEdgesForMetrics.has('all')) incSetInputIfChanged(incGraphEdgesForMetrics, 'all', snapshot.edges)
+        snapshot.componentMetrics = incAllComponentMetrics.get('all')
+      } else {
+        snapshot.componentMetrics = computeComponentMetrics(
+          snapshot.nodes,
+          snapshot.edges,
+          {
+            depth: cmOptions['depth'] as number | undefined,
+            edgeTypes: cmOptions['edgeTypes'] as any,
+            excludeComponents: cmOptions['excludeComponents'] as string[] | undefined,
+          },
+        )
+      }
+      timing.detectors['component-metrics'] = performance.now() - tComponentMetrics
+    } catch (err) {
+      timing.detectors['component-metrics'] = performance.now() - tComponentMetrics
+      console.error(`  ✗ component-metrics failed: ${err}`)
+    }
+  }
+
+  // dsm
+  const dsmEnabled =
+    !factsOnly &&
+    ((config.detectorOptions?.['dsm']?.['enabled'] as boolean | undefined) ?? true)
+  const tDsm = performance.now()
+  if (dsmEnabled) {
+    try {
+      const dsmOptions = config.detectorOptions?.['dsm'] ?? {}
+      const depth = (dsmOptions['depth'] as number | undefined) ?? 3
+      const fileNodes = snapshot.nodes.filter((n) => n.type === 'file').map((n) => n.id)
+      const importEdges = snapshot.edges
+        .filter((e) => e.type === 'import')
+        .map((e) => ({ from: e.from, to: e.to }))
+      const agg = aggregateByContainer(fileNodes, importEdges, depth)
+      snapshot.dsm = computeDsm(agg.nodes, agg.edges)
+      timing.detectors['dsm'] = performance.now() - tDsm
+    } catch (err) {
+      timing.detectors['dsm'] = performance.now() - tDsm
+      console.error(`  ✗ dsm failed: ${err}`)
+    }
+  }
 }
 
 // ─── File Discovery ─────────────────────────────────────────────────────
