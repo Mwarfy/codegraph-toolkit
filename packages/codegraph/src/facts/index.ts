@@ -203,6 +203,33 @@ export async function exportFacts(
   }
   relations.push(fanInRel)
 
+  // ─── CycleNode ────────────────────────────────────────────────────────
+  // Pour chaque cycle détecté (Tarjan SCC sur graphe combiné import + event +
+  // queue + dynamic-load), émet un tuple par fichier participant. Le champ
+  // `gated` indique si le cycle est gated par un gate explicite (ex
+  // `if (env.X)` autour de l'import dynamique) — un cycle gated reste un
+  // cycle au sens topo mais est intentionnel donc PAS à bloquer.
+  // Source: ADR-022 ratchet pattern, axe 5 enrichissement post-Phase-C.
+  const cycleNodeRel: RelationDef = {
+    name: 'CycleNode',
+    decl: '(file:symbol, cycleId:symbol, gated:symbol)',
+    rows: [],
+  }
+  const cycleNodeSeen = new Set<string>()
+  for (const c of snapshot.cycles ?? []) {
+    const gatedSym = c.gated ? 'true' : 'false'
+    for (const file of c.nodes) {
+      // dedupe : un fichier peut apparaître plusieurs fois dans un cycle
+      // listé en path (premier == dernier). On émet un tuple unique
+      // par (file, cycleId).
+      const key = file + '\x00' + c.id
+      if (cycleNodeSeen.has(key)) continue
+      cycleNodeSeen.add(key)
+      cycleNodeRel.rows.push([sym(file), sym(c.id), gatedSym])
+    }
+  }
+  relations.push(cycleNodeRel)
+
   // ─── Write to disk ────────────────────────────────────────────────────
   await fs.mkdir(options.outDir, { recursive: true })
 

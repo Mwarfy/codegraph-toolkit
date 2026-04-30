@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+ff7cd93 refactor(codegraph): Phase C — analyze() à 157 LOC via 4 helpers d'orchestration
 6029444 refactor(codegraph): Phase B — migration des 13 détecteurs restants vers Detector/Registry
 2807c3e refactor(codegraph): Phase A — pattern visiteur Detector/Registry pour analyze()
 f0f9ca3 feat(adr-toolkit): détecteur fsm — unions string literals + write sites observables
@@ -111,7 +112,6 @@ b28b910 chore: rename @liby/ → @liby-tools/ pour publication npm
 7bb2997 docs(adr-006): core/types.ts est canonical contract — pas de breaking change
 467b4e0 refactor(codegraph): extract 2 sections from analyze() god-file
 812d7bd refactor(codegraph): move 3 fns from detectors/ to extractors/
-04e3f2d feat(codegraph-mcp): nouveau MCP server exposant les queries codegraph
 ```
 
 ## Comment contribuer à ce brief
