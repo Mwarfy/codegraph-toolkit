@@ -18,9 +18,9 @@ import { minimatch } from 'minimatch'
 import { CodeGraph } from './graph.js'
 import type { CodeGraphConfig, DetectorContext, DetectedLink, GraphSnapshot } from './types.js'
 import { createDetectors } from '../detectors/index.js'
-import { analyzeExports, createSharedProject } from '../detectors/unused-exports.js'
-import { analyzeComplexity } from '../detectors/complexity.js'
-import { analyzeSymbolRefs } from '../detectors/symbol-refs.js'
+import { analyzeExports, createSharedProject } from '../extractors/unused-exports.js'
+import { analyzeComplexity } from '../extractors/complexity.js'
+import { analyzeSymbolRefs } from '../extractors/symbol-refs.js'
 import { analyzeTypedCalls } from '../extractors/typed-calls.js'
 import { analyzeCycles } from '../extractors/cycles.js'
 import { analyzeTruthPoints } from '../extractors/truth-points.js'
@@ -82,7 +82,7 @@ import {
   allUnusedExports as incAllUnusedExports,
   testFilesIndexInput as incTestFilesIndex,
 } from '../incremental/unused-exports.js'
-import { buildTestFilesIndex } from '../detectors/unused-exports.js'
+import { buildTestFilesIndex } from '../extractors/unused-exports.js'
 import { allTsImports as incAllTsImports } from '../incremental/ts-imports.js'
 import { setTsImportPrebuiltProject } from '../detectors/ts-imports.js'
 import {

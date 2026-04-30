@@ -10,7 +10,7 @@ import {
   extractSymbolRefsFileBundle,
   type SymbolRefsFileBundle,
   type SymbolRefsResult,
-} from '../detectors/symbol-refs.js'
+} from '../extractors/symbol-refs.js'
 import { sharedDb as db } from './database.js'
 import {
   fileContent,

@@ -21,7 +21,7 @@ import {
   type UnusedExportsFileBundle,
   type FileExportInfo,
   type TestFilesIndex,
-} from '../detectors/unused-exports.js'
+} from '../extractors/unused-exports.js'
 import { sharedDb as db } from './database.js'
 import {
   fileContent,

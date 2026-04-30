@@ -84,18 +84,19 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer l'état OU ajouter la transition manquante_
 - **DEP-UNUSED** `@liby/codegraph` — déclaré dans packages/adr-toolkit/package.json, jamais importé  
   _→ npm uninstall @liby/codegraph + npm test_
+- **DEP-UNUSED** `typescript` — déclaré dans packages/codegraph-mcp/package.json, jamais importé  
+  _→ npm uninstall typescript + npm test_
 - **DEP-UNUSED** `graphology-operators` — déclaré dans packages/codegraph/package.json, jamais importé  
   _→ npm uninstall graphology-operators + npm test_
 - **DEP-UNUSED** `graphology-types` — déclaré dans packages/codegraph/package.json, jamais importé  
   _→ npm uninstall graphology-types + npm test_
 - **DEP-UNUSED** `serve-handler` — déclaré dans packages/codegraph/package.json, jamais importé  
   _→ npm uninstall serve-handler + npm test_
-- **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
-  _→ npm uninstall jest + npm test_
 
 ## Activité récente (14 derniers jours)
 
 ```
+04e3f2d feat(codegraph-mcp): nouveau MCP server exposant les queries codegraph
 20b3709 feat(codegraph): 4 nouveaux détecteurs déterministes + fix cycles bullmq
 be1553e docs+test: ADR-005 pattern détecteurs + test parité legacy/incremental
 9906e22 perf(codegraph): unused-exports en queries Salsa fines [Sprint 11.2]
@@ -107,7 +108,6 @@ be1553e docs+test: ADR-005 pattern détecteurs + test parité legacy/incremental
 77d2053 feat(salsa,codegraph): delta saves — append-only deltas + auto-compact [Sprint 8]
 52b6fc7 docs(phase-1): refresh boot brief post-Sprint 7 — Phase 1 fonctionnellement complète
 e65edee feat(salsa,codegraph): disk persistence for cross-process cache hit [Sprint 7]
-29dc4d4 docs(phase-1): refresh boot brief post-Sprint 6 — cible <500ms warm ATTEINTE
 ```
 
 ## Comment contribuer à ce brief

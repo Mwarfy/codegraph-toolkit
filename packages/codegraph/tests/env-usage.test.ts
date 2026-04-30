@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 import * as path from 'node:path'
 import * as fs from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
-import { createSharedProject } from '../src/detectors/unused-exports.js'
+import { createSharedProject } from '../src/extractors/unused-exports.js'
 import { analyzeEnvUsage } from '../src/extractors/env-usage.js'
 
 const __filename = fileURLToPath(import.meta.url)

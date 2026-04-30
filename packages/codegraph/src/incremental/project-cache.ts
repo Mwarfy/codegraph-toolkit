@@ -22,7 +22,7 @@
 import { Project } from 'ts-morph'
 import * as path from 'node:path'
 import * as fs from 'node:fs/promises'
-import { createSharedProject } from '../detectors/unused-exports.js'
+import { createSharedProject } from '../extractors/unused-exports.js'
 
 interface CachedProject {
   project: Project
