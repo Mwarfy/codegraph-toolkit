@@ -93,6 +93,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+e875f5e docs(phase-1): refresh boot brief post-Sprint 3
 b6c2bb6 feat(codegraph): incremental mode — batch 4 final (symbol-refs, taint, metrics) [Sprint 3]
 cb6309d feat(codegraph): incremental mode — batch 3 (typed-calls, cycles, data-flows) [Sprint 3]
 4756b92 feat(codegraph): incremental mode — batch 2 (complexity, state-machines, truth-points) [Sprint 3]
@@ -104,7 +105,6 @@ ca6d610 feat(codegraph): incremental mode — env-usage + oauth-scope-literals v
 5d90920 feat(salsa): @liby/salsa runtime — Salsa-style incremental computation (Sprint 1)
 e75b92b feat(codegraph): factsOnly mode + facts --regen flag (M8)
 7ab3214 feat(codegraph): oauth-scope-literals extractor + OauthScopeLiteral facts (M7 prep)
-18f64c6 feat(codegraph,datalog): wrappedIn capture + relax inline fact constraint (M4 prep)
 ```
 
 ## Comment contribuer à ce brief

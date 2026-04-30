@@ -36,7 +36,11 @@ import {
   fileContent as incFileContent,
   projectFiles as incProjectFiles,
   setIncrementalContext,
+  getCachedMtime as incGetCachedMtime,
+  setCachedMtime as incSetCachedMtime,
+  setInputIfChanged as incSetInputIfChanged,
 } from '../incremental/queries.js'
+import { getOrBuildSharedProject as incGetOrBuildProject } from '../incremental/project-cache.js'
 import { allEnvUsage as incAllEnvUsage } from '../incremental/env-usage.js'
 import { allOauthScopeLiterals as incAllOauthScopeLiterals } from '../incremental/oauth-scope-literals.js'
 import { allEventEmitSites as incAllEventEmitSites } from '../incremental/event-emit-sites.js'
@@ -241,33 +245,66 @@ export async function analyze(
     } catch {}
   }
 
-  // Projet ts-morph partagé entre les deux analyses AST qui suivent. Crucial :
-  // charger ts-morph deux fois fait sauter le heap Node sur projets ≥ 200 fichiers.
-  const sharedProject = createSharedProject(config.rootDir, files, tsConfigPath)
+  // Projet ts-morph partagé.
+  // En mode legacy : créer un Project frais (pattern actuel).
+  // En mode incremental : passer par le project-cache qui réutilise
+  //   le Project entre runs et refresh seulement les SourceFile dont
+  //   le mtime a bougé (Sprint 5.2).
+  let sharedProject: ReturnType<typeof createSharedProject>
 
-  // ─── Incremental mode setup ────────────────────────────────────────
-  // Sprint 2 : on alimente le runtime Salsa AVANT de tourner les
-  // détecteurs incrementalisés. Le Project ts-morph est ré-utilisé
-  // (compagnon hors-Salsa). `fileContent` est set pour chaque fichier
-  // à partir du fileCache déjà rempli par le pipeline batch.
   if (incremental) {
-    setIncrementalContext({ project: sharedProject, rootDir: config.rootDir })
-    // Pré-charger fileContent depuis le fileCache. Sur 2e run sans
-    // modif, `set` avec une valeur Object.is-égale ne bouge pas
-    // changedAt → cache hit downstream.
+    // Snapshot des mtimes "vus au run précédent" AVANT toute mise à jour.
+    // Le project-cache utilise ce snapshot pour décider quels SourceFile
+    // refresh.
+    const previousMtimes = new Map<string, number>()
     for (const f of files) {
+      const m = incGetCachedMtime(f)
+      if (m !== undefined) previousMtimes.set(f, m)
+    }
+
+    sharedProject = await incGetOrBuildProject(
+      config.rootDir, files, tsConfigPath, previousMtimes, fileCache,
+    )
+    setIncrementalContext({ project: sharedProject, rootDir: config.rootDir })
+
+    // Sprint 5.1 — mtime-aware fileContent : skip readFile + skip
+    // fileContent.set quand mtime fs n'a pas bougé depuis le run
+    // précédent dans CE process. Sur Sentinel, sauve ~600 readFile +
+    // ~600 input.set au warm 2nd run.
+    //
+    // Note : le project-cache (Sprint 5.2) a déjà refresh les
+    // SourceFile pour les fichiers dont mtime a bougé. Ici on
+    // synchronise fileContent + mtimeCache pour le run suivant.
+    for (const f of files) {
+      const absPath = path.join(config.rootDir, f)
+      let mtime: number | undefined
+      try {
+        const stat = await fs.stat(absPath)
+        mtime = stat.mtimeMs
+      } catch {
+        mtime = undefined
+      }
+
+      const cachedMtime = incGetCachedMtime(f)
+      const cellExists = incFileContent.has(f)
+
+      if (mtime !== undefined && cachedMtime === mtime && cellExists) {
+        continue  // Skip : fichier inchangé.
+      }
+
       let content = fileCache.get(f)
       if (content === undefined) {
         try {
-          content = await fs.readFile(path.join(config.rootDir, f), 'utf-8')
+          content = await fs.readFile(absPath, 'utf-8')
           fileCache.set(f, content)
         } catch {
           content = ''
         }
       }
       incFileContent.set(f, content)
+      if (mtime !== undefined) incSetCachedMtime(f, mtime)
     }
-    incProjectFiles.set('all', files)
+    incSetInputIfChanged(incProjectFiles, 'all', files)
 
     // Discovery + filter active manifests pour package-deps incremental.
     // C'est async donc fait ici, pas dans une derived query (sync only).
@@ -282,9 +319,9 @@ export async function analyze(
         if (m) scopeFileCount.set(m.abs, (scopeFileCount.get(m.abs) ?? 0) + 1)
       }
       const activeManifests = allManifests.filter((m) => (scopeFileCount.get(m.abs) ?? 0) > 0)
-      incPackageManifests.set('all', activeManifests)
+      incSetInputIfChanged(incPackageManifests, 'all', activeManifests)
     } else {
-      incPackageManifests.set('all', [])
+      incSetInputIfChanged(incPackageManifests, 'all', [])
     }
 
     // SQL defaults pour state-machines : async file reads ici.
@@ -301,7 +338,10 @@ export async function analyze(
         } catch {}
       }
     } catch {}
-    incSqlDefaults.set('all', sqlDefaultsBuffer)
+    incSetInputIfChanged(incSqlDefaults, 'all', sqlDefaultsBuffer)
+  } else {
+    // Mode legacy : Project frais à chaque appel (pas de cache cross-run).
+    sharedProject = createSharedProject(config.rootDir, files, tsConfigPath)
   }
 
   if (!factsOnly) {
@@ -408,7 +448,7 @@ export async function analyze(
         // path qui le set juste avant). edgeTypes/gateNames custom non
         // supportés (defaults suffisent pour Sentinel).
         if (!incGraphEdges.has('all')) {
-          incGraphEdges.set('all', graph.getAllEdges())
+          incSetInputIfChanged(incGraphEdges, 'all', graph.getAllEdges())
         }
         cycles = incAllCycles.get('all')
       } else {
@@ -448,7 +488,7 @@ export async function analyze(
         // Salsa path : feed graph edges + delegate to allTruthPoints.
         // conceptAliases / redisVarNames / etc. custom non supportés
         // (defaults suffisent pour Sentinel).
-        incGraphEdges.set('all', graph.getAllEdges())
+        incSetInputIfChanged(incGraphEdges, 'all', graph.getAllEdges())
         truthPoints = incAllTruthPoints.get('all')
       } else {
         truthPoints = await analyzeTruthPoints(
@@ -489,7 +529,7 @@ export async function analyze(
         // Salsa path : alimente typedCallsInput puis appelle allDataFlows.
         // Custom options (maxDepth, queryFnNames, etc.) non supportés —
         // defaults suffisent pour Sentinel.
-        incTypedCallsInput.set('all', typedCalls)
+        incSetInputIfChanged(incTypedCallsInput, 'all', typedCalls)
         dataFlows = incAllDataFlows.get('all')
       } else {
         dataFlows = await analyzeDataFlows(
@@ -752,7 +792,7 @@ export async function analyze(
           sanitizers: raw.sanitizers ?? [],
         }
         if (incremental) {
-          incTaintRules.set('all', rules)
+          incSetInputIfChanged(incTaintRules, 'all', rules)
           taintViolations = incAllTaint.get('all')
         } else {
           taintViolations = await analyzeTaint(config.rootDir, files, sharedProject, rules)
@@ -823,8 +863,8 @@ export async function analyze(
         // input puis on calcule via le derived. Custom options
         // (edgeTypesForCentrality, alpha, tolerance) non supportés —
         // defaults suffisent pour Sentinel.
-        incGraphNodes.set('all', snapshot.nodes)
-        incGraphEdgesForMetrics.set('all', snapshot.edges)
+        incSetInputIfChanged(incGraphNodes, 'all', snapshot.nodes)
+        incSetInputIfChanged(incGraphEdgesForMetrics, 'all', snapshot.edges)
         snapshot.moduleMetrics = incAllModuleMetrics.get('all')
       } else {
         snapshot.moduleMetrics = computeModuleMetrics(
@@ -856,8 +896,8 @@ export async function analyze(
       if (incremental) {
         // Salsa path : nodes+edges déjà set par module-metrics au-dessus.
         // Custom options non supportés.
-        if (!incGraphNodes.has('all')) incGraphNodes.set('all', snapshot.nodes)
-        if (!incGraphEdgesForMetrics.has('all')) incGraphEdgesForMetrics.set('all', snapshot.edges)
+        if (!incGraphNodes.has('all')) incSetInputIfChanged(incGraphNodes, 'all', snapshot.nodes)
+        if (!incGraphEdgesForMetrics.has('all')) incSetInputIfChanged(incGraphEdgesForMetrics, 'all', snapshot.edges)
         snapshot.componentMetrics = incAllComponentMetrics.get('all')
       } else {
         snapshot.componentMetrics = computeComponentMetrics(

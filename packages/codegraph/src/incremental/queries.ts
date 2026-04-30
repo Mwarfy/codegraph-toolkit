@@ -25,7 +25,7 @@
  */
 
 import type { Project } from 'ts-morph'
-import { input } from '@liby/salsa'
+import { input, type InputQuery, type QueryKey } from '@liby/salsa'
 import { sharedDb as db } from './database.js'
 
 // ─── Inputs Salsa ─────────────────────────────────────────────────────
@@ -35,6 +35,66 @@ export const fileContent = input<string, string>(db, 'fileContent')
 
 /** Liste des fichiers analysés. Label conventionnel : 'all'. */
 export const projectFiles = input<string, readonly string[]>(db, 'projectFiles')
+
+/**
+ * mtime tracking pour skip de re-lecture / re-set des fileContent
+ * inchangés entre runs (Sprint 5.1). Module-level — partagé avec le
+ * sharedDb via le même process.
+ *
+ * Lifecycle : analyze() peut appeler `getMtimeCache()` pour comparer
+ * avec mtime fs.stat. Si même mtime → skip readFile + skip
+ * fileContent.set (l'ancienne valeur reste en cell, revision pas
+ * bumpée pour ce fichier).
+ */
+const mtimeCache = new Map<string, number>()
+
+export function getCachedMtime(filePath: string): number | undefined {
+  return mtimeCache.get(filePath)
+}
+
+export function setCachedMtime(filePath: string, mtime: number): void {
+  mtimeCache.set(filePath, mtime)
+}
+
+export function clearMtimeCache(): void {
+  mtimeCache.clear()
+}
+
+/**
+ * Sprint 5.3 — Skip-set quand la valeur est deep-equal à la précédente.
+ *
+ * Salsa bump la revision sur chaque `input.set()` même si le contenu
+ * est équivalent (Object.is sur un nouvel array → false). Pour les
+ * inputs "lourds" set à chaque run (graphEdges, typedCalls, manifests,
+ * sqlDefaults), ça invalide tous les agrégats globaux qui en dépendent.
+ *
+ * Solution : avant le set, comparer une signature JSON de la valeur
+ * précédente. Si identique, skip → la cell garde son `changedAt`,
+ * downstream skip aussi.
+ *
+ * Trade-off : JSON.stringify coûte O(n) sur la value. Pour Sentinel,
+ * 750 callEdges + 521 sigs = ~10ms. Acceptable pour gagner ~1-2s sur
+ * l'invalidation downstream.
+ */
+const inputSignatures = new Map<string, string>()
+
+export function setInputIfChanged<K extends QueryKey, V>(
+  inputQuery: InputQuery<K, V>,
+  key: K,
+  value: V,
+): boolean {
+  const sigKey = `${inputQuery.id}:${String(key)}`
+  const sig = JSON.stringify(value)
+  const prev = inputSignatures.get(sigKey)
+  if (prev === sig) return false
+  inputSignatures.set(sigKey, sig)
+  inputQuery.set(key, value)
+  return true
+}
+
+export function clearInputSignatures(): void {
+  inputSignatures.clear()
+}
 
 /**
  * Manifests `package.json` actifs (au moins 1 fichier dans leur scope).
