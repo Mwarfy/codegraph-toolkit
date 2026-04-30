@@ -1,6 +1,6 @@
 {
   "name": "@liby-tools/datalog",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Deterministic Datalog interpreter for codegraph invariants — pure TS, zero binary",
   "type": "module",
   "main": "./dist/index.js",

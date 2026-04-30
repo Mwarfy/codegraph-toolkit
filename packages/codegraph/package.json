@@ -1,6 +1,6 @@
 {
   "name": "@liby-tools/codegraph",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Visual dependency graph + deterministic synopsis for AI-supervised codebases",
   "type": "module",
   "main": "./dist/index.js",
@@ -44,7 +44,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@liby-tools/salsa": "^0.1.0",
+    "@liby-tools/salsa": "^0.2.0",
     "ts-morph": "^25.0.0",
     "graphology": "^0.26.0",
     "graphology-metrics": "^2.3.0",

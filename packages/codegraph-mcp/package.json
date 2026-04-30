@@ -1,6 +1,6 @@
 {
   "name": "@liby-tools/codegraph-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "MCP server exposing codegraph snapshot queries — architectural intelligence for Claude Code",
   "type": "module",
   "main": "./dist/index.js",
@@ -8,7 +8,10 @@
   "bin": {
     "codegraph-mcp": "./dist/index.js"
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "engines": {
     "node": ">=18"
   },
@@ -21,7 +24,13 @@
     "directory": "packages/codegraph-mcp"
   },
   "license": "MIT",
-  "keywords": ["mcp", "model-context-protocol", "claude-code", "codegraph", "code-intelligence"],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude-code",
+    "codegraph",
+    "code-intelligence"
+  ],
   "scripts": {
     "build": "tsc -b",
     "dev": "tsc -b --watch"

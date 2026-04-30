@@ -4,15 +4,16 @@
 
 ```bash
 # Install (à faire une fois)
-curl -fsSL https://raw.githubusercontent.com/Mwarfy/codegraph-toolkit/master/install.sh | bash
+npm install -g @liby-tools/codegraph @liby-tools/adr-toolkit @liby-tools/codegraph-mcp
 
 # Dans n'importe quel projet TS
 cd ton-projet
-npm link @liby-tools/codegraph @liby-tools/adr-toolkit
 npx adr-toolkit init --with-claude-settings
 ```
 
-3 commandes. Tu écris ton premier ADR, tu poses un marqueur `// ADR-001` dans le code, et le toolkit régénère automatiquement la doc à chaque commit.
+2 commandes. Tu écris ton premier ADR, tu poses un marqueur `// ADR-001` dans le code, et le toolkit régénère automatiquement la doc à chaque commit.
+
+> **Mode dev** (contributeurs au toolkit) : utilise `curl -fsSL https://raw.githubusercontent.com/Mwarfy/codegraph-toolkit/master/install.sh | bash -s -- --dev` pour cloner + npm link en local.
 
 ## Pourquoi
 
@@ -61,23 +62,21 @@ Tu poses `// ADR-018` au top de `kernel/scheduler.ts`. À chaque commit, le tool
 ### 1. Installer le toolkit (une fois par machine)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Mwarfy/codegraph-toolkit/master/install.sh | bash
+npm install -g @liby-tools/codegraph @liby-tools/adr-toolkit @liby-tools/codegraph-mcp
 ```
 
-Ça clone le repo dans `~/Documents/codegraph-toolkit`, build les 2 packages, et expose les binaires `codegraph` + `adr-toolkit` via `npm link`.
+Expose les binaires `codegraph`, `adr-toolkit`, `codegraph-mcp` globalement.
 
-Alternative si tu préfères contrôler manuellement :
+**Mode dev** (contribuer au toolkit) :
 ```bash
-git clone https://github.com/Mwarfy/codegraph-toolkit.git ~/Documents/codegraph-toolkit
-cd ~/Documents/codegraph-toolkit
-nvm use && npm install && npm run build && npm link --workspaces
+curl -fsSL https://raw.githubusercontent.com/Mwarfy/codegraph-toolkit/master/install.sh | bash -s -- --dev
 ```
+Clone dans `~/Documents/codegraph-toolkit`, build, `npm link --workspaces`. Modifs au source sont live.
 
 ### 2. Activer dans ton projet
 
 ```bash
 cd ton-projet
-npm link @liby-tools/codegraph @liby-tools/adr-toolkit
 npx adr-toolkit init --with-claude-settings
 ```
 
@@ -272,19 +271,26 @@ npx adr-toolkit bootstrap --mode sdk --max 5
 - Sur-génération → candidat vient de codegraph, pas du LLM
 - Rule générique ("for consistency", "best practice") → flag basse confiance
 
-**Status MVP** :
-- ✅ Détection : pattern `singleton` (private static instance + getInstance)
-- ⏳ Détection à venir : `fsm` (union string literals), `write-isolation` (seul writer DB), `hub` (in-degree ≥ threshold)
+**Status v0.2.0** :
+- ✅ Détection : `singleton` (private static instance + getInstance)
+- ✅ Détection : `write-isolation` (truth-points avec UN seul writer — depuis snapshot codegraph)
+- ✅ Détection : `hub` (in-degree ≥ threshold sans marqueur ADR existant)
+- ⏳ Détection à venir : `fsm` (union string literals avec writes observables — AST analysis)
 - ✅ Output : drafts avec Status: Proposed (relire avant Accepted)
 - ✅ Confiance auto-calculée (high si Why cite source, low si TODO ou phrase générique)
 
 ## Roadmap
 
-- **Détecteurs additionnels** pour bootstrap (`fsm`, `write-isolation`, `hub`).
+- **Détecteur `fsm`** — union string literals (`Status`, `State`, `Phase`, `Stage`) avec writes observables. AST analysis non-triviale, ~3-4h.
 - **Spawn parallèle** des agents bootstrap (actuellement séquentiel).
-- **Publication npm registry** — passer du `npm link` vers `npm install @liby-tools/...`. Setup en place (cf. `.npmrc`, `publishConfig`), publication elle-même attend décision.
-- **Refactor profond `core/analyzer.ts`** — pattern visiteur / detector registry pour découper le god-file (1188 LOC, fonction `analyze()` à 591 LOC). 2 sections déjà extraites en helpers (Sprint avril 2026), reste 13+ blocs.
-- **Test invariants pour `core/types.ts`** (cf. ADR-006) — vérifier qu'aucun champ documenté dans `GraphSnapshot` n'a été retiré sans deprecation cycle.
+- **Refactor profond `core/analyzer.ts`** — pattern visiteur / detector registry pour découper le god-file (1188 LOC, fonction `analyze()` à 855 lignes brutes / 591 LOC effectives). 2 sections déjà extraites en helpers, reste 13+ blocs. 1-2 jours dédiés, tests parité critiques.
+
+## Done en v0.2.0
+
+- ✅ Publication npm registry (`@liby-tools/*` sur npmjs.com)
+- ✅ Détecteurs bootstrap `write-isolation` + `hub`
+- ✅ Test invariant `GraphSnapshot` field set (ADR-006 — pas de breaking change sans deprecation)
+- ✅ install.sh modernisé (`npm install -g` par défaut, `--dev` pour clone+link)
 
 ## Consommateurs
 

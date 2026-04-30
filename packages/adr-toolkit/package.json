@@ -1,6 +1,6 @@
 {
   "name": "@liby-tools/adr-toolkit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "ADR governance toolkit — anchors regen, file→ADRs linker, ts-morph asserts, boot brief generator",
   "type": "module",
   "main": "./dist/index.js",
@@ -26,7 +26,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@liby-tools/codegraph": "^0.1.0",
+    "@liby-tools/codegraph": "^0.2.0",
     "@anthropic-ai/sdk": "^0.39.0",
     "commander": "^13.0.0",
     "chalk": "^5.4.0",

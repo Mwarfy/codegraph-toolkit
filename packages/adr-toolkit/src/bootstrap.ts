@@ -78,6 +78,120 @@ export async function detectSingletonCandidates(
   return candidates
 }
 
+/**
+ * Détecte les write-isolation candidates : truth-points (concepts canoniques
+ * avec table SQL/state) qui n'ont qu'UN seul writer dans tout le code.
+ *
+ * Cas d'usage : un fichier est le SEUL endroit où une donnée business est
+ * écrite. Cette propriété est typiquement implicite — codifiée nulle part —
+ * mais critique : si un autre site se mettait à écrire dans la même table,
+ * l'invariant casse silencieusement.
+ *
+ * L'ADR proposé verrouille cette isolation : "X est l'unique writer de Y".
+ *
+ * Source : `snapshot.truthPoints[]` (déjà calculé par codegraph). Filter
+ * sur `writers.length === 1` + skip les concepts avec writers déjà
+ * ADR-anchored (évite redondance).
+ */
+export async function detectWriteIsolationCandidates(
+  config: AdrToolkitConfig,
+  snapshotPath: string,
+): Promise<PatternCandidate[]> {
+  const candidates: PatternCandidate[] = []
+
+  let snapshot: { truthPoints?: Array<{ concept: string; canonical?: { kind?: string; name?: string }; writers?: Array<{ file: string; symbol?: string; line?: number }> }> }
+  try {
+    snapshot = JSON.parse(await readFile(snapshotPath, 'utf-8'))
+  } catch {
+    return candidates
+  }
+
+  for (const tp of snapshot.truthPoints ?? []) {
+    if (!tp.writers || tp.writers.length !== 1) continue
+    const writer = tp.writers[0]
+    const fullPath = path.join(config.rootDir, writer.file)
+    candidates.push({
+      kind: 'write-isolation',
+      filePath: fullPath,
+      relativePath: writer.file,
+      evidence:
+        `concept=${tp.concept}, canonical=${tp.canonical?.kind ?? '?'}/${tp.canonical?.name ?? '?'}, ` +
+        `unique writer at ${writer.symbol ?? '(no symbol)'}:${writer.line ?? '?'}`,
+    })
+  }
+
+  return candidates
+}
+
+/**
+ * Détecte les hub candidates : fichiers avec un in-degree (count d'imports
+ * entrants) au-dessus d'un seuil, sans marqueur ADR existant.
+ *
+ * Cas d'usage : `core/types.ts` (in:57 sur codegraph-toolkit) est un hub
+ * critique sans ADR. Modification = blast radius énorme. Sans guardrail
+ * explicite, un futur dev/agent peut le modifier en pensant que c'est juste
+ * une définition de types.
+ *
+ * L'ADR proposé verrouille les modifications conservatives sur ce hub
+ * (cf. ADR-006 codegraph-toolkit qui a été créé manuellement pour ce cas).
+ *
+ * Source : `snapshot.edges[]` (count to=relPath where type=import) + scan
+ * des marqueurs ADR existants (skip si déjà anchored).
+ *
+ * Threshold default : 20 imports. Configurable via options.
+ */
+export async function detectHubCandidates(
+  config: AdrToolkitConfig,
+  snapshotPath: string,
+  options: { threshold?: number } = {},
+): Promise<PatternCandidate[]> {
+  const threshold = options.threshold ?? 20
+  const candidates: PatternCandidate[] = []
+
+  let snapshot: { edges?: Array<{ from: string; to: string; type: string }>; nodes?: Array<{ id: string }> }
+  try {
+    snapshot = JSON.parse(await readFile(snapshotPath, 'utf-8'))
+  } catch {
+    return candidates
+  }
+
+  // Compute in-degree from import edges only
+  const inDegree = new Map<string, number>()
+  for (const e of snapshot.edges ?? []) {
+    if (e.type !== 'import') continue
+    inDegree.set(e.to, (inDegree.get(e.to) ?? 0) + 1)
+  }
+
+  // Sort by in-degree descending, take only those over threshold
+  const hubs = [...inDegree.entries()]
+    .filter(([, n]) => n >= threshold)
+    .sort((a, b) => b[1] - a[1])
+
+  for (const [relativePath, count] of hubs) {
+    const fullPath = path.join(config.rootDir, relativePath)
+
+    // Skip if file already has an ADR marker — avoid redundant proposals.
+    let content: string
+    try {
+      content = await readFile(fullPath, 'utf-8')
+    } catch {
+      continue
+    }
+    // Detect any "// ADR-NNN" or "# ADR-NNN" marker in the first ~30 lines
+    const head = content.split('\n').slice(0, 30).join('\n')
+    if (/(?:\/\/|#)\s*ADR-\d{3}/.test(head)) continue
+
+    candidates.push({
+      kind: 'hub',
+      filePath: fullPath,
+      relativePath,
+      evidence: `in-degree=${count} (threshold=${threshold}), no ADR marker found in first 30 lines`,
+    })
+  }
+
+  return candidates
+}
+
 // ─── Draft schema (output du LLM) ───────────────────────────────────────────
 
 export interface AdrDraft {

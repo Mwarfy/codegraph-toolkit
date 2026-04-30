@@ -98,6 +98,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+b28b910 chore: rename @liby/ → @liby-tools/ pour publication npm
 1be9051 chore(deps): pin intra-workspace deps à ^0.1.0 pour npm publish
 8935e31 docs: README codegraph-mcp + npm publish setup + bootstrap backlog
 7bb2997 docs(adr-006): core/types.ts est canonical contract — pas de breaking change
@@ -109,7 +110,6 @@ be1553e docs+test: ADR-005 pattern détecteurs + test parité legacy/incremental
 9906e22 perf(codegraph): unused-exports en queries Salsa fines [Sprint 11.2]
 5b0a379 docs: SPRINT-11-2-UNUSED-EXPORTS-PLAN.md — boot brief dédié pour reprendre Sprint 11.2
 66a4ae6 docs(phase-3): refresh boot brief — Phase 3 partielle, prochaines étapes
-2244034 perf(codegraph): Phase 3 partielle — discoverFiles cache + ts-imports Salsa wired [Sprint 10+11.1]
 ```
 
 ## Comment contribuer à ce brief
