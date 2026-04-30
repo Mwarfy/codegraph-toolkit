@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+1a239bd feat(codegraph-mcp): codegraph_who_calls + codegraph_extract_candidates
 c9da515 feat(codegraph): co-change extractor + codegraph_co_changed MCP tool
 b0b7cfa feat(codegraph): FSM detectionConfidence — observed vs declared-only
 63b9a45 feat(codegraph): émission CycleNode facts + boot brief enrichissement 5 axes
@@ -111,7 +112,6 @@ f0f9ca3 feat(adr-toolkit): détecteur fsm — unions string literals + write sit
 08534fb release: v0.2.0 — bootstrap detectors + types invariant + install.sh moderne
 b28b910 chore: rename @liby/ → @liby-tools/ pour publication npm
 1be9051 chore(deps): pin intra-workspace deps à ^0.1.0 pour npm publish
-8935e31 docs: README codegraph-mcp + npm publish setup + bootstrap backlog
 ```
 
 ## Comment contribuer à ce brief

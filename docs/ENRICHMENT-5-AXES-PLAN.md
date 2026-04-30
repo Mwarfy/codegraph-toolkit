@@ -139,30 +139,26 @@ différents (l'un `{from, to, line}`, l'autre avec types). Vérifier que
 le `symbol_id` a le même format dans les deux. Si pas, normaliser dans
 le tool.
 
-### Axe 3 — Truth-point + data-flow coverage IRL (~6h, le plus complexe)
+### Axe 3 — Truth-point + data-flow coverage IRL — **OBSOLÈTE**
 
-**Objectif** : aujourd'hui sur codegraph-toolkit lui-même, les 10
-dataFlows détectés sont tous dans des fixtures de test. Le détecteur rate
-les vraies routes/listeners (ou il n'y en a pas — c'est un toolkit, pas
-une app). Mais le détecteur de truth-points marche bien sur Sentinel.
+**Statut (2026-04-30)** : investigation menée, **faux problème confirmé**.
 
-**Hypothèse à valider AVANT d'implémenter** : est-ce que les "fixtures-
-only" sont un faux problème (codegraph-toolkit n'a vraiment pas de
-routes/listeners runtime, c'est un CLI), ou un vrai bug ? Lire les
-sources :
-- Y a-t-il des appels `app.get()`, `event.on()`, `bus.emit()` dans
-  codegraph-toolkit qui devraient être détectés ?
-- Si non → axe 3 est obsolète, c'est juste "CLI ≠ app".
-- Si oui → identifier ce qui est raté et étendre les détecteurs.
+**Investigation** :
+- Snapshot Sentinel : **160 dataFlows réels** (toutes des routes HTTP
+  `GET /api/accounts`, `POST /api/approvals/resolve`, etc.) +
+  **71 truthPoints réels** (`sentinel_counters`, `trust_scores`,
+  `approvals` avec writers=3 readers=10, etc.).
+- Snapshot codegraph-toolkit : 10 dataFlows tous dans fixtures.
+- Grep code source toolkit : aucun `app.get()`, aucun `bus.emit()`,
+  aucun event listener runtime. Le seul `server.setRequestHandler` est
+  le protocole MCP (handler générique). Le seul `server.listen` est
+  optionnel pour servir un panneau web.
 
-**Plan conditionnel (si vrai bug)** :
-1. Reproduire sur fixture minimal.
-2. Étendre `extractors/data-flows.ts` listenFnNames / queryFnNames /
-   etc. pour matcher les patterns ratés.
-3. Test parité régression sur Sentinel (snapshot identique pour tout
-   ce qui marche déjà).
+**Conclusion** : codegraph-toolkit est un CLI/library sans routes ni
+listeners runtime — c'est juste sa nature. Le détecteur marche
+parfaitement (validé sur Sentinel app). Pas de bug à fixer.
 
-**Validation** : nouveaux dataFlows détectés en dehors des fixtures.
+**Pas de code change.** Axe 3 retiré du backlog actif.
 
 ## Ordre d'exécution recommandé
 
@@ -177,7 +173,17 @@ sources :
 5. **Axe 3** (data-flow IRL, 6h) — investigation d'abord. Si vrai
    problème, ~6h. Sinon retirer du backlog.
 
-**Total estimé : 16h si tout fait, étalé sur plusieurs sessions.**
+**Statut final (2026-04-30) — TOUT LIVRÉ + Axe 3 marqué obsolète :**
+
+| Axe | Commit toolkit | Commit Sentinel | Statut |
+|---|---|---|---|
+| 5 — cycles blocker | `63b9a45` | `e2a244c` | ✓ livré |
+| 4 — FSM confidence | `b0b7cfa` | (parité préservée, pas de change) | ✓ livré |
+| 2 — co-change | `c9da515` | `0db732c` (hook) | ✓ livré |
+| 1 — symbol-level MCP | `1a239bd` | (pas de change Sentinel) | ✓ livré |
+| 3 — data-flow IRL | (n/a) | (n/a) | ✗ obsolète (faux problème) |
+
+**Total réel : ~7h sur 1 session** (vs estimé 16h sur plusieurs).
 
 ## Reprise rapide checklist
 
