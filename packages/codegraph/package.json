@@ -45,6 +45,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@liby-tools/datalog": "^0.2.0",
     "@liby-tools/salsa": "^0.2.0",
     "ts-morph": "^25.0.0",
     "graphology": "^0.26.0",

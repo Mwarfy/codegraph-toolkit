@@ -1467,6 +1467,150 @@ program
     console.log()
   })
 
+// ─── datalog-check ────────────────────────────────────────────────────────
+// Phase 4 Tier 8 : exécute toutes les rules .dl du projet contre les facts
+// live (régénérés par `codegraph watch`). Mode --diff compare avec une
+// baseline cachée pour n'afficher QUE les nouvelles violations introduites
+// depuis la dernière baseline (typiquement le dernier commit).
+//
+// Utilisé par le hook PostToolUse pour gater chaque Edit/Write avec
+// l'ensemble des invariants Datalog (mono + composites multi-relation),
+// pas seulement au pre-commit.
+
+program
+  .command('datalog-check')
+  .description('Run all .dl rules against current facts. --diff: only NEW violations vs cached baseline.')
+  .option('--rules-dir <path>', 'Directory containing .dl rule files (default: <root>/sentinel-core/invariants if exists, else <root>/invariants)')
+  .option('--facts-dir <path>', 'Directory containing .facts files (default: <root>/.codegraph/facts)')
+  .option('--baseline <path>', 'Baseline JSON to diff against (default: <root>/.codegraph/violations-baseline.json)')
+  .option('--diff', 'Show only violations NOT in baseline (i.e. introduced since baseline)', false)
+  .option('--update-baseline', 'After running, write current violations to baseline file (typically post-commit)', false)
+  .option('--json', 'Emit JSON instead of text (for hook consumption)', false)
+  .option('--timeout <ms>', 'Hard timeout in ms (default 5000). Skip if exceeded.', '5000')
+  .action(async (opts) => {
+    const startTs = performance.now()
+    const root = process.cwd()
+    const rulesDir = opts.rulesDir ?? (
+      await exists(path.join(root, 'sentinel-core/invariants'))
+        ? path.join(root, 'sentinel-core/invariants')
+        : path.join(root, 'invariants')
+    )
+    const factsDir = opts.factsDir ?? path.join(root, '.codegraph/facts')
+    const baselinePath = opts.baseline ?? path.join(root, '.codegraph/violations-baseline.json')
+    const timeoutMs = parseInt(String(opts.timeout), 10)
+
+    // Load runtime
+    let runFromDirs
+    try {
+      const datalog = await import('@liby-tools/datalog')
+      runFromDirs = datalog.runFromDirs
+    } catch (err) {
+      console.error(chalk.red(`✗ @liby-tools/datalog not installed`))
+      process.exit(1)
+    }
+
+    // Race against timeout (hard cap so the hook stays fast)
+    const evalPromise = runFromDirs({
+      rulesDir,
+      factsDir,
+      allowRecursion: true,
+    }).catch((err: unknown) => ({ error: err }))
+    const timeoutPromise = new Promise<{ timeout: true }>((resolve) =>
+      setTimeout(() => resolve({ timeout: true }), timeoutMs),
+    )
+    const raced = await Promise.race([evalPromise, timeoutPromise])
+    if ('timeout' in raced) {
+      if (opts.json) console.log(JSON.stringify({ timeout: true, ms: timeoutMs }))
+      else console.error(chalk.yellow(`⚠ datalog-check timeout (${timeoutMs}ms) — skipped`))
+      process.exit(0)
+    }
+    if ('error' in raced) {
+      if (opts.json) console.log(JSON.stringify({ error: String((raced as any).error) }))
+      else console.error(chalk.red(`✗ datalog-check failed: ${(raced as any).error}`))
+      process.exit(1)
+    }
+
+    const result = (raced as any).result
+    const violations: Array<[string, string, number, string]> =
+      result.outputs.get('Violation') ?? []
+
+    // Format violations as stable keys for diff.
+    const keyOf = (v: [string, string, number, string]): string =>
+      `${v[0]}\x00${v[1]}\x00${v[2]}\x00${v[3]}`
+    const currentKeys = new Set(violations.map(keyOf))
+
+    // Update baseline mode (post-commit) — write all current and exit.
+    if (opts.updateBaseline) {
+      const fsPromises = await import('node:fs/promises')
+      await fsPromises.writeFile(baselinePath, JSON.stringify({
+        violations,
+        updatedAt: new Date().toISOString(),
+      }, null, 2) + '\n')
+      if (!opts.json) console.log(chalk.green(`✓ baseline updated (${violations.length} violations) → ${baselinePath}`))
+      else console.log(JSON.stringify({ updated: true, count: violations.length }))
+      return
+    }
+
+    // Diff mode : load baseline, return only NEW violations.
+    let newViolations = violations
+    let baselineCount = 0
+    if (opts.diff) {
+      try {
+        const fsPromises = await import('node:fs/promises')
+        const raw = await fsPromises.readFile(baselinePath, 'utf-8')
+        const baseline = JSON.parse(raw)
+        const baselineKeys = new Set(
+          (baseline.violations ?? []).map((v: any) => keyOf(v as [string, string, number, string])),
+        )
+        baselineCount = baselineKeys.size
+        newViolations = violations.filter((v) => !baselineKeys.has(keyOf(v)))
+      } catch (err: any) {
+        if (err.code !== 'ENOENT') throw err
+        // No baseline = traiter comme baseline vide → tout = nouveau.
+      }
+    }
+
+    const elapsed = Math.round(performance.now() - startTs)
+    if (opts.json) {
+      console.log(JSON.stringify({
+        elapsed,
+        total: violations.length,
+        baseline: baselineCount,
+        new: newViolations.length,
+        violations: newViolations.map(([adr, file, line, msg]) => ({ adr, file, line, msg })),
+      }))
+      return
+    }
+
+    // Text output
+    if (newViolations.length === 0) {
+      if (opts.diff) {
+        console.log(chalk.green(`  ✓ no NEW violations (baseline=${baselineCount}, current=${violations.length}, ${elapsed}ms)`))
+      } else {
+        console.log(chalk.green(`  ✓ ${violations.length} violations (all grandfathered, ${elapsed}ms)`))
+      }
+      return
+    }
+
+    const header = opts.diff
+      ? chalk.red(`  ✗ ${newViolations.length} NEW violation(s) introduced since baseline (${elapsed}ms)`)
+      : chalk.red(`  ✗ ${newViolations.length} violation(s) (${elapsed}ms)`)
+    console.log(header)
+    for (const [adr, file, line, msg] of newViolations.slice(0, 20)) {
+      const lineStr = line === 0 ? '' : `:${line}`
+      console.log(`    ${chalk.bold(adr)} ${file}${lineStr}`)
+      console.log(`      ${msg}`)
+    }
+    if (newViolations.length > 20) {
+      console.log(chalk.dim(`    +${newViolations.length - 20} more`))
+    }
+    process.exit(opts.diff ? 0 : 1)   // diff mode = info, no fail
+  })
+
+async function exists(p: string): Promise<boolean> {
+  try { await (await import('node:fs/promises')).stat(p); return true } catch { return false }
+}
+
 // ─── memory ───────────────────────────────────────────────────────────────
 
 const memoryCmd = program

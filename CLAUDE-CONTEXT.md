@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+58278cb feat(phase4-tier7): composites multi-relation — 5 facts promus + 4 rules
 ee2ec36 feat(phase4-tier6): switch checks + controlling expr + audit cols + resource balance
 20a6abd feat(phase4-tier5): articulation-points + sql-naming + sql-migration-order
 806fb0f feat(phase4-tier4): floating-promises + switch-fallthrough + deprecated-usage
@@ -111,7 +112,6 @@ d998e49 feat(phase4-axe5): @liby-tools/invariants-postgres-ts — catalogue port
 3e2f4bc feat(phase4-axe4): drift agentique — 3 patterns V1 + MCP tool
 c423a80 feat(phase4-axe3): mémoire inter-sessions — store + MCP tools + CLI
 e61268d feat(phase4-axe2): SymbolCallEdge / SymbolSignature / EntryPoint facts
-6a2da32 feat(phase4-axe1): codegraph_datalog_query — Datalog ad hoc query MCP tool
 ```
 
 ## Comment contribuer à ce brief
