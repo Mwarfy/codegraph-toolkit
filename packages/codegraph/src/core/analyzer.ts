@@ -39,6 +39,7 @@ import { TruthPointsDetector } from './detectors/truth-points-detector.js'
 import { DataFlowsDetector } from './detectors/data-flows-detector.js'
 import { StateMachinesDetector } from './detectors/state-machines-detector.js'
 import { TaintDetector } from './detectors/taint-detector.js'
+import { SqlSchemaDetector } from './detectors/sql-schema-detector.js'
 import { analyzeTodos, type TodoMarker } from '../extractors/todos.js'
 import { analyzeLongFunctions, type LongFunction } from '../extractors/long-functions.js'
 import { analyzeMagicNumbers, type MagicNumber } from '../extractors/magic-numbers.js'
@@ -257,6 +258,7 @@ export async function analyze(
     .register(new EventEmitSitesDetector())
     .register(new OauthScopeLiteralsDetector())
     .register(new TaintDetector())
+    .register(new SqlSchemaDetector())
 
   const detectorCtx: DetectorRunContext = {
     config,
@@ -628,6 +630,7 @@ function patchSnapshotWithDetectorResults(
     ['taint', 'taintViolations'],
     ['event-emit-sites', 'eventEmitSites'],
     ['oauth-scope-literals', 'oauthScopeLiterals'],
+    ['sql-schema', 'sqlSchema'],
   ]
   for (const [detectorName, snapshotField] of mapping) {
     const value = results[detectorName]

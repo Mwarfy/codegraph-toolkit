@@ -375,6 +375,55 @@ export interface GraphSnapshot {
     totalCommitsTo: number
     jaccard: number
   }>
+  /**
+   * Schema SQL Postgres détecté à partir des migrations (`*.sql`).
+   * Tables + colonnes + indexes + foreignKeys + dérivé fkWithoutIndex
+   * (FKs sans index correspondant — risque DELETE CASCADE full scan).
+   *
+   * Cf. Phase 2 du plan d'enrichissement (docs/PHASE-2-SQL-DETECTOR-PLAN.md).
+   */
+  sqlSchema?: {
+    tables: Array<{
+      name: string
+      file: string
+      line: number
+      columns: Array<{
+        name: string
+        type: string
+        notNull: boolean
+        isUnique: boolean
+        isPrimaryKey: boolean
+        foreignKey?: { toTable: string; toColumn: string }
+        line: number
+      }>
+    }>
+    indexes: Array<{
+      name: string
+      table: string
+      firstColumn: string | null
+      columns: string[]
+      unique: boolean
+      implicit: boolean
+      file: string
+      line: number
+    }>
+    foreignKeys: Array<{
+      fromTable: string
+      fromColumn: string
+      toTable: string
+      toColumn: string
+      file: string
+      line: number
+    }>
+    fkWithoutIndex: Array<{
+      fromTable: string
+      fromColumn: string
+      toTable: string
+      toColumn: string
+      file: string
+      line: number
+    }>
+  }
 }
 
 /** Re-export du type produit par `extractors/oauth-scope-literals`. */

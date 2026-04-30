@@ -203,6 +203,89 @@ export async function exportFacts(
   }
   relations.push(fanInRel)
 
+  // ─── SQL Schema (Phase 2 enrichissement) ──────────────────────────────
+  // Émet 5 relations dérivées de l'extracteur sql-schema (parse des
+  // migrations Postgres). Source des invariants type "FK doit être
+  // indexé" exécutables via Datalog.
+  const sqlTableRel: RelationDef = {
+    name: 'SqlTable',
+    decl: '(name:symbol, file:symbol, line:number)',
+    rows: [],
+  }
+  const sqlColumnRel: RelationDef = {
+    name: 'SqlColumn',
+    decl: '(table:symbol, column:symbol, type:symbol, file:symbol, line:number)',
+    rows: [],
+  }
+  const sqlForeignKeyRel: RelationDef = {
+    name: 'SqlForeignKey',
+    decl: '(fromTable:symbol, fromCol:symbol, toTable:symbol, toCol:symbol, file:symbol, line:number)',
+    rows: [],
+  }
+  const sqlIndexRel: RelationDef = {
+    name: 'SqlIndex',
+    decl: '(name:symbol, table:symbol, firstCol:symbol, file:symbol, line:number)',
+    rows: [],
+  }
+  const sqlFkWithoutIndexRel: RelationDef = {
+    name: 'SqlFkWithoutIndex',
+    decl: '(fromTable:symbol, fromCol:symbol, toTable:symbol, toCol:symbol)',
+    rows: [],
+  }
+  if (snapshot.sqlSchema) {
+    for (const t of snapshot.sqlSchema.tables) {
+      sqlTableRel.rows.push([sym(t.name), sym(t.file), num(t.line)])
+      for (const c of t.columns) {
+        sqlColumnRel.rows.push([
+          sym(t.name),
+          sym(c.name),
+          sym(c.type),
+          sym(t.file),
+          num(c.line),
+        ])
+      }
+    }
+    for (const fk of snapshot.sqlSchema.foreignKeys) {
+      sqlForeignKeyRel.rows.push([
+        sym(fk.fromTable),
+        sym(fk.fromColumn),
+        sym(fk.toTable),
+        sym(fk.toColumn),
+        sym(fk.file),
+        num(fk.line),
+      ])
+    }
+    for (const idx of snapshot.sqlSchema.indexes) {
+      // Skip les indexes sur expression (firstColumn=null) — pas
+      // utilisables pour le matching FK→index.
+      if (idx.firstColumn === null) continue
+      sqlIndexRel.rows.push([
+        sym(idx.name),
+        sym(idx.table),
+        sym(idx.firstColumn),
+        sym(idx.file),
+        num(idx.line),
+      ])
+    }
+    // Dédupe les FkWithoutIndex (dans le snapshot ils peuvent apparaître
+    // 2× quand la même FK est définie dans deux fichiers — schema.sql +
+    // migration source). Pour le datalog on veut une violation par paire
+    // unique (fromTable, fromCol).
+    const seenFkPair = new Set<string>()
+    for (const fk of snapshot.sqlSchema.fkWithoutIndex) {
+      const key = fk.fromTable + '\x00' + fk.fromColumn
+      if (seenFkPair.has(key)) continue
+      seenFkPair.add(key)
+      sqlFkWithoutIndexRel.rows.push([
+        sym(fk.fromTable),
+        sym(fk.fromColumn),
+        sym(fk.toTable),
+        sym(fk.toColumn),
+      ])
+    }
+  }
+  relations.push(sqlTableRel, sqlColumnRel, sqlForeignKeyRel, sqlIndexRel, sqlFkWithoutIndexRel)
+
   // ─── CycleNode ────────────────────────────────────────────────────────
   // Pour chaque cycle détecté (Tarjan SCC sur graphe combiné import + event +
   // queue + dynamic-load), émet un tuple par fichier participant. Le champ
