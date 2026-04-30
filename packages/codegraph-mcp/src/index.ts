@@ -26,6 +26,7 @@ import { codegraphWhoImports } from './tools/importers.js'
 import { codegraphTruthPointFor } from './tools/truth-point.js'
 import { codegraphRecent } from './tools/recent.js'
 import { codegraphUncovered } from './tools/uncovered.js'
+import { codegraphCoChanged } from './tools/co-changed.js'
 
 const server = new Server(
   {
@@ -127,6 +128,28 @@ const TOOLS = [
       },
     },
   },
+  {
+    name: 'codegraph_co_changed',
+    description:
+      'List files frequently co-modified with the given file (last 90 days, ' +
+      'minCount=3 by default). Source: git log + jaccard coefficient. Use to ' +
+      'detect operational coupling not codified in imports — "when I touch X, ' +
+      'I also tend to touch Y". Strong signal for truth-point readers/writers ' +
+      'or feature components that span multiple files.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        file_path: { type: 'string', description: 'Path of the file (absolute or relative-to-repo).' },
+        repo_root: { type: 'string' },
+        limit: { type: 'number', description: 'Top-N pairs returned (default 10).' },
+        min_jaccard: {
+          type: 'number',
+          description: 'Filter pairs below this jaccard (default 0, no filter).',
+        },
+      },
+      required: ['file_path'],
+    },
+  },
 ]
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -153,6 +176,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break
       case 'codegraph_uncovered':
         result = codegraphUncovered(args as any)
+        break
+      case 'codegraph_co_changed':
+        result = codegraphCoChanged(args as any)
         break
       default:
         return {

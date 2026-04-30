@@ -43,6 +43,7 @@ import { analyzeTodos, type TodoMarker } from '../extractors/todos.js'
 import { analyzeLongFunctions, type LongFunction } from '../extractors/long-functions.js'
 import { analyzeMagicNumbers, type MagicNumber } from '../extractors/magic-numbers.js'
 import { analyzeTestCoverage, type TestCoverageReport } from '../extractors/test-coverage.js'
+import { analyzeCoChange, type CoChangePair } from '../extractors/co-change.js'
 import {
   fileContent as incFileContent,
   projectFiles as incProjectFiles,
@@ -547,6 +548,7 @@ async function runDeterministicDetectors(
   let longFunctions: LongFunction[] | undefined
   let magicNumbers: MagicNumber[] | undefined
   let testCoverage: TestCoverageReport | undefined
+  let coChangePairs: CoChangePair[] | undefined
 
   const tTodos = performance.now()
   try {
@@ -584,10 +586,21 @@ async function runDeterministicDetectors(
     console.error(`  ✗ test-coverage failed: ${err}`)
   }
 
+  const tCoChange = performance.now()
+  try {
+    const knownFiles = new Set(snapshot.nodes.filter((n) => n.type === 'file').map((n) => n.id))
+    coChangePairs = await analyzeCoChange(config.rootDir, { knownFiles })
+    timing.detectors['co-change'] = performance.now() - tCoChange
+  } catch (err) {
+    timing.detectors['co-change'] = performance.now() - tCoChange
+    console.error(`  ✗ co-change failed: ${err}`)
+  }
+
   if (todos) snapshot.todos = todos
   if (longFunctions) snapshot.longFunctions = longFunctions
   if (magicNumbers) snapshot.magicNumbers = magicNumbers
   if (testCoverage) snapshot.testCoverage = testCoverage
+  if (coChangePairs) snapshot.coChangePairs = coChangePairs
 }
 
 /**

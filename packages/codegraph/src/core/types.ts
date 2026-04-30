@@ -360,6 +360,21 @@ export interface GraphSnapshot {
     uncoveredFiles: number
     coverageRatio: number
   }
+  /**
+   * Paires de fichiers fréquemment co-modifiés sur les N derniers
+   * jours (default 90j). Source: `git log --name-only`. Filtre :
+   * count >= 3, jaccard >= 0 (cf. CoChangeOptions).
+   *
+   * Cf. axe 2 du plan d'enrichissement.
+   */
+  coChangePairs?: Array<{
+    from: string
+    to: string
+    count: number
+    totalCommitsFrom: number
+    totalCommitsTo: number
+    jaccard: number
+  }>
 }
 
 /** Re-export du type produit par `extractors/oauth-scope-literals`. */
