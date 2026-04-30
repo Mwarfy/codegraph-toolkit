@@ -16,6 +16,8 @@
   → [`Détecteurs généralistes par défaut, project-specific opt-in`](docs/adr/003-detectors-generaliste-vs-project-specific.md)
 - **ADR-004** — Le bootstrap agentique sépare 3 rôles, et aucun ne franchit son périmètre : > > 1. **OÙ regarder** : codegraph + pattern detectors (déterministe). Le > LLM ne décide jamais quels fichiers méritent un ADR. > 2. **COMMENT formuler** : un agent Sonnet par candidat avec prompt > cadré et output JSON forcé. Le LLM rédige Rule + Why + asserts depuis > le code, rien d'autre. > 3. **QUOI accepter** : humain (CLI revue + `--apply` confirmé). Les > ADRs sont écrits avec `Status: Proposed`, jamais `Accepted`.
   → [`Bootstrap = 3 rôles séparés (codegraph détecte / LLM rédige / humain valide)`](docs/adr/004-bootstrap-trois-roles-separes.md)
+- **ADR-005** — Tout détecteur codegraph qui scanne des fichiers TS expose 4 éléments : > 1. Un helper pure `extractXxxFileBundle(sf, relPath, rootDir, project?)` > qui dérive un bundle sérialisable d'UN seul SourceFile. > 2. Si l'agrégation est non-triviale, un helper pure > `aggregateXxxBundles(bundlesByFile)` qui fusionne sans I/O ni AST. > 3. Une fonction batch publique `analyzeXxx(rootDir, files, ...)` qui > compose les deux ci-dessus en boucle (chemin legacy préservé). > 4. Un wrapper Salsa dans `incremental/xxx.ts` exposant > `xxxBundleOfFile(path)` (derived sur `fileContent`) + > `allXxx(label)` (derived qui agrège). > > Aucun détecteur ne mélange I/O async + AST walk + agrégation globale dans > une même fonction batch monolithique.
+  → [`Pattern détecteurs codegraph — bundle per-file + agrégat pure`](docs/adr/005-detector-pattern-bundle-per-file.md)
 
 ## Fichiers gouvernés par un ADR (lookup pré-calculé)
 
@@ -36,9 +38,9 @@
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
 - `packages/codegraph/src/core/types.ts` (in: 59)
-- `packages/codegraph/src/incremental/database.ts` (in: 19)
-- `packages/salsa/dist/index.d.ts` (in: 18)
-- `packages/codegraph/src/incremental/queries.ts` (in: 16)
+- `packages/codegraph/src/incremental/database.ts` (in: 20)
+- `packages/salsa/dist/index.d.ts` (in: 19)
+- `packages/codegraph/src/incremental/queries.ts` (in: 17)
 - `packages/adr-toolkit/src/config.ts` (in: 9) · gov by ADR-002
 - `packages/codegraph/src/diff/types.ts` (in: 8)
 - `packages/datalog/src/types.ts` (in: 8)
@@ -49,9 +51,9 @@
 Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `// ADR-NNN`** dans le code. Intentionnel ? Sinon poser un marqueur ou créer un ADR :
 
 - **59** `packages/codegraph/src/core/types.ts` _(top-hub)_
-- **19** `packages/codegraph/src/incremental/database.ts` _(top-hub)_
-- **18** `packages/salsa/dist/index.d.ts` _(top-hub)_
-- **16** `packages/codegraph/src/incremental/queries.ts` _(top-hub)_
+- **20** `packages/codegraph/src/incremental/database.ts` _(top-hub)_
+- **19** `packages/salsa/dist/index.d.ts` _(top-hub)_
+- **17** `packages/codegraph/src/incremental/queries.ts` _(top-hub)_
 
 ## Tensions actives — invitations à explorer
 
@@ -94,6 +96,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+9906e22 perf(codegraph): unused-exports en queries Salsa fines [Sprint 11.2]
 5b0a379 docs: SPRINT-11-2-UNUSED-EXPORTS-PLAN.md — boot brief dédié pour reprendre Sprint 11.2
 66a4ae6 docs(phase-3): refresh boot brief — Phase 3 partielle, prochaines étapes
 2244034 perf(codegraph): Phase 3 partielle — discoverFiles cache + ts-imports Salsa wired [Sprint 10+11.1]
@@ -105,7 +108,6 @@ e65edee feat(salsa,codegraph): disk persistence for cross-process cache hit [Spr
 29dc4d4 docs(phase-1): refresh boot brief post-Sprint 6 — cible <500ms warm ATTEINTE
 5254819 perf(codegraph): ts-imports reuses sharedProject in incremental mode [Sprint 6]
 7815a4d feat(codegraph): expose --incremental flag in CLI [Sprint 4]
-4dfd6cc docs(phase-1): refresh boot brief post-Sprint 5
 ```
 
 ## Comment contribuer à ce brief

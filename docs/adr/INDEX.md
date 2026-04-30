@@ -8,7 +8,11 @@
 
 | ADR | Règle qui mord | Anchored in |
 |---|---|---|
-| _(aucun ADR encore — créer le premier via `_TEMPLATE.md`)_ | | |
+| [001](001-synopsis-builder-pure.md) | Synopsis builder = pure, zéro LLM | `packages/codegraph/src/synopsis/` |
+| [002](002-config-driven-no-hardcoded-projects.md) | Config-driven, jamais de path projet hardcodé | `packages/codegraph/src/config/` |
+| [003](003-detectors-generaliste-vs-project-specific.md) | Détecteurs généralistes vs project-specific | `packages/codegraph/src/detectors/` |
+| [004](004-bootstrap-trois-roles-separes.md) | Bootstrap = 3 rôles (codegraph détecte / LLM rédige / humain valide) | `packages/adr-toolkit/src/bootstrap*` |
+| [005](005-detector-pattern-bundle-per-file.md) | Détecteurs codegraph = bundle per-file + agrégat pure | `packages/codegraph/src/detectors/`, `packages/codegraph/src/incremental/` |
 
 ## Comment ajouter un ADR
 
