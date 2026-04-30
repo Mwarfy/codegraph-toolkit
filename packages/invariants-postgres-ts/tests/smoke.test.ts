@@ -209,6 +209,72 @@ describe('no-eval', () => {
   })
 })
 
+describe('no-hardcoded-secret', () => {
+  it('0 violations sur facts vides', async () => {
+    const { violations } = await runRule({ ruleName: 'no-hardcoded-secret.dl' })
+    expect(violations).toEqual([])
+  })
+
+  it('flag un secret détecté', async () => {
+    const facts = new Map([
+      ['HardcodedSecret', 'src/auth.ts\t42\tapi_key\tname\t450'],
+    ])
+    const { violations } = await runRule({ ruleName: 'no-hardcoded-secret.dl', facts })
+    expect(violations).toHaveLength(1)
+    expect(violations[0][0]).toBe('NO-HARDCODED-SECRET')
+    expect(violations[0][1]).toBe('src/auth.ts')
+    expect(violations[0][2]).toBe(42)
+  })
+
+  it('skip si grandfathered', async () => {
+    const schema = await loadRule('schema-subset.dl')
+    const baseRule = await loadRule('no-hardcoded-secret.dl')
+    const customRule = baseRule + '\nHardcodedSecretGrandfathered("src/auth.ts", 42).\n'
+    const program = mergePrograms([
+      { name: 'schema.dl', content: schema },
+      { name: 'rule.dl', content: customRule },
+    ])
+    const facts = new Map([
+      ['HardcodedSecret', 'src/auth.ts\t42\tapi_key\tname\t450'],
+    ])
+    const db = loadFacts(program.decls, { factsByRelation: facts })
+    const result = evaluate(program, db, { allowRecursion: true })
+    expect(result.outputs.get('Violation') ?? []).toEqual([])
+  })
+})
+
+describe('no-boolean-positional-param', () => {
+  it('0 violations sur facts vides', async () => {
+    const { violations } = await runRule({ ruleName: 'no-boolean-positional-param.dl' })
+    expect(violations).toEqual([])
+  })
+
+  it('flag un boolean positionnel', async () => {
+    const facts = new Map([
+      ['BooleanParam', 'src/api.ts\t10\tsendMessage\turgent\t1\t2'],
+    ])
+    const { violations } = await runRule({ ruleName: 'no-boolean-positional-param.dl', facts })
+    expect(violations).toHaveLength(1)
+    expect(violations[0][0]).toBe('NO-BOOLEAN-POSITIONAL-PARAM')
+  })
+
+  it('skip si grandfathered par (file, name)', async () => {
+    const schema = await loadRule('schema-subset.dl')
+    const baseRule = await loadRule('no-boolean-positional-param.dl')
+    const customRule = baseRule + '\nBooleanParamGrandfathered("src/api.ts", "sendMessage").\n'
+    const program = mergePrograms([
+      { name: 'schema.dl', content: schema },
+      { name: 'rule.dl', content: customRule },
+    ])
+    const facts = new Map([
+      ['BooleanParam', 'src/api.ts\t10\tsendMessage\turgent\t1\t2'],
+    ])
+    const db = loadFacts(program.decls, { factsByRelation: facts })
+    const result = evaluate(program, db, { allowRecursion: true })
+    expect(result.outputs.get('Violation') ?? []).toEqual([])
+  })
+})
+
 describe('schema-subset.dl est valide', () => {
   it('parse sans erreur et déclare les relations attendues', async () => {
     const schema = await loadRule('schema-subset.dl')
@@ -221,6 +287,8 @@ describe('schema-subset.dl est valide', () => {
     expect(program.decls.has('SqlForeignKey')).toBe(true)
     expect(program.decls.has('SqlPrimaryKey')).toBe(true)
     expect(program.decls.has('EvalCall')).toBe(true)
+    expect(program.decls.has('HardcodedSecret')).toBe(true)
+    expect(program.decls.has('BooleanParam')).toBe(true)
     expect(program.decls.has('Violation')).toBe(true)
     // Toutes les input relations sont marquées .input
     expect(program.decls.get('CycleNode')!.isInput).toBe(true)

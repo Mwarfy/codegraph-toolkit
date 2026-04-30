@@ -2,7 +2,7 @@
 
 Standard Datalog invariants for **TypeScript + Postgres** projects, drop-in for [`codegraph-toolkit`](https://github.com/Mwarfy/codegraph-toolkit).
 
-Six invariants, all 100% portable across TS/Postgres projects:
+Eight invariants, all 100% portable across TS/Postgres projects:
 
 | Invariant | What it catches |
 |---|---|
@@ -12,6 +12,8 @@ Six invariants, all 100% portable across TS/Postgres projects:
 | `sql-timestamp-needs-tz` | `TIMESTAMP` without time zone (multi-region bug). Ratchet on `(table, col)`. |
 | `sql-orphan-fk` | Foreign keys pointing to non-existent tables (refactor reliquats). Ratchet on `(table, col)`. |
 | `no-eval` | `eval(...)` and `new Function(...)` (RCE vector). Ratchet on `(file, kind)`. |
+| `no-hardcoded-secret` | Hardcoded API keys / tokens / credentials in source (regex + entropy). Ratchet on `(file, line)`. |
+| `no-boolean-positional-param` | Boolean trap (Sonar S2301) — prefer options object. Ratchet on `(file, name)`. |
 
 ## Why these two
 

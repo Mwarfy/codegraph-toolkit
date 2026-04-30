@@ -414,6 +414,41 @@ export async function exportFacts(
   }
   relations.push(evalCallRel)
 
+  // ─── HardcodedSecret (Tier 2) ────────────────────────────────────────
+  const hardcodedSecretRel: RelationDef = {
+    name: 'HardcodedSecret',
+    decl: '(file:symbol, line:number, context:symbol, trigger:symbol, entropy:number)',
+    rows: [],
+  }
+  for (const s of snapshot.hardcodedSecrets ?? []) {
+    hardcodedSecretRel.rows.push([
+      sym(s.file),
+      num(s.line),
+      sym(s.context || '_'),
+      sym(s.trigger),
+      num(Math.round(s.entropy * 100)),  // entropy * 100 pour rester en int
+    ])
+  }
+  relations.push(hardcodedSecretRel)
+
+  // ─── BooleanParam (Tier 2) ───────────────────────────────────────────
+  const booleanParamRel: RelationDef = {
+    name: 'BooleanParam',
+    decl: '(file:symbol, line:number, name:symbol, paramName:symbol, paramIndex:number, totalParams:number)',
+    rows: [],
+  }
+  for (const b of snapshot.booleanParams ?? []) {
+    booleanParamRel.rows.push([
+      sym(b.file),
+      num(b.line),
+      sym(b.name),
+      sym(b.paramName),
+      num(b.paramIndex),
+      num(b.totalParams),
+    ])
+  }
+  relations.push(booleanParamRel)
+
   // ─── Write to disk ────────────────────────────────────────────────────
   await fs.mkdir(options.outDir, { recursive: true })
 

@@ -1,0 +1,35 @@
+// NO-BOOLEAN-POSITIONAL-PARAM — Pas de boolean positionnel non-named.
+//
+// Pourquoi : `foo(true)` ou `foo(x, false, y)` est illisible au call
+// site. Le reader doit aller voir la signature pour comprendre ce que
+// `true` signifie. Boolean trap classique (Sonar S2301, Checkstyle).
+//
+// Préférer :
+//   - Une constante nommée : `foo(URGENT)` au lieu de `foo(true)`.
+//   - Un options object : `foo({ urgent: true })`.
+//   - Deux fonctions distinctes : `fooSync()` / `fooAsync()` au lieu
+//     de `foo(async: boolean)`.
+//
+// L'extracteur skip déjà :
+//   - Les setters/predicates avec 1 seul param (`setEnabled`,
+//     `isFoo`).
+//   - Les fichiers de test (`*.test.ts`, `tests/`, `fixtures/`).
+//   - Les types `boolean | undefined` ou unions élargies (flag
+//     optionnel typique).
+//   - Les sites avec `// boolean-ok: <reason>` ligne précédente.
+//
+// Source des facts : `BooleanParam(file, line, name, paramName,
+// paramIndex, totalParams)`.
+//
+// Pattern ratchet : grandfather par (file, name) — c'est-à-dire la
+// signature complète, pas un site individuel. Si tu changes la
+// signature pour passer en options object, le grandfather devient
+// obsolète automatiquement (la fonction n'apparaît plus dans
+// BooleanParam).
+
+.decl BooleanParamGrandfathered(file: symbol, name: symbol)
+
+Violation("NO-BOOLEAN-POSITIONAL-PARAM", File, Line,
+  "boolean positionnel — utiliser options object ou splitter en deux fonctions") :-
+    BooleanParam(File, Line, Name, _, _, _),
+    !BooleanParamGrandfathered(File, Name).

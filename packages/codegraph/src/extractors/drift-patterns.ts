@@ -28,13 +28,15 @@
  * section Mémoire avec la raison.
  */
 
-import { type Project, type SourceFile, Node } from 'ts-morph'
+import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
 import type { TodoMarker } from './todos.js'
 
 export type DriftSignalKind =
   | 'excessive-optional-params'
   | 'wrapper-superfluous'
   | 'todo-no-owner'
+  | 'deep-nesting'
+  | 'empty-catch-no-comment'
 
 export interface DriftSignal {
   kind: DriftSignalKind
@@ -65,10 +67,16 @@ export interface DriftPatternsOptions {
    * pour ignorer les wrappers très courts intentionnels (≤2 args).
    */
   wrapperMinArgs?: number
+  /**
+   * Profondeur max de nesting (if/for/while/switch/try) avant flag.
+   * Default 5. Au-delà, la fonction devient une pyramide.
+   */
+  maxNestingDepth?: number
 }
 
 const DEFAULT_OPTIONAL_PARAMS_THRESHOLD = 5
 const DEFAULT_WRAPPER_MIN_ARGS = 1
+const DEFAULT_MAX_NESTING_DEPTH = 5
 
 // ─── Pattern 1 + 2 : AST per-file ─────────────────────────────────────────
 
@@ -212,6 +220,89 @@ export function extractDriftPatternsFileBundle(
       line,
       'arrow',
     )
+  }
+
+  // ─── Pattern 4 : deep-nesting (Tier 2) ────────────────────────────
+  // Profondeur de nesting (if/for/while/switch/try) > seuil. Pyramide
+  // de doom = candidat extract-method ou guard-clause.
+  const maxNestingDepth = options.maxNestingDepth ?? DEFAULT_MAX_NESTING_DEPTH
+  const NESTING_KINDS = new Set([
+    SyntaxKind.IfStatement,
+    SyntaxKind.ForStatement,
+    SyntaxKind.ForInStatement,
+    SyntaxKind.ForOfStatement,
+    SyntaxKind.WhileStatement,
+    SyntaxKind.DoStatement,
+    SyntaxKind.SwitchStatement,
+    SyntaxKind.TryStatement,
+  ])
+  const checkNesting = (
+    name: string,
+    body: Node | undefined,
+    line: number,
+  ): void => {
+    if (!body || isExempt(line)) return
+    let maxDepth = 0
+    const walk = (n: Node, depth: number): void => {
+      if (NESTING_KINDS.has(n.getKind())) {
+        depth++
+        if (depth > maxDepth) maxDepth = depth
+      }
+      n.forEachChild((child) => walk(child, depth))
+    }
+    walk(body, 0)
+    if (maxDepth > maxNestingDepth) {
+      signals.push({
+        kind: 'deep-nesting',
+        file: relPath,
+        line,
+        message: `${name} : nesting profondeur ${maxDepth} (>${maxNestingDepth}) — guard-clauses ou extract-method ?`,
+        severity: 2,
+        details: { name, maxDepth },
+      })
+    }
+  }
+
+  // ─── Pattern 5 : empty-catch sans commentaire (Tier 2) ─────────────
+  // try { ... } catch { /* nothing */ } ou catch (e) {} sans rationale.
+  // Avale silencieusement les erreurs — vrai bug-prone classique.
+  for (const cat of sf.getDescendantsOfKind(SyntaxKind.CatchClause)) {
+    const block = cat.getBlock()
+    const stmts = block.getStatements()
+    const line = cat.getStartLineNumber()
+    if (isExempt(line)) continue
+    if (stmts.length > 0) continue   // catch fait quelque chose → OK
+
+    // Catch vide. Vérifier si un commentaire est présent dans le body
+    // (entre les `{` et `}`). On regarde le contenu textuel du block.
+    const bodyText = block.getFullText()
+    const hasComment = /\/\/|\/\*/.test(bodyText)
+    if (hasComment) continue          // commentaire = rationale présente
+
+    signals.push({
+      kind: 'empty-catch-no-comment',
+      file: relPath,
+      line,
+      message: `catch vide sans commentaire — avale silencieusement les erreurs ; ajouter rationale ou logger`,
+      severity: 2,
+    })
+  }
+
+  // Run nesting check sur toutes les fonctions découvertes.
+  for (const fn of sf.getFunctions()) {
+    checkNesting(fn.getName() ?? '(anonymous)', fn.getBody(), fn.getStartLineNumber())
+  }
+  for (const cls of sf.getClasses()) {
+    const className = cls.getName() ?? '(anonymous)'
+    for (const method of cls.getMethods()) {
+      checkNesting(`${className}.${method.getName()}`, method.getBody(), method.getStartLineNumber())
+    }
+  }
+  for (const v of sf.getVariableDeclarations()) {
+    const init = v.getInitializer()
+    if (!init) continue
+    if (!Node.isArrowFunction(init) && !Node.isFunctionExpression(init)) continue
+    checkNesting(v.getName(), init.getBody(), v.getStartLineNumber())
   }
 
   return { signals }

@@ -171,6 +171,101 @@ describe('drift-patterns — convention drift-ok exempt', () => {
   })
 })
 
+describe('drift-patterns — deep-nesting (Tier 2)', () => {
+  it('flag une fonction avec nesting profondeur > 5', () => {
+    const { sf, name } = fileFromText(`
+      export function deep() {
+        if (true) {
+          for (let i = 0; i < 10; i++) {
+            while (i > 0) {
+              if (i % 2 === 0) {
+                try {
+                  if (i > 5) {
+                    return i
+                  }
+                } catch {}
+              }
+            }
+          }
+        }
+      }
+    `)
+    const { signals } = extractDriftPatternsFileBundle(sf, name)
+    const dn = signals.find((s) => s.kind === 'deep-nesting')
+    expect(dn).toBeDefined()
+    expect((dn!.details!.maxDepth as number)).toBeGreaterThan(5)
+  })
+
+  it('ne flag PAS sous le seuil', () => {
+    const { sf, name } = fileFromText(`
+      export function shallow(x: number) {
+        if (x > 0) {
+          return x
+        }
+        return 0
+      }
+    `)
+    const { signals } = extractDriftPatternsFileBundle(sf, name)
+    expect(signals.filter((s) => s.kind === 'deep-nesting')).toEqual([])
+  })
+
+  it('seuil custom', () => {
+    const { sf, name } = fileFromText(`
+      export function depth3(x: number) {
+        if (x > 0) {
+          if (x > 1) {
+            if (x > 2) return x
+          }
+        }
+      }
+    `)
+    const { signals } = extractDriftPatternsFileBundle(sf, name, { maxNestingDepth: 2 })
+    expect(signals.find((s) => s.kind === 'deep-nesting')).toBeDefined()
+  })
+})
+
+describe('drift-patterns — empty-catch (Tier 2)', () => {
+  it('flag try/catch avec body vide sans commentaire', () => {
+    const { sf, name } = fileFromText(`
+      export function f() {
+        try {
+          doSomething()
+        } catch (e) {}
+      }
+    `)
+    const { signals } = extractDriftPatternsFileBundle(sf, name)
+    expect(signals.find((s) => s.kind === 'empty-catch-no-comment')).toBeDefined()
+  })
+
+  it('skip si le catch a un commentaire', () => {
+    const { sf, name } = fileFromText(`
+      export function f() {
+        try {
+          doSomething()
+        } catch {
+          // intentional : best-effort cleanup
+        }
+      }
+    `)
+    const { signals } = extractDriftPatternsFileBundle(sf, name)
+    expect(signals.filter((s) => s.kind === 'empty-catch-no-comment')).toEqual([])
+  })
+
+  it('skip si le catch a du code', () => {
+    const { sf, name } = fileFromText(`
+      export function f() {
+        try {
+          doSomething()
+        } catch (e) {
+          console.error(e)
+        }
+      }
+    `)
+    const { signals } = extractDriftPatternsFileBundle(sf, name)
+    expect(signals.filter((s) => s.kind === 'empty-catch-no-comment')).toEqual([])
+  })
+})
+
 describe('drift-patterns — todoToDriftSignal (pattern 3)', () => {
   function todo(message: string, tag: 'TODO' | 'FIXME' = 'TODO'): TodoMarker {
     return { tag, message, file: 'src/x.ts', line: 10 }

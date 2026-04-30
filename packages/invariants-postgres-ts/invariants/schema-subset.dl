@@ -23,6 +23,8 @@
 .decl SqlFkWithoutIndex(fromTable: symbol, fromCol: symbol, toTable: symbol, toCol: symbol)
 .decl SqlPrimaryKey(table: symbol, column: symbol, file: symbol, line: number)
 .decl EvalCall(file: symbol, line: number, kind: symbol, containingSymbol: symbol)
+.decl HardcodedSecret(file: symbol, line: number, context: symbol, trigger: symbol, entropy: number)
+.decl BooleanParam(file: symbol, line: number, name: symbol, paramName: symbol, paramIndex: number, totalParams: number)
 
 .input File
 .input FileTag
@@ -37,6 +39,8 @@
 .input SqlFkWithoutIndex
 .input SqlPrimaryKey
 .input EvalCall
+.input HardcodedSecret
+.input BooleanParam
 
 // La relation cible commune : tous les fichiers de rules écrivent ici.
 .decl Violation(adr: symbol, file: symbol, line: number, msg: symbol)

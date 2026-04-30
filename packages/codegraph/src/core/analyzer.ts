@@ -44,6 +44,8 @@ import { DrizzleSchemaDetector } from './detectors/drizzle-schema-detector.js'
 import { analyzeTodos, type TodoMarker } from '../extractors/todos.js'
 import { analyzeDriftPatterns, type DriftSignal } from '../extractors/drift-patterns.js'
 import { analyzeEvalCalls, type EvalCall } from '../extractors/eval-calls.js'
+import { analyzeHardcodedSecrets, type HardcodedSecret } from '../extractors/hardcoded-secrets.js'
+import { analyzeBooleanParams, type BooleanParamSite } from '../extractors/boolean-params.js'
 import { analyzeLongFunctions, type LongFunction } from '../extractors/long-functions.js'
 import { analyzeMagicNumbers, type MagicNumber } from '../extractors/magic-numbers.js'
 import { analyzeTestCoverage, type TestCoverageReport } from '../extractors/test-coverage.js'
@@ -557,6 +559,8 @@ async function runDeterministicDetectors(
   let coChangePairs: CoChangePair[] | undefined
   let driftSignals: DriftSignal[] | undefined
   let evalCalls: EvalCall[] | undefined
+  let hardcodedSecrets: HardcodedSecret[] | undefined
+  let booleanParams: BooleanParamSite[] | undefined
 
   const tTodos = performance.now()
   try {
@@ -624,6 +628,24 @@ async function runDeterministicDetectors(
     console.error(`  ✗ eval-calls failed: ${err}`)
   }
 
+  const tHardcoded = performance.now()
+  try {
+    hardcodedSecrets = await analyzeHardcodedSecrets(config.rootDir, files, sharedProject)
+    timing.detectors['hardcoded-secrets'] = performance.now() - tHardcoded
+  } catch (err) {
+    timing.detectors['hardcoded-secrets'] = performance.now() - tHardcoded
+    console.error(`  ✗ hardcoded-secrets failed: ${err}`)
+  }
+
+  const tBoolParams = performance.now()
+  try {
+    booleanParams = await analyzeBooleanParams(config.rootDir, files, sharedProject)
+    timing.detectors['boolean-params'] = performance.now() - tBoolParams
+  } catch (err) {
+    timing.detectors['boolean-params'] = performance.now() - tBoolParams
+    console.error(`  ✗ boolean-params failed: ${err}`)
+  }
+
   if (todos) snapshot.todos = todos
   if (longFunctions) snapshot.longFunctions = longFunctions
   if (magicNumbers) snapshot.magicNumbers = magicNumbers
@@ -631,6 +653,8 @@ async function runDeterministicDetectors(
   if (coChangePairs) snapshot.coChangePairs = coChangePairs
   if (driftSignals) snapshot.driftSignals = driftSignals
   if (evalCalls) snapshot.evalCalls = evalCalls
+  if (hardcodedSecrets) snapshot.hardcodedSecrets = hardcodedSecrets
+  if (booleanParams) snapshot.booleanParams = booleanParams
 }
 
 /**

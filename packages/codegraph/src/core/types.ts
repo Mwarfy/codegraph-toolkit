@@ -317,12 +317,18 @@ export interface GraphSnapshot {
 
   /**
    * Drift signals — patterns que l'agent crée plus que les humains.
-   * 3 patterns V1 : excessive-optional-params, wrapper-superfluous,
-   * todo-no-owner. Sert à RALENTIR l'agent au bon moment, pas à bloquer.
-   * Source : `extractors/drift-patterns.ts` (Phase 4 axe 4). Optionnel.
+   * V1 : excessive-optional-params, wrapper-superfluous, todo-no-owner.
+   * Tier 2 : deep-nesting, empty-catch-no-comment.
+   * Sert à RALENTIR l'agent au bon moment, pas à bloquer.
+   * Source : `extractors/drift-patterns.ts` (Phase 4 axe 4 + Tier 2). Optionnel.
    */
   driftSignals?: Array<{
-    kind: 'excessive-optional-params' | 'wrapper-superfluous' | 'todo-no-owner'
+    kind:
+      | 'excessive-optional-params'
+      | 'wrapper-superfluous'
+      | 'todo-no-owner'
+      | 'deep-nesting'
+      | 'empty-catch-no-comment'
     file: string
     line: number
     message: string
@@ -455,6 +461,36 @@ export interface GraphSnapshot {
     file: string
     line: number
     containingSymbol: string
+  }>
+
+  /**
+   * Hardcoded secrets candidats — strings longs + entropy haute + contexte
+   * suspect (variable nommée 'token', 'api_key', etc.) OU pattern connu
+   * (sk-..., ghp_..., AKIA...). Optionnel.
+   * Cf. extractors/hardcoded-secrets.ts (Phase 4 Tier 2).
+   */
+  hardcodedSecrets?: Array<{
+    file: string
+    line: number
+    context: string
+    preview: string
+    entropy: number
+    length: number
+    trigger: 'name' | 'pattern'
+  }>
+
+  /**
+   * Boolean positional params — fonctions avec param boolean positionnel
+   * (sans named arg / object destructuring). Cf. Sonar S2301.
+   * Cf. extractors/boolean-params.ts (Phase 4 Tier 2).
+   */
+  booleanParams?: Array<{
+    file: string
+    name: string
+    line: number
+    paramIndex: number
+    paramName: string
+    totalParams: number
   }>
 }
 
