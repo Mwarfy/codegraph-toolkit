@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+fd50aa4 feat(datalog): comparison ops (>, <, >=, <=, !=) + 2nd pass post-aggregate
 f9a0e3d feat(phase4-tier14): cross-function taint + 4 CWE rules + Datalog aggregates
 c4bcf00 feat(phase4-tier13): CWE rules library — 4 CVE classics portees (CodeQL inspiration)
 3579a04 feat(phase4-tier11+12): variable tracking + proof tree + 3 composites inspires
@@ -111,7 +112,6 @@ e5ac979 feat(phase4-tier9): packaging shipping-ready — tout via npm install + 
 58278cb feat(phase4-tier7): composites multi-relation — 5 facts promus + 4 rules
 ee2ec36 feat(phase4-tier6): switch checks + controlling expr + audit cols + resource balance
 20a6abd feat(phase4-tier5): articulation-points + sql-naming + sql-migration-order
-806fb0f feat(phase4-tier4): floating-promises + switch-fallthrough + deprecated-usage
 ```
 
 ## Comment contribuer à ce brief

@@ -21,6 +21,12 @@
  *   - Pas de propagation à travers d'autres calls (limite du nom var).
  *   - Pas de sanitizer detection inline (`const id = parseInt(req.body.id)`).
  *
+ * V2 (Tier 15) — destructuring patterns supportés :
+ *   - `const { id, name } = req.body` → `id`, `name` taintés (idiomatique Express)
+ *   - `const { id: userId } = req.body` → `userId` tainté (alias)
+ *   - `const [first] = req.params` → `first` tainté
+ *   - Nested destructuring (`const { a: { b } } = req.body`) → V3
+ *
  * Sources reconnues : `req.body`, `req.query`, `req.params`, `req.headers`,
  * `request.body`, `ctx.req.body`, `process.argv`, `process.env`.
  */
@@ -112,19 +118,28 @@ export function extractTaintedVarsFileBundle(
       const text = init.getText()
       const source = matchSource(text)
       if (!source) continue
-      // Nom de la variable. Skip les destructurings (pattern complex —
-      // peut être étendu V2).
       const nameNode = v.getNameNode()
-      if (!Node.isIdentifier(nameNode)) continue
-      const varName = nameNode.getText()
-      taintedVars.set(varName, source)
-      decls.push({
-        file: relPath,
-        containingSymbol: fnName,
-        varName,
-        line: v.getStartLineNumber(),
-        source,
-      })
+      const line = v.getStartLineNumber()
+      if (Node.isIdentifier(nameNode)) {
+        const varName = nameNode.getText()
+        taintedVars.set(varName, source)
+        decls.push({ file: relPath, containingSymbol: fnName, varName, line, source })
+      } else if (
+        Node.isObjectBindingPattern(nameNode) ||
+        Node.isArrayBindingPattern(nameNode)
+      ) {
+        // V2 (Tier 15) : `const { id, name } = req.body` ou `const [a] = req.params`.
+        // Chaque BindingElement devient une tainted var. Alias supporté
+        // (`{ id: userId }` → `userId`). Nested destructuring skip V1.
+        for (const elem of nameNode.getElements()) {
+          if (!Node.isBindingElement(elem)) continue
+          const elemName = elem.getNameNode()
+          if (!Node.isIdentifier(elemName)) continue
+          const varName = elemName.getText()
+          taintedVars.set(varName, source)
+          decls.push({ file: relPath, containingSymbol: fnName, varName, line, source })
+        }
+      }
     }
     if (taintedVars.size > 0) {
       taintedByFn.set(fnId, taintedVars)
