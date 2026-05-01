@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+84544b9 refactor(invariants): raffiner extractor empty-catch + rule passthrough-fn
 8eb80b8 refactor(invariants): raffiner composite-async-sink-with-swallow
 81dd087 refactor(toolkit): extract NCD-detected duplications + analyzer.ts cross-discipline
 dc48f25 feat(toolkit): 4 nouvelles disciplines mathématiques (8e→11e)
@@ -111,7 +112,6 @@ c003043 docs: update READMEs for v0.5.0 — 91 rules, multi-dir, 7 cross-discipl
 3ecfa05 docs: cross-discipline metrics — synthese 6 disciplines portees
 9ee3547 feat(toolkit): min-cut/max-flow — coût objectif de séparation packages
 4cb7ffa feat(toolkit): TDA + Lyapunov — cycles structurels + chaos detection
-375d5a2 feat(toolkit): cross-discipline rules — Fiedler λ₂ + Shannon entropy + Hamming dup
 ```
 
 ## Comment contribuer à ce brief
