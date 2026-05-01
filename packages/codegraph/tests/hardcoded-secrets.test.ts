@@ -59,10 +59,18 @@ describe('hardcoded-secrets — name trigger', () => {
   })
 })
 
+// Prefixes connus reconstitues au runtime — sinon GitHub secret scanning
+// flag le test file lui-meme comme leak (faux-positif sur fixtures de test).
+const PREFIX_STRIPE = 'sk_live' + '_'
+const PREFIX_GITHUB = 'ghp' + '_'
+const PREFIX_AWS = 'AKIA' + 'IOSFODNN7EXAMPLE'
+const PREFIX_SLACK = 'xoxb' + '-'
+const RANDOM_BODY = 'aB7xQ9zR2mN8vL4kP1jH6tY3wE5rT0uI'
+
 describe('hardcoded-secrets — pattern trigger (known prefix)', () => {
-  it('flag stripe sk_live token meme sans variable name suspect', () => {
+  it('flag stripe live token meme sans variable name suspect', () => {
     const { sf, name } = fileFromText(`
-      const x = "sk_live_aB7xQ9zR2mN8vL4kP1jH6tY3wE5rT0uI"
+      const x = "${PREFIX_STRIPE}${RANDOM_BODY}"
     `)
     const { secrets } = extractHardcodedSecretsFileBundle(sf, name)
     expect(secrets).toHaveLength(1)
@@ -71,7 +79,7 @@ describe('hardcoded-secrets — pattern trigger (known prefix)', () => {
 
   it('flag GitHub PAT', () => {
     const { sf, name } = fileFromText(`
-      const x = "ghp_aB7xQ9zR2mN8vL4kP1jH6tY3wE5rT0uI"
+      const x = "${PREFIX_GITHUB}${RANDOM_BODY}"
     `)
     const { secrets } = extractHardcodedSecretsFileBundle(sf, name)
     expect(secrets).toHaveLength(1)
@@ -79,7 +87,7 @@ describe('hardcoded-secrets — pattern trigger (known prefix)', () => {
 
   it('flag AWS access key', () => {
     const { sf, name } = fileFromText(`
-      const x = "AKIAIOSFODNN7EXAMPLE"
+      const x = "${PREFIX_AWS}"
     `)
     const { secrets } = extractHardcodedSecretsFileBundle(sf, name)
     expect(secrets).toHaveLength(1)
@@ -87,7 +95,7 @@ describe('hardcoded-secrets — pattern trigger (known prefix)', () => {
 
   it('flag Slack bot token', () => {
     const { sf, name } = fileFromText(`
-      const x = "xoxb-aB7xQ9zR2mN8vL4kP1jH6tY3wE5rT0uI"
+      const x = "${PREFIX_SLACK}${RANDOM_BODY}"
     `)
     const { secrets } = extractHardcodedSecretsFileBundle(sf, name)
     expect(secrets).toHaveLength(1)
