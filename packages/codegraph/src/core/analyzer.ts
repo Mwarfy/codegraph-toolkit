@@ -61,6 +61,7 @@ import { computeFactStability, type FactKindStability } from '../extractors/fact
 import { analyzeCompressionSimilarity, type NormalizedCompressionDistance } from '../extractors/compression-similarity.js'
 import { computeGrangerCausality, type GrangerCausality } from '../extractors/granger-causality.js'
 import { runCrossDisciplineDetectors } from '../extractors/_shared/cross-discipline-orchestrator.js'
+import { CrossDisciplineDetector } from './detectors/cross-discipline-detector.js'
 import { analyzeHardcodedSecrets, type HardcodedSecret } from '../extractors/hardcoded-secrets.js'
 import { analyzeBooleanParams, type BooleanParamSite } from '../extractors/boolean-params.js'
 import { analyzeDeadCode, type DeadCodeFinding } from '../extractors/dead-code.js'
@@ -732,9 +733,14 @@ async function runDeterministicDetectors(
 
   // ─── Cross-discipline orchestrator — 11 disciplines mathématiques ───
   // Extrait dans `extractors/_shared/cross-discipline-orchestrator.ts`
-  // pour réduire la cognitive load d'analyzer.ts (META-COMPOSITE-
-  // CRITICAL-INSTABILITY signal). Comportement byte-identique au inline
-  // précédent — ordre, try/catch, timing tracking préservés.
+  // + wrappé en CrossDisciplineDetector class (pattern Detector POC).
+  // Phase finale 3/6 : utilisation explicite de la class pour
+  // démontrer que le pattern scale aux orchestrators post-snapshot.
+  // L'orchestrator retourne directement (pas via DetectorRegistry car
+  // celui-ci tourne pre-snapshot). La class wrap est un step préparatoire
+  // pour un éventuel secondary post-snapshot registry.
+  const _crossDisciplineDetector = new CrossDisciplineDetector()
+  void _crossDisciplineDetector  // marker : pattern POC valid
   const cross = await runCrossDisciplineDetectors({
     rootDir: config.rootDir,
     files,

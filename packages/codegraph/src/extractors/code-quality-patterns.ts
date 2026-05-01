@@ -223,12 +223,19 @@ export function extractCodeQualityPatternsFileBundle(
     for (const node of sf.getDescendantsOfKind(candidate.kind)) {
       const line = node.getStartLineNumber()
       if (isExempt(line, 'alloc-ok')) continue
-      // Walk up : si on rencontre une LoopKind avant une FN_KINDS, c'est dans un loop
+      // Walk up : si on rencontre une LoopKind avant une FN_KINDS, c'est dans un loop.
+      // Track aussi le first loop ancestor pour pouvoir checker l'edge case
+      // "allocation IS the loop initializer" (pas par-iteration).
       let cur: Node | undefined = node.getParent()
       let inLoop = false
+      let loopAncestor: Node | undefined
       while (cur) {
         if (FN_KINDS.has(cur.getKind())) break
-        if (LOOP_KINDS.has(cur.getKind())) { inLoop = true; break }
+        if (LOOP_KINDS.has(cur.getKind())) {
+          inLoop = true
+          loopAncestor = cur
+          break
+        }
         cur = cur.getParent()
       }
       if (!inLoop) continue
@@ -237,6 +244,17 @@ export function extractCodeQualityPatternsFileBundle(
       // dans le type — sanity check : on skip les ObjectLiteral dans TypeNode).
       if (candidate.alias === 'object-literal'
        && node.getFirstAncestorByKind(SyntaxKind.TypeReference)) continue
+
+      // Edge case : l'allocation EST le iterable du loop (pas par-iteration).
+      // `for (const x of [1,2,3])` — l'array literal est évalué UNE fois,
+      // pas N fois. Pareil pour `for (const x of {...})` (pas idiomatic mais
+      // peut arriver). Vérifier si le node est descendant direct du loop sans
+      // passer par un body Block.
+      if (loopAncestor) {
+        const isLoopInitializer = isDescendantOfLoopInit(node, loopAncestor)
+        if (isLoopInitializer) continue
+      }
+
       out.allocationInLoops.push({
         file: relPath, line, allocKind: candidate.alias,
         containingSymbol: findContainingSymbol(node),
@@ -280,6 +298,32 @@ export async function analyzeCodeQualityPatterns(
   out.awaitInLoops.sort(sortFn)
   out.allocationInLoops.sort(sortFn)
   return out
+}
+
+/**
+ * True si `node` est dans la "init" partie d'un loop ancestor (i.e.
+ * pas dans le body). Évite les FP du type :
+ *   `for (const x of [1, 2, 3])` → array literal NOT par-iteration
+ *   `for (let i = 0, arr = [...]; i < arr.length; i++)` → idem
+ *   `while ({a} = next())` → idem (rare)
+ *
+ * Heuristique : l'init d'un loop est tout ce qui n'est PAS dans le
+ * Block body (ForOfStatement.statement, ForStatement.statement, etc.).
+ * On remonte du node vers le loopAncestor — si on traverse un Block
+ * avant d'arriver au loopAncestor, on était dans le body (= par-iteration).
+ */
+function isDescendantOfLoopInit(node: Node, loopAncestor: Node): boolean {
+  let cur: Node | undefined = node
+  while (cur && cur !== loopAncestor) {
+    if (cur.getKind() === SyntaxKind.Block) {
+      // On a traversé un Block avant d'arriver au loop = on est DANS le body
+      return false
+    }
+    cur = cur.getParent()
+  }
+  // On a atteint le loopAncestor sans traverser un Block = on est dans
+  // l'init/condition/incrementor du loop.
+  return cur === loopAncestor
 }
 
 function relativize(absPath: string, rootDir: string): string | null {

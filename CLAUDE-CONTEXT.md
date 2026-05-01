@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+0c9d608 test(toolkit): contract tests pour CrossDisciplineDetector POC
 bbfa9d6 feat(toolkit): SQL ALTER TABLE tracking + CrossDisciplineDetector POC
 7362f13 refactor(invariants): raffiner composite-orphan-file (Next.js framework-routed)
 84544b9 refactor(invariants): raffiner extractor empty-catch + rule passthrough-fn
@@ -111,7 +112,6 @@ c003043 docs: update READMEs for v0.5.0 — 91 rules, multi-dir, 7 cross-discipl
 443e072 feat(datalog): runFromDirs accepte rulesDir array (multi-dir loader)
 18a37a7 chore(toolkit): retire 3 exports dead code (UnusedExport.facts)
 87f2ac1 feat(toolkit): Information Bottleneck (Tishby 1999) — 7e cross-discipline
-3ecfa05 docs: cross-discipline metrics — synthese 6 disciplines portees
 ```
 
 ## Comment contribuer à ce brief

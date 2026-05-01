@@ -109,9 +109,23 @@ export function findSqlNamingViolations(
 
       // Timestamp / temporal column — suffix `_at`.
       if (TEMPORAL_TYPE_RE.test(col.type) && !col.name.endsWith('_at')) {
-        // Skip les patterns volontaires : `*_date`, `*_time` (alternatives
-        // sémantiques explicites — dob, birth_date, etc.).
-        if (!col.name.endsWith('_date') && !col.name.endsWith('_time')) {
+        // Skip les patterns volontaires :
+        //   - `*_date`, `*_time` : alternatives sémantiques explicites (dob, birth_date)
+        //   - DATE type pur : convention "calendar date", pas un instant timestamp
+        //   - `*_until` : sémantique "deadline future" valide
+        //   - `window_*` ou `*_start`/`*_end` : intervalles temporels nommés
+        //   - `last_updated` : synonyme accepté de `updated_at`
+        const isDateTypePure = /^date(\s|$)/i.test(col.type)
+        const hasAcceptedSuffix =
+          col.name.endsWith('_date') ||
+          col.name.endsWith('_time') ||
+          col.name.endsWith('_until') ||
+          col.name.endsWith('_start') ||
+          col.name.endsWith('_end')
+        const hasAcceptedPrefix = col.name.startsWith('window_')
+        const isAcceptedSynonym = col.name === 'last_updated'
+
+        if (!hasAcceptedSuffix && !hasAcceptedPrefix && !isAcceptedSynonym && !isDateTypePure) {
           violations.push({
             kind: 'timestamp-missing-at-suffix',
             table: table.name,

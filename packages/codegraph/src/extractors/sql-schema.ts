@@ -142,6 +142,7 @@ export async function analyzeSqlSchema(
   const indexes: SqlIndex[] = []
   const foreignKeys: SqlForeignKey[] = []
   const addedColumns: AddedColumn[] = []
+  const renamedColumns: RenamedColumn[] = []
 
   for (const file of sqlFiles) {
     let content: string
@@ -151,6 +152,7 @@ export async function analyzeSqlSchema(
     indexes.push(...fileResult.indexes)
     foreignKeys.push(...fileResult.foreignKeys)
     addedColumns.push(...fileResult.addedColumns)
+    renamedColumns.push(...fileResult.renamedColumns)
   }
 
   // Cross-file merge : ALTER TABLE ADD COLUMN extend les tables existantes.
@@ -160,6 +162,10 @@ export async function analyzeSqlSchema(
   // Note : une même table peut apparaître plusieurs fois (000_initial_schema.sql
   // + schema.sql consolidé). On applique le merge à TOUTES les entrées
   // matchant le nom (filter, pas find).
+  //
+  // ADD COLUMN doit s'appliquer AVANT RENAME — sinon une colonne ajoutée par
+  // ALTER puis renommée en migration ultérieure rate son rename (la col
+  // n'existe pas encore au moment du rename merge).
   for (const ac of addedColumns) {
     const targets = tables.filter((t) => t.name === ac.table)
     for (const target of targets) {
@@ -173,6 +179,18 @@ export async function analyzeSqlSchema(
         isPrimaryKey: ac.isPrimaryKey,
         line: ac.line,
       })
+    }
+  }
+
+  // Cross-file merge : ALTER TABLE RENAME COLUMN renomme les colonnes
+  // existantes. Applique à toutes les entrées matchant le nom de table
+  // (multiple CREATE TABLE équivalents dans schema.sql + migrations).
+  for (const rc of renamedColumns) {
+    const targets = tables.filter((t) => t.name === rc.table)
+    for (const target of targets) {
+      const col = target.columns.find((c) => c.name === rc.fromName)
+      if (!col) continue
+      col.name = rc.toName
     }
   }
 
@@ -241,11 +259,12 @@ export function derivePrimaryKeys(tables: SqlTable[], indexes: SqlIndex[]): SqlP
 export function parseSqlFile(
   content: string,
   file: string,
-): { tables: SqlTable[]; indexes: SqlIndex[]; foreignKeys: SqlForeignKey[]; addedColumns: AddedColumn[] } {
+): { tables: SqlTable[]; indexes: SqlIndex[]; foreignKeys: SqlForeignKey[]; addedColumns: AddedColumn[]; renamedColumns: RenamedColumn[] } {
   const tables: SqlTable[] = []
   const indexes: SqlIndex[] = []
   const foreignKeys: SqlForeignKey[] = []
   const addedColumns: AddedColumn[] = []
+  const renamedColumns: RenamedColumn[] = []
 
   // ─── CREATE TABLE ────────────────────────────────────────────────
   // Capture: nom + bloc parenthèses (avec parenthèses imbriquées).
@@ -369,7 +388,23 @@ export function parseSqlFile(
     })
   }
 
-  return { tables, indexes, foreignKeys, addedColumns }
+  // ─── ALTER TABLE ... RENAME COLUMN ────────────────────────────────
+  // Pattern : `ALTER TABLE [IF EXISTS] table RENAME COLUMN old TO new`
+  // (variant : `RENAME old TO new` sans COLUMN keyword).
+  // Critical pour éviter les FP sur les rules sql-naming/sql-audit-columns
+  // après un cleanup rename qui résout déjà la convention.
+  const alterRenameColRe = /ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(\w+(?:\.\w+)?)\s+RENAME\s+(?:COLUMN\s+)?(\w+)\s+TO\s+(\w+)/gi
+  while ((m = alterRenameColRe.exec(content)) !== null) {
+    renamedColumns.push({
+      table: stripSchema(m[1]),
+      fromName: m[2],
+      toName: m[3],
+      file,
+      line: lineNumberAt(content, m.index),
+    })
+  }
+
+  return { tables, indexes, foreignKeys, addedColumns, renamedColumns }
 }
 
 // Internal helper type for ALTER TABLE ADD COLUMN tracking
@@ -380,6 +415,14 @@ interface AddedColumn {
   notNull: boolean
   isUnique: boolean
   isPrimaryKey: boolean
+  file: string
+  line: number
+}
+
+interface RenamedColumn {
+  table: string
+  fromName: string
+  toName: string
   file: string
   line: number
 }
