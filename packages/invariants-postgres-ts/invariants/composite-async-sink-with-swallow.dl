@@ -31,12 +31,21 @@ HasAwaitInLoop(F) :- AwaitInLoop(F, _, _, _).
 .decl HasTaintSink(file: symbol)
 HasTaintSink(F) :- TaintSink(F, _, _, _, _).
 
+// Conservé pour rétrocompat (composite-legacy-hot-zone l'utilise)
 .decl HasTryCatchSwallow(file: symbol)
 HasTryCatchSwallow(F) :- TryCatchSwallow(F, _, _, _).
 
+// Raffinement Phase C : ne flag que les catches `empty` (strict).
+// Les `log-only` (logger.error sans rethrow) et `no-rethrow` (handling
+// avec return false / set state) sont des design choices acceptables.
+// Avant ce raffinement, 46/46 grandfathers Sentinel étaient des FP
+// rule (vu lors de l'audit Phase A).
+.decl HasEmptyTryCatchSwallow(file: symbol)
+HasEmptyTryCatchSwallow(F) :- TryCatchSwallow(F, _, "empty", _).
+
 Violation("COMPOSITE-ASYNC-SINK-WITH-SWALLOW", F, 0,
-  "trio await-in-loop + taint-sink + silent-error — perf×securite×masquage, audit prio") :-
+  "trio await-in-loop + taint-sink + EMPTY catch — perf×securite×masquage strict, audit prio") :-
     HasAwaitInLoop(F),
     HasTaintSink(F),
-    HasTryCatchSwallow(F),
+    HasEmptyTryCatchSwallow(F),
     !AsyncSinkSwallowGrandfathered(F).

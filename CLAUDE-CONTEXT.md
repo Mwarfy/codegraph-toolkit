@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+81dd087 refactor(toolkit): extract NCD-detected duplications + analyzer.ts cross-discipline
 dc48f25 feat(toolkit): 4 nouvelles disciplines mathématiques (8e→11e)
 691337e feat(toolkit): 8e discipline Newman-Girvan + 4 méta-composites cross-disciplines
 c003043 docs: update READMEs for v0.5.0 — 91 rules, multi-dir, 7 cross-discipline
@@ -111,7 +112,6 @@ c003043 docs: update READMEs for v0.5.0 — 91 rules, multi-dir, 7 cross-discipl
 4cb7ffa feat(toolkit): TDA + Lyapunov — cycles structurels + chaos detection
 375d5a2 feat(toolkit): cross-discipline rules — Fiedler λ₂ + Shannon entropy + Hamming dup
 bc4fce3 feat(invariants): 2 rules auto-decouvertes via pattern mining
-1cc41ea refactor(facts): extract 3 emit helpers + fix File/FileTag regression
 ```
 
 ## Comment contribuer à ce brief
