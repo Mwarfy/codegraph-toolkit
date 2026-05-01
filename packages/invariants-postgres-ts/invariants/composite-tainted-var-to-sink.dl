@@ -26,3 +26,10 @@ Violation("COMPOSITE-TAINTED-VAR-TO-SINK", File, Line,
     TaintedArgCall(File, Line, _, _, _, _, _),
     TaintSink(File, Line, _, _, _),
     !TaintedVarToSinkGrandfathered(File, Line).
+
+// Grandfather list — 2026-05-01.
+// server.ts:64 = res.setHeader('Access-Control-Allow-Origin', corsOrigin) ou
+// corsOrigin vient de process.env.SENTINEL_CORS_ORIGIN. Configuration CORS
+// legitime (l'env var est ops, pas user input). Apparu apres ajout du
+// kind="redirect" Tier 16 (setHeader matche maintenant).
+TaintedVarToSinkGrandfathered("sentinel-core/src/api/server.ts", 64).

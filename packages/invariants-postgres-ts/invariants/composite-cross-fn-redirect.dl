@@ -1,0 +1,35 @@
+// COMPOSITE-CROSS-FN-REDIRECT — CWE-601 cross-fonction (Tier 16).
+//
+// Pourquoi : un user input pipe vers res.redirect/setHeader('Location')
+// sans allowlist domain = open redirect. Vecteur de phishing classique
+// (l'attaquant fabrique une URL qui passe par votre domaine de confiance
+// puis redirige vers le site phishing).
+//
+// Cross-fn pattern courant :
+//
+//   function handler(req) {
+//     return doRedirect(req.query.next)
+//   }
+//   function doRedirect(target) {
+//     res.redirect(target)             // <- open redirect
+//   }
+//
+// Reuse :
+//   - TaintedParam (composite-cross-function-taint.dl)
+//   - kind="redirect" (Tier 16, ajoute a taint-sinks.ts)
+//
+// Nouveaux sinks captures : res/response/ctx/reply + methods
+// redirect/setHeader/writeHead.
+//
+// Limites V1 :
+//   - 0 allowlist pattern reconnu (idealement detect URL.host validation
+//     contre une liste d'origines autorisees).
+//   - setHeader peut etre legit (ex: Content-Type) ; le ratchet absorbe.
+
+.decl CrossFnRedirectGrandfathered(file: symbol, line: number)
+
+Violation("COMPOSITE-CROSS-FN-REDIRECT", F, SinkLine,
+  "user input transite via parametre fonction jusqu'a un redirect/Location header — verifier allowlist domain") :-
+    TaintedParam(F, S, _, _),
+    TaintSink(F, SinkLine, "redirect", _, S),
+    !CrossFnRedirectGrandfathered(F, SinkLine).

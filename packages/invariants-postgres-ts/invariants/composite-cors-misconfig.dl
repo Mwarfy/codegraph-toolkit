@@ -1,0 +1,28 @@
+// COMPOSITE-CORS-MISCONFIG — CWE-942 (Tier 16).
+//
+// Pourquoi : `cors({ origin: '*' })` permet a TOUT site web de lire la
+// reponse via XHR. Si combine avec `credentials: true`, leak total
+// des sessions.
+//
+// `cors({ origin: req.headers.origin })` (reflective) = encore pire,
+// fait croire qu'une allowlist est en place mais accepte tout.
+//
+// Source : extractors/security-patterns.ts (Tier 16).
+// Fact : CorsConfig(file, line, originKind, containingSymbol)
+//   originKind in {wildcard, reflective, literal, dynamic}
+//
+// References :
+//   - https://cwe.mitre.org/data/definitions/942.html
+//   - CodeQL js/cors-misconfiguration
+
+.decl CorsMisconfigGrandfathered(file: symbol, line: number)
+
+Violation("COMPOSITE-CORS-MISCONFIG", F, L,
+  "CORS origin='*' — toute origine peut lire les reponses, scope a une allowlist") :-
+    CorsConfig(F, L, "wildcard", _),
+    !CorsMisconfigGrandfathered(F, L).
+
+Violation("COMPOSITE-CORS-MISCONFIG", F, L,
+  "CORS origin reflective (req.headers.origin) — equivaut a wildcard, allowlist statique requise") :-
+    CorsConfig(F, L, "reflective", _),
+    !CorsMisconfigGrandfathered(F, L).

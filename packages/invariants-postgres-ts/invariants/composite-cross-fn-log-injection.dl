@@ -1,0 +1,36 @@
+// COMPOSITE-CROSS-FN-LOG-INJECTION — CWE-117 cross-fonction (Tier 16).
+//
+// Pourquoi : un user input loggue sans neutralisation = log forging.
+// L'attaquant peut injecter des newlines + payloads pour fabriquer
+// de fausses entrees de log (audit pourri, attaques scolaires sur
+// SIEM). CRLF injection si le format est texte.
+//
+// Cross-fn pattern courant :
+//
+//   function handler(req) {
+//     return processInput(req.body)
+//   }
+//   function processInput(input) {
+//     logger.info(`User submitted: ${input.name}`)   // <- log injection
+//   }
+//
+// Reuse :
+//   - TaintedParam (composite-cross-function-taint.dl)
+//   - kind="log" (Tier 16, ajoute a taint-sinks.ts)
+//
+// Nouveaux sinks captures : logger/console/pino/winston/bunyan + methods
+// info/warn/error/debug/log/trace/fatal.
+//
+// Limites V1 :
+//   - 0 sanitizer pattern reconnu actuellement (ajouter encodeForLog,
+//     stripCRLF, escape-newlines si on les voit emerger)
+//   - Tres permissif — beaucoup de logs sont safe (ex: log d'un id deja
+//     parseInt-e). Le ratchet absorbe les sites legitimes.
+
+.decl CrossFnLogInjGrandfathered(file: symbol, line: number)
+
+Violation("COMPOSITE-CROSS-FN-LOG-INJECTION", F, SinkLine,
+  "user input transite via parametre fonction jusqu'a un logger — encoder les newlines pour eviter log forging") :-
+    TaintedParam(F, S, _, _),
+    TaintSink(F, SinkLine, "log", _, S),
+    !CrossFnLogInjGrandfathered(F, SinkLine).

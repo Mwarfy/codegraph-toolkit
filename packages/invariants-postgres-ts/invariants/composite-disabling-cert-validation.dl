@@ -1,0 +1,19 @@
+// COMPOSITE-DISABLING-CERT-VALIDATION — CWE-295 (Tier 16).
+//
+// Pourquoi : `rejectUnauthorized: false` (https/tls/axios) ou
+// `strictSSL: false` (request) desactive la validation du certificat
+// serveur — MITM trivial, le client accepte n'importe quel cert.
+//
+// Source : extractors/security-patterns.ts (Tier 16).
+// Fact : TlsConfigUnsafe(file, line, key, containingSymbol)
+//
+// References :
+//   - https://cwe.mitre.org/data/definitions/295.html
+//   - CodeQL js/disabling-certificate-validation
+
+.decl TlsUnsafeGrandfathered(file: symbol, line: number)
+
+Violation("COMPOSITE-DISABLING-CERT-VALIDATION", F, L,
+  "TLS cert validation desactivee — MITM trivial, retirer cette option ou pinner le cert") :-
+    TlsConfigUnsafe(F, L, _, _),
+    !TlsUnsafeGrandfathered(F, L).

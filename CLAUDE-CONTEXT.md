@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+4418c90 feat(codegraph): Tier 16 extractors — crypto-algo + security-patterns + 2 sink kinds
 10f4bf9 feat(invariants): Tier 15 — 21 nouvelles rules library + PHASE-5 backlog
 ecc5303 feat(codegraph): tainted-vars supporte les destructurings (Tier 15)
 fd50aa4 feat(datalog): comparison ops (>, <, >=, <=, !=) + 2nd pass post-aggregate
@@ -111,7 +112,6 @@ c4bcf00 feat(phase4-tier13): CWE rules library — 4 CVE classics portees (CodeQ
 76ca900 fix(tests): reconstruct secret prefixes au runtime — secret scanning
 e5ac979 feat(phase4-tier9): packaging shipping-ready — tout via npm install + init
 7fb30b0 feat(phase4-tier8): live datalog dans le hook PostToolUse — 70ms wall clock
-58278cb feat(phase4-tier7): composites multi-relation — 5 facts promus + 4 rules
 ```
 
 ## Comment contribuer à ce brief

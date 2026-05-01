@@ -1,0 +1,56 @@
+// COMPOSITE-WEAK-CRYPTO-ALGO — CWE-327 algo-aware (Tier 16).
+//
+// Pourquoi : cwe-327-weak-crypto.dl V1 detecte par nom de callee
+// (createHash flag meme avec sha256 — faux positifs). Cette rule
+// utilise CryptoCall qui extrait l'algo du 1er arg literal :
+// createHash('md5') vs createHash('sha256').
+//
+// Algos blacklistes :
+//   - hash : md5, md4, md2, sha1, sha-1, ripemd128
+//   - cipher : des, des-ede, rc4, rc2 (cryptographiquement casses)
+//   - cipher mode : *-ecb (Electronic Codebook — pas IV-bound,
+//     reveal patterns plaintext)
+//
+// Source : extractors/crypto-algo.ts (Tier 16). Fact :
+//   CryptoCall(file, line, fn, algo, containingSymbol)
+//
+// Pattern ratchet : grandfather par (file, line). 0 violations Sentinel
+// au demarrage (pas d'usage crypto direct). Rule preventive.
+//
+// References :
+//   - https://cwe.mitre.org/data/definitions/327.html
+//   - https://datatracker.ietf.org/doc/html/rfc6151 (md5/sha1 deprecated)
+
+.decl WeakCryptoAlgoGrandfathered(file: symbol, line: number)
+
+.decl IsWeakHashAlgo(algo: symbol)
+IsWeakHashAlgo("md5").
+IsWeakHashAlgo("md4").
+IsWeakHashAlgo("md2").
+IsWeakHashAlgo("sha1").
+IsWeakHashAlgo("sha-1").
+IsWeakHashAlgo("ripemd128").
+
+.decl IsWeakCipherAlgo(algo: symbol)
+IsWeakCipherAlgo("des").
+IsWeakCipherAlgo("des-ede").
+IsWeakCipherAlgo("des-ede3").
+IsWeakCipherAlgo("rc4").
+IsWeakCipherAlgo("rc2").
+// AES-* en mode ECB est faible (pattern reveal). Catch via -ecb suffix
+// est impossible en pure Datalog ; on liste les variantes communes :
+IsWeakCipherAlgo("aes-128-ecb").
+IsWeakCipherAlgo("aes-192-ecb").
+IsWeakCipherAlgo("aes-256-ecb").
+
+Violation("COMPOSITE-WEAK-CRYPTO-ALGO", F, L,
+  "appel crypto avec algo faible (md5/sha1/des/rc4/ecb) — utiliser sha256+/aes-gcm/aes-cbc") :-
+    CryptoCall(F, L, _, A, _),
+    IsWeakHashAlgo(A),
+    !WeakCryptoAlgoGrandfathered(F, L).
+
+Violation("COMPOSITE-WEAK-CRYPTO-ALGO", F, L,
+  "cipher faible (des/rc4/ecb) — utiliser aes-256-gcm ou chacha20-poly1305") :-
+    CryptoCall(F, L, _, A, _),
+    IsWeakCipherAlgo(A),
+    !WeakCryptoAlgoGrandfathered(F, L).

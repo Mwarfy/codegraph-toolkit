@@ -1,0 +1,44 @@
+// COMPOSITE-CLEAR-TEXT-LOGGING — CWE-312 (Tier 16).
+//
+// Pourquoi : un secret (variable nommee password/token/apiKey/...) loggue
+// directement = leak via logs. Particulierement dangereux car les logs
+// sont generalement persistes, replicates a SIEM, gardes longtemps.
+//
+// Pattern matche : SecretVarRef + callee qui ressemble a un logger.
+//
+// Source : extractors/security-patterns.ts (Tier 16).
+// Fact : SecretVarRef(file, line, varName, kind, callee, containingSymbol)
+//
+// References :
+//   - https://cwe.mitre.org/data/definitions/312.html
+//   - OWASP Logging Cheat Sheet
+//   - CodeQL js/clear-text-logging
+
+.decl ClearTextLoggingGrandfathered(file: symbol, line: number)
+
+.decl IsLoggerCallee(callee: symbol)
+IsLoggerCallee("logger.info").
+IsLoggerCallee("logger.warn").
+IsLoggerCallee("logger.error").
+IsLoggerCallee("logger.debug").
+IsLoggerCallee("logger.log").
+IsLoggerCallee("logger.trace").
+IsLoggerCallee("logger.fatal").
+IsLoggerCallee("log.info").
+IsLoggerCallee("log.warn").
+IsLoggerCallee("log.error").
+IsLoggerCallee("log.debug").
+IsLoggerCallee("log.trace").
+IsLoggerCallee("console.log").
+IsLoggerCallee("console.info").
+IsLoggerCallee("console.warn").
+IsLoggerCallee("console.error").
+IsLoggerCallee("console.debug").
+IsLoggerCallee("pino.info").
+IsLoggerCallee("winston.info").
+
+Violation("COMPOSITE-CLEAR-TEXT-LOGGING", F, L,
+  "secret (password/token/apiKey/...) loggue en clair — masquer ou exclure du log") :-
+    SecretVarRef(F, L, _, _, Cal, _),
+    IsLoggerCallee(Cal),
+    !ClearTextLoggingGrandfathered(F, L).

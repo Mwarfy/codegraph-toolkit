@@ -1,0 +1,24 @@
+// COMPOSITE-INSECURE-RANDOMNESS — CWE-338 (Tier 16).
+//
+// Pourquoi : `Math.random()` est un PRNG non-cryptographique (xorshift),
+// previsible apres ~1024 echantillons. Utilise pour token / secret /
+// nonce / sessionId / csrf / otp / key = predictable, attaquant peut
+// les regenerer.
+//
+// Source : extractors/security-patterns.ts (Tier 16).
+// Fact : WeakRandomCall(file, line, varName, secretKind, containingSymbol)
+//   secretKind != '_' ssi varName matche pattern secret-named.
+//
+// Solution : `crypto.randomBytes(n)` ou `crypto.randomUUID()`.
+//
+// References :
+//   - https://cwe.mitre.org/data/definitions/338.html
+//   - CodeQL js/insecure-randomness
+
+.decl InsecureRandomGrandfathered(file: symbol, line: number)
+
+Violation("COMPOSITE-INSECURE-RANDOMNESS", F, L,
+  "Math.random() utilise pour un secret/token/nonce — utiliser crypto.randomBytes/randomUUID") :-
+    WeakRandomCall(F, L, _, K, _),
+    K != "_",
+    !InsecureRandomGrandfathered(F, L).
