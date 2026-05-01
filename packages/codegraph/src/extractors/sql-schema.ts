@@ -141,6 +141,7 @@ export async function analyzeSqlSchema(
   const tables: SqlTable[] = []
   const indexes: SqlIndex[] = []
   const foreignKeys: SqlForeignKey[] = []
+  const addedColumns: AddedColumn[] = []
 
   for (const file of sqlFiles) {
     let content: string
@@ -149,6 +150,30 @@ export async function analyzeSqlSchema(
     tables.push(...fileResult.tables)
     indexes.push(...fileResult.indexes)
     foreignKeys.push(...fileResult.foreignKeys)
+    addedColumns.push(...fileResult.addedColumns)
+  }
+
+  // Cross-file merge : ALTER TABLE ADD COLUMN extend les tables existantes.
+  // Sans ça, une table créée en migration 023 + colonne ajoutée en migration
+  // 073 apparaît comme "manquant la colonne" dans les rules sql-audit-columns.
+  //
+  // Note : une même table peut apparaître plusieurs fois (000_initial_schema.sql
+  // + schema.sql consolidé). On applique le merge à TOUTES les entrées
+  // matchant le nom (filter, pas find).
+  for (const ac of addedColumns) {
+    const targets = tables.filter((t) => t.name === ac.table)
+    for (const target of targets) {
+      // Skip si la colonne existe déjà (idempotence — ALTER TABLE IF NOT EXISTS)
+      if (target.columns.some((c) => c.name === ac.column)) continue
+      target.columns.push({
+        name: ac.column,
+        type: ac.type,
+        notNull: ac.notNull,
+        isUnique: ac.isUnique,
+        isPrimaryKey: ac.isPrimaryKey,
+        line: ac.line,
+      })
+    }
   }
 
   // Cross-FK + index match
@@ -216,10 +241,11 @@ export function derivePrimaryKeys(tables: SqlTable[], indexes: SqlIndex[]): SqlP
 export function parseSqlFile(
   content: string,
   file: string,
-): { tables: SqlTable[]; indexes: SqlIndex[]; foreignKeys: SqlForeignKey[] } {
+): { tables: SqlTable[]; indexes: SqlIndex[]; foreignKeys: SqlForeignKey[]; addedColumns: AddedColumn[] } {
   const tables: SqlTable[] = []
   const indexes: SqlIndex[] = []
   const foreignKeys: SqlForeignKey[] = []
+  const addedColumns: AddedColumn[] = []
 
   // ─── CREATE TABLE ────────────────────────────────────────────────
   // Capture: nom + bloc parenthèses (avec parenthèses imbriquées).
@@ -319,7 +345,43 @@ export function parseSqlFile(
     })
   }
 
-  return { tables, indexes, foreignKeys }
+  // ─── ALTER TABLE ... ADD COLUMN ──────────────────────────────────
+  // Migrations qui étendent une table existante. Sans ce parsing, le
+  // détecteur sql-schema ne voit que les CREATE TABLE source — les
+  // colonnes ajoutées via ALTER ne sont pas détectées, créant des FP
+  // sur les rules sql-audit-columns / sql-fk-needs-index.
+  //
+  // Pattern : `ALTER TABLE [IF EXISTS] table ADD [COLUMN] [IF NOT EXISTS] col TYPE [...constraints]`
+  const alterAddColRe = /ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(\w+(?:\.\w+)?)\s+ADD\s+(?:COLUMN\s+)?(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s+([A-Z][A-Z0-9_()]*(?:\([^)]*\))?)\s*([^;,\n]*)/gi
+  while ((m = alterAddColRe.exec(content)) !== null) {
+    // Skip si match a déjà été parsed comme FK (ALTER TABLE ... ADD CONSTRAINT FK ...)
+    if (/FOREIGN\s+KEY/i.test(m[0])) continue
+    if (/CONSTRAINT/i.test(m[0])) continue
+    addedColumns.push({
+      table: stripSchema(m[1]),
+      column: m[2],
+      type: m[3].trim(),
+      notNull: /NOT\s+NULL/i.test(m[4]),
+      isUnique: /UNIQUE/i.test(m[4]),
+      isPrimaryKey: false,
+      file,
+      line: lineNumberAt(content, m.index),
+    })
+  }
+
+  return { tables, indexes, foreignKeys, addedColumns }
+}
+
+// Internal helper type for ALTER TABLE ADD COLUMN tracking
+interface AddedColumn {
+  table: string
+  column: string
+  type: string
+  notNull: boolean
+  isUnique: boolean
+  isPrimaryKey: boolean
+  file: string
+  line: number
 }
 
 // ═════════════════════════════════════════════════════════════════════
