@@ -567,6 +567,33 @@ export interface GraphSnapshot {
   }>
 
   /**
+   * Persistent cycles — TDA approximation (Edelsbrunner-Letscher-Zomorodian).
+   * Cycles d'imports persistant à travers l'historique git = structurels.
+   * Cf. extractors/persistent-cycles.ts.
+   */
+  persistentCycles?: Array<{
+    cycleId: string
+    sampleNodes: string[]
+    snapshotCount: number
+    totalSnapshots: number
+    persistenceX1000: number
+    firstSeenIso: string
+    lastSeenIso: string
+    gated: boolean
+  }>
+
+  /**
+   * Lyapunov exponent approximation sur co-change history (chaos detection).
+   * Cf. extractors/lyapunov-cochange.ts.
+   */
+  lyapunovMetrics?: Array<{
+    file: string
+    totalCoChanges: number
+    partnerCount: number
+    lyapunovX1000: number
+  }>
+
+  /**
    * Security patterns (Phase 5 Tier 16) — 4 facts complementaires
    * captures en un seul AST walk : secret-named vars passees a un call,
    * CORS misconfig, TLS unsafe options, Math.random pour secrets.

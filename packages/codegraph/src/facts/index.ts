@@ -1200,6 +1200,34 @@ function emitCrossDisciplineFacts(
     sigDupRel.rows.push([sym(d.symbolA), sym(d.symbolB), num(d.hamming)])
   }
   relations.push(sigDupRel)
+
+  // ─── PersistentCycle (TDA — homologie persistante) ─────────────────
+  const persistentCycleRel: RelationDef = {
+    name: 'PersistentCycle',
+    decl: '(cycleId:symbol, snapshotCount:number, totalSnapshots:number, persistenceX1000:number, gated:symbol)',
+    rows: [],
+  }
+  for (const c of snapshot.persistentCycles ?? []) {
+    persistentCycleRel.rows.push([
+      sym(c.cycleId), num(c.snapshotCount), num(c.totalSnapshots),
+      num(c.persistenceX1000), sym(c.gated ? 'true' : 'false'),
+    ])
+  }
+  relations.push(persistentCycleRel)
+
+  // ─── LyapunovMetric (théorie systèmes dynamiques) ──────────────────
+  const lyapunovRel: RelationDef = {
+    name: 'LyapunovMetric',
+    decl: '(file:symbol, totalCoChanges:number, partnerCount:number, lyapunovX1000:number)',
+    rows: [],
+  }
+  for (const l of snapshot.lyapunovMetrics ?? []) {
+    lyapunovRel.rows.push([
+      sym(l.file), num(l.totalCoChanges),
+      num(l.partnerCount), num(l.lyapunovX1000),
+    ])
+  }
+  relations.push(lyapunovRel)
 }
 
 function sym(value: string): string {

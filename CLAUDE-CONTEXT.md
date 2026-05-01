@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+375d5a2 feat(toolkit): cross-discipline rules — Fiedler λ₂ + Shannon entropy + Hamming dup
 bc4fce3 feat(invariants): 2 rules auto-decouvertes via pattern mining
 1cc41ea refactor(facts): extract 3 emit helpers + fix File/FileTag regression
 c3750da feat(toolkit): Top-5 graph theory uplift — PageRank + complexity + perf + SCC
@@ -111,7 +112,6 @@ c3b4e3c feat(codegraph): Tier 17 — 13 nouveaux facts emis + 2 nouveaux extract
 4418c90 feat(codegraph): Tier 16 extractors — crypto-algo + security-patterns + 2 sink kinds
 10f4bf9 feat(invariants): Tier 15 — 21 nouvelles rules library + PHASE-5 backlog
 ecc5303 feat(codegraph): tainted-vars supporte les destructurings (Tier 15)
-fd50aa4 feat(datalog): comparison ops (>, <, >=, <=, !=) + 2nd pass post-aggregate
 ```
 
 ## Comment contribuer à ce brief

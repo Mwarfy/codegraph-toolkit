@@ -1,0 +1,26 @@
+// COMPOSITE-STRUCTURAL-CYCLE-PERSISTENT — TDA / homologie persistante.
+//
+// Origine : Edelsbrunner-Letscher-Zomorodian 2002 (persistent homology).
+// Aucun analyzer code n'utilise la persistence pour distinguer cycles
+// structurels vs accidentels.
+//
+// Insight : un cycle d'imports present dans >50% des snapshots
+// historiques git est un INVARIANT TOPOLOGIQUE de l'architecture.
+// Il faut soit (a) le gater explicitement (accept design decision),
+// soit (b) refactor en module extrait. Un cycle a 5% persistence est
+// un accident a corriger, pas un design.
+//
+// Cette distinction est INVISIBLE aux rules cycle-detection classiques
+// qui voient seulement le snapshot courant. La persistence sur l'axe
+// temporel revele la nature topologique vs transient.
+//
+// Source : extractors/persistent-cycles.ts.
+// Fact : PersistentCycle(cycleId, snapshotCount, totalSnapshots, persistenceX1000, gated)
+
+.decl StructuralCyclePersistentGrandfathered(cycleId: symbol)
+
+Violation("COMPOSITE-STRUCTURAL-CYCLE-PERSISTENT", C, 0,
+  "cycle d'imports persistent (>50% snapshots) NON-GATED — design decision a expliciter (gate ou refactor)") :-
+    PersistentCycle(C, _, _, P, "false"),
+    P > 500,
+    !StructuralCyclePersistentGrandfathered(C).

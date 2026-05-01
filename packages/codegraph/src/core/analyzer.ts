@@ -52,6 +52,8 @@ import { analyzeFunctionComplexity, type FunctionComplexity } from '../extractor
 import { computeSpectralMetrics, type SpectralMetric } from '../extractors/spectral-graph.js'
 import { computeSymbolEntropy, type SymbolEntropyMetric } from '../extractors/symbol-entropy.js'
 import { detectSignatureDuplicates, type SignatureDuplicate } from '../extractors/signature-duplication.js'
+import { computePersistentCycles, type PersistentCycle } from '../extractors/persistent-cycles.js'
+import { computeLyapunovMetrics, type LyapunovMetric } from '../extractors/lyapunov-cochange.js'
 import { analyzeHardcodedSecrets, type HardcodedSecret } from '../extractors/hardcoded-secrets.js'
 import { analyzeBooleanParams, type BooleanParamSite } from '../extractors/boolean-params.js'
 import { analyzeDeadCode, type DeadCodeFinding } from '../extractors/dead-code.js'
@@ -586,6 +588,8 @@ async function runDeterministicDetectors(
   let spectralMetrics: SpectralMetric[] | undefined
   let symbolEntropy: SymbolEntropyMetric[] | undefined
   let signatureDuplicates: SignatureDuplicate[] | undefined
+  let persistentCycles: PersistentCycle[] | undefined
+  let lyapunovMetrics: LyapunovMetric[] | undefined
   let hardcodedSecrets: HardcodedSecret[] | undefined
   let booleanParams: BooleanParamSite[] | undefined
   let deadCode: DeadCodeFinding[] | undefined
@@ -750,6 +754,28 @@ async function runDeterministicDetectors(
     console.error(`  ✗ signature-duplication failed: ${err}`)
   }
 
+  // ─── Topological Data Analysis (TDA) — persistent homology ─────────
+  const tPersistent = performance.now()
+  try {
+    persistentCycles = await computePersistentCycles(config.rootDir)
+    timing.detectors['persistent-cycles'] = performance.now() - tPersistent
+  } catch (err) {
+    timing.detectors['persistent-cycles'] = performance.now() - tPersistent
+    console.error(`  ✗ persistent-cycles failed: ${err}`)
+  }
+
+  // ─── Théorie des systèmes dynamiques — Lyapunov exponent approx ────
+  const tLyap = performance.now()
+  try {
+    if (coChangePairs) {
+      lyapunovMetrics = computeLyapunovMetrics(coChangePairs)
+    }
+    timing.detectors['lyapunov-cochange'] = performance.now() - tLyap
+  } catch (err) {
+    timing.detectors['lyapunov-cochange'] = performance.now() - tLyap
+    console.error(`  ✗ lyapunov-cochange failed: ${err}`)
+  }
+
   const tHardcoded = performance.now()
   try {
     hardcodedSecrets = await analyzeHardcodedSecrets(config.rootDir, files, sharedProject)
@@ -890,6 +916,8 @@ async function runDeterministicDetectors(
   if (spectralMetrics) snapshot.spectralMetrics = spectralMetrics
   if (symbolEntropy) snapshot.symbolEntropy = symbolEntropy
   if (signatureDuplicates) snapshot.signatureDuplicates = signatureDuplicates
+  if (persistentCycles) snapshot.persistentCycles = persistentCycles
+  if (lyapunovMetrics) snapshot.lyapunovMetrics = lyapunovMetrics
   if (hardcodedSecrets) snapshot.hardcodedSecrets = hardcodedSecrets
   if (booleanParams) snapshot.booleanParams = booleanParams
   if (deadCode) snapshot.deadCode = deadCode

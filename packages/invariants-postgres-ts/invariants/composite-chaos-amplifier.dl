@@ -1,0 +1,28 @@
+// COMPOSITE-CHAOS-AMPLIFIER — théorie des systèmes dynamiques.
+//
+// Origine : exposant de Lyapunov en physique (Lyapunov 1892, applique
+// au chaos deterministe par Ruelle, Takens). Mesure la divergence
+// exponentielle des trajectoires initialement proches.
+//
+// Application : un fichier dont une modification declenche en moyenne
+// > e ≈ 2.7 co-changes sur les commits suivants amplifie les
+// perturbations exponentiellement (λ > 1). C'est un "amplificateur
+// de chaos" architectural — chaque touche y propage.
+//
+// Compose avec :
+//   - PageRank haut + Lyapunov haut = file central qui propage massivement
+//   - Lyapunov haut + cyclomatic haut = file fragile
+//
+// Threshold : λ × 1000 > 2000 (= avg co-change > e² - 1 ≈ 6.4 / commit).
+// Au-dessus, le file est un epicentre de cascade.
+//
+// Source : extractors/lyapunov-cochange.ts.
+// Fact : LyapunovMetric(file, totalCoChanges, partnerCount, lyapunovX1000)
+
+.decl ChaosAmplifierGrandfathered(file: symbol)
+
+Violation("COMPOSITE-CHAOS-AMPLIFIER", F, 0,
+  "λ Lyapunov > 2 — file amplifie chaos (cascade refactor automatique a chaque touche)") :-
+    LyapunovMetric(F, _, _, L),
+    L > 2000,
+    !ChaosAmplifierGrandfathered(F).
