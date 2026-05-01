@@ -1256,6 +1256,38 @@ function emitCrossDisciplineFacts(
     ])
   }
   relations.push(ibRel)
+
+  // ─── ImportCommunity (Newman-Girvan 2004 / Louvain 2008) ──────────
+  // 8e discipline : community detection sur le graphe d'imports.
+  // misplaced=1 si le file est dans une community != son package physique.
+  const communityRel: RelationDef = {
+    name: 'ImportCommunity',
+    decl: '(file:symbol, communityId:number, physicalPackage:symbol, misplaced:number)',
+    rows: [],
+  }
+  for (const c of snapshot.importCommunities ?? []) {
+    communityRel.rows.push([
+      sym(c.file), num(c.communityId),
+      sym(c.physicalPackage), num(c.misplaced),
+    ])
+  }
+  relations.push(communityRel)
+
+  // ─── ModularityScore — score Q global Newman-Girvan ────────────────
+  // Singleton fact : un seul tuple par snapshot.
+  const modularityRel: RelationDef = {
+    name: 'ModularityScore',
+    decl: '(globalQX1000:number, communityCount:number, misplacedCount:number)',
+    rows: [],
+  }
+  if (snapshot.modularityScore) {
+    modularityRel.rows.push([
+      num(snapshot.modularityScore.globalModularityX1000),
+      num(snapshot.modularityScore.communityCount),
+      num(snapshot.modularityScore.misplacedCount),
+    ])
+  }
+  relations.push(modularityRel)
 }
 
 function sym(value: string): string {

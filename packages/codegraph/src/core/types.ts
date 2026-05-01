@@ -618,6 +618,26 @@ export interface GraphSnapshot {
   }>
 
   /**
+   * Newman-Girvan community detection via Louvain (Blondel 2008).
+   * 8e discipline mathematique. Cf. extractors/community-detection.ts.
+   */
+  importCommunities?: Array<{
+    file: string
+    communityId: number
+    physicalPackage: string
+    misplaced: 0 | 1
+  }>
+
+  /**
+   * Modularity Q score global (Newman-Girvan 2004) + stats globaux.
+   */
+  modularityScore?: {
+    globalModularityX1000: number
+    communityCount: number
+    misplacedCount: number
+  }
+
+  /**
    * Security patterns (Phase 5 Tier 16) — 4 facts complementaires
    * captures en un seul AST walk : secret-named vars passees a un call,
    * CORS misconfig, TLS unsafe options, Math.random pour secrets.

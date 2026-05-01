@@ -41,7 +41,7 @@
 
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
-- `packages/codegraph/src/core/types.ts` (in: 73) · gov by ADR-006
+- `packages/codegraph/src/core/types.ts` (in: 74) · gov by ADR-006
 - `packages/codegraph/src/incremental/queries.ts` (in: 22)
 - `packages/codegraph/src/incremental/database.ts` (in: 20)
 - `packages/salsa/dist/index.d.ts` (in: 19)
@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+c003043 docs: update READMEs for v0.5.0 — 91 rules, multi-dir, 7 cross-discipline
 443e072 feat(datalog): runFromDirs accepte rulesDir array (multi-dir loader)
 18a37a7 chore(toolkit): retire 3 exports dead code (UnusedExport.facts)
 87f2ac1 feat(toolkit): Information Bottleneck (Tishby 1999) — 7e cross-discipline
@@ -111,7 +112,6 @@ bc4fce3 feat(invariants): 2 rules auto-decouvertes via pattern mining
 1cc41ea refactor(facts): extract 3 emit helpers + fix File/FileTag regression
 c3750da feat(toolkit): Top-5 graph theory uplift — PageRank + complexity + perf + SCC
 f35acd1 feat(toolkit): self-audit — 5 quick-wins + 2 meta-fix + dogfood gate
-9a62387 feat(invariants): Tier 18 — event-payload-cross-block-taint + closure backlog
 ```
 
 ## Comment contribuer à ce brief

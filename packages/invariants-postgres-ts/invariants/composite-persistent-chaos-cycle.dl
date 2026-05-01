@@ -1,0 +1,24 @@
+// META-COMPOSITE-PERSISTENT-CHAOS-CYCLE — TDA × Lyapunov.
+//
+// Cycle d'imports topologiquement persistant (>50% des snapshots
+// historiques) avec au moins un fichier amplificateur de chaos.
+//
+// Sémantique : c'est une dette architecturale CHRONIQUE qui n'est pas
+// dormante — elle continue de propager des modifications. Le pire cas :
+// un cycle persistent qui amplifie chaos = chaque touche dans le cycle
+// déclenche une cascade qui revient via le cycle.
+//
+// Composition : Edelsbrunner-Letscher-Zomorodian 2002 × Lyapunov 1892.
+// Aucune des 2 disciplines seule ne capture le pattern. Un cycle
+// persistent stable est juste un design (back-edge). Un file chaos sans
+// cycle est isolé. Cycle persistent + chaos = pathologie active.
+
+.decl PersistentChaosCycleGrandfathered(cycleId: symbol)
+
+Violation("META-COMPOSITE-PERSISTENT-CHAOS-CYCLE", F, 0,
+  "fichier dans cycle topologiquement persistant ET amplificateur chaos — dette chronique active") :-
+    PersistentCycle(CId, _, _, _, "false"),
+    CycleNode(F, CId, "false"),
+    LyapunovMetric(F, _, _, L),
+    L > 1500,
+    !PersistentChaosCycleGrandfathered(CId).

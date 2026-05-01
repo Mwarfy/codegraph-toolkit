@@ -56,6 +56,7 @@ import { computePersistentCycles, type PersistentCycle } from '../extractors/per
 import { computeLyapunovMetrics, type LyapunovMetric } from '../extractors/lyapunov-cochange.js'
 import { computePackageMinCuts, type PackageMinCut } from '../extractors/package-mincut.js'
 import { computeInformationBottleneck, type InformationBottleneck } from '../extractors/information-bottleneck.js'
+import { computeCommunityDetection, type ImportCommunity, type ModularityScore } from '../extractors/community-detection.js'
 import { analyzeHardcodedSecrets, type HardcodedSecret } from '../extractors/hardcoded-secrets.js'
 import { analyzeBooleanParams, type BooleanParamSite } from '../extractors/boolean-params.js'
 import { analyzeDeadCode, type DeadCodeFinding } from '../extractors/dead-code.js'
@@ -594,6 +595,8 @@ async function runDeterministicDetectors(
   let lyapunovMetrics: LyapunovMetric[] | undefined
   let packageMinCuts: PackageMinCut[] | undefined
   let informationBottlenecks: InformationBottleneck[] | undefined
+  let importCommunities: ImportCommunity[] | undefined
+  let modularityScore: ModularityScore | undefined
   let hardcodedSecrets: HardcodedSecret[] | undefined
   let booleanParams: BooleanParamSite[] | undefined
   let deadCode: DeadCodeFinding[] | undefined
@@ -802,6 +805,18 @@ async function runDeterministicDetectors(
     console.error(`  ✗ information-bottleneck failed: ${err}`)
   }
 
+  // ─── Community detection (Newman-Girvan 2004 / Louvain 2008) ────────
+  const tCD = performance.now()
+  try {
+    const cd = computeCommunityDetection(snapshot.nodes, snapshot.edges)
+    importCommunities = cd.communities
+    modularityScore = cd.score
+    timing.detectors['community-detection'] = performance.now() - tCD
+  } catch (err) {
+    timing.detectors['community-detection'] = performance.now() - tCD
+    console.error(`  ✗ community-detection failed: ${err}`)
+  }
+
   const tHardcoded = performance.now()
   try {
     hardcodedSecrets = await analyzeHardcodedSecrets(config.rootDir, files, sharedProject)
@@ -946,6 +961,8 @@ async function runDeterministicDetectors(
   if (lyapunovMetrics) snapshot.lyapunovMetrics = lyapunovMetrics
   if (packageMinCuts) snapshot.packageMinCuts = packageMinCuts
   if (informationBottlenecks) snapshot.informationBottlenecks = informationBottlenecks
+  if (importCommunities) snapshot.importCommunities = importCommunities
+  if (modularityScore) snapshot.modularityScore = modularityScore
   if (hardcodedSecrets) snapshot.hardcodedSecrets = hardcodedSecrets
   if (booleanParams) snapshot.booleanParams = booleanParams
   if (deadCode) snapshot.deadCode = deadCode

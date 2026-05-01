@@ -1,0 +1,34 @@
+// COMPOSITE-MISPLACED-FILE — Newman-Girvan community detection (8e discipline).
+//
+// Origine : Newman-Girvan 2004 ("Finding and evaluating community
+// structure in networks"). Modularity Q = Σᵢ (eᵢᵢ - aᵢ²) où eᵢᵢ =
+// fraction d'edges intra-community i, aᵢ = fraction edges incidentes.
+// Algorithme Louvain (Blondel 2008) maximise Q en O(n log n).
+//
+// Application : si le graphe d'imports a une structure communautaire
+// claire (Q > 0.3) ET un fichier appartient à une community dont le
+// package physique majoritaire ≠ son propre package physique, c'est un
+// candidat à co-localisation. Il "tire" structurellement vers un
+// autre module.
+//
+// Différenciation vs disciplines déjà portées :
+//   - PageRank   : centralité d'UN node (pas de communautés)
+//   - Fiedler λ₂ : connectivité d'UN sous-graphe DONNÉ
+//   - Min-cut    : coût séparation 2 ensembles DONNÉS
+//   - Newman    : DÉCOUVRE les communautés naturelles
+//
+// Garde-fou : on n'émet la violation QUE si modularity globale Q > 300
+// (× 1000). Sinon le découpage en communautés est trop diffus pour
+// être actionnable. Ratchet par fichier pour la dette historique.
+//
+// Threshold : misplaced=1 ∧ Q > 300. Conservateur — ne signale que les
+// projets avec une vraie structure modulaire violée.
+
+.decl MisplacedFileGrandfathered(file: symbol)
+
+Violation("COMPOSITE-MISPLACED-FILE", F, 0,
+  "fichier dans une community != son package physique (Newman-Girvan modularity claire) — candidat co-localisation") :-
+    ImportCommunity(F, _, _, 1),
+    ModularityScore(Q, _, _),
+    Q > 300,
+    !MisplacedFileGrandfathered(F).

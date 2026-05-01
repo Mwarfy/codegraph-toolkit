@@ -1,0 +1,27 @@
+// META-COMPOSITE-FORK-CASCADE — théorie des codes × systèmes dynamiques.
+//
+// Hamming = 0 (copy-paste fork) sur 2 fichiers où AU MOINS UN est un
+// chaos amplifier (Lyapunov haut). Risque : un fix dans un fichier ne
+// propagera pas à l'autre, et chaque modif dans le file chaos cascade
+// sans toucher le fork = bug fixé d'un côté, présent de l'autre, à
+// chaque release.
+//
+// Composition : Hamming 1950 × Lyapunov 1892. La rule
+// composite-copy-paste-fork seule signale juste le fork ; cette rule
+// raffine en signalant les forks DANGEREUX (cascade non synchronisée).
+
+.decl ForkCascadeGrandfathered(symbolA: symbol, symbolB: symbol)
+
+Violation("META-COMPOSITE-FORK-CASCADE", A, 0,
+  "copy-paste fork dans file chaos amplifier — fix d'un côté = bug persistant de l'autre, refactor commun urgent") :-
+    SignatureNearDuplicate(A, B, 0),
+    LyapunovMetric(A, _, _, LA),
+    LA > 1500,
+    !ForkCascadeGrandfathered(A, B).
+
+Violation("META-COMPOSITE-FORK-CASCADE", B, 0,
+  "copy-paste fork dans file chaos amplifier — fix d'un côté = bug persistant de l'autre, refactor commun urgent") :-
+    SignatureNearDuplicate(A, B, 0),
+    LyapunovMetric(B, _, _, LB),
+    LB > 1500,
+    !ForkCascadeGrandfathered(A, B).

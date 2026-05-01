@@ -1,0 +1,24 @@
+// META-COMPOSITE-DEAD-COMPLEX-CODE — composition pratique pour priorité refactor.
+//
+// UnusedExport (safe-to-remove avec confidence) ∧ FunctionComplexity
+// haute = code mort COMPLEXE à supprimer en priorité absolue. C'est
+// double dette : le code mort coûte de la lecture humaine, sa
+// complexité coûte d'autant plus à comprendre avant suppression.
+//
+// Sémantique anti-procrastination : "je supprimerai ce code mort
+// quand j'aurai le temps" — la complexité augmente le coût d'attente,
+// la rule pousse à le faire MAINTENANT (et le -N LOC est gratifiant).
+//
+// Composition : graph theory (UnusedExport) × McCabe complexity. Aucune
+// des 2 seule ne quantifie l'urgence — code mort simple est trivial à
+// supprimer (mais peu de gain), code complexe vivant est utile.
+// Intersection = sweet spot pour gain immédiat.
+
+.decl DeadComplexCodeGrandfathered(file: symbol, name: symbol)
+
+Violation("META-COMPOSITE-DEAD-COMPLEX-CODE", F, L,
+  "export inutilisé + complexité haute — supprimer en priorité (double dette)") :-
+    UnusedExport(F, N, L, _, "safe-to-remove"),
+    FunctionComplexity(F, N, _, Cyc, _, _),
+    Cyc > 8,
+    !DeadComplexCodeGrandfathered(F, N).

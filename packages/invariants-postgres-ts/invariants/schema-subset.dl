@@ -80,6 +80,8 @@
 .decl LyapunovMetric(file: symbol, totalCoChanges: number, partnerCount: number, lyapunovX1000: number)
 .decl PackageMinCut(fromPackage: symbol, toPackage: symbol, edgeCount: number, minCut: number)
 .decl InformationBottleneck(symbol: symbol, callerCount: number, calleeCount: number, scoreX1000: number)
+.decl ImportCommunity(file: symbol, communityId: number, physicalPackage: symbol, misplaced: number)
+.decl ModularityScore(globalQX1000: number, communityCount: number, misplacedCount: number)
 .decl SymbolCallEdge(fromFile: symbol, fromSymbol: symbol, toFile: symbol, toSymbol: symbol, line: number)
 .decl SymbolSignature(file: symbol, name: symbol, kind: symbol, line: number)
 .decl EntryPoint(file: symbol, kind: symbol, id: symbol)
@@ -155,6 +157,8 @@
 .input LyapunovMetric
 .input PackageMinCut
 .input InformationBottleneck
+.input ImportCommunity
+.input ModularityScore
 .input SymbolCallEdge
 .input SymbolSignature
 .input EntryPoint

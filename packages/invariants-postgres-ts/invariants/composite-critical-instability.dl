@@ -1,0 +1,29 @@
+// META-COMPOSITE-CRITICAL-INSTABILITY — combine 3 disciplines orthogonales.
+//
+// Catch les fichiers à blast radius MAXIMUM :
+//   - Lyapunov haut (systèmes dynamiques) : amplifie le chaos, cascade
+//     refactor à chaque touche
+//   - PageRank haut (théorie des graphes) : centralité importante,
+//     beaucoup de modules dépendent transitivement
+//   - ¬TestedFile (couverture) : aucun safety net
+//
+// Aucune des 3 disciplines seule ne capture le pattern. Un file
+// chaos-amplifier mais peu central = manageable. Un file central mais
+// stable = tested-by-virtue-of-criticality. Un file central + chaos +
+// pas de test = priorité ABSOLUE à corriger.
+//
+// Threshold conservateur : λ × 1000 > 1500 (chaos modéré) ∧
+// pageRank × 1000 > 5 (top 5%) ∧ pas de fichier .test.ts associé.
+//
+// Composition : Lyapunov 1892 × PageRank 1998 × Coverage discipline.
+
+.decl CriticalInstabilityGrandfathered(file: symbol)
+
+Violation("META-COMPOSITE-CRITICAL-INSTABILITY", F, 0,
+  "fichier central + chaos amplifier + sans test — blast radius max, refactor priorité 1") :-
+    LyapunovMetric(F, _, _, L),
+    L > 1500,
+    ModuleCentrality(F, PR, _),
+    PR > 5,
+    !TestedFile(F),
+    !CriticalInstabilityGrandfathered(F).
