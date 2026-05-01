@@ -44,6 +44,8 @@
 .decl SanitizerCall(file: symbol, line: number, callee: symbol, containingSymbol: symbol)
 .decl TaintedVarDecl(file: symbol, containingSymbol: symbol, varName: symbol, line: number, source: symbol)
 .decl TaintedArgCall(file: symbol, line: number, callee: symbol, argVarName: symbol, argIndex: number, source: symbol, containingSymbol: symbol)
+.decl TaintedArgumentToCall(callerFile: symbol, callerSymbol: symbol, callee: symbol, paramIndex: number, source: symbol)
+.decl FunctionParam(file: symbol, symbol: symbol, paramName: symbol, paramIndex: number)
 
 .input File
 .input FileTag
@@ -79,6 +81,8 @@
 .input SanitizerCall
 .input TaintedVarDecl
 .input TaintedArgCall
+.input TaintedArgumentToCall
+.input FunctionParam
 
 // La relation cible commune : tous les fichiers de rules écrivent ici.
 .decl Violation(adr: symbol, file: symbol, line: number, msg: symbol)

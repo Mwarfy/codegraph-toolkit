@@ -44,6 +44,7 @@
 
 import {
   DatalogError,
+  type AggregateDef,
   type Atom, type ColumnDecl, type ColumnType,
   type DatalogValue, type Program, type RelationDecl,
   type Rule, type SourcePos, type Term,
@@ -166,7 +167,7 @@ class Lexer {
     this.advance()                                   // consume '.'
     let s = ''
     while (/[a-z]/.test(this.peek())) s += this.advance()
-    if (!['decl', 'input', 'output'].includes(s)) {
+    if (!['decl', 'input', 'output', 'count', 'sum', 'min', 'max'].includes(s)) {
       this.err('parse.unknownDirective', `unknown directive '.${s}'`, start)
     }
     return { kind: 'directive', value: s, pos: start }
@@ -291,11 +292,12 @@ class Parser {
     const decls = new Map<string, RelationDecl>()
     const rules: Rule[] = []
     const inlineFacts: Atom[] = []
+    const aggregates: AggregateDef[] = []
 
     while (this.peek().kind !== 'eof') {
       const t = this.peek()
       if (t.kind === 'directive') {
-        this.parseDirective(decls)
+        this.parseDirective(decls, aggregates)
         continue
       }
       if (t.kind === 'ident') {
@@ -321,6 +323,7 @@ class Parser {
     }
 
     const program: Program = { decls, rules, inlineFacts }
+    if (aggregates.length > 0) program.aggregates = aggregates
     if (this.source !== undefined) program.source = this.source
 
     if (!skipReferenceCheck) {
@@ -334,9 +337,16 @@ class Parser {
 
   // ─── Directives ────────────────────────────────────────────────────────
 
-  private parseDirective(decls: Map<string, RelationDecl>): void {
+  private parseDirective(
+    decls: Map<string, RelationDecl>,
+    aggregates: AggregateDef[],
+  ): void {
     const t = this.advance()                         // directive
     const which = t.value
+    if (which === 'count' || which === 'sum' || which === 'min' || which === 'max') {
+      this.parseAggregate(which, decls, aggregates, t.pos)
+      return
+    }
     if (which === 'decl') {
       const name = this.expect('ident', "relation name expected after '.decl'")
       this.assertRelName(name.value, name.pos)
@@ -371,6 +381,77 @@ class Parser {
     }
     /* istanbul ignore next: covered by lexer's whitelist */
     this.err('parse.unknownDirective', `unknown directive '${which}'`, t.pos)
+  }
+
+  /**
+   * Parse une directive d'agrégation.
+   *
+   *   .count <Result>(<col1: type>, ...) by <Source>(<args>)
+   *
+   * Le `decl` du résultat est créé automatiquement (alias d'un `.decl`
+   * implicite avec `isOutput=true` pour qu'il apparaisse dans les outputs).
+   */
+  private parseAggregate(
+    kind: 'count' | 'sum' | 'min' | 'max',
+    decls: Map<string, RelationDecl>,
+    aggregates: AggregateDef[],
+    pos: SourcePos,
+  ): void {
+    const name = this.expect('ident', `relation name expected after '.${kind}'`)
+    this.assertRelName(name.value, name.pos)
+    this.expect('lparen', "'(' expected after aggregate name")
+    const columns: ColumnDecl[] = []
+    if (this.peek().kind !== 'rparen') {
+      columns.push(this.parseColumn())
+      while (this.peek().kind === 'comma') {
+        this.advance()
+        columns.push(this.parseColumn())
+      }
+    }
+    this.expect('rparen', "')' expected to close aggregate columns")
+
+    // La dernière col DOIT être numérique (count/sum/min/max → number).
+    if (columns.length === 0 || columns[columns.length - 1].type !== 'number') {
+      this.err('parse.aggregateLastColMustBeNumber',
+        `last column of aggregate '${name.value}' must be type 'number'`, name.pos)
+    }
+
+    // Mot-clé 'by' (parsé comme ident).
+    const byTok = this.expect('ident', "'by' expected after aggregate header")
+    if (byTok.value !== 'by') {
+      this.err('parse.expected', `expected 'by' got '${byTok.value}'`, byTok.pos)
+    }
+
+    // Pattern source : <SourceRel>(args).
+    const sourceName = this.expect('ident', "source relation name expected after 'by'")
+    this.assertRelName(sourceName.value, sourceName.pos)
+    this.expect('lparen', "'(' expected after source relation name")
+    const pattern: Term[] = []
+    if (this.peek().kind !== 'rparen') {
+      pattern.push(this.parseTerm())
+      while (this.peek().kind === 'comma') {
+        this.advance()
+        pattern.push(this.parseTerm())
+      }
+    }
+    this.expect('rparen', "')' expected to close source pattern")
+
+    if (decls.has(name.value)) {
+      this.err('parse.duplicateDecl',
+        `relation '${name.value}' already declared (aggregates auto-decl)`, name.pos)
+    }
+
+    const resultDecl: RelationDecl = {
+      name: name.value, columns,
+      isInput: false, isOutput: false,
+      pos: name.pos,
+    }
+    decls.set(name.value, resultDecl)
+
+    aggregates.push({
+      kind, resultRel: name.value, resultDecl,
+      sourceRel: sourceName.value, pattern, pos,
+    })
   }
 
   private parseColumn(): ColumnDecl {

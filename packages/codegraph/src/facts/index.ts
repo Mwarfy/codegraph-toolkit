@@ -730,6 +730,38 @@ export async function exportFacts(
   }
   relations.push(taintedVarDeclRel, taintedArgCallRel)
 
+  // ─── TaintedArgumentToCall + FunctionParam (Tier 14 — cross-function) ─
+  const taintedArgumentToCallRel: RelationDef = {
+    name: 'TaintedArgumentToCall',
+    decl: '(callerFile:symbol, callerSymbol:symbol, callee:symbol, paramIndex:number, source:symbol)',
+    rows: [],
+  }
+  const functionParamRel: RelationDef = {
+    name: 'FunctionParam',
+    decl: '(file:symbol, symbol:symbol, paramName:symbol, paramIndex:number)',
+    rows: [],
+  }
+  if (snapshot.argumentsFacts) {
+    for (const ta of snapshot.argumentsFacts.taintedArgs) {
+      taintedArgumentToCallRel.rows.push([
+        sym(ta.callerFile),
+        sym(ta.callerSymbol),
+        sym(ta.callee),
+        num(ta.paramIndex),
+        sym(ta.source),
+      ])
+    }
+    for (const p of snapshot.argumentsFacts.params) {
+      functionParamRel.rows.push([
+        sym(p.file),
+        sym(p.symbol),
+        sym(p.paramName),
+        num(p.paramIndex),
+      ])
+    }
+  }
+  relations.push(taintedArgumentToCallRel, functionParamRel)
+
   // ─── Write to disk ────────────────────────────────────────────────────
   await fs.mkdir(options.outDir, { recursive: true })
 

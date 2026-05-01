@@ -89,6 +89,56 @@ export interface Rule {
   index: number
 }
 
+// ─── AST: Aggregate definition (Tier 14 alt2) ─────────────────────────────
+
+/**
+ * Une aggregation déclarative.
+ *
+ * Syntaxe :
+ *   `.count <Result>(<col1: type>, ..., <colN: type>) by <Source>(<args>)`
+ *   `.sum   <Result>(<colsGroup>, <colTotal: number>) by <Source>(<args>)`
+ *   `.min   <Result>(<colsGroup>, <colMin: number>)   by <Source>(<args>)`
+ *   `.max   <Result>(<colsGroup>, <colMax: number>)   by <Source>(<args>)`
+ *
+ * Sémantique :
+ *   - Les variables `X, Y, ...` dans les args du source pattern sont les
+ *     colonnes de groupement (apparaissent dans le résultat).
+ *   - Les `_` (wildcards) ne sont PAS clés — agrégés.
+ *   - Pour `count` : la dernière colonne du résultat est l'arity du group.
+ *   - Pour `sum/min/max` : la dernière col du résultat est l'agrégat sur
+ *     la colonne du source désignée par la variable spéciale `V` (par
+ *     convention nommée — toute variable qui apparaît dans le résultat à
+ *     la dernière position est interprétée comme la "value column").
+ *
+ * Exemples :
+ *   .count TruthPointsPerFile(file: symbol, count: number)
+ *     by TruthPointWriter(_, file)
+ *   // → pour chaque distinct file, count des rows TruthPointWriter
+ *
+ *   .sum TotalRefs(file: symbol, total: number)
+ *     by ModuleFanIn(file, total)
+ *   // → groupé par file (qui ne se répète pas), somme de la 2ème col
+ *
+ * Eval : exécuté en post-strates (les facts sont là, on agrège dessus).
+ * Le résultat est inséré dans la DB et peut être consommé par d'autres
+ * rules (via stratification implicite : aggregates produisent de nouveaux
+ * facts, qui peuvent ensuite être utilisés).
+ */
+export interface AggregateDef {
+  kind: 'count' | 'sum' | 'min' | 'max'
+  resultRel: string
+  /** Décl. de la rel résultat. La dernière col est numérique (l'agrégat). */
+  resultDecl: RelationDecl
+  /** Source à scanner. */
+  sourceRel: string
+  /**
+   * Pattern matché contre les rows de sourceRel. Variables = clés de
+   * groupement (par leur position dans le résultat). Wildcards = ignorés.
+   */
+  pattern: Term[]
+  pos: SourcePos
+}
+
 // ─── AST: Programme complet ────────────────────────────────────────────────
 
 export interface Program {
@@ -96,6 +146,8 @@ export interface Program {
   rules: Rule[]
   /** Facts inline `Foo("a", 1).` parsés depuis le source `.dl` (rare). */
   inlineFacts: Atom[]
+  /** Aggregations (Tier 14 alt2 — count/sum/min/max post-strata). */
+  aggregates?: AggregateDef[]
   /** Source path si chargé depuis disque, sinon undefined. */
   source?: string
 }

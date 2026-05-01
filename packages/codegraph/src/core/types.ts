@@ -626,6 +626,29 @@ export interface GraphSnapshot {
   }>
 
   /**
+   * Cross-function taint propagation — TaintedArgumentToCall + FunctionParam
+   * (Tier 14). Permet du vrai inter-procedural taint via composite Datalog :
+   *   TaintedArgumentToCall(_, _, S, I, Src) ∩ FunctionParam(F, S, P, I)
+   *   → param P de fonction S est tainté.
+   * Cf. extractors/arguments.ts.
+   */
+  argumentsFacts?: {
+    taintedArgs: Array<{
+      callerFile: string
+      callerSymbol: string
+      callee: string
+      paramIndex: number
+      source: 'req.body' | 'req.query' | 'req.params' | 'req.headers' | 'process.argv' | 'process.env'
+    }>
+    params: Array<{
+      file: string
+      symbol: string
+      paramName: string
+      paramIndex: number
+    }>
+  }
+
+  /**
    * Tainted variables — variables assignees a un user input non-sanitize
    * (req.body.*, req.query.*, etc.) + call-sites qui les passent en
    * argument. Variable tracking SCOPE-LEVEL lite (Tier 11).

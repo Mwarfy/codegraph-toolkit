@@ -56,6 +56,7 @@ import { analyzeResourceBalance, type ResourceImbalance } from '../extractors/re
 import { analyzeTaintSinks, type TaintSink } from '../extractors/taint-sinks.js'
 import { analyzeSanitizers, type Sanitizer } from '../extractors/sanitizers.js'
 import { analyzeTaintedVars, type TaintedVarDecl, type TaintedArgCall } from '../extractors/tainted-vars.js'
+import { analyzeArguments, type TaintedArgumentToCall, type FunctionParam } from '../extractors/arguments.js'
 import { analyzeLongFunctions, type LongFunction } from '../extractors/long-functions.js'
 import { analyzeMagicNumbers, type MagicNumber } from '../extractors/magic-numbers.js'
 import { analyzeTestCoverage, type TestCoverageReport } from '../extractors/test-coverage.js'
@@ -581,6 +582,7 @@ async function runDeterministicDetectors(
   let taintSinks: TaintSink[] | undefined
   let sanitizerCalls: Sanitizer[] | undefined
   let taintedVars: { decls: TaintedVarDecl[]; argCalls: TaintedArgCall[] } | undefined
+  let argumentsFacts: { taintedArgs: TaintedArgumentToCall[]; params: FunctionParam[] } | undefined
 
   const tTodos = performance.now()
   try {
@@ -764,6 +766,15 @@ async function runDeterministicDetectors(
     console.error(`  ✗ tainted-vars failed: ${err}`)
   }
 
+  const tArguments = performance.now()
+  try {
+    argumentsFacts = await analyzeArguments(config.rootDir, files, sharedProject)
+    timing.detectors['arguments'] = performance.now() - tArguments
+  } catch (err) {
+    timing.detectors['arguments'] = performance.now() - tArguments
+    console.error(`  ✗ arguments failed: ${err}`)
+  }
+
   if (todos) snapshot.todos = todos
   if (longFunctions) snapshot.longFunctions = longFunctions
   if (magicNumbers) snapshot.magicNumbers = magicNumbers
@@ -783,6 +794,7 @@ async function runDeterministicDetectors(
   if (taintSinks) snapshot.taintSinks = taintSinks
   if (sanitizerCalls) snapshot.sanitizerCalls = sanitizerCalls
   if (taintedVars) snapshot.taintedVars = taintedVars
+  if (argumentsFacts) snapshot.argumentsFacts = argumentsFacts
 }
 
 /**

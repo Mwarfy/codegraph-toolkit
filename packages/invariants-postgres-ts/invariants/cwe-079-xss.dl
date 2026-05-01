@@ -1,0 +1,44 @@
+// CWE-079 — Cross-Site Scripting (Reflected XSS).
+//
+// Pourquoi : un user input renvoye sans escape dans une reponse HTML
+// permet a un attaquant d'injecter du JavaScript qui s'execute dans le
+// browser de la victime (vol de session, defacement, redirect malicieux).
+//
+// Pattern :
+//   const name = req.query.name              <- TaintedVarDecl
+//   res.send(`<h1>Hello ${name}</h1>`)       <- TaintedArgCall + TaintSink(html-out)
+//   // PAS DE escape / sanitizeHtml / template-engine auto-escape
+//
+// La rule flag :
+//   TaintedArgCall + TaintSink(kind="html-out") sans HasHtmlEscape
+//
+// Solution propre :
+//   - Template engine avec auto-escape (handlebars, ejs, pug par defaut)
+//   - escapeHtml() / DOMPurify.sanitize() avant render
+//   - Content-Security-Policy header (defense in depth)
+//   - Pour les API JSON : utiliser res.json() (auto-escape) pas res.send(`...`)
+//
+// References :
+//   - https://cwe.mitre.org/data/definitions/79.html
+//   - OWASP Top 10 2021 #A03 (Injection — XSS inclus)
+//   - CodeQL js/reflected-xss
+
+.decl Cwe79Grandfathered(file: symbol, line: number)
+
+// HasHtmlEscape : detection minimale d'escape HTML.
+// Convention naming : escape, escapeHtml, sanitize, sanitizeHtml, encode.
+.decl HasHtmlEscape(file: symbol)
+HasHtmlEscape(F) :- SanitizerCall(F, _, "escape", _).
+HasHtmlEscape(F) :- SanitizerCall(F, _, "escapeHtml", _).
+HasHtmlEscape(F) :- SanitizerCall(F, _, "sanitizeHtml", _).
+HasHtmlEscape(F) :- SanitizerCall(F, _, "sanitize", _).
+HasHtmlEscape(F) :- SanitizerCall(F, _, "encode", _).
+HasHtmlEscape(F) :- SanitizerCall(F, _, "encodeURIComponent", _).
+HasHtmlEscape(F) :- SanitizerCall(F, _, "DOMPurify.sanitize", _).
+
+Violation("CWE-079", File, Line,
+  "user input dans HTML output sans escape — XSS reflechi possible ; escape/template-auto") :-
+    TaintedArgCall(File, Line, _, _, _, _, _),
+    TaintSink(File, Line, "html-out", _, _),
+    !HasHtmlEscape(File),
+    !Cwe79Grandfathered(File, Line).

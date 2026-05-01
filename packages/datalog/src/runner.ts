@@ -73,6 +73,7 @@ export function mergePrograms(
   const decls = new Map<string, RelationDecl>()
   const rules: Rule[] = []
   const inlineFacts: Program['inlineFacts'] = []
+  const aggregates: NonNullable<Program['aggregates']> = []
   let nextIndex = 0
 
   for (const { name, content } of sources) {
@@ -91,9 +92,11 @@ export function mergePrograms(
       rules.push({ ...r, index: nextIndex++ })
     }
     inlineFacts.push(...sub.inlineFacts)
+    if (sub.aggregates) aggregates.push(...sub.aggregates)
   }
 
   const merged: Program = { decls, rules, inlineFacts, source: '<merged>' }
+  if (aggregates.length > 0) merged.aggregates = aggregates
   validateProgramReferences(merged)
   return merged
 }

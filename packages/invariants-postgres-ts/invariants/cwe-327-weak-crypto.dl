@@ -1,0 +1,56 @@
+// CWE-327 — Use of a Broken or Risky Cryptographic Algorithm.
+//
+// Pourquoi : MD5 et SHA-1 sont CRYPTOGRAPHIQUEMENT CASSES depuis annees
+// (collisions practiques 2017+). Les utiliser pour signature, password
+// hash, ou verification d'integrite sur user input = vulnerabilite known.
+// Pour les passwords : bcrypt/argon2/scrypt obligatoires.
+//
+// Pattern :
+//   crypto.createHash("md5")                  <- sink kind weak-crypto
+//   crypto.createHash("sha1")
+//   md5(password)                             <- direct call
+//   sha1(token)
+//
+// La rule flag :
+//   - HardcodedSecret avec trigger="weak-crypto-algo" (md5/sha1 dans createHash arg)
+//   - OU EvalCall avec kind="weak-crypto" (call direct a md5/sha1)
+//
+// Note : on n'a PAS de fact dedie weak-crypto pour le moment. La rule
+// pour V1 detecte UNIQUEMENT les call-sites md5/sha1/createHash via
+// EvalCall (qui couvre eval-style + dynamic exec). Pour la couverture
+// complete, ajouter un extractor dedie crypto-algo.ts en V2.
+//
+// V1 : on detecte HasMd5Sha1Call via TaintedArgCall.callee match.
+//
+// Solution propre :
+//   - Hash : SHA-256 ou SHA-3 minimum
+//   - HMAC pour signature/auth (HMAC-SHA-256)
+//   - Password : bcrypt (cost 12+), argon2id, scrypt
+//   - Pour fingerprint NON-SECURITY : md5 OK avec commentaire explicit
+//
+// References :
+//   - https://cwe.mitre.org/data/definitions/327.html
+//   - https://shattered.io (SHA-1 collision practique 2017)
+//   - NIST SP 800-131A (deprecated SHA-1 since 2010)
+
+.decl Cwe327Grandfathered(file: symbol, line: number)
+
+// WeakCryptoCall : call-site qui invoque md5 ou sha1 (direct ou via
+// crypto.createHash("md5")). Detection par callee name uniquement (pas
+// de string-arg parsing).
+.decl WeakCryptoCall(file: symbol, line: number, callee: symbol)
+WeakCryptoCall(F, L, "md5") :- TaintedArgCall(F, L, "md5", _, _, _, _).
+WeakCryptoCall(F, L, "sha1") :- TaintedArgCall(F, L, "sha1", _, _, _, _).
+WeakCryptoCall(F, L, "md5") :- TaintSink(F, L, _, "md5", _).
+WeakCryptoCall(F, L, "sha1") :- TaintSink(F, L, _, "sha1", _).
+
+// On flag aussi les call-sites symbol-call de md5/sha1 sans tainted —
+// utilisation pour hashage en general est suspect quand pas commente.
+// On utilise SymbolCallEdge si disponible.
+WeakCryptoCall(F, L, "md5") :- SymbolCallEdge(F, _, _, "md5", L).
+WeakCryptoCall(F, L, "sha1") :- SymbolCallEdge(F, _, _, "sha1", L).
+
+Violation("CWE-327", File, Line,
+  "MD5/SHA-1 detecte — algorithme cryptographique casse ; SHA-256+ ou bcrypt selon use case") :-
+    WeakCryptoCall(File, Line, _),
+    !Cwe327Grandfathered(File, Line).

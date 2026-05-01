@@ -1,0 +1,52 @@
+// CWE-502 — Deserialization of Untrusted Data.
+//
+// Pourquoi : deserialiser un user input avec un parser non-safe (JSON.parse
+// avec reviver custom, YAML.load au lieu de safeLoad, node-serialize,
+// js-yaml < 4) peut menener a RCE direct (constructeurs malveillants,
+// getters auto-invokes, ou pour XML : XXE).
+//
+// Pattern :
+//   const data = req.body.payload             <- TaintedVarDecl
+//   const obj = unsafeLoad(data)              <- deserialization sink, tainted
+//   // obj peut contenir des !!js/function objects qui s'invoquent
+//
+// La rule flag :
+//   TaintedArgCall vers callee in {load, deserialize, unserialize, eval}
+//     OU JSON.parse + reviver tainte
+//   AND no SanitizerCall validateBody/parse Zod dans le file
+//
+// Solution propre :
+//   - JSON.parse SANS reviver (safe par defaut, pas de prototype invoke)
+//   - YAML : js-yaml 4+ load() est safe, sinon explicit yaml.safeLoad()
+//   - jamais node-serialize.unserialize sur user input (RCE direct)
+//   - Schema validation Zod APRES parse pour shape verification
+//
+// References :
+//   - https://cwe.mitre.org/data/definitions/502.html
+//   - OWASP Top 10 2017 #A8 (Insecure Deserialization)
+//   - CodeQL js/unsafe-deserialization
+
+.decl Cwe502Grandfathered(file: symbol, line: number)
+
+// DeserSink : relation auxiliaire — TaintedArgCall vers parser.
+.decl DeserSink(file: symbol, line: number)
+DeserSink(F, L) :- TaintedArgCall(F, L, "load", _, _, _, _).
+DeserSink(F, L) :- TaintedArgCall(F, L, "deserialize", _, _, _, _).
+DeserSink(F, L) :- TaintedArgCall(F, L, "unserialize", _, _, _, _).
+DeserSink(F, L) :- TaintedArgCall(F, L, "loadAll", _, _, _, _).
+DeserSink(F, L) :- TaintedArgCall(F, L, "parseXml", _, _, _, _).
+// JSON.parse avec arg tainte — risque si reviver malveillant ou shape non-valide.
+DeserSink(F, L) :- TaintedArgCall(F, L, "parse", _, _, _, _).
+
+// HasShapeValidation : un schema-validator detecte avant ou apres parse.
+.decl HasShapeValidation(file: symbol)
+HasShapeValidation(F) :- SanitizerCall(F, _, "validateBody", _).
+HasShapeValidation(F) :- SanitizerCall(F, _, "validateSchema", _).
+HasShapeValidation(F) :- SanitizerCall(F, _, "validateInput", _).
+HasShapeValidation(F) :- SanitizerCall(F, _, "safeParse", _).
+
+Violation("CWE-502", File, Line,
+  "deserialization de user input sans validation schema — RCE/prototype-pollution possible") :-
+    DeserSink(File, Line),
+    !HasShapeValidation(File),
+    !Cwe502Grandfathered(File, Line).

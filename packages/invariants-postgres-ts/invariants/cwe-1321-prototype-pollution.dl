@@ -1,0 +1,54 @@
+// CWE-1321 — Improperly Controlled Modification of Object Prototype Attributes
+// (Prototype Pollution).
+//
+// Pourquoi : passer un user-controlled object directement a Object.assign,
+// _.merge, $.extend, ou similaire permet a l'attaquant d'injecter
+// __proto__ / constructor / prototype dans n'importe quel objet, ce qui
+// peut escalader en RCE selon le shape de l'app (ex : props.isAdmin via
+// __proto__.isAdmin = true).
+//
+// Pattern :
+//   const userInput = req.body                 <- TaintedVarDecl ({})
+//   _.merge(target, userInput)                 <- merge sink, no key filter
+//   // userInput peut contenir { __proto__: { isAdmin: true } }
+//
+// La rule flag :
+//   TaintedArgCall ou Callee in {assign, merge, extend, defaults, mergeWith}
+//   AND no SanitizerCall validateSchema/validateBody dans le file
+//
+// Solution propre :
+//   - Object.create(null) au lieu de {} pour cibles merge
+//   - Schema validation Zod (interdit __proto__/constructor par defaut)
+//   - lodash 4.17.21+ ou _.mergeWith avec customizer qui drop __proto__
+//   - Map au lieu d'object pour user-keyed dicts
+//
+// References :
+//   - https://cwe.mitre.org/data/definitions/1321.html
+//   - https://github.com/lodash/lodash/wiki/Changelog (CVE-2019-10744)
+//   - CodeQL js/prototype-pollution
+
+.decl Cwe1321Grandfathered(file: symbol, line: number)
+
+// MergeSink : relation auxiliaire — call a une fct merge-like avec arg tainte.
+// Match callee (last segment de PropertyAccess) sur la liste merge classique.
+.decl MergeSink(file: symbol, line: number)
+MergeSink(F, L) :- TaintedArgCall(F, L, "assign", _, _, _, _).
+MergeSink(F, L) :- TaintedArgCall(F, L, "merge", _, _, _, _).
+MergeSink(F, L) :- TaintedArgCall(F, L, "mergeWith", _, _, _, _).
+MergeSink(F, L) :- TaintedArgCall(F, L, "extend", _, _, _, _).
+MergeSink(F, L) :- TaintedArgCall(F, L, "defaults", _, _, _, _).
+MergeSink(F, L) :- TaintedArgCall(F, L, "defaultsDeep", _, _, _, _).
+MergeSink(F, L) :- TaintedArgCall(F, L, "set", _, _, _, _).
+
+// HasSchemaValidation : zod / joi / yup / validateBody dans le file.
+.decl HasSchemaValidation(file: symbol)
+HasSchemaValidation(F) :- SanitizerCall(F, _, "validateBody", _).
+HasSchemaValidation(F) :- SanitizerCall(F, _, "validateSchema", _).
+HasSchemaValidation(F) :- SanitizerCall(F, _, "parse", _).
+HasSchemaValidation(F) :- SanitizerCall(F, _, "safeParse", _).
+
+Violation("CWE-1321", File, Line,
+  "user object passe a merge/assign/extend sans validation schema — prototype pollution possible") :-
+    MergeSink(File, Line),
+    !HasSchemaValidation(File),
+    !Cwe1321Grandfathered(File, Line).

@@ -1,0 +1,50 @@
+// COMPOSITE-CROSS-FUNCTION-TAINT — vrai inter-procedural taint lite (Tier 14).
+//
+// Pourquoi : Tier 11 etait scope-level (req.body.x reste dans la meme
+// function avant d'atteindre le sink). En vrai code, on a souvent :
+//
+//   function handleReq(req) {
+//     const userId = req.body.userId
+//     processUser(userId)            // <- propagation cross-fn
+//   }
+//   function processUser(id) {
+//     db.query(`SELECT * WHERE id=${id}`)   // <- sink, mais id pas dans
+//                                           //    le scope de handleReq
+//   }
+//
+// Tier 14 capture ca via 2 facts :
+//   - TaintedArgumentToCall(callerFile, callerSym, callee, paramIdx, src)
+//     "le callsite de F a un arg tainte a position I"
+//   - FunctionParam(file, sym, paramName, paramIdx)
+//     "F a un param de nom P a position I"
+//
+// On joint les deux pour deduire qu'un PARAM specifique d'une callee est
+// tainte. Ensuite on reuse TaintSink (callee dans body de la callee) pour
+// flagger un sink dans une fn dont un param est cross-fn-tainte.
+//
+// Limites V1 :
+//   - 1 hop seulement (chain de 3+ fonctions perd la propagation).
+//   - Match callee par nom (collision si meme nom dans 2 modules).
+//   - Pas de tracking de re-assignement DANS la callee.
+//
+// Pattern ratchet : grandfather par (file, line) du sink. 0 violations
+// Sentinel attendues au demarrage (validateBody systematique aux frontieres).
+
+.decl CrossFunctionTaintGrandfathered(file: symbol, line: number)
+
+// TaintedParam(F, S, P, Src)  -  "le param P de la fonction S dans F
+// est tainte par une source Src" (deduit du fait qu'un caller a passe
+// un arg tainte a la position correspondante).
+.decl TaintedParam(file: symbol, symbol: symbol, paramName: symbol, source: symbol)
+TaintedParam(F, S, P, Src) :-
+    TaintedArgumentToCall(_, _, S, I, Src),
+    FunctionParam(F, S, P, I).
+
+// Sink dans le body de la fonction (callee S dans F) ou un param est tainte
+// cross-function. Le join implicite via F partage entre TaintedParam et
+// TaintSink garantit que le sink est dans le meme fichier que la callee.
+Violation("COMPOSITE-CROSS-FUNCTION-TAINT", F, SinkLine,
+  "user input transite via parametre fonction jusqu'a un sink — sanitize a la frontiere") :-
+    TaintedParam(F, S, _, _),
+    TaintSink(F, SinkLine, _, _, S),
+    !CrossFunctionTaintGrandfathered(F, SinkLine).

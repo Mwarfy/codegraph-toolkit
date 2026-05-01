@@ -110,6 +110,101 @@ export function evaluate(
     }
   }
 
+  // ─── Aggregates (Tier 14 alt2) ───
+  // Post-strates : count/sum/min/max sur les relations matérialisées.
+  // Les relations résultats ne sont PAS marquées .output par défaut —
+  // l'utilisateur peut ajouter `.output X` dans son source pour les
+  // exposer, ou les utiliser comme input de rules ultérieures.
+  if (program.aggregates && program.aggregates.length > 0) {
+    for (const agg of program.aggregates) {
+      const sourceRel = db.relations.get(agg.sourceRel)
+      if (!sourceRel) {
+        throw new DatalogError('eval.aggregateUnknownSource',
+          `aggregate '${agg.resultRel}' references unknown source '${agg.sourceRel}'`,
+          agg.pos, program.source)
+      }
+      // Déterminer les indices "clés" (positions de variables dans pattern)
+      // et les renvoyer dans l'ordre d'apparition (= ordre des cols résultat,
+      // sauf la dernière col qui est la valeur agrégée).
+      const groupCols: number[] = []
+      for (let i = 0; i < agg.pattern.length; i++) {
+        if (agg.pattern[i].kind === 'var') groupCols.push(i)
+      }
+
+      // Pour sum/min/max : on a besoin de désigner LA colonne valeur du
+      // source. Convention : c'est la dernière variable dans pattern qui
+      // mappe à la dernière col du résultat (l'agrégat). On extrait avant
+      // l'arity check pour que celui-ci voie les "vraies" group cols.
+      let valueColIdx = -1
+      if (agg.kind !== 'count') {
+        if (groupCols.length === 0) {
+          throw new DatalogError('eval.aggregateNoValueCol',
+            `'${agg.kind}' aggregate '${agg.resultRel}' needs at least one value variable in source pattern`,
+            agg.pos, program.source)
+        }
+        valueColIdx = groupCols[groupCols.length - 1]
+        // La last group var devient la value col → on l'enlève des group keys.
+        groupCols.pop()
+      }
+
+      // resultDecl arity = groupCols.length + 1 (l'agrégat).
+      if (groupCols.length !== agg.resultDecl.columns.length - 1) {
+        throw new DatalogError('eval.aggregateArityMismatch',
+          `aggregate '${agg.resultRel}': ${groupCols.length} group var(s) but result has ${agg.resultDecl.columns.length - 1} non-aggregate col(s)`,
+          agg.pos, program.source)
+      }
+
+      // Map<canonicalGroupKey, { groupKey: tuple, accum: number }>
+      const buckets = new Map<string, { keyTuple: DatalogValue[]; accum: number }>()
+      for (const row of sourceRel.tuples) {
+        // Match constants in pattern (non-var, non-wildcard) — skip si mismatch.
+        let matches = true
+        for (let i = 0; i < agg.pattern.length; i++) {
+          const term = agg.pattern[i]
+          if (term.kind === 'const' && row[i] !== term.value) { matches = false; break }
+        }
+        if (!matches) continue
+
+        const keyTuple = groupCols.map((i) => row[i])
+        const key = keyTuple.map((v) => String(v)).join('\x00')
+        let bucket = buckets.get(key)
+        if (!bucket) {
+          const initAccum = agg.kind === 'count' ? 0
+            : agg.kind === 'sum' ? 0
+            : agg.kind === 'min' ? Number.POSITIVE_INFINITY
+            : Number.NEGATIVE_INFINITY                                // max
+          bucket = { keyTuple: keyTuple.slice(), accum: initAccum }
+          buckets.set(key, bucket)
+        }
+        if (agg.kind === 'count') bucket.accum += 1
+        else {
+          const v = row[valueColIdx]
+          if (typeof v !== 'number') {
+            throw new DatalogError('eval.aggregateNonNumber',
+              `'${agg.kind}' aggregate '${agg.resultRel}': value column '${agg.pattern[valueColIdx].kind === 'var' ? (agg.pattern[valueColIdx] as { name: string }).name : '?'}' must be number, got ${typeof v} '${v}'`,
+              agg.pos, program.source)
+          }
+          if (agg.kind === 'sum') bucket.accum += v
+          else if (agg.kind === 'min') bucket.accum = Math.min(bucket.accum, v)
+          else if (agg.kind === 'max') bucket.accum = Math.max(bucket.accum, v)
+        }
+      }
+
+      // Insérer les résultats dans la DB. La relation résultat doit déjà
+      // exister via initRelations (créée à partir de decls.set en parsing).
+      const resultRel = db.relations.get(agg.resultRel)
+      if (!resultRel) {
+        throw new DatalogError('eval.aggregateMissingResultRel',
+          `aggregate result relation '${agg.resultRel}' not initialized in DB — bug?`,
+          agg.pos, program.source)
+      }
+      for (const bucket of buckets.values()) {
+        const tuple: DatalogValue[] = [...bucket.keyTuple, bucket.accum]
+        insertTuple(resultRel, tuple)
+      }
+    }
+  }
+
   // Build outputs : only relations marked .output, sorted lex.
   const outputs = new Map<string, Tuple[]>()
   for (const decl of program.decls.values()) {
