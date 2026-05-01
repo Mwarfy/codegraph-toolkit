@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+1cc41ea refactor(facts): extract 3 emit helpers + fix File/FileTag regression
 c3750da feat(toolkit): Top-5 graph theory uplift — PageRank + complexity + perf + SCC
 f35acd1 feat(toolkit): self-audit — 5 quick-wins + 2 meta-fix + dogfood gate
 9a62387 feat(invariants): Tier 18 — event-payload-cross-block-taint + closure backlog
@@ -111,7 +112,6 @@ c3b4e3c feat(codegraph): Tier 17 — 13 nouveaux facts emis + 2 nouveaux extract
 ecc5303 feat(codegraph): tainted-vars supporte les destructurings (Tier 15)
 fd50aa4 feat(datalog): comparison ops (>, <, >=, <=, !=) + 2nd pass post-aggregate
 f9a0e3d feat(phase4-tier14): cross-function taint + 4 CWE rules + Datalog aggregates
-c4bcf00 feat(phase4-tier13): CWE rules library — 4 CVE classics portees (CodeQL inspiration)
 ```
 
 ## Comment contribuer à ce brief

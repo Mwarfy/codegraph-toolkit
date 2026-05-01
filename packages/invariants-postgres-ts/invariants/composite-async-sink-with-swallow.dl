@@ -1,0 +1,42 @@
+// COMPOSITE-ASYNC-SINK-WITH-SWALLOW — auto-decouverte via pattern mining.
+//
+// Origine : pattern mining sur co-occurrences de facts du toolkit.
+// Top trio detecte (lift > 4.5) :
+//   AwaitInLoop ∧ TaintSink ∧ TryCatchSwallow (53% Jaccard)
+//
+// Cette rule N'A PAS ETE ECRITE PAR UN HUMAIN.
+// Elle est synthetisee depuis les co-occurrences statistiques observees
+// sur le corpus toolkit + Sentinel.
+//
+// Interpretation : un fichier qui a les TROIS patterns combine 3 risques
+// orthogonaux :
+//   1. Loops async = sequential I/O bottleneck (perf)
+//   2. TaintSink = potentiel CWE (securite)
+//   3. TryCatchSwallow = erreurs silencieuses (correctness/observability)
+//
+// Quand les 3 cohabitent dans un meme file, le risque combine est
+// disproportionnel : un sink dangereux est appele en boucle, et si
+// une erreur arrive, elle est avalee silencieusement. Pas de signal
+// pour identifier le bug en prod.
+//
+// La regle file-level (pas line-level) car les 3 facts ne sont pas
+// forcement co-localises au meme call site — on capture la zone
+// architecturale entiere.
+
+.decl AsyncSinkSwallowGrandfathered(file: symbol)
+
+.decl HasAwaitInLoop(file: symbol)
+HasAwaitInLoop(F) :- AwaitInLoop(F, _, _, _).
+
+.decl HasTaintSink(file: symbol)
+HasTaintSink(F) :- TaintSink(F, _, _, _, _).
+
+.decl HasTryCatchSwallow(file: symbol)
+HasTryCatchSwallow(F) :- TryCatchSwallow(F, _, _, _).
+
+Violation("COMPOSITE-ASYNC-SINK-WITH-SWALLOW", F, 0,
+  "trio await-in-loop + taint-sink + silent-error — perf×securite×masquage, audit prio") :-
+    HasAwaitInLoop(F),
+    HasTaintSink(F),
+    HasTryCatchSwallow(F),
+    !AsyncSinkSwallowGrandfathered(F).

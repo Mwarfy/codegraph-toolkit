@@ -1,0 +1,27 @@
+// COMPOSITE-LEGACY-HOT-ZONE — auto-decouverte via pattern mining.
+//
+// Origine : co-occurrence MagicNumber × TryCatchSwallow detectee a
+// lift 6.09 sur le corpus. Pattern caracteristique du legacy "ca marche
+// ne touche pas" :
+//   - MagicNumber : configs hardcodees (timeouts, thresholds)
+//   - TryCatchSwallow : gestion defensive faible (try/catch vide ou
+//     log-only)
+//
+// Combine, ces 2 patterns signalent typiquement du code ecrit dans
+// l'urgence ou peu maintenu. Risque : a la moindre evolution des
+// requirements (timeout change, nouvelle erreur a surfacer), le code
+// craque silencieusement.
+//
+// La rule N'A PAS ETE ECRITE PAR UN HUMAIN. Synthetisee depuis les
+// patterns observes.
+
+.decl LegacyHotZoneGrandfathered(file: symbol)
+
+.decl HasMagicNumberFile(file: symbol)
+HasMagicNumberFile(F) :- MagicNumber(F, _, _, _, _).
+
+Violation("COMPOSITE-LEGACY-HOT-ZONE", F, 0,
+  "magic numbers + silent errors = legacy hot zone, audit avant prochain change") :-
+    HasMagicNumberFile(F),
+    HasTryCatchSwallow(F),
+    !LegacyHotZoneGrandfathered(F).
