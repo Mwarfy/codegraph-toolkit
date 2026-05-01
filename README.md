@@ -9,7 +9,9 @@ cd ton-projet
 npx adr-toolkit init --with-invariants postgres --with-claude-hooks
 ```
 
-C'est tout. Le toolkit détecte ta stack (Express/Hono/Next, raw SQL/Drizzle, mono ou monorepo), génère la config, installe **24 invariants Datalog** (20 mono-relation + 4 composites multi-relation), wire les hooks git + Claude Code (PreToolUse + PostToolUse avec **live Datalog gate à 70ms par edit**), et te livre une mental map déterministe régénérée à chaque commit.
+C'est tout. Le toolkit détecte ta stack (Express/Hono/Next, raw SQL/Drizzle, mono ou monorepo), génère la config, installe **91 rules Datalog** (20 mono-relation + 56 composites + 8 CWE + 7 cross-discipline mathématique), wire les hooks git + Claude Code (PreToolUse + PostToolUse avec **live Datalog gate à 70ms par edit**), et te livre une mental map déterministe régénérée à chaque commit.
+
+**74 relations Datalog émises** depuis 50+ extracteurs : graph theory (PageRank, Tarjan SCC, articulation points), théorie spectrale (Fiedler λ₂), théorie de l'information (Shannon entropy, Tishby information bottleneck), théorie des codes (Hamming distance), TDA (persistent homology), systèmes dynamiques (Lyapunov exponent), théorie des flots (Ford-Fulkerson min-cut). Première fois portées dans un analyzer TS/JS à notre connaissance.
 
 ---
 
@@ -33,24 +35,65 @@ C'est une **infra de concentration**, pas une infra de code.
 
 Tu poses `// ADR-018` au top d'un fichier. Le toolkit régénère automatiquement la section `## Anchored in` de l'ADR. Renames absorbés gratuitement (le marqueur suit le code). Les claims sémantiques (`fonction X existe`, `Y est de type Set<string>`) deviennent **exécutables via ts-morph asserts**.
 
-### 3. 24 invariants Datalog ratchetés (package `@liby-tools/invariants-postgres-ts`)
+### 3. 91 rules Datalog ratchetées (package `@liby-tools/invariants-postgres-ts`)
 
-Tu écris une règle déclarative (`fk-needs-index.dl`), elle s'exécute contre les facts émis par codegraph (37 relations émises : `SqlForeignKey`, `EvalCall`, `EntryPoint`, `ArticulationPoint`, `TruthPointWriter`, etc.). La rule attrape **toute nouvelle violation** sans bloquer sur l'existant (pattern ratchet).
+Tu écris une règle déclarative (`fk-needs-index.dl`), elle s'exécute contre les facts émis par codegraph (74 relations émises : `SqlForeignKey`, `EvalCall`, `EntryPoint`, `ArticulationPoint`, `TruthPointWriter`, `LyapunovMetric`, `InformationBottleneck`, etc.). La rule attrape **toute nouvelle violation** sans bloquer sur l'existant (pattern ratchet).
 
-**20 invariants mono-relation** packagés :
+**20 invariants mono-relation** :
 - **Architecture** : `cycles-no-new`, `no-new-articulation-point` (Tarjan O(V+E) — révèle les hubs cachés)
 - **SQL/Postgres** : `sql-fk-needs-index`, `sql-table-needs-pk`, `sql-timestamp-needs-tz`, `sql-orphan-fk`, `sql-naming-convention`, `sql-migration-order`, `sql-audit-columns`
 - **Sécurité** : `no-eval`, `no-hardcoded-secret` (regex + Shannon entropy)
 - **Code quality** : `no-boolean-positional-param` (Sonar S2301), `no-identical-subexpressions` (S1764), `no-return-then-else` (S1126), `no-switch-fallthrough` (gcc -Wimplicit-fallthrough), `no-switch-empty-or-no-default` (MISRA 16.6), `no-controlling-expression-constant` (MISRA 14.3)
 - **JS-specific** : `no-floating-promise` (rustc unused_must_use porté JS), `no-deprecated-usage` (Go SA1019), `no-resource-imbalance` (Reed-Solomon parity acquire/release)
 
-**4 composites multi-relation** (Tier 7) — patterns qu'aucune rule isolée ne capture :
+**56 composites multi-relation** (Tiers 7-18) — patterns qu'aucune rule isolée ne capture. Exemples :
 - `composite-eval-in-http-route` — `EvalCall` ∩ `EntryPoint(http-route)` = RCE chemin court
 - `composite-fk-chain-without-index` — closure transitive `A→B→C` avec maillon faible
 - `composite-high-critical-untested` — `ArticulationPoint ∩ TruthPointWriter ∩ ¬TestedFile` = blast radius max sans safety net
-- `composite-double-drift-wrapper-boolean` — drift wrapper-superfluous + boolean param = double dette agentique
+- `composite-cross-fn-sql-injection` — taint multi-hop `req.body → param N → SQL sink` sans sanitizer (CodeQL inspiration)
+- `composite-event-payload-cross-block-taint` — event payload non-sanitized cross-block boundary
+- `composite-cyclomatic-bomb`, `composite-cognitive-bomb` — McCabe + SonarQube cognitive
+- `composite-god-dispatcher` — Shannon H(callees) > 4 bits ∧ ≥10 callees
 
-Validation Sentinel : 0 violations hors grandfathered, **2 vrais HIGH-CRITICAL révélés par les composites** que aucune rule isolée ne voyait.
+**8 CWE rules** — taxonomie sécurité MITRE :
+- `cwe-022` (Path Traversal), `cwe-078` (Command Injection), `cwe-079` (XSS), `cwe-089` (SQL Injection), `cwe-327` (Weak Crypto), `cwe-502` (Unsafe Deserialization), `cwe-918` (SSRF), `cwe-1321` (Prototype Pollution)
+
+**7 cross-discipline composites** — disciplines mathématiques classiques portées dans un analyzer TS/JS :
+- `composite-spectral-bottleneck` — Fiedler λ₂ × 1000 < 50 (théorie spectrale, Cheeger inequality)
+- `composite-god-dispatcher` — Shannon entropy distribution callees (théorie de l'information)
+- `composite-copy-paste-fork` — Hamming = 0 entre 2 signatures (théorie des codes)
+- `composite-structural-cycle-persistent` — TDA persistent homology > 50% des snapshots (Edelsbrunner-Letscher-Zomorodian 2002)
+- `composite-chaos-amplifier` — Lyapunov exponent λ × 1000 > 2000 (systèmes dynamiques chaos)
+- `composite-package-coupling` — Ford-Fulkerson min-cut > 5 entre 2 packages (théorie des flots)
+- `composite-information-hub-untested` — Tishby Information Bottleneck score > 25 (I(input;output) approximé)
+
+Détail : [`docs/CROSS-DISCIPLINE-METRICS.md`](docs/CROSS-DISCIPLINE-METRICS.md).
+
+Validation Sentinel : 68 violations totales (toutes grandfathered = baseline historique stable), **plusieurs vrais positifs HIGH-CRITICAL révélés par les composites** que aucune rule isolée ne voyait.
+
+#### Multi-dir loader (consume canonical + project-local)
+
+Depuis v0.5.0, `runFromDirs` accepte `rulesDir: string[]` permettant aux projets consumers de séparer :
+
+```typescript
+import { runFromDirs } from '@liby-tools/datalog'
+import { createRequire } from 'node:module'
+
+const require = createRequire(import.meta.url)
+const pkgJson = require.resolve('@liby-tools/invariants-postgres-ts/package.json')
+const canonical = path.join(path.dirname(pkgJson), 'invariants')
+
+await runFromDirs({
+  rulesDir: [canonical, 'sentinel-core/invariants'],  // canonical + project local
+  factsDir: '.codegraph/facts',
+})
+```
+
+Le projet local garde uniquement :
+1. Ses `adr-NNN.dl` (rules ADR-specific projet)
+2. Un `*-grandfathers.dl` consolidé (les facts ratchet `XGrandfathered("project/path")`)
+
+Plus de duplication des 88 rules universelles. La source unique = le toolkit. Les grandfathers projet sont des facts injectés dans les rules canoniques via le ratchet pattern.
 
 ### 4. 14 MCP tools pour l'agent IA
 
@@ -77,7 +120,7 @@ Le serveur MCP `codegraph-mcp` expose le snapshot comme outils queryable. Ton ag
 
 `codegraph watch &` maintient `.codegraph/snapshot-live.json` à jour à chaque save (~50ms warm via cache Salsa). Le hook PostToolUse Claude Code lit ce snapshot live et injecte le contexte structurel **plus** :
 
-- **Live Datalog** (Tier 8) — exécute les 24 rules contre les facts live à chaque edit, affiche uniquement les **nouvelles violations** vs baseline post-commit. Latence mesurée 70ms wall clock. Si je m'apprête à introduire un FK chain pathologique, un eval dans un http handler, ou faire devenir un fichier HIGH-CRITICAL-UNTESTED, je le sais immédiatement — pas en bloc au pre-commit
+- **Live Datalog** (Tier 8) — exécute les 91 rules contre les facts live à chaque edit, affiche uniquement les **nouvelles violations** vs baseline post-commit. Latence mesurée 70ms wall clock. Si je m'apprête à introduire un FK chain pathologique, un eval dans un http handler, ou faire devenir un fichier HIGH-CRITICAL-UNTESTED, je le sais immédiatement — pas en bloc au pre-commit
 - **Drift signals** (Tier 4) — patterns que l'agent crée plus que les humains, par fichier touché
 - **Mémoire inter-sessions** (Tier 3) — décisions / FP / incidents marqués lors de sessions précédentes affichés quand le fichier est touché
 
@@ -129,7 +172,7 @@ La rule Datalog `sql-fk-needs-index.dl` que tu écris **une seule fois** marche 
 npm install --save-dev @liby-tools/codegraph @liby-tools/adr-toolkit @liby-tools/codegraph-mcp \
                        @liby-tools/datalog @liby-tools/invariants-postgres-ts
 
-# 2. Init complet (24 invariants Datalog + 4 hooks Claude + test runner Datalog + git hooks)
+# 2. Init complet (91 rules Datalog + 4 hooks Claude + test runner Datalog + git hooks)
 cd ton-projet
 npx adr-toolkit init --with-invariants postgres --with-claude-hooks
 
@@ -146,7 +189,7 @@ git commit -am "feat: ADR-001"
 ```
 
 À partir d'ici :
-- **pre-commit** : `codegraph facts --regen` + `tsc` + 24 invariants Datalog + ADR anchors regen + brief sync
+- **pre-commit** : `codegraph facts --regen` + `tsc` + 91 rules Datalog + ADR anchors regen + brief sync
 - **post-commit** : `codegraph analyze` + brief regen + datalog baseline update
 - **Edit/Write Claude** : PreToolUse (ADR check) + PostToolUse (HIGH-RISK + drift + mémoire + **live Datalog 70ms**)
 - **Watch mode** (optionnel, recommandé) : `codegraph watch &` régen facts à chaque save (~50ms)
@@ -415,7 +458,7 @@ L'exception : `adr-toolkit bootstrap --apply` lance des agents Sonnet pour rédi
 
 ## Détecteurs déterministes additionnels
 
-En plus de la cartographie de base, 20+ extracteurs émettent des facts Datalog (37 relations) :
+En plus de la cartographie de base, 50+ extracteurs émettent des facts Datalog (74 relations) :
 
 - **todos** — TODO/FIXME/HACK/XXX/NOTE markers avec file + line + message
 - **long-functions** — fonctions/méthodes >100 LOC (configurable)
@@ -435,6 +478,18 @@ En plus de la cartographie de base, 20+ extracteurs émettent des facts Datalog 
 - **deprecated-usage** — JSDoc `@deprecated` declarations + cross-ref call sites
 - **articulation-points** — Tarjan O(V+E) : hubs cachés du graphe d'imports
 - **resource-balance** — parity acquire/release, setInterval/clearInterval, etc.
+- **module-centrality** — PageRank (Brin/Page) + Henry-Kafura par fichier
+- **function-complexity** — McCabe cyclomatic + SonarQube cognitive
+- **allocation-in-loop** — allocations détectées dans loops (perf)
+- **persistent-cycles** — TDA persistent homology sur les snapshots historiques
+- **lyapunov-cochange** — exposant de Lyapunov par fichier (cascade refactor)
+- **package-mincut** — Ford-Fulkerson Edmonds-Karp BFS, coût objectif de séparation
+- **information-bottleneck** — score I(input;output) par symbole (Tishby 1999)
+- **spectral-graph** — Fiedler λ₂ par sous-graphe (power iteration projetée)
+- **symbol-entropy** — Shannon H(callees) par fonction
+- **signature-duplication** — Hamming distance sur signatures encodées (~10 bits)
+- **taint** — flow analysis cross-function avec sinks/sanitizers (CodeQL inspiration)
+- **crypto-algo** + **security-patterns** — détecte CWE-327, CORS misconfig, TLS unsafe, weak random
 
 ---
 
@@ -530,7 +585,7 @@ import {
 
 ## Consommateurs
 
-- **Sentinel** (référence) — Express + raw SQL Postgres. 23 ADRs, 47+ marqueurs, 11 ts-morph asserts, **28 invariants Datalog actifs** (24 portables + 4 Sentinel-specific), hooks Claude Code (PreToolUse + PostToolUse avec live Datalog 70ms par edit).
+- **Sentinel** (référence) — Express + raw SQL Postgres. 23 ADRs, 47+ marqueurs, 11 ts-morph asserts, **95 rules Datalog actives** (91 toolkit canonical + 4 Sentinel ADR-specific), 335 grandfathers consolidés, hooks Claude Code (PreToolUse + PostToolUse avec live Datalog 70ms par edit). Multi-dir loader actif depuis v0.5.0 — zéro duplication des rules toolkit.
 - **Morovar** — Hono + Drizzle ORM + Postgres. MMORPG 2D. Validé Phase 3 portabilité (rule SQL Sentinel marche identiquement sur facts Drizzle).
 - **Ton projet ?** — ouvre une issue avec ton retour.
 
@@ -561,6 +616,16 @@ import {
   - Live Datalog gate dans hook PostToolUse (Tier 8) — 70ms wall clock par edit, delta vs baseline post-commit
   - Packaging shipping-ready (Tier 9) — `--with-invariants postgres --with-claude-hooks` install tout en 1 commande
   - Snapshot relations émises 17 → 37, suite tests toolkit 191 → 452
+- `v0.5.0` — **Phase 5 cross-discipline + composition orthogonale** (Tiers 14-18) :
+  - 67 nouvelles rules : 56 composites (Tiers 14-18) + 8 CWE (Tier 14) + 7 cross-discipline mathématique
+  - **6 disciplines mathématiques portées** : Fiedler λ₂ (théorie spectrale, Cheeger inequality), Shannon entropy (théorie de l'information), Hamming distance (théorie des codes), TDA persistent homology (Edelsbrunner-Letscher-Zomorodian 2002), Lyapunov exponent (systèmes dynamiques chaos), Ford-Fulkerson min-cut (théorie des flots)
+  - **7e discipline : Tishby Information Bottleneck** — détecte passthrough fns (1c×1c, candidates inline) et information hubs (high score = points d'extension non-testés)
+  - **Pattern mining auto-découvert** : 2 rules synthétisées par co-occurrence lift sur les facts (rather than human-designed)
+  - Self-audit récursif : codegraph s'analyse lui-même via dogfood gate (`packages/codegraph/tests/self-invariants.test.ts`, budget 700)
+  - 14 nouveaux extracteurs : module-centrality (PageRank), function-complexity (McCabe + SonarQube), allocation-in-loop, persistent-cycles, lyapunov-cochange, package-mincut, information-bottleneck, spectral-graph, symbol-entropy, signature-duplication, taint cross-function, crypto-algo, security-patterns, code-quality-patterns
+  - **Multi-dir Datalog loader** : `runFromDirs({ rulesDir: [canonical, project] })` permet aux projets consumers de séparer rules toolkit et grandfathers locaux. Sentinel : 92 rules dupliquées → 0 (consume via npm link).
+  - Documentation [`docs/CROSS-DISCIPLINE-METRICS.md`](docs/CROSS-DISCIPLINE-METRICS.md) — synthèse 7 disciplines avec théorèmes + applications + sources
+  - Snapshot relations émises 37 → 74, suite tests toolkit 452 → 510
 
 Pour le détail : [`CHANGELOG.md`](CHANGELOG.md).
 
@@ -569,9 +634,11 @@ Pour le détail : [`CHANGELOG.md`](CHANGELOG.md).
 ## Liens
 
 - [`packages/codegraph-mcp/README.md`](packages/codegraph-mcp/README.md) — détail des 14 MCP tools
-- [`packages/invariants-postgres-ts/README.md`](packages/invariants-postgres-ts/README.md) — 24 rules Datalog packagées
-- [`packages/datalog/README.md`](packages/datalog/README.md) — runtime Datalog interne
+- [`packages/invariants-postgres-ts/README.md`](packages/invariants-postgres-ts/README.md) — 91 rules Datalog packagées
+- [`packages/datalog/README.md`](packages/datalog/README.md) — runtime Datalog interne (multi-dir loader)
 - [`packages/salsa/README.md`](packages/salsa/README.md) — incremental computation
+- [`docs/CROSS-DISCIPLINE-METRICS.md`](docs/CROSS-DISCIPLINE-METRICS.md) — 7 disciplines mathématiques portées
 - [`docs/REFACTOR-ANALYZER-PLAN.md`](docs/REFACTOR-ANALYZER-PLAN.md) — détail du refactor 3-phases (god-file → registry)
 - [`docs/ENRICHMENT-5-AXES-PLAN.md`](docs/ENRICHMENT-5-AXES-PLAN.md) — plan des 5 axes Phase 1
 - [`docs/PHASE-2-SQL-DETECTOR-PLAN.md`](docs/PHASE-2-SQL-DETECTOR-PLAN.md) — design du SQL detector
+- [`docs/PHASE-5-COMPOSITE-BACKLOG.md`](docs/PHASE-5-COMPOSITE-BACKLOG.md) — 52 candidats Tiers 14-18

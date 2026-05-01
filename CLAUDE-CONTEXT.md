@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+443e072 feat(datalog): runFromDirs accepte rulesDir array (multi-dir loader)
 18a37a7 chore(toolkit): retire 3 exports dead code (UnusedExport.facts)
 87f2ac1 feat(toolkit): Information Bottleneck (Tishby 1999) — 7e cross-discipline
 3ecfa05 docs: cross-discipline metrics — synthese 6 disciplines portees
@@ -111,7 +112,6 @@ bc4fce3 feat(invariants): 2 rules auto-decouvertes via pattern mining
 c3750da feat(toolkit): Top-5 graph theory uplift — PageRank + complexity + perf + SCC
 f35acd1 feat(toolkit): self-audit — 5 quick-wins + 2 meta-fix + dogfood gate
 9a62387 feat(invariants): Tier 18 — event-payload-cross-block-taint + closure backlog
-fa4032f feat(invariants): Tier 17 — 11 nouvelles rules library + grandfathers
 ```
 
 ## Comment contribuer à ce brief

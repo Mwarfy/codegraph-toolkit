@@ -61,7 +61,7 @@ invariants and nothing else. If you need any of the above, use Soufflé.
 ## API
 
 ```ts
-import { runFromDirs, runFromString } from '@liby-tools/datalog'
+import { runFromDirs, runFromString, loadProgramFromDirs } from '@liby-tools/datalog'
 
 // File-system entry point.
 const { result } = await runFromDirs({
@@ -71,12 +71,47 @@ const { result } = await runFromDirs({
 })
 console.log(result.outputs.get('Violation'))
 
+// Multi-dir mode (depuis v0.5.0) — consume canonical rules + project local.
+// Idéal pour les projets qui veulent les rules toolkit + leurs grandfathers
+// locaux SANS dupliquer les rules canoniques.
+const { result: r2 } = await runFromDirs({
+  rulesDir: [
+    'node_modules/@liby-tools/invariants-postgres-ts/invariants',
+    'invariants',  // adr-NNN.dl + project-grandfathers.dl uniquement
+  ],
+  factsDir: '.codegraph/facts',
+})
+
 // Programmatic / test entry point.
-const { result } = runFromString({
+const { result: r3 } = runFromString({
   rules: `.decl A(x: symbol) ...`,
   facts: new Map([['A', [['hello']]]]),
 })
 ```
+
+### Multi-dir loader
+
+`runFromDirs({ rulesDir })` accepte `string` ou `string[]`. Avec un array :
+
+- Les `.dl` de chaque dir sont chargés en **ordre lex DANS chaque dir**, puis dans l'**ordre de l'array ENTRE dirs**.
+- Les filenames sont préfixés du basename du dir pour disambiguer les conflits (`canonical/rule.dl` vs `project/rule.dl`).
+- Une `.decl` redéclarée dans 2 dirs = `runner.duplicateDecl` error claire.
+- Les inline facts (ex: `XGrandfathered("path").`) accumulent normalement, ce qui permet le pattern ratchet :
+
+```datalog
+// Dans canonical/composite-fk-chain.dl (toolkit) :
+.decl FkChainGrandfathered(table: symbol, col: symbol)
+
+Violation("COMPOSITE-FK-CHAIN", T, 0, "...") :-
+    FkChain(T, C, _, _),
+    !FkChainGrandfathered(T, C).
+
+// Dans project/grandfathers.dl (consumer) — juste les facts :
+FkChainGrandfathered("orders", "customer_id").
+FkChainGrandfathered("invoices", "order_id").
+```
+
+Le projet n'a jamais besoin de copier la rule. Il fournit juste les facts qui exempte sa dette historique.
 
 ## CLI
 
