@@ -1,0 +1,6 @@
+// Project-specific grandfathers — exempte un fichier legacy.
+// Cette stratégie remplace la copie complète du fichier rule-emits.dl
+// dans le projet : on garde la rule canonique côté toolkit + uniquement
+// les facts grandfather côté projet.
+
+EmitsGrandfathered("src/legacy/exempted.ts").

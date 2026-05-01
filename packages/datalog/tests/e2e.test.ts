@@ -67,6 +67,47 @@ describe('e2e — ADR-017 pilot', () => {
   })
 })
 
+describe('e2e — multi-dir rules (canonical + project)', () => {
+  const canonicalDir = path.resolve(__dirname, 'fixtures/multi-dir-canonical')
+  const projectDir = path.resolve(__dirname, 'fixtures/multi-dir-project')
+
+  it('charge rules canoniques + project, applique grandfathers du project', async () => {
+    const { result } = await runFromDirs({
+      rulesDir: [canonicalDir, projectDir],
+      factsDir: canonicalDir,
+    })
+    const v = result.outputs.get('Violation')!
+    // 2 emits totaux ; 1 grandfathered → 1 violation restante
+    expect(v).toEqual([
+      ['ADR-X', 'src/active/leak.ts', 20, 'untyped emit'],
+    ])
+  })
+
+  it('sans le project dir : aucun grandfather → 2 violations', async () => {
+    const { result } = await runFromDirs({
+      rulesDir: canonicalDir,
+      factsDir: canonicalDir,
+    })
+    const v = result.outputs.get('Violation')!
+    expect(v.length).toBe(2)
+  })
+
+  it('order matters : array preserve l\'ordre canonical → project', async () => {
+    // Les deux ordres doivent produire le même résultat (Datalog est
+    // déclaratif), mais le test vérifie que multi-dir parse correctement
+    // quel que soit l'ordre.
+    const r1 = await runFromDirs({
+      rulesDir: [canonicalDir, projectDir],
+      factsDir: canonicalDir,
+    })
+    const r2 = await runFromDirs({
+      rulesDir: [projectDir, canonicalDir],
+      factsDir: canonicalDir,
+    })
+    expect(r1.result.outputs.get('Violation')).toEqual(r2.result.outputs.get('Violation'))
+  })
+})
+
 describe('e2e — runs against real Sentinel facts (smoke)', () => {
   it('handles the full Sentinel facts dump (240 files, 50 emits) without error', async () => {
     const sentinelFacts = path.resolve(

@@ -1,0 +1,8 @@
+// Rule canonique avec hook ratchet — le projet ajoute ses grandfather
+// facts dans son propre dir, sans toucher cette rule.
+
+.decl EmitsGrandfathered(file: symbol)
+
+Violation("ADR-X", File, Line, "untyped emit") :-
+    EmitsLiteral(File, Line, _),
+    !EmitsGrandfathered(File).

@@ -31,13 +31,34 @@ async function exists(p) {
   try { await fs.stat(p); return true } catch { return false }
 }
 
-const rulesDir = await exists(path.join(root, 'sentinel-core/invariants'))
-  ? path.join(root, 'sentinel-core/invariants')
-  : path.join(root, 'invariants')
+// Détection rules-dir(s) :
+//   1. Si le projet utilise @liby-tools/invariants-postgres-ts (linké via
+//      node_modules) → multi-dir [toolkit-canonical, project-local].
+//   2. Sinon fallback : un seul dir local.
+async function resolveRulesDirs(root) {
+  const local = await exists(path.join(root, 'sentinel-core/invariants'))
+    ? path.join(root, 'sentinel-core/invariants')
+    : path.join(root, 'invariants')
+
+  // Cherche le pkg toolkit dans plusieurs node_modules layers
+  const candidates = [
+    path.join(root, 'node_modules/@liby-tools/invariants-postgres-ts/invariants'),
+    path.join(root, 'sentinel-core/node_modules/@liby-tools/invariants-postgres-ts/invariants'),
+  ]
+  for (const c of candidates) {
+    if (await exists(c)) {
+      return [c, local] // canonical first, project-local second
+    }
+  }
+  return [local]
+}
+
+const rulesDirs = await resolveRulesDirs(root)
 const factsDir = path.join(root, '.codegraph/facts')
 const baselinePath = path.join(root, '.codegraph/violations-baseline.json')
 
-if (!(await exists(rulesDir)) || !(await exists(factsDir))) {
+const allRulesDirsExist = (await Promise.all(rulesDirs.map(exists))).every(Boolean)
+if (!allRulesDirsExist || !(await exists(factsDir))) {
   console.log(JSON.stringify({ skipped: true, reason: 'no rules or facts dir' }))
   process.exit(0)
 }
@@ -46,7 +67,9 @@ if (!(await exists(rulesDir)) || !(await exists(factsDir))) {
 // (proof tree) dans le hook output. Coût eval +5-10ms typique mais
 // l'agent voit POURQUOI une violation existe, pas juste OÙ.
 const evalPromise = runFromDirs({
-  rulesDir, factsDir, allowRecursion: true,
+  // multi-dir si le toolkit canonical est trouvé, sinon single-dir.
+  rulesDir: rulesDirs.length === 1 ? rulesDirs[0] : rulesDirs,
+  factsDir, allowRecursion: true,
   recordProofsFor: ['Violation'],
 }).catch((err) => ({ __error: String(err) }))
 let timer

@@ -23,7 +23,7 @@ export { evaluate, formatProof } from './eval.js'
 export type { EvalOptions } from './eval.js'
 
 export {
-  runFromDirs, runFromString, loadProgramFromDir,
+  runFromDirs, runFromString, loadProgramFromDir, loadProgramFromDirs,
   mergePrograms, formatRunResult,
 } from './runner.js'
 export type { RunFromDirsOptions, FormatRunOptions } from './runner.js'

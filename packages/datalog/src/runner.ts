@@ -25,8 +25,15 @@ import {
 } from './types.js'
 
 export interface RunFromDirsOptions extends EvalOptions {
-  /** Dossier contenant les `.dl` (rules + schema). Lus en ordre lex. */
-  rulesDir: string
+  /**
+   * Dossier(s) contenant les `.dl` (rules + schema). Lus en ordre lex
+   * dans chaque dossier, puis concaténés dans l'ordre fourni si array.
+   *
+   * Multi-dir use case : un projet consomme les rules canoniques d'un
+   * package partagé (`@liby-tools/invariants-postgres-ts/invariants`) +
+   * ses propres rules locales (ADR-specific + grandfathers).
+   */
+  rulesDir: string | string[]
   /** Dossier contenant les `.facts` (un fichier par relation .input). */
   factsDir: string
 }
@@ -35,7 +42,8 @@ export async function runFromDirs(opts: RunFromDirsOptions): Promise<{
   program: Program
   result: RunResult
 }> {
-  const program = await loadProgramFromDir(opts.rulesDir)
+  const dirs = Array.isArray(opts.rulesDir) ? opts.rulesDir : [opts.rulesDir]
+  const program = await loadProgramFromDirs(dirs)
   const db = await loadFactsFromDir(program.decls, opts.factsDir)
   const evalOpts: EvalOptions = {}
   if (opts.recordProofsFor !== undefined) evalOpts.recordProofsFor = opts.recordProofsFor
@@ -45,15 +53,33 @@ export async function runFromDirs(opts: RunFromDirsOptions): Promise<{
 }
 
 export async function loadProgramFromDir(dir: string): Promise<Program> {
-  const entries = await fs.readdir(dir)
-  const dlFiles = entries.filter((f) => f.endsWith('.dl')).sort()
-  if (dlFiles.length === 0) {
-    throw new DatalogError('runner.noRules', `no .dl files found in ${dir}`)
+  return loadProgramFromDirs([dir])
+}
+
+/**
+ * Charge plusieurs dirs `.dl`, dans l'ordre fourni, et les merge en un
+ * unique programme. Ordre lex DANS chaque dir, ordre array ENTRE dirs.
+ * Pratique pour `[toolkitRules, projectRules]` : les rules canoniques
+ * sont chargées d'abord, puis le projet ajoute ses adr-NNN.dl + ses
+ * grandfathers facts.
+ */
+export async function loadProgramFromDirs(dirs: string[]): Promise<Program> {
+  if (dirs.length === 0) {
+    throw new DatalogError('runner.noRules', 'no rules dir provided')
   }
   const sources: Array<{ name: string; content: string }> = []
-  for (const f of dlFiles) {
-    const p = path.join(dir, f)
-    sources.push({ name: f, content: await fs.readFile(p, 'utf-8') })
+  for (const dir of dirs) {
+    const entries = await fs.readdir(dir)
+    const dlFiles = entries.filter((f) => f.endsWith('.dl')).sort()
+    for (const f of dlFiles) {
+      const p = path.join(dir, f)
+      // Préfixe le nom avec le dir pour disambiguer en cas de doublon
+      // de filename dans 2 dirs (erreur claire au merge plutôt qu'écrase).
+      sources.push({ name: `${path.basename(dir)}/${f}`, content: await fs.readFile(p, 'utf-8') })
+    }
+  }
+  if (sources.length === 0) {
+    throw new DatalogError('runner.noRules', `no .dl files found in ${dirs.join(', ')}`)
   }
   return mergePrograms(sources)
 }

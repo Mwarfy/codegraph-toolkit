@@ -1,0 +1,8 @@
+// Canonical rules dir — simule @liby-tools/invariants-postgres-ts/invariants/.
+// Le schema + une rule avec ratchet (grandfather hook).
+
+.decl EmitsLiteral(file: symbol, line: number, eventName: symbol)
+.input EmitsLiteral
+
+.decl Violation(adr: symbol, file: symbol, line: number, msg: symbol)
+.output Violation
