@@ -45,7 +45,7 @@
 - `packages/codegraph/src/incremental/queries.ts` (in: 22)
 - `packages/codegraph/src/incremental/database.ts` (in: 20)
 - `packages/salsa/dist/index.d.ts` (in: 19)
-- `packages/codegraph/src/core/detector-registry.ts` (in: 17)
+- `packages/codegraph/src/core/detector-registry.ts` (in: 18)
 - `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 14)
 - `packages/adr-toolkit/src/config.ts` (in: 10) · gov by ADR-002
 - `packages/codegraph-mcp/src/snapshot-loader.ts` (in: 9)
@@ -57,7 +57,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 - **22** `packages/codegraph/src/incremental/queries.ts` _(top-hub)_
 - **20** `packages/codegraph/src/incremental/database.ts` _(top-hub)_
 - **19** `packages/salsa/dist/index.d.ts` _(top-hub)_
-- **17** `packages/codegraph/src/core/detector-registry.ts` _(top-hub)_
+- **18** `packages/codegraph/src/core/detector-registry.ts` _(top-hub)_
 
 ## Tensions actives — invitations à explorer
 
@@ -72,11 +72,11 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/adr-toolkit/tests/fixtures/sample-project/src/services/state-service.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/codegraph/src/core/detectors/cross-discipline-detector.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/b.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/c.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **FSM-ORPHAN** `ApprovalStatus#expired` — état déclaré mais jamais écrit dans le code  
   _→ supprimer l'état OU ajouter la transition manquante_
@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+bbfa9d6 feat(toolkit): SQL ALTER TABLE tracking + CrossDisciplineDetector POC
 7362f13 refactor(invariants): raffiner composite-orphan-file (Next.js framework-routed)
 84544b9 refactor(invariants): raffiner extractor empty-catch + rule passthrough-fn
 8eb80b8 refactor(invariants): raffiner composite-async-sink-with-swallow
@@ -111,7 +112,6 @@ c003043 docs: update READMEs for v0.5.0 — 91 rules, multi-dir, 7 cross-discipl
 18a37a7 chore(toolkit): retire 3 exports dead code (UnusedExport.facts)
 87f2ac1 feat(toolkit): Information Bottleneck (Tishby 1999) — 7e cross-discipline
 3ecfa05 docs: cross-discipline metrics — synthese 6 disciplines portees
-9ee3547 feat(toolkit): min-cut/max-flow — coût objectif de séparation packages
 ```
 
 ## Comment contribuer à ce brief
