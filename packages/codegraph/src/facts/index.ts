@@ -1249,13 +1249,27 @@ function emitCrossDisciplineFacts(
     decl: '(symbol:symbol, callerCount:number, calleeCount:number, scoreX1000:number)',
     rows: [],
   }
+  // Auxiliaire : SymbolFile(symbol, file) — extrait depuis "file:name".
+  // Permet aux rules de joindre des facts file-level (EntryPoint, etc.)
+  // avec des facts symbol-level (IB, NCD, signatures, ...).
+  const symbolFileRel: RelationDef = {
+    name: 'SymbolFile',
+    decl: '(symbol:symbol, file:symbol)',
+    rows: [],
+  }
   for (const ib of snapshot.informationBottlenecks ?? []) {
     ibRel.rows.push([
       sym(ib.symbol), num(ib.callerCount),
       num(ib.calleeCount), num(ib.bottleneckScoreX1000),
     ])
+    // Extract `file:name` → file
+    const colonIdx = ib.symbol.lastIndexOf(':')
+    if (colonIdx > 0) {
+      symbolFileRel.rows.push([sym(ib.symbol), sym(ib.symbol.slice(0, colonIdx))])
+    }
   }
   relations.push(ibRel)
+  relations.push(symbolFileRel)
 
   // ─── ImportCommunity (Newman-Girvan 2004 / Louvain 2008) ──────────
   // 8e discipline : community detection sur le graphe d'imports.

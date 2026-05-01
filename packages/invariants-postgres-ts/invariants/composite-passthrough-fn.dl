@@ -12,10 +12,25 @@
 //   - !articulation : si pas critique, inline safe
 //
 // Threshold : score × 1000 = 1000 (1 × 1 caller/callee, log₂(2)² = 1).
+//
+// Raffinement Phase suivante : EXCLURE les fonctions dans des fichiers
+// HTTP route (pattern API normal — handler délègue à kernel/manager,
+// 1c×1c systématique). Audit Phase A avait montré 68 grandfathers FP
+// rule sur Sentinel : ~80% étaient des HTTP handlers.
+// Le ratchet Sentinel via SymbolFile + EntryPoint(http-route) nettoie.
 
 .decl PassthroughFnGrandfathered(symbol: symbol)
+
+// Helper : un fichier est-il dans la couche API ? Soit EntryPoint
+// http-route directement, soit FileTag "api" (handler/dispatcher
+// sous-file qui est délégué depuis un router parent).
+.decl IsApiLayerFile(file: symbol)
+IsApiLayerFile(F) :- EntryPoint(F, "http-route", _).
+IsApiLayerFile(F) :- FileTag(F, "api").
 
 Violation("COMPOSITE-PASSTHROUGH-FN", S, 0,
   "fonction passe-plat (1 caller, 1 callee) — candidate inline") :-
     InformationBottleneck(S, 1, 1, _),
+    SymbolFile(S, F),
+    !IsApiLayerFile(F),
     !PassthroughFnGrandfathered(S).

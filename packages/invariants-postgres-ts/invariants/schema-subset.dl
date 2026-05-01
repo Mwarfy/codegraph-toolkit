@@ -80,6 +80,7 @@
 .decl LyapunovMetric(file: symbol, totalCoChanges: number, partnerCount: number, lyapunovX1000: number)
 .decl PackageMinCut(fromPackage: symbol, toPackage: symbol, edgeCount: number, minCut: number)
 .decl InformationBottleneck(symbol: symbol, callerCount: number, calleeCount: number, scoreX1000: number)
+.decl SymbolFile(symbol: symbol, file: symbol)
 .decl ImportCommunity(file: symbol, communityId: number, physicalPackage: symbol, misplaced: number)
 .decl ModularityScore(globalQX1000: number, communityCount: number, misplacedCount: number)
 .decl FactKindStability(relationName: symbol, snapshotsTotal: number, stableTransitions: number, stationaryStableX1000: number, avgTupleCount: number)
@@ -161,6 +162,7 @@
 .input LyapunovMetric
 .input PackageMinCut
 .input InformationBottleneck
+.input SymbolFile
 .input ImportCommunity
 .input ModularityScore
 .input FactKindStability

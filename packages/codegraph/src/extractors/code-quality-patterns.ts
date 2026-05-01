@@ -127,6 +127,22 @@ export function extractCodeQualityPatternsFileBundle(
     const stmts = block.getStatements()
     let kind = ''
     if (stmts.length === 0) {
+      // Body 0 statements — vérifier la présence d'un commentaire
+      // explicatif. `catch { /* best-effort */ }` ou `catch { // intentional }`
+      // sont des design choices délibérés, pas des bugs.
+      // Le commentaire signale l'intention au lecteur ; sans commentaire
+      // ET sans body = vrai swallow silencieux.
+      const blockText = block.getText()
+      // Strip { } et whitespace
+      const inside = blockText.slice(1, -1).trim()
+      // Si l'intérieur contient un commentaire substantiel (≥3 chars
+      // après les markers de commentaire) → 'commented-empty' (skip-flag)
+      const hasComment = /\/\*[\s\S]{3,}\*\//.test(inside) || /\/\/.{3,}/.test(inside)
+      if (hasComment) {
+        // Commented-empty = intentional swallow with rationale.
+        // On skip ce kind du fact pour éviter les FP rule.
+        continue
+      }
       kind = 'empty'
     } else {
       // Check if all statements are log-only and no rethrow
