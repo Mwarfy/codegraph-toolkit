@@ -41,7 +41,7 @@
 
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
-- `packages/codegraph/src/core/types.ts` (in: 72) · gov by ADR-006
+- `packages/codegraph/src/core/types.ts` (in: 73) · gov by ADR-006
 - `packages/codegraph/src/incremental/queries.ts` (in: 22)
 - `packages/codegraph/src/incremental/database.ts` (in: 20)
 - `packages/salsa/dist/index.d.ts` (in: 19)
@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+3ecfa05 docs: cross-discipline metrics — synthese 6 disciplines portees
 9ee3547 feat(toolkit): min-cut/max-flow — coût objectif de séparation packages
 4cb7ffa feat(toolkit): TDA + Lyapunov — cycles structurels + chaos detection
 375d5a2 feat(toolkit): cross-discipline rules — Fiedler λ₂ + Shannon entropy + Hamming dup
@@ -111,7 +112,6 @@ f35acd1 feat(toolkit): self-audit — 5 quick-wins + 2 meta-fix + dogfood gate
 fa4032f feat(invariants): Tier 17 — 11 nouvelles rules library + grandfathers
 c3b4e3c feat(codegraph): Tier 17 — 13 nouveaux facts emis + 2 nouveaux extractors
 50a01d9 feat(invariants): Tier 16 — 7 nouvelles rules library
-4418c90 feat(codegraph): Tier 16 extractors — crypto-algo + security-patterns + 2 sink kinds
 ```
 
 ## Comment contribuer à ce brief

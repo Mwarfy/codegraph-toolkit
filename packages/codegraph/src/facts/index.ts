@@ -1242,6 +1242,20 @@ function emitCrossDisciplineFacts(
     ])
   }
   relations.push(minCutRel)
+
+  // ─── InformationBottleneck (Tishby/Pereira/Bialek 1999) ────────────
+  const ibRel: RelationDef = {
+    name: 'InformationBottleneck',
+    decl: '(symbol:symbol, callerCount:number, calleeCount:number, scoreX1000:number)',
+    rows: [],
+  }
+  for (const ib of snapshot.informationBottlenecks ?? []) {
+    ibRel.rows.push([
+      sym(ib.symbol), num(ib.callerCount),
+      num(ib.calleeCount), num(ib.bottleneckScoreX1000),
+    ])
+  }
+  relations.push(ibRel)
 }
 
 function sym(value: string): string {

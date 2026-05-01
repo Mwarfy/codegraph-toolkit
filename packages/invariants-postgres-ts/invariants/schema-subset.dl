@@ -79,6 +79,7 @@
 .decl PersistentCycle(cycleId: symbol, snapshotCount: number, totalSnapshots: number, persistenceX1000: number, gated: symbol)
 .decl LyapunovMetric(file: symbol, totalCoChanges: number, partnerCount: number, lyapunovX1000: number)
 .decl PackageMinCut(fromPackage: symbol, toPackage: symbol, edgeCount: number, minCut: number)
+.decl InformationBottleneck(symbol: symbol, callerCount: number, calleeCount: number, scoreX1000: number)
 .decl SymbolCallEdge(fromFile: symbol, fromSymbol: symbol, toFile: symbol, toSymbol: symbol, line: number)
 .decl SymbolSignature(file: symbol, name: symbol, kind: symbol, line: number)
 .decl EntryPoint(file: symbol, kind: symbol, id: symbol)
@@ -153,6 +154,7 @@
 .input PersistentCycle
 .input LyapunovMetric
 .input PackageMinCut
+.input InformationBottleneck
 .input SymbolCallEdge
 .input SymbolSignature
 .input EntryPoint

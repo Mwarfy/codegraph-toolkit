@@ -607,6 +607,17 @@ export interface GraphSnapshot {
   }>
 
   /**
+   * Information Bottleneck approximation (Tishby/Pereira/Bialek 1999).
+   * Cf. extractors/information-bottleneck.ts.
+   */
+  informationBottlenecks?: Array<{
+    symbol: string
+    callerCount: number
+    calleeCount: number
+    bottleneckScoreX1000: number
+  }>
+
+  /**
    * Security patterns (Phase 5 Tier 16) — 4 facts complementaires
    * captures en un seul AST walk : secret-named vars passees a un call,
    * CORS misconfig, TLS unsafe options, Math.random pour secrets.

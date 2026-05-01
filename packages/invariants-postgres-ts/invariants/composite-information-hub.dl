@@ -1,0 +1,21 @@
+// COMPOSITE-INFORMATION-HUB — Information Bottleneck (Tishby 1999).
+//
+// Origine : symetrique de passthrough-fn. Score IB tres haut signale
+// un point de convergence + redistribution = candidat extension point
+// (interface, plugin pattern, dependency injection).
+//
+// Threshold : score × 1000 > 25000 (log₂(callers+1) × log₂(callees+1) > 25
+// = ~5×5 ou ~3×8 callers/callees distincts). Au-dessus, la fonction
+// transmet un flow dense d'information.
+//
+// Cette rule est INFORMATIONNELLE (signale), pas une violation
+// classique. Mais combine avec !TestedFile = signal critique : un
+// information hub non-teste est tres fragile.
+
+.decl InformationHubGrandfathered(symbol: symbol)
+
+Violation("COMPOSITE-INFORMATION-HUB-UNTESTED", S, 0,
+  "information hub (>25 IB score) — point d'extension critique, ajouter test integration") :-
+    InformationBottleneck(S, _, _, Score),
+    Score > 25000,
+    !InformationHubGrandfathered(S).

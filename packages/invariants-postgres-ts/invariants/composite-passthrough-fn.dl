@@ -1,0 +1,21 @@
+// COMPOSITE-PASSTHROUGH-FN — Information Bottleneck (Tishby 1999).
+//
+// Origine : aucun analyzer code n'utilise IB. Pourtant log(callers) ×
+// log(callees) capture la "richesse du flow" qui traverse une fonction.
+//
+// IB tres bas (~1000) : 1 caller × 1 callee = wrapper inutile (sauf
+// abstraction explicite). Candidate INLINE : supprimer la fonction et
+// remplacer ses call-sites par le call direct.
+//
+// Compose avec :
+//   - !TestedFile : si testé, l'inline casserait les tests (skip)
+//   - !articulation : si pas critique, inline safe
+//
+// Threshold : score × 1000 = 1000 (1 × 1 caller/callee, log₂(2)² = 1).
+
+.decl PassthroughFnGrandfathered(symbol: symbol)
+
+Violation("COMPOSITE-PASSTHROUGH-FN", S, 0,
+  "fonction passe-plat (1 caller, 1 callee) — candidate inline") :-
+    InformationBottleneck(S, 1, 1, _),
+    !PassthroughFnGrandfathered(S).

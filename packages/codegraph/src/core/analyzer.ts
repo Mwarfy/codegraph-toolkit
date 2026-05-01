@@ -55,6 +55,7 @@ import { detectSignatureDuplicates, type SignatureDuplicate } from '../extractor
 import { computePersistentCycles, type PersistentCycle } from '../extractors/persistent-cycles.js'
 import { computeLyapunovMetrics, type LyapunovMetric } from '../extractors/lyapunov-cochange.js'
 import { computePackageMinCuts, type PackageMinCut } from '../extractors/package-mincut.js'
+import { computeInformationBottleneck, type InformationBottleneck } from '../extractors/information-bottleneck.js'
 import { analyzeHardcodedSecrets, type HardcodedSecret } from '../extractors/hardcoded-secrets.js'
 import { analyzeBooleanParams, type BooleanParamSite } from '../extractors/boolean-params.js'
 import { analyzeDeadCode, type DeadCodeFinding } from '../extractors/dead-code.js'
@@ -592,6 +593,7 @@ async function runDeterministicDetectors(
   let persistentCycles: PersistentCycle[] | undefined
   let lyapunovMetrics: LyapunovMetric[] | undefined
   let packageMinCuts: PackageMinCut[] | undefined
+  let informationBottlenecks: InformationBottleneck[] | undefined
   let hardcodedSecrets: HardcodedSecret[] | undefined
   let booleanParams: BooleanParamSite[] | undefined
   let deadCode: DeadCodeFinding[] | undefined
@@ -788,6 +790,18 @@ async function runDeterministicDetectors(
     console.error(`  ✗ package-mincut failed: ${err}`)
   }
 
+  // ─── Information Bottleneck (Tishby/Pereira/Bialek 1999) ────────────
+  const tIB = performance.now()
+  try {
+    if (snapshot.symbolRefs) {
+      informationBottlenecks = computeInformationBottleneck(snapshot.symbolRefs)
+    }
+    timing.detectors['information-bottleneck'] = performance.now() - tIB
+  } catch (err) {
+    timing.detectors['information-bottleneck'] = performance.now() - tIB
+    console.error(`  ✗ information-bottleneck failed: ${err}`)
+  }
+
   const tHardcoded = performance.now()
   try {
     hardcodedSecrets = await analyzeHardcodedSecrets(config.rootDir, files, sharedProject)
@@ -931,6 +945,7 @@ async function runDeterministicDetectors(
   if (persistentCycles) snapshot.persistentCycles = persistentCycles
   if (lyapunovMetrics) snapshot.lyapunovMetrics = lyapunovMetrics
   if (packageMinCuts) snapshot.packageMinCuts = packageMinCuts
+  if (informationBottlenecks) snapshot.informationBottlenecks = informationBottlenecks
   if (hardcodedSecrets) snapshot.hardcodedSecrets = hardcodedSecrets
   if (booleanParams) snapshot.booleanParams = booleanParams
   if (deadCode) snapshot.deadCode = deadCode
