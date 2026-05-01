@@ -414,6 +414,74 @@ export async function exportFacts(
   }
   relations.push(evalCallRel)
 
+  // ─── CryptoCall (Tier 16) ──────────────────────────────────────────
+  // Crypto API calls avec algo extrait. Permet rule cwe-327 algo-aware.
+  // Source : extractors/crypto-algo.ts.
+  const cryptoCallRel: RelationDef = {
+    name: 'CryptoCall',
+    decl: '(file:symbol, line:number, fn:symbol, algo:symbol, containingSymbol:symbol)',
+    rows: [],
+  }
+  for (const cc of snapshot.cryptoCalls ?? []) {
+    cryptoCallRel.rows.push([
+      sym(cc.file),
+      num(cc.line),
+      sym(cc.fn),
+      sym(cc.algo || '_'),
+      sym(cc.containingSymbol),
+    ])
+  }
+  relations.push(cryptoCallRel)
+
+  // ─── Security patterns (Tier 16) — 4 facts en bundle ─────────────────
+  // Source : extractors/security-patterns.ts.
+  const secretRefRel: RelationDef = {
+    name: 'SecretVarRef',
+    decl: '(file:symbol, line:number, varName:symbol, kind:symbol, callee:symbol, containingSymbol:symbol)',
+    rows: [],
+  }
+  const corsConfigRel: RelationDef = {
+    name: 'CorsConfig',
+    decl: '(file:symbol, line:number, originKind:symbol, containingSymbol:symbol)',
+    rows: [],
+  }
+  const tlsUnsafeRel: RelationDef = {
+    name: 'TlsConfigUnsafe',
+    decl: '(file:symbol, line:number, key:symbol, containingSymbol:symbol)',
+    rows: [],
+  }
+  const weakRandomRel: RelationDef = {
+    name: 'WeakRandomCall',
+    decl: '(file:symbol, line:number, varName:symbol, secretKind:symbol, containingSymbol:symbol)',
+    rows: [],
+  }
+  const sp = snapshot.securityPatterns
+  if (sp) {
+    for (const r of sp.secretRefs) {
+      secretRefRel.rows.push([
+        sym(r.file), num(r.line), sym(r.varName), sym(r.kind),
+        sym(r.callee), sym(r.containingSymbol),
+      ])
+    }
+    for (const r of sp.corsConfigs) {
+      corsConfigRel.rows.push([
+        sym(r.file), num(r.line), sym(r.originKind), sym(r.containingSymbol),
+      ])
+    }
+    for (const r of sp.tlsUnsafe) {
+      tlsUnsafeRel.rows.push([
+        sym(r.file), num(r.line), sym(r.key), sym(r.containingSymbol),
+      ])
+    }
+    for (const r of sp.weakRandoms) {
+      weakRandomRel.rows.push([
+        sym(r.file), num(r.line), sym(r.varName || '_'),
+        sym(r.secretKind || '_'), sym(r.containingSymbol),
+      ])
+    }
+  }
+  relations.push(secretRefRel, corsConfigRel, tlsUnsafeRel, weakRandomRel)
+
   // ─── HardcodedSecret (Tier 2) ────────────────────────────────────────
   const hardcodedSecretRel: RelationDef = {
     name: 'HardcodedSecret',

@@ -464,6 +464,43 @@ export interface GraphSnapshot {
   }>
 
   /**
+   * Crypto API calls (createHash / createCipher / pbkdf2 / scrypt) avec
+   * algo extrait du 1er arg literal. Permet a la rule cwe-327 de detecter
+   * les algos faibles (md5, sha1, des, ecb mode) precisement, pas juste
+   * par nom de callee. Optionnel. Cf. extractors/crypto-algo.ts (Phase 5 Tier 16).
+   */
+  cryptoCalls?: Array<{
+    file: string
+    line: number
+    fn: string
+    algo: string
+    containingSymbol: string
+  }>
+
+  /**
+   * Security patterns (Phase 5 Tier 16) — 4 facts complementaires
+   * captures en un seul AST walk : secret-named vars passees a un call,
+   * CORS misconfig, TLS unsafe options, Math.random pour secrets.
+   * Cf. extractors/security-patterns.ts.
+   */
+  securityPatterns?: {
+    secretRefs: Array<{
+      file: string; line: number; varName: string; kind: string
+      callee: string; containingSymbol: string
+    }>
+    corsConfigs: Array<{
+      file: string; line: number; originKind: string; containingSymbol: string
+    }>
+    tlsUnsafe: Array<{
+      file: string; line: number; key: string; containingSymbol: string
+    }>
+    weakRandoms: Array<{
+      file: string; line: number; varName: string; secretKind: string
+      containingSymbol: string
+    }>
+  }
+
+  /**
    * Hardcoded secrets candidats — strings longs + entropy haute + contexte
    * suspect (variable nommée 'token', 'api_key', etc.) OU pattern connu
    * (sk-..., ghp_..., AKIA...). Optionnel.
@@ -607,7 +644,7 @@ export interface GraphSnapshot {
   taintSinks?: Array<{
     file: string
     line: number
-    kind: 'sql' | 'eval' | 'exec' | 'fs-read' | 'fs-write' | 'http-out' | 'html-out'
+    kind: 'sql' | 'eval' | 'exec' | 'fs-read' | 'fs-write' | 'http-out' | 'html-out' | 'log' | 'redirect'
     callee: string
     containingSymbol: string
   }>

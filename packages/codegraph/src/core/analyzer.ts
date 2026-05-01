@@ -44,6 +44,8 @@ import { DrizzleSchemaDetector } from './detectors/drizzle-schema-detector.js'
 import { analyzeTodos, type TodoMarker } from '../extractors/todos.js'
 import { analyzeDriftPatterns, type DriftSignal } from '../extractors/drift-patterns.js'
 import { analyzeEvalCalls, type EvalCall } from '../extractors/eval-calls.js'
+import { analyzeCryptoCalls, type CryptoCall } from '../extractors/crypto-algo.js'
+import { analyzeSecurityPatterns, type SecurityPatternsAggregated } from '../extractors/security-patterns.js'
 import { analyzeHardcodedSecrets, type HardcodedSecret } from '../extractors/hardcoded-secrets.js'
 import { analyzeBooleanParams, type BooleanParamSite } from '../extractors/boolean-params.js'
 import { analyzeDeadCode, type DeadCodeFinding } from '../extractors/dead-code.js'
@@ -570,6 +572,8 @@ async function runDeterministicDetectors(
   let coChangePairs: CoChangePair[] | undefined
   let driftSignals: DriftSignal[] | undefined
   let evalCalls: EvalCall[] | undefined
+  let cryptoCalls: CryptoCall[] | undefined
+  let securityPatterns: SecurityPatternsAggregated | undefined
   let hardcodedSecrets: HardcodedSecret[] | undefined
   let booleanParams: BooleanParamSite[] | undefined
   let deadCode: DeadCodeFinding[] | undefined
@@ -648,6 +652,24 @@ async function runDeterministicDetectors(
   } catch (err) {
     timing.detectors['eval-calls'] = performance.now() - tEval
     console.error(`  ✗ eval-calls failed: ${err}`)
+  }
+
+  const tCrypto = performance.now()
+  try {
+    cryptoCalls = await analyzeCryptoCalls(config.rootDir, files, sharedProject)
+    timing.detectors['crypto-algo'] = performance.now() - tCrypto
+  } catch (err) {
+    timing.detectors['crypto-algo'] = performance.now() - tCrypto
+    console.error(`  ✗ crypto-algo failed: ${err}`)
+  }
+
+  const tSecurity = performance.now()
+  try {
+    securityPatterns = await analyzeSecurityPatterns(config.rootDir, files, sharedProject)
+    timing.detectors['security-patterns'] = performance.now() - tSecurity
+  } catch (err) {
+    timing.detectors['security-patterns'] = performance.now() - tSecurity
+    console.error(`  ✗ security-patterns failed: ${err}`)
   }
 
   const tHardcoded = performance.now()
@@ -782,6 +804,8 @@ async function runDeterministicDetectors(
   if (coChangePairs) snapshot.coChangePairs = coChangePairs
   if (driftSignals) snapshot.driftSignals = driftSignals
   if (evalCalls) snapshot.evalCalls = evalCalls
+  if (cryptoCalls) snapshot.cryptoCalls = cryptoCalls
+  if (securityPatterns) snapshot.securityPatterns = securityPatterns
   if (hardcodedSecrets) snapshot.hardcodedSecrets = hardcodedSecrets
   if (booleanParams) snapshot.booleanParams = booleanParams
   if (deadCode) snapshot.deadCode = deadCode
