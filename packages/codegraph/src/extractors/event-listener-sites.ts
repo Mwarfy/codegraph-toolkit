@@ -24,6 +24,7 @@
  */
 
 import { type Project, SyntaxKind, type SourceFile, Node } from 'ts-morph'
+import { findContainingSymbol } from './_shared/ast-helpers.js'
 
 const LISTENER_NAMES = new Set([
   'on', 'once', 'subscribe', 'addEventListener', 'listen', 'listensTo',
@@ -126,27 +127,6 @@ export function scanListenerSitesInSourceFile(
     }
   }
   return out
-}
-
-function findContainingSymbol(node: Node): string {
-  let current: Node | undefined = node.getParent()
-  while (current) {
-    if (Node.isFunctionDeclaration(current)) return current.getName() ?? ''
-    if (Node.isMethodDeclaration(current)) {
-      const cls = current.getFirstAncestorByKind(SyntaxKind.ClassDeclaration)
-      const className = cls?.getName() ?? ''
-      const methodName = current.getName()
-      return className ? `${className}.${methodName}` : methodName
-    }
-    if (Node.isVariableDeclaration(current)) {
-      const init = current.getInitializer()
-      if (init && (Node.isArrowFunction(init) || Node.isFunctionExpression(init))) {
-        return current.getName()
-      }
-    }
-    current = current.getParent()
-  }
-  return ''
 }
 
 function relativize(absPath: string, rootDir: string): string | null {

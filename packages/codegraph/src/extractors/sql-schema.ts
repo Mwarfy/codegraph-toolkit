@@ -18,6 +18,7 @@
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
 import { minimatch } from 'minimatch'
+import { computeFkWithoutIndex } from './_shared/sql-helpers.js'
 
 // ═════════════════════════════════════════════════════════════════════
 // Types
@@ -151,7 +152,8 @@ export async function analyzeSqlSchema(
   }
 
   // Cross-FK + index match
-  const fkWithoutIndex = computeFkWithoutIndex(foreignKeys, indexes, tables)
+  const fkWithoutIndex = computeFkWithoutIndex(foreignKeys, indexes)
+  void tables
 
   // Dérive primaryKeys depuis tables[].columns + table-level indexes _pkey.
   const primaryKeys = derivePrimaryKeys(tables, indexes)
@@ -528,37 +530,4 @@ function stripSchema(qualifiedName: string): string {
   // `public.users` → `users`. Garde tel quel si pas de point.
   const idx = qualifiedName.indexOf('.')
   return idx === -1 ? qualifiedName : qualifiedName.slice(idx + 1)
-}
-
-// ═════════════════════════════════════════════════════════════════════
-// FK index matching
-// ═════════════════════════════════════════════════════════════════════
-
-function computeFkWithoutIndex(
-  foreignKeys: SqlForeignKey[],
-  indexes: SqlIndex[],
-  _tables: SqlTable[],
-): SqlFkWithoutIndex[] {
-  // Build index : (table, firstCol) → at least one index exists
-  const indexedFirstCol = new Set<string>()
-  for (const idx of indexes) {
-    if (idx.firstColumn === null) continue
-    indexedFirstCol.add(`${idx.table}\x00${idx.firstColumn}`)
-  }
-
-  const out: SqlFkWithoutIndex[] = []
-  for (const fk of foreignKeys) {
-    const key = `${fk.fromTable}\x00${fk.fromColumn}`
-    if (!indexedFirstCol.has(key)) {
-      out.push({
-        fromTable: fk.fromTable,
-        fromColumn: fk.fromColumn,
-        toTable: fk.toTable,
-        toColumn: fk.toColumn,
-        file: fk.file,
-        line: fk.line,
-      })
-    }
-  }
-  return out
 }

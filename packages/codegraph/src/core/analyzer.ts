@@ -60,6 +60,7 @@ import { computeCommunityDetection, type ImportCommunity, type ModularityScore }
 import { computeFactStability, type FactKindStability } from '../extractors/fact-stability.js'
 import { analyzeCompressionSimilarity, type NormalizedCompressionDistance } from '../extractors/compression-similarity.js'
 import { computeGrangerCausality, type GrangerCausality } from '../extractors/granger-causality.js'
+import { runCrossDisciplineDetectors } from '../extractors/_shared/cross-discipline-orchestrator.js'
 import { analyzeHardcodedSecrets, type HardcodedSecret } from '../extractors/hardcoded-secrets.js'
 import { analyzeBooleanParams, type BooleanParamSite } from '../extractors/boolean-params.js'
 import { analyzeDeadCode, type DeadCodeFinding } from '../extractors/dead-code.js'
@@ -729,174 +730,32 @@ async function runDeterministicDetectors(
     console.error(`  ✗ function-complexity failed: ${err}`)
   }
 
-  // ─── Cross-discipline metrics (Cycle 2bis) ────────────────────────
-  // Composent des disciplines mathématiques sous-utilisees dans le code
-  // analysis : théorie spectrale (Fiedler), info theory (Shannon),
-  // coding theory (Hamming).
-  const tSpectral = performance.now()
-  try {
-    spectralMetrics = computeSpectralMetrics(snapshot.nodes, snapshot.edges)
-    timing.detectors['spectral-graph'] = performance.now() - tSpectral
-  } catch (err) {
-    timing.detectors['spectral-graph'] = performance.now() - tSpectral
-    console.error(`  ✗ spectral-graph failed: ${err}`)
-  }
-
-  const tEntropy = performance.now()
-  try {
-    if (snapshot.symbolRefs) {
-      symbolEntropy = computeSymbolEntropy(snapshot.symbolRefs)
-    }
-    timing.detectors['symbol-entropy'] = performance.now() - tEntropy
-  } catch (err) {
-    timing.detectors['symbol-entropy'] = performance.now() - tEntropy
-    console.error(`  ✗ symbol-entropy failed: ${err}`)
-  }
-
-  const tSigDup = performance.now()
-  try {
-    if (snapshot.typedCalls) {
-      signatureDuplicates = detectSignatureDuplicates(snapshot.typedCalls.signatures ?? [], {
-        hammingThreshold: 0,
-        sameKindOnly: true,
-        sameNameOnly: true,  // Same exportName = copy-paste avec rename file
-      })
-    }
-    timing.detectors['signature-duplication'] = performance.now() - tSigDup
-  } catch (err) {
-    timing.detectors['signature-duplication'] = performance.now() - tSigDup
-    console.error(`  ✗ signature-duplication failed: ${err}`)
-  }
-
-  // ─── Topological Data Analysis (TDA) — persistent homology ─────────
-  const tPersistent = performance.now()
-  try {
-    persistentCycles = await computePersistentCycles(config.rootDir)
-    timing.detectors['persistent-cycles'] = performance.now() - tPersistent
-  } catch (err) {
-    timing.detectors['persistent-cycles'] = performance.now() - tPersistent
-    console.error(`  ✗ persistent-cycles failed: ${err}`)
-  }
-
-  // ─── Théorie des systèmes dynamiques — Lyapunov exponent approx ────
-  const tLyap = performance.now()
-  try {
-    if (coChangePairs) {
-      lyapunovMetrics = computeLyapunovMetrics(coChangePairs)
-    }
-    timing.detectors['lyapunov-cochange'] = performance.now() - tLyap
-  } catch (err) {
-    timing.detectors['lyapunov-cochange'] = performance.now() - tLyap
-    console.error(`  ✗ lyapunov-cochange failed: ${err}`)
-  }
-
-  // ─── Théorie des flots — min-cut entre packages (Ford-Fulkerson) ────
-  const tMinCut = performance.now()
-  try {
-    packageMinCuts = computePackageMinCuts(snapshot.nodes, snapshot.edges)
-    timing.detectors['package-mincut'] = performance.now() - tMinCut
-  } catch (err) {
-    timing.detectors['package-mincut'] = performance.now() - tMinCut
-    console.error(`  ✗ package-mincut failed: ${err}`)
-  }
-
-  // ─── Information Bottleneck (Tishby/Pereira/Bialek 1999) ────────────
-  const tIB = performance.now()
-  try {
-    if (snapshot.symbolRefs) {
-      informationBottlenecks = computeInformationBottleneck(snapshot.symbolRefs)
-    }
-    timing.detectors['information-bottleneck'] = performance.now() - tIB
-  } catch (err) {
-    timing.detectors['information-bottleneck'] = performance.now() - tIB
-    console.error(`  ✗ information-bottleneck failed: ${err}`)
-  }
-
-  // ─── Community detection (Newman-Girvan 2004 / Louvain 2008) ────────
-  const tCD = performance.now()
-  try {
-    const cd = computeCommunityDetection(snapshot.nodes, snapshot.edges)
-    importCommunities = cd.communities
-    modularityScore = cd.score
-    timing.detectors['community-detection'] = performance.now() - tCD
-  } catch (err) {
-    timing.detectors['community-detection'] = performance.now() - tCD
-    console.error(`  ✗ community-detection failed: ${err}`)
-  }
-
-  // ─── Fact stability (Markov stationary distribution) ─────────────────
-  const tFS = performance.now()
-  try {
-    factStabilities = await computeFactStability(config.rootDir)
-    timing.detectors['fact-stability'] = performance.now() - tFS
-  } catch (err) {
-    timing.detectors['fact-stability'] = performance.now() - tFS
-    console.error(`  ✗ fact-stability failed: ${err}`)
-  }
-
-  // ─── Bayesian co-change conditional P(B|A) — 9e discipline ───────────
-  // Calcul direct depuis coChangePairs existant (totalCommitsFrom/To).
-  const tBCC = performance.now()
-  try {
-    if (snapshot.coChangePairs) {
-      const out: Array<{ driver: string; follower: string; conditionalProbX1000: number }> = []
-      for (const pair of snapshot.coChangePairs) {
-        // P(B | A) = count / totalCommitsFrom — A est driver
-        if (pair.totalCommitsFrom > 0) {
-          const probBA = pair.count / pair.totalCommitsFrom
-          if (probBA >= 0.5) {
-            out.push({
-              driver: pair.from,
-              follower: pair.to,
-              conditionalProbX1000: Math.round(probBA * 1000),
-            })
-          }
-        }
-        // P(A | B) = count / totalCommitsTo — B est driver
-        if (pair.totalCommitsTo > 0) {
-          const probAB = pair.count / pair.totalCommitsTo
-          if (probAB >= 0.5) {
-            out.push({
-              driver: pair.to,
-              follower: pair.from,
-              conditionalProbX1000: Math.round(probAB * 1000),
-            })
-          }
-        }
-      }
-      out.sort((a, b) => {
-        if (a.conditionalProbX1000 !== b.conditionalProbX1000) return b.conditionalProbX1000 - a.conditionalProbX1000
-        if (a.driver !== b.driver) return a.driver < b.driver ? -1 : 1
-        return a.follower < b.follower ? -1 : 1
-      })
-      bayesianCoChanges = out
-    }
-    timing.detectors['bayesian-cochange'] = performance.now() - tBCC
-  } catch (err) {
-    timing.detectors['bayesian-cochange'] = performance.now() - tBCC
-    console.error(`  ✗ bayesian-cochange failed: ${err}`)
-  }
-
-  // ─── NCD Kolmogorov compression similarity — 10e discipline ──────────
-  const tNCD = performance.now()
-  try {
-    compressionDistances = await analyzeCompressionSimilarity(config.rootDir, files, sharedProject)
-    timing.detectors['compression-similarity'] = performance.now() - tNCD
-  } catch (err) {
-    timing.detectors['compression-similarity'] = performance.now() - tNCD
-    console.error(`  ✗ compression-similarity failed: ${err}`)
-  }
-
-  // ─── Granger causality sur séquences git — 11e discipline ────────────
-  const tGr = performance.now()
-  try {
-    const knownFiles = new Set(snapshot.nodes.map((n) => n.id))
-    grangerCausalities = await computeGrangerCausality(config.rootDir, { knownFiles })
-    timing.detectors['granger-causality'] = performance.now() - tGr
-  } catch (err) {
-    timing.detectors['granger-causality'] = performance.now() - tGr
-    console.error(`  ✗ granger-causality failed: ${err}`)
-  }
+  // ─── Cross-discipline orchestrator — 11 disciplines mathématiques ───
+  // Extrait dans `extractors/_shared/cross-discipline-orchestrator.ts`
+  // pour réduire la cognitive load d'analyzer.ts (META-COMPOSITE-
+  // CRITICAL-INSTABILITY signal). Comportement byte-identique au inline
+  // précédent — ordre, try/catch, timing tracking préservés.
+  const cross = await runCrossDisciplineDetectors({
+    rootDir: config.rootDir,
+    files,
+    sharedProject,
+    snapshot,
+    coChangePairs,
+    timing,
+  })
+  spectralMetrics = cross.spectralMetrics
+  symbolEntropy = cross.symbolEntropy
+  signatureDuplicates = cross.signatureDuplicates
+  persistentCycles = cross.persistentCycles
+  lyapunovMetrics = cross.lyapunovMetrics
+  packageMinCuts = cross.packageMinCuts
+  informationBottlenecks = cross.informationBottlenecks
+  importCommunities = cross.importCommunities
+  modularityScore = cross.modularityScore
+  factStabilities = cross.factStabilities
+  bayesianCoChanges = cross.bayesianCoChanges
+  compressionDistances = cross.compressionDistances
+  grangerCausalities = cross.grangerCausalities
 
   const tHardcoded = performance.now()
   try {

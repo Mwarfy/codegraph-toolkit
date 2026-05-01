@@ -35,6 +35,7 @@
 
 import { Project, SyntaxKind, type Node, type SourceFile } from 'ts-morph'
 import * as path from 'node:path'
+import { collectFunctionRanges, findContainerAtLine, type FnRange } from './_shared/ast-helpers.js'
 import type {
   DataFlow,
   DataFlowEntry,
@@ -311,67 +312,6 @@ export const DEFAULT_DATA_FLOWS_OPTS: DataFlowFileBundleOptions = {
   bullmqWorkerCtors: new Set(DEFAULT_BULLMQ_WORKER_CTORS),
   httpOutboundFns: new Set(DEFAULT_HTTP_OUTBOUND_FNS),
   httpOutboundClients: new Set(DEFAULT_HTTP_OUTBOUND_CLIENTS),
-}
-
-// ─── Function range tracking ────────────────────────────────────────────────
-
-interface FnRange {
-  start: number
-  end: number
-  name: string  // "foo" ou "ClassName.method"
-}
-
-function collectFunctionRanges(sf: SourceFile): FnRange[] {
-  const ranges: FnRange[] = []
-
-  for (const fd of sf.getFunctions()) {
-    const name = fd.getName()
-    if (!name) continue
-    ranges.push({ start: fd.getStartLineNumber(), end: fd.getEndLineNumber(), name })
-  }
-
-  for (const cd of sf.getClasses()) {
-    const className = cd.getName() ?? '<anonymous>'
-    for (const m of cd.getMethods()) {
-      ranges.push({
-        start: m.getStartLineNumber(),
-        end: m.getEndLineNumber(),
-        name: `${className}.${m.getName()}`,
-      })
-    }
-    const ctor = cd.getConstructors()[0]
-    if (ctor) {
-      ranges.push({
-        start: ctor.getStartLineNumber(),
-        end: ctor.getEndLineNumber(),
-        name: `${className}.constructor`,
-      })
-    }
-  }
-
-  for (const vs of sf.getVariableStatements()) {
-    for (const vd of vs.getDeclarations()) {
-      const init = vd.getInitializer()
-      if (!init) continue
-      const k = init.getKind()
-      if (k !== SyntaxKind.ArrowFunction && k !== SyntaxKind.FunctionExpression) continue
-      ranges.push({
-        start: vd.getStartLineNumber(),
-        end: vd.getEndLineNumber(),
-        name: vd.getName(),
-      })
-    }
-  }
-
-  ranges.sort((a, b) => (a.end - a.start) - (b.end - b.start))
-  return ranges
-}
-
-function findContainerAtLine(ranges: FnRange[], line: number): string | null {
-  for (const r of ranges) {
-    if (line >= r.start && line <= r.end) return r.name
-  }
-  return null
 }
 
 // ─── Sink scanning ──────────────────────────────────────────────────────────

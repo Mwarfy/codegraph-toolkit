@@ -41,14 +41,14 @@
 
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
-- `packages/codegraph/src/core/types.ts` (in: 74) · gov by ADR-006
+- `packages/codegraph/src/core/types.ts` (in: 75) · gov by ADR-006
 - `packages/codegraph/src/incremental/queries.ts` (in: 22)
 - `packages/codegraph/src/incremental/database.ts` (in: 20)
 - `packages/salsa/dist/index.d.ts` (in: 19)
 - `packages/codegraph/src/core/detector-registry.ts` (in: 17)
+- `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 14)
 - `packages/adr-toolkit/src/config.ts` (in: 10) · gov by ADR-002
 - `packages/codegraph-mcp/src/snapshot-loader.ts` (in: 9)
-- `packages/codegraph/src/diff/types.ts` (in: 8)
 
 ## ⚠ ADR anchor suggestions
 
@@ -66,6 +66,8 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 > pas verdict. Une tension non explorée n'est pas un bug — c'est un saut
 > latéral possible que le sol stable rend testable.
 
+- **CYCLE** `packages/codegraph/src/extractors/_shared/sql-helpers.ts → packages/codegraph/src/extractors/sql-schema.ts` — boucle directe (2 fichiers)  
+  _→ inverser l'import OU extraire dans un 3e fichier_
 - **ORPHELIN** `packages/adr-toolkit/tests/fixtures/sample-project/src/core/event-bus.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/adr-toolkit/tests/fixtures/sample-project/src/services/state-service.ts` — aucun importeur  
@@ -94,12 +96,11 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ npm uninstall jest + npm test_
 - **DEP-UNUSED** `test-only-in-deps` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall test-only-in-deps + npm test_
-- **DEP-UNUSED** `unused-pkg` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
-  _→ npm uninstall unused-pkg + npm test_
 
 ## Activité récente (14 derniers jours)
 
 ```
+dc48f25 feat(toolkit): 4 nouvelles disciplines mathématiques (8e→11e)
 691337e feat(toolkit): 8e discipline Newman-Girvan + 4 méta-composites cross-disciplines
 c003043 docs: update READMEs for v0.5.0 — 91 rules, multi-dir, 7 cross-discipline
 443e072 feat(datalog): runFromDirs accepte rulesDir array (multi-dir loader)
@@ -111,7 +112,6 @@ c003043 docs: update READMEs for v0.5.0 — 91 rules, multi-dir, 7 cross-discipl
 375d5a2 feat(toolkit): cross-discipline rules — Fiedler λ₂ + Shannon entropy + Hamming dup
 bc4fce3 feat(invariants): 2 rules auto-decouvertes via pattern mining
 1cc41ea refactor(facts): extract 3 emit helpers + fix File/FileTag regression
-c3750da feat(toolkit): Top-5 graph theory uplift — PageRank + complexity + perf + SCC
 ```
 
 ## Comment contribuer à ce brief

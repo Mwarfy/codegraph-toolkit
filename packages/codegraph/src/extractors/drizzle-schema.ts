@@ -45,6 +45,7 @@ import type {
   SqlSchemaResult,
 } from './sql-schema.js'
 import { derivePrimaryKeys } from './sql-schema.js'
+import { computeFkWithoutIndex } from './_shared/sql-helpers.js'
 
 export type { SqlSchemaResult } from './sql-schema.js'
 
@@ -419,29 +420,3 @@ function relativize(absPath: string, rootDir: string): string {
   return path.relative(rootDir, absPath).replace(/\\/g, '/')
 }
 
-function computeFkWithoutIndex(
-  foreignKeys: SqlForeignKey[],
-  indexes: SqlIndex[],
-): SqlFkWithoutIndex[] {
-  const indexedFirstCol = new Set<string>()
-  for (const idx of indexes) {
-    if (idx.firstColumn === null) continue
-    indexedFirstCol.add(`${idx.table}\x00${idx.firstColumn}`)
-  }
-
-  const out: SqlFkWithoutIndex[] = []
-  for (const fk of foreignKeys) {
-    const key = `${fk.fromTable}\x00${fk.fromColumn}`
-    if (!indexedFirstCol.has(key)) {
-      out.push({
-        fromTable: fk.fromTable,
-        fromColumn: fk.fromColumn,
-        toTable: fk.toTable,
-        toColumn: fk.toColumn,
-        file: fk.file,
-        line: fk.line,
-      })
-    }
-  }
-  return out
-}

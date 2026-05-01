@@ -22,6 +22,7 @@
  */
 
 import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
+import { findContainingSymbol } from './_shared/ast-helpers.js'
 
 const TEST_FILE_RE = /(\.test\.tsx?|\.spec\.tsx?|(^|\/)tests?\/|(^|\/)fixtures?\/)/
 const SECRET_NAME_RE = /^(password|passwd|pwd|secret|token|api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|client[-_]?secret|jwt|nonce|sessionid|csrf|otp|priv(ate)?[-_]?key|encryption[-_]?key)$/i
@@ -205,27 +206,6 @@ export function extractSecurityPatternsFileBundle(
   }
 
   return out
-}
-
-function findContainingSymbol(node: Node): string {
-  let current: Node | undefined = node.getParent()
-  while (current) {
-    if (Node.isFunctionDeclaration(current)) return current.getName() ?? ''
-    if (Node.isMethodDeclaration(current)) {
-      const cls = current.getFirstAncestorByKind(SyntaxKind.ClassDeclaration)
-      const className = cls?.getName() ?? ''
-      const methodName = current.getName()
-      return className ? `${className}.${methodName}` : methodName
-    }
-    if (Node.isVariableDeclaration(current)) {
-      const init = current.getInitializer()
-      if (init && (Node.isArrowFunction(init) || Node.isFunctionExpression(init))) {
-        return current.getName()
-      }
-    }
-    current = current.getParent()
-  }
-  return ''
 }
 
 export interface SecurityPatternsAggregated {

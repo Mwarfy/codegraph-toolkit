@@ -18,6 +18,7 @@
  */
 
 import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
+import { findContainingSymbol } from './_shared/ast-helpers.js'
 
 export interface Sanitizer {
   file: string
@@ -96,27 +97,6 @@ export function extractSanitizersFileBundle(
   }
 
   return { sanitizers }
-}
-
-function findContainingSymbol(node: Node): string {
-  let current: Node | undefined = node.getParent()
-  while (current) {
-    if (Node.isFunctionDeclaration(current)) return current.getName() ?? ''
-    if (Node.isMethodDeclaration(current)) {
-      const cls = current.getFirstAncestorByKind(SyntaxKind.ClassDeclaration)
-      const className = cls?.getName() ?? ''
-      const methodName = current.getName()
-      return className ? `${className}.${methodName}` : methodName
-    }
-    if (Node.isVariableDeclaration(current)) {
-      const init = current.getInitializer()
-      if (init && (Node.isArrowFunction(init) || Node.isFunctionExpression(init))) {
-        return current.getName()
-      }
-    }
-    current = current.getParent()
-  }
-  return ''
 }
 
 export async function analyzeSanitizers(

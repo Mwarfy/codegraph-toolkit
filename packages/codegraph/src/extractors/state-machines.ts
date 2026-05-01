@@ -34,6 +34,7 @@
 import { Project, SyntaxKind, type SourceFile, type Node, type TypeAliasDeclaration, type EnumDeclaration } from 'ts-morph'
 import * as path from 'node:path'
 import * as fs from 'node:fs/promises'
+import { collectFunctionRanges, findContainerAtLine, type FnRange } from './_shared/ast-helpers.js'
 import type {
   StateMachine,
   StateTransition,
@@ -69,11 +70,9 @@ export interface WriteSignal {
   container: string  // "file:function"
 }
 
-export interface FnRange {
-  start: number
-  end: number
-  name: string
-}
+// FnRange est ré-exporté depuis _shared/ast-helpers.js pour la
+// rétro-compatibilité (était local-only mais exporté pour symétrie).
+export type { FnRange } from './_shared/ast-helpers.js'
 
 /**
  * Bundle de tout ce qu'on peut extraire d'UN SourceFile sans toucher à
@@ -348,60 +347,6 @@ function extractEnumStates(en: EnumDeclaration): string[] {
   return dedup(out)
 }
 
-// ─── Function ranges ────────────────────────────────────────────────────────
-
-function collectFunctionRanges(sf: SourceFile): FnRange[] {
-  const ranges: FnRange[] = []
-
-  for (const fd of sf.getFunctions()) {
-    const name = fd.getName()
-    if (!name) continue
-    ranges.push({ start: fd.getStartLineNumber(), end: fd.getEndLineNumber(), name })
-  }
-
-  for (const cd of sf.getClasses()) {
-    const className = cd.getName() ?? '<anonymous>'
-    for (const m of cd.getMethods()) {
-      ranges.push({
-        start: m.getStartLineNumber(),
-        end: m.getEndLineNumber(),
-        name: `${className}.${m.getName()}`,
-      })
-    }
-    const ctor = cd.getConstructors()[0]
-    if (ctor) {
-      ranges.push({
-        start: ctor.getStartLineNumber(),
-        end: ctor.getEndLineNumber(),
-        name: `${className}.constructor`,
-      })
-    }
-  }
-
-  for (const vs of sf.getVariableStatements()) {
-    for (const vd of vs.getDeclarations()) {
-      const init = vd.getInitializer()
-      if (!init) continue
-      const k = init.getKind()
-      if (k !== SyntaxKind.ArrowFunction && k !== SyntaxKind.FunctionExpression) continue
-      ranges.push({
-        start: vd.getStartLineNumber(),
-        end: vd.getEndLineNumber(),
-        name: vd.getName(),
-      })
-    }
-  }
-
-  ranges.sort((a, b) => (a.end - a.start) - (b.end - b.start))
-  return ranges
-}
-
-function findContainerAtLine(ranges: FnRange[], line: number): string | null {
-  for (const r of ranges) {
-    if (line >= r.start && line <= r.end) return r.name
-  }
-  return null
-}
 
 // ─── Trigger detection ──────────────────────────────────────────────────────
 

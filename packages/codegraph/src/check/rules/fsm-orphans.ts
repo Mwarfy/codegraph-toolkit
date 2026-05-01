@@ -15,6 +15,7 @@
 
 import type { GraphSnapshot } from '../../core/types.js'
 import type { CheckRule, Violation } from '../types.js'
+import { splitNullKey as splitKey } from '../../extractors/_shared/ast-helpers.js'
 
 export const noNewOrphanStatesRule: CheckRule = {
   name: 'no-new-orphan-states',
@@ -52,7 +53,3 @@ function orphanSet(snapshot: GraphSnapshot): Set<string> {
   return out
 }
 
-function splitKey(key: string): [string, string] {
-  const idx = key.indexOf('\u0000')
-  return [key.slice(0, idx), key.slice(idx + 1)]
-}
