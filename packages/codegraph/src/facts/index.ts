@@ -695,6 +695,41 @@ export async function exportFacts(
   }
   relations.push(sanitizerCallRel)
 
+  // ─── TaintedVarDecl + TaintedArgCall (Tier 11 — variable tracking) ──
+  const taintedVarDeclRel: RelationDef = {
+    name: 'TaintedVarDecl',
+    decl: '(file:symbol, containingSymbol:symbol, varName:symbol, line:number, source:symbol)',
+    rows: [],
+  }
+  const taintedArgCallRel: RelationDef = {
+    name: 'TaintedArgCall',
+    decl: '(file:symbol, line:number, callee:symbol, argVarName:symbol, argIndex:number, source:symbol, containingSymbol:symbol)',
+    rows: [],
+  }
+  if (snapshot.taintedVars) {
+    for (const d of snapshot.taintedVars.decls) {
+      taintedVarDeclRel.rows.push([
+        sym(d.file),
+        sym(d.containingSymbol || '_'),
+        sym(d.varName),
+        num(d.line),
+        sym(d.source),
+      ])
+    }
+    for (const ac of snapshot.taintedVars.argCalls) {
+      taintedArgCallRel.rows.push([
+        sym(ac.file),
+        num(ac.line),
+        sym(ac.callee),
+        sym(ac.argVarName),
+        num(ac.argIndex),
+        sym(ac.source),
+        sym(ac.containingSymbol || '_'),
+      ])
+    }
+  }
+  relations.push(taintedVarDeclRel, taintedArgCallRel)
+
   // ─── Write to disk ────────────────────────────────────────────────────
   await fs.mkdir(options.outDir, { recursive: true })
 

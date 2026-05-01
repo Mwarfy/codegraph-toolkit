@@ -13,7 +13,7 @@
 
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
-import { runFromDirs } from '@liby-tools/datalog'
+import { runFromDirs, formatProof, tupleKey } from '@liby-tools/datalog'
 
 const args = process.argv.slice(2)
 const root = args[0]
@@ -42,8 +42,13 @@ if (!(await exists(rulesDir)) || !(await exists(factsDir))) {
   process.exit(0)
 }
 
-const evalPromise = runFromDirs({ rulesDir, factsDir, allowRecursion: true })
-  .catch((err) => ({ __error: String(err) }))
+// Tier 12 : record proofs for Violation pour pouvoir afficher le path
+// (proof tree) dans le hook output. Coût eval +5-10ms typique mais
+// l'agent voit POURQUOI une violation existe, pas juste OÙ.
+const evalPromise = runFromDirs({
+  rulesDir, factsDir, allowRecursion: true,
+  recordProofsFor: ['Violation'],
+}).catch((err) => ({ __error: String(err) }))
 let timer
 const timeoutPromise = new Promise((resolve) => {
   timer = setTimeout(() => resolve({ __timeout: true }), TIMEOUT_MS)
@@ -64,7 +69,25 @@ if (raced.__error) {
 }
 
 const violations = raced.result.outputs.get('Violation') ?? []
+const proofs = raced.result.proofs?.get('Violation') ?? new Map()
 const keyOf = (v) => `${v[0]}\x00${v[1]}\x00${v[2]}\x00${v[3]}`
+
+// Extrait un PATH lisible depuis le proof tree d'un Violation. Le proof
+// liste les facts/rules qui ont permis de derive la conclusion. On
+// retourne juste les noms de relations + tuples cles (pas le tree full).
+function proofPath(violationTuple) {
+  try {
+    const proofKey = tupleKey('Violation', violationTuple)
+    const proof = proofs.get(proofKey)
+    if (!proof) return null
+    // formatProof renvoie un texte multi-lignes avec indent. On garde
+    // les 8 premieres lignes pour l'output JSON (acceptable taille hook).
+    const text = formatProof(proof)
+    return text.split('\n').slice(0, 8).join('\n')
+  } catch {
+    return null
+  }
+}
 
 if (updateBaseline) {
   await fs.writeFile(baselinePath, JSON.stringify({
@@ -97,6 +120,10 @@ console.log(JSON.stringify({
   total: violations.length,
   baseline: baselineCount,
   new: newViolations.length,
-  violations: newViolations.slice(0, 20).map(([adr, file, line, msg]) => ({ adr, file, line, msg })),
+  violations: newViolations.slice(0, 20).map((tuple) => {
+    const [adr, file, line, msg] = tuple
+    const path = proofPath(tuple)
+    return path ? { adr, file, line, msg, path } : { adr, file, line, msg }
+  }),
   truncated: newViolations.length > 20 ? newViolations.length - 20 : 0,
 }))

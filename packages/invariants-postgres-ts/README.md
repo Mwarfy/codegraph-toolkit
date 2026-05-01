@@ -38,6 +38,9 @@ These rules cross-reference 2+ fact relations to detect signals that no single r
 | `composite-high-critical-untested` | `ArticulationPoint ∧ TruthPointWriter ∧ ¬TestedFile` = max blast radius without safety net. Ratchet on `file`. |
 | `composite-double-drift-wrapper-boolean` | `wrapper-superfluous` drift signal + `BooleanParam` on same function = double dette agentique, supprimer le wrapper résout les 2. Ratchet on `(file, name)`. |
 | `composite-tainted-flow` | Taint analysis lite (CodeQL inspiration) — http-route entry → SymbolCallEdge transitif → TaintSink (sql/eval/exec/fs/http/html) sans SanitizerCall dans le file source ou sink. Ratchet on `(sinkFile, sinkLine)`. |
+| `composite-tainted-var-to-sink` | Variable tracking lite — tainted var (req.body/process.env/etc.) passée DIRECTEMENT à un sink à la même ligne (Tier 11). Ratchet on `(file, line)`. |
+| `composite-todo-in-truth-point-writer` | TODO sans owner dans un fichier qui écrit un truth-point business — dette qui peut affecter le SSOT. Ratchet on `(file, line)`. |
+| `composite-boolean-trap-untested` | Boolean positionnel + fichier sans test direct — double risque, prioriser refactor options object. Ratchet on `(file, name)`. |
 
 ## Why these two
 

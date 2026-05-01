@@ -1,0 +1,34 @@
+// COMPOSITE-BOOLEAN-TRAP-UNTESTED — boolean positionnel sans test.
+//
+// Pourquoi : un boolean positionnel est deja un signal de design
+// (Sonar S2301). Un boolean positionnel dans un fichier SANS test
+// direct = double risque : fonction confusante au call site ET aucun
+// safety net pour detecter qu'un dev a inverse les params.
+//
+// Composite multi-relation :
+//   BooleanParam(file, _, name, _, _, _) ∩ !TestedFile(file)
+//
+// Different des rules isolees :
+//   - no-boolean-positional-param (Tier 2) flag tous (volume eleve si
+//     legacy)
+//   - Ce composite priorise les sites SANS test direct = candidates
+//     refactor en premier (cassure detectable difficilement sans tests)
+//
+// Pattern ratchet : grandfather par (file, name). Le grandfather devient
+// obsolete automatiquement quand on ajoute un test direct (TestedFile
+// devient true) OU quand on refactor en options object.
+
+.decl BoolTrapUntestedGrandfathered(file: symbol, name: symbol)
+
+// Relation intermediaire pour eviter de generer plusieurs Violations
+// pour le meme (file, name) (BooleanParam peut avoir plusieurs entries
+// si la fn a plusieurs boolean params).
+.decl BoolTrapUntested(file: symbol, line: number, name: symbol)
+BoolTrapUntested(F, L, N) :-
+    BooleanParam(F, L, N, _, _, _),
+    !TestedFile(F).
+
+Violation("COMPOSITE-BOOLEAN-TRAP-UNTESTED", File, Line,
+  "boolean positionnel dans fichier non teste — double risque, prioriser refactor options object") :-
+    BoolTrapUntested(File, Line, Name),
+    !BoolTrapUntestedGrandfathered(File, Name).

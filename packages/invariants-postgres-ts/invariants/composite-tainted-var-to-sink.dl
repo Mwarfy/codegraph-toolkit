@@ -1,0 +1,28 @@
+// COMPOSITE-TAINTED-VAR-TO-SINK — variable tracking lite (Tier 11).
+//
+// Pourquoi : Tier 10 (tainted-flow) faisait du file-level (entry_file
+// reach sink_file). Tier 11 fait du VARIABLE-LEVEL : si une variable
+// assignee a un user input (req.body.x, process.env.X) est PASSEE EN
+// ARGUMENT a un sink (db.query, eval, exec, etc.) DANS LA MEME FONCTION,
+// c'est un vrai positif a haute confiance.
+//
+// Composite multi-relation (Tier 11) :
+//   TaintedArgCall(file, line, callee, varName, argIdx, source, _)
+//   ∩ TaintSink(file, line, kind, callee, _) — meme position
+//
+// Source des facts :
+//   - TaintedVarDecl + TaintedArgCall (extractor tainted-vars.ts)
+//   - TaintSink (extractor taint-sinks.ts)
+//
+// Pattern ratchet : grandfather par (file, line). 0 violations Sentinel
+// au depart (l'archi routes → service → kernel utilise systematiquement
+// validateBody avant de toucher les sinks). La rule gate les NOUVELLES
+// regressions ou un agent oublierait de sanitizer.
+
+.decl TaintedVarToSinkGrandfathered(file: symbol, line: number)
+
+Violation("COMPOSITE-TAINTED-VAR-TO-SINK", File, Line,
+  "user input (req.body / process.env / etc.) passe directement a un sink (sql/eval/exec/...)") :-
+    TaintedArgCall(File, Line, _, _, _, _, _),
+    TaintSink(File, Line, _, _, _),
+    !TaintedVarToSinkGrandfathered(File, Line).

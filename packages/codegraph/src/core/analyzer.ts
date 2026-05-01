@@ -55,6 +55,7 @@ import { findMigrationOrderViolations, type MigrationOrderViolation } from '../e
 import { analyzeResourceBalance, type ResourceImbalance } from '../extractors/resource-balance.js'
 import { analyzeTaintSinks, type TaintSink } from '../extractors/taint-sinks.js'
 import { analyzeSanitizers, type Sanitizer } from '../extractors/sanitizers.js'
+import { analyzeTaintedVars, type TaintedVarDecl, type TaintedArgCall } from '../extractors/tainted-vars.js'
 import { analyzeLongFunctions, type LongFunction } from '../extractors/long-functions.js'
 import { analyzeMagicNumbers, type MagicNumber } from '../extractors/magic-numbers.js'
 import { analyzeTestCoverage, type TestCoverageReport } from '../extractors/test-coverage.js'
@@ -579,6 +580,7 @@ async function runDeterministicDetectors(
   let resourceImbalances: ResourceImbalance[] | undefined
   let taintSinks: TaintSink[] | undefined
   let sanitizerCalls: Sanitizer[] | undefined
+  let taintedVars: { decls: TaintedVarDecl[]; argCalls: TaintedArgCall[] } | undefined
 
   const tTodos = performance.now()
   try {
@@ -753,6 +755,15 @@ async function runDeterministicDetectors(
     console.error(`  ✗ sanitizers failed: ${err}`)
   }
 
+  const tTaintedVars = performance.now()
+  try {
+    taintedVars = await analyzeTaintedVars(config.rootDir, files, sharedProject)
+    timing.detectors['tainted-vars'] = performance.now() - tTaintedVars
+  } catch (err) {
+    timing.detectors['tainted-vars'] = performance.now() - tTaintedVars
+    console.error(`  ✗ tainted-vars failed: ${err}`)
+  }
+
   if (todos) snapshot.todos = todos
   if (longFunctions) snapshot.longFunctions = longFunctions
   if (magicNumbers) snapshot.magicNumbers = magicNumbers
@@ -771,6 +782,7 @@ async function runDeterministicDetectors(
   if (resourceImbalances) snapshot.resourceImbalances = resourceImbalances
   if (taintSinks) snapshot.taintSinks = taintSinks
   if (sanitizerCalls) snapshot.sanitizerCalls = sanitizerCalls
+  if (taintedVars) snapshot.taintedVars = taintedVars
 }
 
 /**

@@ -1,0 +1,26 @@
+// COMPOSITE-TODO-IN-TRUTH-POINT-WRITER — dette dans le SSOT business.
+//
+// Pourquoi : un TODO sans owner (drift agentique) dans un fichier qui
+// ECRIT un truth-point business = dette qui dérive sans propriétaire ET
+// qui peut affecter le state-of-truth. Prioriser le refactor sur ces
+// sites.
+//
+// Composite multi-relation :
+//   DriftSignalFact(file, line, "todo-no-owner")
+//   ∩ TruthPointWriter(_, file)
+//
+// Different de no-deprecated-usage et todo-no-owner pris isolement :
+//   - todo-no-owner (Tier 4) flag tous les TODOs orphelins (volume eleve)
+//   - Ce composite filtre uniquement ceux dans un SSOT writer (volume
+//     faible, signal fort)
+//
+// Pattern ratchet : grandfather par (file, line). Severity = 2 (signal
+// fort, action recommandee).
+
+.decl TodoInTruthGrandfathered(file: symbol, line: number)
+
+Violation("COMPOSITE-TODO-IN-TRUTH-POINT-WRITER", File, Line,
+  "TODO sans owner dans un truth-point writer — dette qui peut affecter le SSOT business") :-
+    DriftSignalFact(File, Line, "todo-no-owner"),
+    TruthPointWriter(_, File),
+    !TodoInTruthGrandfathered(File, Line).

@@ -371,6 +371,13 @@ const TOOLS = [
           type: 'number',
           description: 'Cap on tuples returned (default 200).',
         },
+        with_proof: {
+          type: 'boolean',
+          description:
+            'If true, capture and display the proof tree under each output tuple. ' +
+            'Shows the chain of facts/rules that derived each result — invaluable for ' +
+            'debugging composite multi-relation rules. Eval cost +5-10ms typical.',
+        },
       },
       required: ['rule_text'],
     },

@@ -624,6 +624,31 @@ export interface GraphSnapshot {
     callee: string
     containingSymbol: string
   }>
+
+  /**
+   * Tainted variables — variables assignees a un user input non-sanitize
+   * (req.body.*, req.query.*, etc.) + call-sites qui les passent en
+   * argument. Variable tracking SCOPE-LEVEL lite (Tier 11).
+   * Cf. extractors/tainted-vars.ts.
+   */
+  taintedVars?: {
+    decls: Array<{
+      file: string
+      containingSymbol: string
+      varName: string
+      line: number
+      source: 'req.body' | 'req.query' | 'req.params' | 'req.headers' | 'process.argv' | 'process.env'
+    }>
+    argCalls: Array<{
+      file: string
+      line: number
+      callee: string
+      argVarName: string
+      argIndex: number
+      source: 'req.body' | 'req.query' | 'req.params' | 'req.headers' | 'process.argv' | 'process.env'
+      containingSymbol: string
+    }>
+  }
 }
 
 /** Re-export du type produit par `extractors/oauth-scope-literals`. */

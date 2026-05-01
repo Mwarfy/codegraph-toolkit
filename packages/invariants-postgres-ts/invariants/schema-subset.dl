@@ -42,6 +42,8 @@
 .decl CoChange(fileA: symbol, fileB: symbol, count: number, jaccardX100: number)
 .decl TaintSink(file: symbol, line: number, kind: symbol, callee: symbol, containingSymbol: symbol)
 .decl SanitizerCall(file: symbol, line: number, callee: symbol, containingSymbol: symbol)
+.decl TaintedVarDecl(file: symbol, containingSymbol: symbol, varName: symbol, line: number, source: symbol)
+.decl TaintedArgCall(file: symbol, line: number, callee: symbol, argVarName: symbol, argIndex: number, source: symbol, containingSymbol: symbol)
 
 .input File
 .input FileTag
@@ -75,6 +77,8 @@
 .input CoChange
 .input TaintSink
 .input SanitizerCall
+.input TaintedVarDecl
+.input TaintedArgCall
 
 // La relation cible commune : tous les fichiers de rules écrivent ici.
 .decl Violation(adr: symbol, file: symbol, line: number, msg: symbol)

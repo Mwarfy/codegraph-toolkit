@@ -884,6 +884,73 @@ describe('composite-tainted-flow (Tier 10)', () => {
   })
 })
 
+describe('composite-tainted-var-to-sink (Tier 11)', () => {
+  it('flag user input passe directement a un sink (meme line)', async () => {
+    const facts = new Map([
+      ['TaintedArgCall', 'src/api.ts\t42\tdb.query\tuserId\t0\treq.body\thandler'],
+      ['TaintSink', 'src/api.ts\t42\tsql\tdb.query\thandler'],
+    ])
+    const { violations } = await runRule({ ruleName: 'composite-tainted-var-to-sink.dl', facts })
+    expect(violations).toHaveLength(1)
+    expect(violations[0][0]).toBe('COMPOSITE-TAINTED-VAR-TO-SINK')
+  })
+
+  it('skip si tainted var pas a la meme ligne que le sink', async () => {
+    const facts = new Map([
+      ['TaintedArgCall', 'src/api.ts\t42\tlog\tuserId\t0\treq.body\thandler'],
+      ['TaintSink', 'src/api.ts\t50\tsql\tdb.query\thandler'],
+    ])
+    const { violations } = await runRule({ ruleName: 'composite-tainted-var-to-sink.dl', facts })
+    expect(violations).toEqual([])
+  })
+})
+
+describe('composite-todo-in-truth-point-writer (Tier 11)', () => {
+  it('flag TODO sans owner dans truth-point writer', async () => {
+    const facts = new Map([
+      ['DriftSignalFact', 'src/store.ts\t50\ttodo-no-owner'],
+      ['TruthPointWriter', 'orders\tsrc/store.ts'],
+    ])
+    const { violations } = await runRule({
+      ruleName: 'composite-todo-in-truth-point-writer.dl', facts,
+    })
+    expect(violations).toHaveLength(1)
+  })
+
+  it('skip si TODO mais pas truth-point writer', async () => {
+    const facts = new Map([
+      ['DriftSignalFact', 'src/util.ts\t10\ttodo-no-owner'],
+    ])
+    const { violations } = await runRule({
+      ruleName: 'composite-todo-in-truth-point-writer.dl', facts,
+    })
+    expect(violations).toEqual([])
+  })
+})
+
+describe('composite-boolean-trap-untested (Tier 11)', () => {
+  it('flag boolean param dans fichier non teste', async () => {
+    const facts = new Map([
+      ['BooleanParam', 'src/api.ts\t10\tsendMessage\turgent\t1\t2'],
+    ])
+    const { violations } = await runRule({
+      ruleName: 'composite-boolean-trap-untested.dl', facts,
+    })
+    expect(violations).toHaveLength(1)
+  })
+
+  it('skip si boolean param dans fichier teste', async () => {
+    const facts = new Map([
+      ['BooleanParam', 'src/api.ts\t10\tsendMessage\turgent\t1\t2'],
+      ['TestedFile', 'src/api.ts'],
+    ])
+    const { violations } = await runRule({
+      ruleName: 'composite-boolean-trap-untested.dl', facts,
+    })
+    expect(violations).toEqual([])
+  })
+})
+
 describe('schema-subset.dl est valide', () => {
   it('parse sans erreur et déclare les relations attendues', async () => {
     const schema = await loadRule('schema-subset.dl')
@@ -913,6 +980,8 @@ describe('schema-subset.dl est valide', () => {
     expect(program.decls.has('CoChange')).toBe(true)
     expect(program.decls.has('TaintSink')).toBe(true)
     expect(program.decls.has('SanitizerCall')).toBe(true)
+    expect(program.decls.has('TaintedVarDecl')).toBe(true)
+    expect(program.decls.has('TaintedArgCall')).toBe(true)
     expect(program.decls.has('Violation')).toBe(true)
     // Toutes les input relations sont marquées .input
     expect(program.decls.get('CycleNode')!.isInput).toBe(true)

@@ -18,6 +18,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import {
   parse, mergePrograms, loadFacts, evaluate,
+  formatProof, tupleKey,
   DatalogError,
 } from '@liby-tools/datalog'
 
@@ -45,6 +46,13 @@ export interface DatalogQueryArgs {
    * sur une rule transitive non-bornée.
    */
   limit?: number
+  /**
+   * Si true, capture et affiche le proof tree de chaque tuple output
+   * (pourquoi ce tuple a été dérivé). Coût eval +5-10ms typique. Utile
+   * pour debug ou pour comprendre une violation composite multi-relation
+   * (Tier 12).
+   */
+  with_proof?: boolean
 }
 
 const DEFAULT_LIMIT = 200
@@ -131,7 +139,11 @@ export function codegraphDatalogQuery(args: DatalogQueryArgs): { content: string
   const start = Date.now()
   let result
   try {
-    result = evaluate(merged, db, { allowRecursion: true })
+    const evalOpts: Parameters<typeof evaluate>[2] = { allowRecursion: true }
+    if (args.with_proof && outputRel.name) {
+      evalOpts.recordProofsFor = [outputRel.name]
+    }
+    result = evaluate(merged, db, evalOpts)
   } catch (err) {
     if (err instanceof DatalogError) {
       return errorResponse(`Datalog eval error: ${err.message}`)
@@ -144,11 +156,12 @@ export function codegraphDatalogQuery(args: DatalogQueryArgs): { content: string
   const tuples = result.outputs.get(outputRel.name) ?? []
   const truncated = tuples.length > limit
   const shown = truncated ? tuples.slice(0, limit) : tuples
+  const proofs = args.with_proof ? result.proofs?.get(outputRel.name) : undefined
 
   const lines: string[] = []
   lines.push(`🔍 Datalog query — ${outputRel.name}`)
   lines.push(`  Tuples: ${tuples.length}${truncated ? ` (showing ${limit}, +${tuples.length - limit} truncated)` : ''}`)
-  lines.push(`  Eval: ${elapsedMs}ms · facts loaded: ${factsByRelation.size} relations`)
+  lines.push(`  Eval: ${elapsedMs}ms · facts loaded: ${factsByRelation.size} relations${args.with_proof ? ' · proofs recorded' : ''}`)
   lines.push('')
   if (shown.length === 0) {
     lines.push('  (no tuples)')
@@ -156,6 +169,18 @@ export function codegraphDatalogQuery(args: DatalogQueryArgs): { content: string
     for (const t of shown) {
       const fmt = t.map((v) => typeof v === 'number' ? String(v) : `"${v}"`).join(', ')
       lines.push(`  ${outputRel.name}(${fmt})`)
+      // Tier 12 : afficher le proof path (chaine de derivation) sous
+      // chaque tuple si proofs capturees.
+      if (proofs) {
+        const proofKey = tupleKey(outputRel.name, t)
+        const proof = proofs.get(proofKey)
+        if (proof) {
+          const proofText = formatProof(proof)
+          for (const pl of proofText.split('\n').slice(0, 6)) {
+            if (pl.trim().length > 0) lines.push(`    ${pl}`)
+          }
+        }
+      }
     }
   }
 

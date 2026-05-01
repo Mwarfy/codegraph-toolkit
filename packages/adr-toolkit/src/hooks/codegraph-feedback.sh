@@ -221,6 +221,14 @@ try {
         const lineStr = v.line === 0 ? '' : ':' + v.line
         lines.push('    [' + v.adr + '] ' + v.file + lineStr)
         lines.push('      ' + v.msg)
+        // Tier 12 : afficher le proof path si disponible — l'agent voit
+        // POURQUOI la violation existe (chaine de derivation Datalog).
+        if (v.path) {
+          const pathLines = v.path.split('\n').slice(0, 4)
+          for (const p of pathLines) {
+            if (p.trim().length > 0) lines.push('      ' + p)
+          }
+        }
       }
       if (data.violations.length > 8) {
         lines.push('    (+' + (data.violations.length - 8) + ' more)')
