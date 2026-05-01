@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+9ee3547 feat(toolkit): min-cut/max-flow — coût objectif de séparation packages
 4cb7ffa feat(toolkit): TDA + Lyapunov — cycles structurels + chaos detection
 375d5a2 feat(toolkit): cross-discipline rules — Fiedler λ₂ + Shannon entropy + Hamming dup
 bc4fce3 feat(invariants): 2 rules auto-decouvertes via pattern mining
@@ -111,7 +112,6 @@ fa4032f feat(invariants): Tier 17 — 11 nouvelles rules library + grandfathers
 c3b4e3c feat(codegraph): Tier 17 — 13 nouveaux facts emis + 2 nouveaux extractors
 50a01d9 feat(invariants): Tier 16 — 7 nouvelles rules library
 4418c90 feat(codegraph): Tier 16 extractors — crypto-algo + security-patterns + 2 sink kinds
-10f4bf9 feat(invariants): Tier 15 — 21 nouvelles rules library + PHASE-5 backlog
 ```
 
 ## Comment contribuer à ce brief
