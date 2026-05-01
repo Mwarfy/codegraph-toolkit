@@ -53,6 +53,8 @@ import { analyzeArticulationPoints, type ArticulationPoint } from '../extractors
 import { findSqlNamingViolations, type SqlNamingViolation } from '../extractors/sql-naming.js'
 import { findMigrationOrderViolations, type MigrationOrderViolation } from '../extractors/sql-migration-order.js'
 import { analyzeResourceBalance, type ResourceImbalance } from '../extractors/resource-balance.js'
+import { analyzeTaintSinks, type TaintSink } from '../extractors/taint-sinks.js'
+import { analyzeSanitizers, type Sanitizer } from '../extractors/sanitizers.js'
 import { analyzeLongFunctions, type LongFunction } from '../extractors/long-functions.js'
 import { analyzeMagicNumbers, type MagicNumber } from '../extractors/magic-numbers.js'
 import { analyzeTestCoverage, type TestCoverageReport } from '../extractors/test-coverage.js'
@@ -575,6 +577,8 @@ async function runDeterministicDetectors(
   let sqlNamingViolations: SqlNamingViolation[] | undefined
   let sqlMigrationOrderViolations: MigrationOrderViolation[] | undefined
   let resourceImbalances: ResourceImbalance[] | undefined
+  let taintSinks: TaintSink[] | undefined
+  let sanitizerCalls: Sanitizer[] | undefined
 
   const tTodos = performance.now()
   try {
@@ -731,6 +735,24 @@ async function runDeterministicDetectors(
     console.error(`  ✗ resource-balance failed: ${err}`)
   }
 
+  const tTaintSinks = performance.now()
+  try {
+    taintSinks = await analyzeTaintSinks(config.rootDir, files, sharedProject)
+    timing.detectors['taint-sinks'] = performance.now() - tTaintSinks
+  } catch (err) {
+    timing.detectors['taint-sinks'] = performance.now() - tTaintSinks
+    console.error(`  ✗ taint-sinks failed: ${err}`)
+  }
+
+  const tSanitizers = performance.now()
+  try {
+    sanitizerCalls = await analyzeSanitizers(config.rootDir, files, sharedProject)
+    timing.detectors['sanitizers'] = performance.now() - tSanitizers
+  } catch (err) {
+    timing.detectors['sanitizers'] = performance.now() - tSanitizers
+    console.error(`  ✗ sanitizers failed: ${err}`)
+  }
+
   if (todos) snapshot.todos = todos
   if (longFunctions) snapshot.longFunctions = longFunctions
   if (magicNumbers) snapshot.magicNumbers = magicNumbers
@@ -747,6 +769,8 @@ async function runDeterministicDetectors(
   if (sqlNamingViolations) snapshot.sqlNamingViolations = sqlNamingViolations
   if (sqlMigrationOrderViolations) snapshot.sqlMigrationOrderViolations = sqlMigrationOrderViolations
   if (resourceImbalances) snapshot.resourceImbalances = resourceImbalances
+  if (taintSinks) snapshot.taintSinks = taintSinks
+  if (sanitizerCalls) snapshot.sanitizerCalls = sanitizerCalls
 }
 
 /**

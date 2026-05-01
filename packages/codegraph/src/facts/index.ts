@@ -662,6 +662,39 @@ export async function exportFacts(
   }
   relations.push(resourceImbalanceRel)
 
+  // ─── TaintSink (Tier 10) — sources/sinks pour taint analysis lite ───
+  const taintSinkRel: RelationDef = {
+    name: 'TaintSink',
+    decl: '(file:symbol, line:number, kind:symbol, callee:symbol, containingSymbol:symbol)',
+    rows: [],
+  }
+  for (const s of snapshot.taintSinks ?? []) {
+    taintSinkRel.rows.push([
+      sym(s.file),
+      num(s.line),
+      sym(s.kind),
+      sym(s.callee),
+      sym(s.containingSymbol || '_'),
+    ])
+  }
+  relations.push(taintSinkRel)
+
+  // ─── SanitizerCall (Tier 10) ────────────────────────────────────────
+  const sanitizerCallRel: RelationDef = {
+    name: 'SanitizerCall',
+    decl: '(file:symbol, line:number, callee:symbol, containingSymbol:symbol)',
+    rows: [],
+  }
+  for (const s of snapshot.sanitizerCalls ?? []) {
+    sanitizerCallRel.rows.push([
+      sym(s.file),
+      num(s.line),
+      sym(s.callee),
+      sym(s.containingSymbol || '_'),
+    ])
+  }
+  relations.push(sanitizerCallRel)
+
   // ─── Write to disk ────────────────────────────────────────────────────
   await fs.mkdir(options.outDir, { recursive: true })
 

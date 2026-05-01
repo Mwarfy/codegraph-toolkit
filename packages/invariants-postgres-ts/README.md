@@ -37,6 +37,7 @@ These rules cross-reference 2+ fact relations to detect signals that no single r
 | `composite-fk-chain-without-index` | Transitive FK chain `A → B → C` where source has no index = pathological CASCADE on entire path. Ratchet on `(table, col)`. |
 | `composite-high-critical-untested` | `ArticulationPoint ∧ TruthPointWriter ∧ ¬TestedFile` = max blast radius without safety net. Ratchet on `file`. |
 | `composite-double-drift-wrapper-boolean` | `wrapper-superfluous` drift signal + `BooleanParam` on same function = double dette agentique, supprimer le wrapper résout les 2. Ratchet on `(file, name)`. |
+| `composite-tainted-flow` | Taint analysis lite (CodeQL inspiration) — http-route entry → SymbolCallEdge transitif → TaintSink (sql/eval/exec/fs/http/html) sans SanitizerCall dans le file source ou sink. Ratchet on `(sinkFile, sinkLine)`. |
 
 ## Why these two
 

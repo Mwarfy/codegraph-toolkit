@@ -598,6 +598,32 @@ export interface GraphSnapshot {
     acquireCount: number
     releaseCount: number
   }>
+
+  /**
+   * Taint sinks — call-sites de fonctions dangereuses ou un user input
+   * non-valide peut causer un degat (sql injection, RCE, SSRF, XSS,
+   * path traversal). Cf. extractors/taint-sinks.ts (Phase 4 Tier 10).
+   */
+  taintSinks?: Array<{
+    file: string
+    line: number
+    kind: 'sql' | 'eval' | 'exec' | 'fs-read' | 'fs-write' | 'http-out' | 'html-out'
+    callee: string
+    containingSymbol: string
+  }>
+
+  /**
+   * Sanitizers — call-sites de fonctions qui assainissent un input
+   * (validateBody, zod.parse, escape, etc.). Combine avec EntryPoint +
+   * SymbolCallEdge + Sink pour le composite taint-flow.
+   * Cf. extractors/sanitizers.ts (Phase 4 Tier 10).
+   */
+  sanitizerCalls?: Array<{
+    file: string
+    line: number
+    callee: string
+    containingSymbol: string
+  }>
 }
 
 /** Re-export du type produit par `extractors/oauth-scope-literals`. */

@@ -1,0 +1,57 @@
+// COMPOSITE-TAINTED-FLOW — taint analysis lite (CodeQL inspiration).
+//
+// Pourquoi : un user input qui arrive a un sink dangereux SANS passer
+// par un sanitizer dans la chaine d'appels = vulnerabilite probable
+// (SQL injection, RCE, SSRF, XSS, path traversal).
+//
+// Taint analysis "vrai" (CodeQL style) suit la VARIABLE a travers les
+// assignations + parametres. Notre version lite suit uniquement les
+// CALL EDGES — beaucoup plus permissive (= plus de faux-positifs) mais
+// suffisante pour gater les cas evidents :
+//   - http-route (entry) → eval (sink) sans validation
+//   - http-route → db.query sans validateBody
+//   - http-route → fs.readFile sans path.normalize
+//   - etc.
+//
+// Composite multi-relation (Tier 10) :
+//   1. EntryPoint(file, "http-route", _) — source
+//   2. SymbolCallEdge transitif depuis ce file → sink file
+//   3. TaintSink(sink_file, line, kind, callee, _) — sink
+//   4. !SanitizerCall(any_file_in_path, _, _, _) — pas de sanitizer
+//      dans le path
+//
+// Approximation : on verifie qu'il EXISTE au moins 1 sanitizer dans
+// le fichier de l'entry-point OU le fichier du sink. Plus precis
+// demanderait du tracking de chemins explicit (path queries CodeQL).
+//
+// Pattern ratchet : grandfather par (sink_file, sink_line). Volumineux
+// au depart sur projets sans validateBody systematique — c'est attendu.
+// Le ratchet absorbe l'historique, la rule attrape les nouveaux flows.
+
+.decl TaintedFlowGrandfathered(sinkFile: symbol, sinkLine: number)
+
+// Reach2 : closure transitive sur SymbolCallEdge — fichier reachable
+// depuis un autre via les call edges (au niveau fichier, plus simple).
+.decl FileReach(fromFile: symbol, toFile: symbol)
+FileReach(F1, F2) :- SymbolCallEdge(F1, _, F2, _, _).
+FileReach(F1, F3) :- FileReach(F1, F2), SymbolCallEdge(F2, _, F3, _, _).
+
+// HasSanitizer : un fichier contient au moins un call sanitizer.
+.decl HasSanitizer(file: symbol)
+HasSanitizer(F) :- SanitizerCall(F, _, _, _).
+
+// TaintedReach : le file source d'un entry-point reach un file qui
+// contient un sink, ET ni le source ni le sink file n'ont de sanitizer.
+// Approximation file-level — preferable a rien meme si imprecis.
+.decl TaintedReach(srcFile: symbol, sinkFile: symbol, sinkLine: number, kind: symbol)
+TaintedReach(SrcF, SinkF, SinkL, Kind) :-
+    EntryPoint(SrcF, "http-route", _),
+    FileReach(SrcF, SinkF),
+    TaintSink(SinkF, SinkL, Kind, _, _),
+    !HasSanitizer(SrcF),
+    !HasSanitizer(SinkF).
+
+Violation("COMPOSITE-TAINTED-FLOW", SinkF, SinkL,
+  "sink atteint depuis http-route sans sanitizer dans le path — taint flow probable") :-
+    TaintedReach(_, SinkF, SinkL, _),
+    !TaintedFlowGrandfathered(SinkF, SinkL).

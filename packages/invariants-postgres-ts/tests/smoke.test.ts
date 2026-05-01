@@ -820,6 +820,70 @@ describe('composite-double-drift-wrapper-boolean (Tier 7)', () => {
   })
 })
 
+describe('composite-tainted-flow (Tier 10)', () => {
+  it('flag flow http-route -> sink sans sanitizer (1 hop)', async () => {
+    const facts = new Map([
+      ['EntryPoint', 'src/api.ts\thttp-route\tPOST /api/run'],
+      ['SymbolCallEdge', 'src/api.ts\thandler\tsrc/db.ts\tquery\t10'],
+      ['TaintSink', 'src/db.ts\t20\tsql\tdb.query\tquery'],
+      // Pas de SanitizerCall = aucun sanitizer dans le path
+    ])
+    const { violations } = await runRule({ ruleName: 'composite-tainted-flow.dl', facts })
+    expect(violations.length).toBeGreaterThan(0)
+    expect(violations[0][0]).toBe('COMPOSITE-TAINTED-FLOW')
+  })
+
+  it('skip si sanitizer dans le src file', async () => {
+    const facts = new Map([
+      ['EntryPoint', 'src/api.ts\thttp-route\tPOST /api/run'],
+      ['SymbolCallEdge', 'src/api.ts\thandler\tsrc/db.ts\tquery\t10'],
+      ['TaintSink', 'src/db.ts\t20\tsql\tdb.query\tquery'],
+      ['SanitizerCall', 'src/api.ts\t5\tvalidateBody\thandler'],
+    ])
+    const { violations } = await runRule({ ruleName: 'composite-tainted-flow.dl', facts })
+    expect(violations).toEqual([])
+  })
+
+  it('skip si sanitizer dans le sink file', async () => {
+    const facts = new Map([
+      ['EntryPoint', 'src/api.ts\thttp-route\tPOST /api/run'],
+      ['SymbolCallEdge', 'src/api.ts\thandler\tsrc/db.ts\tquery\t10'],
+      ['TaintSink', 'src/db.ts\t20\tsql\tdb.query\tquery'],
+      ['SanitizerCall', 'src/db.ts\t15\tparse\tquery'],
+    ])
+    const { violations } = await runRule({ ruleName: 'composite-tainted-flow.dl', facts })
+    expect(violations).toEqual([])
+  })
+
+  it('flag transitif (2 hops)', async () => {
+    const facts = new Map([
+      ['EntryPoint', 'src/api.ts\thttp-route\tPOST /api/run'],
+      ['SymbolCallEdge', 'src/api.ts\thandler\tsrc/service.ts\tdoStuff\t10\nsrc/service.ts\tdoStuff\tsrc/db.ts\tquery\t20'],
+      ['TaintSink', 'src/db.ts\t30\tsql\tdb.query\tquery'],
+    ])
+    const { violations } = await runRule({ ruleName: 'composite-tainted-flow.dl', facts })
+    expect(violations.length).toBeGreaterThan(0)
+  })
+
+  it('skip si grandfathered par (sinkFile, sinkLine)', async () => {
+    const schema = await loadRule('schema-subset.dl')
+    const baseRule = await loadRule('composite-tainted-flow.dl')
+    const customRule = baseRule + '\nTaintedFlowGrandfathered("src/db.ts", 20).\n'
+    const program = mergePrograms([
+      { name: 'schema.dl', content: schema },
+      { name: 'rule.dl', content: customRule },
+    ])
+    const facts = new Map([
+      ['EntryPoint', 'src/api.ts\thttp-route\tPOST /api/run'],
+      ['SymbolCallEdge', 'src/api.ts\thandler\tsrc/db.ts\tquery\t10'],
+      ['TaintSink', 'src/db.ts\t20\tsql\tdb.query\tquery'],
+    ])
+    const db = loadFacts(program.decls, { factsByRelation: facts })
+    const result = evaluate(program, db, { allowRecursion: true })
+    expect(result.outputs.get('Violation') ?? []).toEqual([])
+  })
+})
+
 describe('schema-subset.dl est valide', () => {
   it('parse sans erreur et déclare les relations attendues', async () => {
     const schema = await loadRule('schema-subset.dl')
@@ -847,6 +911,8 @@ describe('schema-subset.dl est valide', () => {
     expect(program.decls.has('TestedFile')).toBe(true)
     expect(program.decls.has('DriftSignalFact')).toBe(true)
     expect(program.decls.has('CoChange')).toBe(true)
+    expect(program.decls.has('TaintSink')).toBe(true)
+    expect(program.decls.has('SanitizerCall')).toBe(true)
     expect(program.decls.has('Violation')).toBe(true)
     // Toutes les input relations sont marquées .input
     expect(program.decls.get('CycleNode')!.isInput).toBe(true)

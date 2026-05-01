@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+5e9aba3 docs(readme): update pour Phase 4 + Tiers 1-9
 76ca900 fix(tests): reconstruct secret prefixes au runtime — secret scanning
 e5ac979 feat(phase4-tier9): packaging shipping-ready — tout via npm install + init
 7fb30b0 feat(phase4-tier8): live datalog dans le hook PostToolUse — 70ms wall clock
@@ -111,7 +112,6 @@ dfc3a9f feat(phase4-tier3): dead-code patterns (Sonar S1764 + S1126)
 2f3d214 feat(phase4-tier2): 4 invariants + 2 drift patterns lift de Sonar/Bandit
 3c94c2d fix(sql-schema): strip les commentaires SQL avant splitTopLevel
 6f1f454 feat(phase4-tier1): 4 invariants déterministes universels lift cross-stack
-d998e49 feat(phase4-axe5): @liby-tools/invariants-postgres-ts — catalogue portable
 ```
 
 ## Comment contribuer à ce brief

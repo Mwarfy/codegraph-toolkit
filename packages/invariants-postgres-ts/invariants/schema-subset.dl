@@ -28,6 +28,7 @@
 .decl DeadCode(file: symbol, line: number, kind: symbol)
 .decl FloatingPromise(file: symbol, line: number, callee: symbol, containingSymbol: symbol)
 .decl EntryPoint(file: symbol, kind: symbol, id: symbol)
+.decl SymbolCallEdge(fromFile: symbol, fromSymbol: symbol, toFile: symbol, toSymbol: symbol, line: number)
 .decl DeprecatedDecl(name: symbol, file: symbol, line: number)
 .decl DeprecatedUsage(file: symbol, line: number, callee: symbol)
 .decl ArticulationPoint(file: symbol, severity: number)
@@ -39,6 +40,8 @@
 .decl TestedFile(file: symbol)
 .decl DriftSignalFact(file: symbol, line: number, kind: symbol)
 .decl CoChange(fileA: symbol, fileB: symbol, count: number, jaccardX100: number)
+.decl TaintSink(file: symbol, line: number, kind: symbol, callee: symbol, containingSymbol: symbol)
+.decl SanitizerCall(file: symbol, line: number, callee: symbol, containingSymbol: symbol)
 
 .input File
 .input FileTag
@@ -58,6 +61,7 @@
 .input DeadCode
 .input FloatingPromise
 .input EntryPoint
+.input SymbolCallEdge
 .input DeprecatedDecl
 .input DeprecatedUsage
 .input ArticulationPoint
@@ -69,6 +73,8 @@
 .input TestedFile
 .input DriftSignalFact
 .input CoChange
+.input TaintSink
+.input SanitizerCall
 
 // La relation cible commune : tous les fichiers de rules écrivent ici.
 .decl Violation(adr: symbol, file: symbol, line: number, msg: symbol)
