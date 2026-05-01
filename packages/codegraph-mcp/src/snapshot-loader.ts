@@ -47,12 +47,6 @@ export function loadSnapshot(repoRoot: string): any {
   return cachedSnapshot
 }
 
-export function clearCache(): void {
-  cachedSnapshot = null
-  cachedMtime = 0
-  cachedPath = ''
-}
-
 /**
  * Normalise un path absolu OU relatif au rootDir vers le format
  * `nodes[].id` du snapshot (relatif à la racine).

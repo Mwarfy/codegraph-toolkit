@@ -226,13 +226,3 @@ async function fileExists(p: string): Promise<boolean> {
   try { await fs.access(p); return true } catch { return false }
 }
 
-/**
- * Force-supprime le cache (baseline + tous les deltas). Utile pour
- * `--cold` ou debug.
- */
-export async function clearPersistedCache(rootDir: string): Promise<void> {
-  try { await fs.unlink(cachePath(rootDir)) } catch {}
-  for (const df of await listDeltas(rootDir)) {
-    try { await fs.unlink(df) } catch {}
-  }
-}

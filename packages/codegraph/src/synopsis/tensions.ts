@@ -163,30 +163,3 @@ export function extractTensions(
   return out
 }
 
-/**
- * Format markdown compact des tensions pour le brief.
- * Une tension = une ligne. Convocation en début, coordonnées au milieu,
- * testHint en suffix italique.
- */
-export function renderTensionsMarkdown(tensions: Tension[]): string {
-  if (tensions.length === 0) {
-    return '_(aucune tension détectée — le code est sain ou les détecteurs n\'ont pas trouvé de friction)_'
-  }
-  const labels: Record<TensionKind, string> = {
-    'cycle': 'CYCLE',
-    'orphan': 'ORPHELIN',
-    'fsm-dead': 'FSM-DEAD',
-    'fsm-orphan': 'FSM-ORPHAN',
-    'dep-unused': 'DEP-UNUSED',
-    'barrel-low': 'BARREL-LOW',
-    'back-edge': 'BACK-EDGE',
-  }
-  const lines: string[] = []
-  for (const t of tensions) {
-    const label = labels[t.kind] ?? t.kind.toUpperCase()
-    const note = t.note ? ` — ${t.note}` : ''
-    const hint = t.testHint ? `  \n  _→ test : ${t.testHint}_` : ''
-    lines.push(`- **${label}** \`${t.coordinates}\`${note}${hint}`)
-  }
-  return lines.join('\n')
-}
