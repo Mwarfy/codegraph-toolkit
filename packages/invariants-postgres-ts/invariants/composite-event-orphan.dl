@@ -1,0 +1,27 @@
+// COMPOSITE-EVENT-ORPHAN (Tier 17).
+//
+// Pourquoi : un event emis (EmitsLiteral / EmitsConstRef) sans aucun
+// listener correspondant = event mort. Soit (a) feature WIP non
+// connectee, (b) regression silencieuse (le subscribe a disparu sans
+// que personne ne s'en apercoive).
+//
+// L'inverse (listener-orphan : subscribe sans emitter) est aussi
+// utile mais plus bruyant car les events viennent souvent de sources
+// externes (webhooks, MCP, etc.).
+//
+// Sources :
+//   - EmitsLiteral(file, line, eventName) — extractor existant
+//   - ListensLiteral(file, line, eventName) — Tier 17 NEW
+//
+// Pattern ratchet : grandfather par eventName.
+
+.decl EventOrphanGrandfathered(eventName: symbol)
+
+.decl EventHasListener(eventName: symbol)
+EventHasListener(E) :- ListensLiteral(_, _, E).
+
+Violation("COMPOSITE-EVENT-ORPHAN", F, L,
+  "event emis sans aucun listener — feature WIP ou subscribe disparu") :-
+    EmitsLiteral(F, L, E),
+    !EventHasListener(E),
+    !EventOrphanGrandfathered(E).

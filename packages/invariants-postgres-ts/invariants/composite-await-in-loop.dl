@@ -1,0 +1,176 @@
+// COMPOSITE-AWAIT-IN-LOOP (Tier 17).
+//
+// Pourquoi : un await dans un for/while/forOf direct serialise les
+// I/O. Sequential = N requetes en N*latency au lieu de N requetes
+// en max(latency) avec Promise.all. Bottleneck classique.
+//
+// Source : extractor code-quality-patterns (Tier 17).
+// Fact : AwaitInLoop(file, line, loopKind, containingSymbol)
+//
+// Cas legitimes a grandfather :
+//   - Throttling explicite (rate-limited API)
+//   - Ordre strict requis (transactions sequentielles)
+//   - Backpressure delibere
+// Marker `// await-ok: <reason>` cote source skip directement
+// l'extractor.
+//
+// Pattern ratchet : grandfather par (file, line).
+
+.decl AwaitInLoopGrandfathered(file: symbol, line: number)
+
+Violation("COMPOSITE-AWAIT-IN-LOOP", F, L,
+  "await dans une boucle — sequential I/O, considerer Promise.all si pas d'ordre requis") :-
+    AwaitInLoop(F, L, _, _),
+    !AwaitInLoopGrandfathered(F, L).
+
+// Grandfather list — 2026-05-01 (auto-generated, 150 entries).
+AwaitInLoopGrandfathered("sentinel-core/src/blocks/base-block.ts", 403).
+AwaitInLoopGrandfathered("sentinel-core/src/blocks/base-block.ts", 432).
+AwaitInLoopGrandfathered("sentinel-core/src/db/migrate.ts", 140).
+AwaitInLoopGrandfathered("sentinel-core/src/db/migrate.ts", 207).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/adaptive-scheduler.ts", 195).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/agent-commit.ts", 399).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/agent-commit.ts", 400).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/block-profiles-sync.ts", 34).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/block-profiles-sync.ts", 53).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/block-runtime.ts", 96).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/block-runtime.ts", 212).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/block-runtime.ts", 229).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/block-runtime.ts", 294).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/browser-pool.ts", 111).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/browser-pool.ts", 246).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/cli-latency-tracker.ts", 128).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/content-optimization-loop.ts", 117).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/content-optimization-loop.ts", 139).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/deploy-client.ts", 560).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/deploy-client.ts", 562).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/dimension-learner.ts", 243).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/event-bus.ts", 161).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/event-queue.ts", 74).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/event-queue.ts", 93).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/event-queue.ts", 100).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/event-queue.ts", 110).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/event-queue.ts", 129).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/feedback-aggregator.ts", 89).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/feedback-aggregator.ts", 101).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/feedback-aggregator.ts", 114).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/feedback-aggregator.ts", 127).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/guardrails.ts", 417).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/guardrails.ts", 458).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/guardrails.ts", 493).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/guardrails.ts", 494).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/healer/autonomous.ts", 201).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/healer/autonomous.ts", 215).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 147).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 154).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 160).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 170).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 183).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 193).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 203).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 214).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 219).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 337).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 359).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 367).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 381).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 394).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 405).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 419).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/healer/escalation-policy.ts", 110).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/healer/escalation-policy.ts", 181).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/healer/escalation-policy.ts", 191).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/healer/reactive.ts", 125).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/healer/reactive.ts", 136).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/health-watchdog.ts", 213).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/hypothesis-engine.ts", 65).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/hypothesis-engine.ts", 71).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/impact-measurer.ts", 141).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/impact-measurer.ts", 288).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/impact-measurer.ts", 303).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/impact-measurer.ts", 322).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/impact-measurer.ts", 323).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/learning/seed-synthesizer.ts", 115).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/learning/seed-synthesizer.ts", 121).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/learning/seed-synthesizer.ts", 170).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/learning/seed-synthesizer.ts", 187).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/learning/seed-synthesizer.ts", 300).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/llm-router.ts", 442).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/llm-router.ts", 451).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/maintenance.ts", 102).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/maintenance.ts", 112).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/maintenance.ts", 185).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/maintenance.ts", 201).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/metrics-collector.ts", 105).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/peer-review-coordinator.ts", 57).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/peer-review-coordinator.ts", 65).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/peer-review-coordinator.ts", 83).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/peer-review-coordinator.ts", 88).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/peer-review-coordinator.ts", 96).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/peer-review-coordinator.ts", 111).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/peer-review-coordinator.ts", 119).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/peer-review.ts", 658).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 137).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 141).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 151).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 157).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 172).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 199).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 229).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 235).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 246).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 248).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 279).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 289).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/post-deploy-watchdog.ts", 181).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/post-deploy-watchdog.ts", 190).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/post-deploy-watchdog.ts", 221).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/provisioning.ts", 116).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/provisioning.ts", 120).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/provisioning.ts", 124).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/provisioning.ts", 126).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/provisioning.ts", 374).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/publish-reconciler.ts", 282).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/redis-client.ts", 76).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/redis-client.ts", 79).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/redis-client.ts", 110).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/schedule-sync.ts", 72).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/scheduler.ts", 198).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/scheduler.ts", 243).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/scheduler.ts", 377).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/scheduler.ts", 480).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/scheduler.ts", 505).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/scheduler.ts", 568).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/scraping-health.ts", 138).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/scraping-health.ts", 157).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/scraping-health.ts", 181).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/slo-registry.ts", 97).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/template-system.ts", 151).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/video-chain-orchestrator.ts", 214).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/video-chain-orchestrator.ts", 474).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/video-chain-orchestrator.ts", 479).
+AwaitInLoopGrandfathered("sentinel-core/src/kernel/visual-render-gc.ts", 64).
+AwaitInLoopGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 820).
+AwaitInLoopGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 1072).
+AwaitInLoopGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 2414).
+AwaitInLoopGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 2886).
+AwaitInLoopGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 2894).
+AwaitInLoopGrandfathered("sentinel-core/src/mcp/tools/execute.ts", 126).
+AwaitInLoopGrandfathered("sentinel-core/src/packs/content-analytics/blocks/youtube-analytics.ts", 116).
+AwaitInLoopGrandfathered("sentinel-core/src/packs/llm-fanout/blocks/code-generator.ts", 286).
+AwaitInLoopGrandfathered("sentinel-core/src/packs/llm-fanout/blocks/code-generator.ts", 349).
+AwaitInLoopGrandfathered("sentinel-core/src/packs/publishing/blocks/youtube-publisher.ts", 386).
+AwaitInLoopGrandfathered("sentinel-core/src/packs/publishing/blocks/youtube-publisher.ts", 390).
+AwaitInLoopGrandfathered("sentinel-core/src/packs/thumbnail-generation/blocks/thumbnail-generator.ts", 146).
+AwaitInLoopGrandfathered("sentinel-core/src/packs/thumbnail-generation/blocks/thumbnail-generator.ts", 156).
+AwaitInLoopGrandfathered("sentinel-core/src/packs/video-assembly/blocks/assembler.ts", 301).
+AwaitInLoopGrandfathered("sentinel-core/src/packs/visual-render/blocks/renderer.ts", 302).
+AwaitInLoopGrandfathered("sentinel-core/src/packs/visual-render/blocks/renderer.ts", 355).
+AwaitInLoopGrandfathered("sentinel-core/src/packs/visual-render/blocks/renderer.ts", 543).
+AwaitInLoopGrandfathered("sentinel-core/src/shared/async-mutex.ts", 14).
+AwaitInLoopGrandfathered("sentinel-core/src/shared/youtube-analytics-api.ts", 245).
+AwaitInLoopGrandfathered("sentinel-web/src/lib/api-client.ts", 103).
+AwaitInLoopGrandfathered("sentinel-web/src/lib/api-client.ts", 115).
+AwaitInLoopGrandfathered("sentinel-web/src/lib/api-client.ts", 121).
+AwaitInLoopGrandfathered("sentinel-web/src/lib/api-client.ts", 128).
+AwaitInLoopGrandfathered("sentinel-web/src/lib/api-client.ts", 139).

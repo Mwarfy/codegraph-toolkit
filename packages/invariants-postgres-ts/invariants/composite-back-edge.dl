@@ -1,0 +1,27 @@
+// COMPOSITE-BACK-EDGE (Tier 17).
+//
+// Pourquoi : un edge d'import qui inverse l'ordre architectural attendu
+// (ex: kernel/ qui importe blocks/) viole la layering implicite. Soit
+// (a) refactor : extraire le partage en module dedie, soit (b) inverser
+// la dependance, soit (c) accepter et grandfather avec ADR explicite.
+//
+// Source : DSM (existant), backEdges calcules par Tarjan ordering.
+// Fact : BackEdge(fromGroup, toGroup) — group-level (typiquement directory).
+//
+// Inspire de Bazel `layering_check`. Force une decision architecturale
+// sur la layering, c'est aussi la valeur de la rule.
+
+.decl BackEdgeGrandfathered(fromGroup: symbol, toGroup: symbol)
+
+Violation("COMPOSITE-BACK-EDGE", From, 0,
+  "edge inverse l'ordre architectural — extraire le partage ou inverser la dependance") :-
+    BackEdge(From, To),
+    !BackEdgeGrandfathered(From, To).
+
+// Grandfather list — 2026-05-01 (auto-generated, 4 entries).
+BackEdgeGrandfathered("sentinel-core/src/kernel", "sentinel-core/src/blocks").
+BackEdgeGrandfathered("sentinel-core/src/project-manager.ts", "sentinel-core/src/memory").
+BackEdgeGrandfathered("sentinel-core/src/shared", "sentinel-core/src/auth").
+BackEdgeGrandfathered("sentinel-web/src/lib", "sentinel-web/src/hooks").
+BackEdgeGrandfathered("sentinel-core/src/shared", "sentinel-core/src/kernel").
+BackEdgeGrandfathered("sentinel-core/src/shared", "sentinel-core/src/memory").

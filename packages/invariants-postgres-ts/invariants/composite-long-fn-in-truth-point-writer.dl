@@ -1,0 +1,36 @@
+// COMPOSITE-LONG-FN-IN-TRUTH-POINT-WRITER (Tier 17).
+//
+// Pourquoi : une fonction longue (>= 80 LOC) DANS un fichier ecrivant
+// un truth-point (writer SSOT) = refactor priorise. Le LOC seul est
+// un signal moyen, mais combine avec writer SSOT, l'impact d'un bug
+// se propage a tous les readers du concept.
+//
+// Source : LongFunction (Tier 17 fact emitter, snapshot.longFunctions)
+//          + TruthPointWriter (existant).
+//
+// Threshold : LOC >= 80. Au-dela, la fonction porte typiquement
+// plusieurs responsabilites (orchestration + business logic + io).
+//
+// Pattern ratchet : grandfather par (file, name).
+
+.decl LongFnInTpWriterGrandfathered(file: symbol, name: symbol)
+
+Violation("COMPOSITE-LONG-FN-IN-TRUTH-POINT-WRITER", F, L,
+  "fonction >= 80 LOC dans un truth-point writer — split avant que la complexite explose") :-
+    LongFunction(F, N, L, LocCount),
+    LocCount >= 80,
+    TruthPointWriter(_, F),
+    !LongFnInTpWriterGrandfathered(F, N).
+
+// Grandfather list — 2026-05-01 (auto-generated, 11 entries).
+LongFnInTpWriterGrandfathered("sentinel-core/src/api/routes/improvement.ts", "handleImprovementRoutes").
+LongFnInTpWriterGrandfathered("sentinel-core/src/api/routes/system.ts", "handleSystemRoutes").
+LongFnInTpWriterGrandfathered("sentinel-core/src/api/webhooks/admin.ts", "executeAdminCommand").
+LongFnInTpWriterGrandfathered("sentinel-core/src/kernel/dimension-learner.ts", "refreshDimensionLearnings").
+LongFnInTpWriterGrandfathered("sentinel-core/src/kernel/healer/reactive.ts", "diagnose").
+LongFnInTpWriterGrandfathered("sentinel-core/src/kernel/healer/reactive.ts", "propose").
+LongFnInTpWriterGrandfathered("sentinel-core/src/kernel/plan-executor.ts", "executePlan").
+LongFnInTpWriterGrandfathered("sentinel-core/src/kernel/post-deploy-watchdog.ts", "triggerBreachPath").
+LongFnInTpWriterGrandfathered("sentinel-core/src/packs/publishing/blocks/youtube-publisher.ts", "YoutubePublisherBlock.publish").
+LongFnInTpWriterGrandfathered("sentinel-core/src/packs/video-assembly/blocks/assembler.ts", "AssemblerBlock.assemble").
+LongFnInTpWriterGrandfathered("sentinel-core/src/packs/visual-render/blocks/renderer.ts", "RendererBlock.renderVisual").

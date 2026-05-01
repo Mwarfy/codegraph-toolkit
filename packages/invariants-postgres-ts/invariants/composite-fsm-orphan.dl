@@ -1,0 +1,29 @@
+// COMPOSITE-FSM-ORPHAN (Tier 17).
+//
+// Pourquoi : un etat FSM declare dans une union/enum mais JAMAIS ecrit
+// dans le code = etat zombie. Soit (a) feature WIP non terminee, soit
+// (b) dette pure (refactor partiel qui a laisse l'etat dans le type
+// sans suppression).
+//
+// Source : extractor state-machines (existant).
+// Fact : FsmStateOrphan(concept, state, confidence)
+//   confidence in {observed, declared-only}.
+//
+// On flag uniquement confidence=observed (signal fiable). Les FSM
+// 'declared-only' peuvent indiquer un detector miss (a investiguer
+// avant de flagger).
+
+.decl FsmOrphanGrandfathered(concept: symbol, state: symbol)
+
+Violation("COMPOSITE-FSM-ORPHAN", C, 0,
+  "etat FSM declare mais jamais ecrit — supprimer ou completer la transition") :-
+    FsmStateOrphan(C, S, "observed"),
+    !FsmOrphanGrandfathered(C, S).
+
+// Grandfather list — 2026-05-01 (auto-generated, 1 entries).
+FsmOrphanGrandfathered("DeployLogPhase", "build").
+FsmOrphanGrandfathered("DeployLogPhase", "up").
+FsmOrphanGrandfathered("DeployLogPhase", "done").
+FsmOrphanGrandfathered("DeployLogPhase", "stage").
+FsmOrphanGrandfathered("DeployLogPhase", "sync").
+FsmOrphanGrandfathered("DeployLogPhase", "other").

@@ -1,0 +1,30 @@
+// COMPOSITE-DEP-UNUSED (Tier 17).
+//
+// Pourquoi : une dependance declaree dans package.json mais jamais
+// importee par le code = bloat npm install + risque supply-chain
+// (paquet jamais audite si non utilise = backdoor invisible).
+//
+// Source : extractor package-deps (existant).
+// Fact : PackageDepIssue(packageName, packageJson, kind, declaredIn)
+//   kind in {declared-unused, missing, devOnly, declared-runtime-asset}
+//
+// On flag uniquement kind=declared-unused.
+
+.decl DepUnusedGrandfathered(packageName: symbol)
+
+Violation("COMPOSITE-DEP-UNUSED", PJ, 0,
+  "dependance declaree mais jamais importee — npm uninstall ou justifier") :-
+    PackageDepIssue(P, PJ, "declared-unused", _),
+    !DepUnusedGrandfathered(P).
+
+// Grandfather list — 2026-05-01 (auto-generated, 2 entries).
+DepUnusedGrandfathered("@vitest/coverage-v8").
+DepUnusedGrandfathered("@tailwindcss/postcss").
+DepUnusedGrandfathered("tsx").
+DepUnusedGrandfathered("@testing-library/jest-dom").
+DepUnusedGrandfathered("@testing-library/react").
+DepUnusedGrandfathered("jsdom").
+DepUnusedGrandfathered("react-dom").
+DepUnusedGrandfathered("tailwindcss").
+DepUnusedGrandfathered("typescript").
+DepUnusedGrandfathered("vitest").

@@ -1,0 +1,26 @@
+// COMPOSITE-DEAD-EXPORT-IN-HUB (Tier 17).
+//
+// Pourquoi : un symbol exporte avec confidence "safe-to-remove" ET dans
+// un fichier hub (ModuleFanIn >= 10) = drift d'API publique propage.
+// Le hub etant importe partout, l'export est probablement mort recent
+// (refactor incomplet) plutot que pure dead code.
+//
+// Source : extractor unused-exports + ModuleFanIn (ou TruthPointWriter).
+// Fact : UnusedExport(file, name, line, kind, confidence)
+//
+// Pattern ratchet : grandfather par (file, name).
+
+.decl DeadExportInHubGrandfathered(file: symbol, name: symbol)
+
+Violation("COMPOSITE-DEAD-EXPORT-IN-HUB", F, L,
+  "export safe-to-remove dans un hub (>=10 imports) — drift d'API publique") :-
+    UnusedExport(F, N, L, _, "safe-to-remove"),
+    ModuleFanIn(F, FanIn),
+    FanIn >= 10,
+    !DeadExportInHubGrandfathered(F, N).
+
+// Grandfather list — 2026-05-01 (auto-generated, 4 entries).
+DeadExportInHubGrandfathered("sentinel-core/src/shared/env.ts", "envString").
+DeadExportInHubGrandfathered("sentinel-web/src/components/ui.tsx", "EmptyState").
+DeadExportInHubGrandfathered("sentinel-web/src/components/ui.tsx", "statusColor").
+DeadExportInHubGrandfathered("sentinel-web/src/components/ui.tsx", "blockTypeIcon").

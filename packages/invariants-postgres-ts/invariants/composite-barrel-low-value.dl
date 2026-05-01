@@ -1,0 +1,21 @@
+// COMPOSITE-BARREL-LOW-VALUE (Tier 17).
+//
+// Pourquoi : un fichier barrel (`index.ts` qui ne fait que re-exports)
+// avec peu de re-exports (<= 2) ET peu de consumers (<= 1) = friction
+// sans benefice. Ajoute une indirection pour rien. Solution : inline
+// les imports + supprimer le barrel.
+//
+// Source : extractor barrels (existant).
+// Fact : Barrel(file, reExportCount, consumerCount, lowValue:string)
+
+.decl BarrelLowGrandfathered(file: symbol)
+
+Violation("COMPOSITE-BARREL-LOW-VALUE", F, 0,
+  "barrel a faible valeur (<= 2 re-exports, <= 1 consumer) — inline + supprimer") :-
+    Barrel(F, _, _, "true"),
+    !BarrelLowGrandfathered(F).
+
+// Grandfather list — 2026-05-01 (auto-generated, 3 entries).
+BarrelLowGrandfathered("sentinel-core/src/api/webhook-api.ts").
+BarrelLowGrandfathered("sentinel-core/src/kernel/healer.ts").
+BarrelLowGrandfathered("sentinel-core/src/mcp/index.ts").

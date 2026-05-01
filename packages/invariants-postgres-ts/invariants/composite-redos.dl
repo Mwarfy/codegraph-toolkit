@@ -1,0 +1,23 @@
+// COMPOSITE-REDOS — CWE-1333 (Tier 17).
+//
+// Pourquoi : un regex avec nested quantifier (`(.+)+`, `(a|a)*`,
+// `(\w+)+$`) provoque un catastrophic backtracking : 50 chars en input
+// peut prendre des minutes, blocage de l'event loop = DoS.
+//
+// Source : extractor code-quality-patterns (Tier 17).
+// Fact : RegexLiteral(file, line, source, flags, hasNestedQuantifier:string)
+//
+// Heuristique nested quantifier dans l'extractor : detecte (X+)+,
+// (X*)*, etc. via regex de pattern simple. Les vrais analyzers ReDoS
+// (rxxr, safe-regex) sont plus precis ; cette rule est conservative
+// (cas evidents seulement).
+
+.decl ReDoSGrandfathered(file: symbol, line: number)
+
+Violation("COMPOSITE-REDOS", F, L,
+  "regex avec nested quantifier — catastrophic backtracking possible (DoS)") :-
+    RegexLiteral(F, L, _, _, "true"),
+    !ReDoSGrandfathered(F, L).
+
+// Grandfather list — 2026-05-01 (auto-generated, 1 entries).
+ReDoSGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 1238).

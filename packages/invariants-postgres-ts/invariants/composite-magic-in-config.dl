@@ -1,0 +1,62 @@
+// COMPOSITE-MAGIC-IN-CONFIG (Tier 17).
+//
+// Pourquoi : un magic number (timeout / threshold) hardcoded dans un
+// fichier de config sensible (resource-thresholds, timeout-config,
+// env, etc.) viole indirectement ADR-013/015/019. Ces fichiers
+// devraient utiliser le resolver typed avec source tracking, pas des
+// litteraux.
+//
+// Source : extractor magic-numbers (existant).
+// Fact : MagicNumber(file, line, value, context, category)
+//
+// Whitelist : 0/1/-1/100 (constants idiomatiques) — non emis par
+// l'extractor (skip preconfigure cote extractor).
+//
+// Pattern ratchet : grandfather par (file, line, value).
+
+.decl MagicInConfigGrandfathered(file: symbol, line: number, value: symbol)
+.decl IsConfigFile(file: symbol)
+IsConfigFile("sentinel-core/src/shared/timeout-config.ts").
+IsConfigFile("sentinel-core/src/shared/resource-thresholds.ts").
+IsConfigFile("sentinel-core/src/shared/resource-capabilities.ts").
+IsConfigFile("sentinel-core/src/shared/env.ts").
+IsConfigFile("sentinel-core/src/shared/constants.ts").
+IsConfigFile("sentinel-core/src/config/block-profiles.ts").
+
+Violation("COMPOSITE-MAGIC-IN-CONFIG", F, L,
+  "magic number dans fichier config sensible — utiliser resolver typed avec source tracking (ADR-013/015/019)") :-
+    MagicNumber(F, L, V, _, _),
+    IsConfigFile(F),
+    !MagicInConfigGrandfathered(F, L, V).
+
+// Grandfather list — 2026-05-01 (auto-generated, 30 entries).
+MagicInConfigGrandfathered("sentinel-core/src/shared/constants.ts", 28, "300000").
+MagicInConfigGrandfathered("sentinel-core/src/shared/constants.ts", 38, "0.20").
+MagicInConfigGrandfathered("sentinel-core/src/shared/constants.ts", 49, "3600").
+MagicInConfigGrandfathered("sentinel-core/src/shared/constants.ts", 50, "86400").
+MagicInConfigGrandfathered("sentinel-core/src/shared/constants.ts", 91, "5000").
+MagicInConfigGrandfathered("sentinel-core/src/shared/constants.ts", 96, "300000").
+MagicInConfigGrandfathered("sentinel-core/src/shared/resource-capabilities.ts", 47, "0.5").
+MagicInConfigGrandfathered("sentinel-core/src/shared/resource-capabilities.ts", 101, "1e15").
+MagicInConfigGrandfathered("sentinel-core/src/shared/resource-capabilities.ts", 236, "0.05").
+MagicInConfigGrandfathered("sentinel-core/src/shared/resource-capabilities.ts", 237, "0.10").
+MagicInConfigGrandfathered("sentinel-core/src/shared/timeout-config.ts", 42, "180_000").
+MagicInConfigGrandfathered("sentinel-core/src/shared/timeout-config.ts", 43, "150_000").
+MagicInConfigGrandfathered("sentinel-core/src/shared/timeout-config.ts", 44, "240_000").
+MagicInConfigGrandfathered("sentinel-core/src/shared/timeout-config.ts", 45, "5_000").
+MagicInConfigGrandfathered("sentinel-core/src/shared/timeout-config.ts", 46, "30_000").
+MagicInConfigGrandfathered("sentinel-core/src/shared/timeout-config.ts", 47, "10_000").
+MagicInConfigGrandfathered("sentinel-core/src/shared/timeout-config.ts", 48, "120_000").
+MagicInConfigGrandfathered("sentinel-core/src/shared/timeout-config.ts", 58, "180_000").
+MagicInConfigGrandfathered("sentinel-core/src/shared/timeout-config.ts", 59, "600_000").
+MagicInConfigGrandfathered("sentinel-core/src/shared/timeout-config.ts", 60, "20_000").
+MagicInConfigGrandfathered("sentinel-core/src/shared/timeout-config.ts", 68, "15_000").
+MagicInConfigGrandfathered("sentinel-core/src/shared/timeout-config.ts", 72, "60_000").
+MagicInConfigGrandfathered("sentinel-core/src/shared/timeout-config.ts", 73, "180_000").
+MagicInConfigGrandfathered("sentinel-core/src/shared/timeout-config.ts", 74, "180_000").
+MagicInConfigGrandfathered("sentinel-core/src/shared/timeout-config.ts", 75, "60_000").
+MagicInConfigGrandfathered("sentinel-core/src/shared/timeout-config.ts", 81, "3_000").
+MagicInConfigGrandfathered("sentinel-core/src/shared/timeout-config.ts", 82, "30_000").
+MagicInConfigGrandfathered("sentinel-core/src/shared/timeout-config.ts", 83, "60_000").
+MagicInConfigGrandfathered("sentinel-core/src/shared/timeout-config.ts", 84, "30_000").
+MagicInConfigGrandfathered("sentinel-core/src/shared/timeout-config.ts", 85, "120_000").

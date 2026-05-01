@@ -1,0 +1,110 @@
+// COMPOSITE-SILENT-ERROR (Tier 17).
+//
+// Pourquoi : un try/catch vide ou log-only sans rethrow avale les
+// exceptions silencieusement. Viole ADR-021 (alertes sortantes pour
+// briser le silence prod). L'erreur est consommee mais aucun signal
+// remonte — bug invisible jusqu'au prochain incident.
+//
+// Source : extractor code-quality-patterns (Tier 17).
+// Fact : TryCatchSwallow(file, line, kind, containingSymbol)
+//   kind in {empty, log-only, no-rethrow}.
+//
+// On flag uniquement kind=empty (signal le plus fort, peu de FP).
+// Les log-only et no-rethrow sont a debattre : certains contextes
+// legitimes (cleanup, fallback). Ratchet possible si on durcit.
+//
+// Pattern exempt cote extractor : `// catch-ok: <reason>` ligne precedente.
+
+.decl SilentErrorGrandfathered(file: symbol, line: number)
+
+Violation("COMPOSITE-SILENT-ERROR", F, L,
+  "try/catch vide — exception silencieuse, ajouter au minimum un logger.error + remontee") :-
+    TryCatchSwallow(F, L, "empty", _),
+    !SilentErrorGrandfathered(F, L).
+
+// Grandfather list — 2026-05-01 (auto-generated, 85 entries).
+SilentErrorGrandfathered("sentinel-core/src/api/routes/system.ts", 93).
+SilentErrorGrandfathered("sentinel-core/src/api/routes/system.ts", 404).
+SilentErrorGrandfathered("sentinel-core/src/api/routes/system.ts", 417).
+SilentErrorGrandfathered("sentinel-core/src/api/server.ts", 153).
+SilentErrorGrandfathered("sentinel-core/src/api/setup-api.ts", 226).
+SilentErrorGrandfathered("sentinel-core/src/api/webhooks/admin.ts", 111).
+SilentErrorGrandfathered("sentinel-core/src/index.ts", 78).
+SilentErrorGrandfathered("sentinel-core/src/index.ts", 85).
+SilentErrorGrandfathered("sentinel-core/src/kernel/adaptive-scheduler.ts", 99).
+SilentErrorGrandfathered("sentinel-core/src/kernel/agent-commit.ts", 479).
+SilentErrorGrandfathered("sentinel-core/src/kernel/alert-system.ts", 159).
+SilentErrorGrandfathered("sentinel-core/src/kernel/alert-system.ts", 399).
+SilentErrorGrandfathered("sentinel-core/src/kernel/browser-pool.ts", 333).
+SilentErrorGrandfathered("sentinel-core/src/kernel/browser-pool.ts", 478).
+SilentErrorGrandfathered("sentinel-core/src/kernel/circuit-breaker.ts", 64).
+SilentErrorGrandfathered("sentinel-core/src/kernel/deploy-client.ts", 584).
+SilentErrorGrandfathered("sentinel-core/src/kernel/deploy-client.ts", 594).
+SilentErrorGrandfathered("sentinel-core/src/kernel/event-queue.ts", 120).
+SilentErrorGrandfathered("sentinel-core/src/kernel/guardrails.ts", 121).
+SilentErrorGrandfathered("sentinel-core/src/kernel/guardrails.ts", 132).
+SilentErrorGrandfathered("sentinel-core/src/kernel/guardrails.ts", 143).
+SilentErrorGrandfathered("sentinel-core/src/kernel/healer/autonomous.ts", 102).
+SilentErrorGrandfathered("sentinel-core/src/kernel/healer/autonomous.ts", 480).
+SilentErrorGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 145).
+SilentErrorGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 158).
+SilentErrorGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 168).
+SilentErrorGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 181).
+SilentErrorGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 191).
+SilentErrorGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 201).
+SilentErrorGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 404).
+SilentErrorGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 417).
+SilentErrorGrandfathered("sentinel-core/src/kernel/healer/index.ts", 118).
+SilentErrorGrandfathered("sentinel-core/src/kernel/healer/reactive.ts", 214).
+SilentErrorGrandfathered("sentinel-core/src/kernel/healer/reactive.ts", 223).
+SilentErrorGrandfathered("sentinel-core/src/kernel/healer/reactive.ts", 243).
+SilentErrorGrandfathered("sentinel-core/src/kernel/healer/reactive.ts", 259).
+SilentErrorGrandfathered("sentinel-core/src/kernel/healer/reactive.ts", 270).
+SilentErrorGrandfathered("sentinel-core/src/kernel/healer/reactive.ts", 281).
+SilentErrorGrandfathered("sentinel-core/src/kernel/healer/reactive.ts", 364).
+SilentErrorGrandfathered("sentinel-core/src/kernel/healer/reactive.ts", 432).
+SilentErrorGrandfathered("sentinel-core/src/kernel/healer/reactive.ts", 504).
+SilentErrorGrandfathered("sentinel-core/src/kernel/healer/reactive.ts", 541).
+SilentErrorGrandfathered("sentinel-core/src/kernel/healer/reactive.ts", 617).
+SilentErrorGrandfathered("sentinel-core/src/kernel/hypothesis-engine.ts", 357).
+SilentErrorGrandfathered("sentinel-core/src/kernel/impact-measurer.ts", 302).
+SilentErrorGrandfathered("sentinel-core/src/kernel/peer-review-coordinator.ts", 181).
+SilentErrorGrandfathered("sentinel-core/src/kernel/peer-review.ts", 392).
+SilentErrorGrandfathered("sentinel-core/src/kernel/peer-review.ts", 512).
+SilentErrorGrandfathered("sentinel-core/src/kernel/peer-review.ts", 521).
+SilentErrorGrandfathered("sentinel-core/src/kernel/provisioning.ts", 124).
+SilentErrorGrandfathered("sentinel-core/src/kernel/provisioning.ts", 524).
+SilentErrorGrandfathered("sentinel-core/src/kernel/scheduler.ts", 239).
+SilentErrorGrandfathered("sentinel-core/src/kernel/scheduler.ts", 247).
+SilentErrorGrandfathered("sentinel-core/src/kernel/scheduler.ts", 414).
+SilentErrorGrandfathered("sentinel-core/src/kernel/scheduler.ts", 518).
+SilentErrorGrandfathered("sentinel-core/src/kernel/scheduler.ts", 522).
+SilentErrorGrandfathered("sentinel-core/src/kernel/scheduler.ts", 591).
+SilentErrorGrandfathered("sentinel-core/src/kernel/tool-validator.ts", 158).
+SilentErrorGrandfathered("sentinel-core/src/kernel/tool-validator.ts", 264).
+SilentErrorGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 819).
+SilentErrorGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 2332).
+SilentErrorGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 2413).
+SilentErrorGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 2446).
+SilentErrorGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 2461).
+SilentErrorGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 2480).
+SilentErrorGrandfathered("sentinel-core/src/mcp/tools/execute.ts", 274).
+SilentErrorGrandfathered("sentinel-core/src/shared/plan-parser.ts", 18).
+SilentErrorGrandfathered("sentinel-core/src/shared/plan-parser.ts", 26).
+SilentErrorGrandfathered("sentinel-core/src/shared/plan-parser.ts", 49).
+SilentErrorGrandfathered("sentinel-core/src/shared/resource-capabilities.ts", 84).
+SilentErrorGrandfathered("sentinel-core/src/shared/title-generator.ts", 274).
+SilentErrorGrandfathered("sentinel-core/src/shared/title-generator.ts", 279).
+SilentErrorGrandfathered("sentinel-core/src/shared/title-generator.ts", 286).
+SilentErrorGrandfathered("sentinel-web/src/app/entities/page.tsx", 48).
+SilentErrorGrandfathered("sentinel-web/src/app/improvement/page.tsx", 79).
+SilentErrorGrandfathered("sentinel-web/src/app/improvement/page.tsx", 89).
+SilentErrorGrandfathered("sentinel-web/src/app/improvement/page.tsx", 101).
+SilentErrorGrandfathered("sentinel-web/src/app/improvement/page.tsx", 113).
+SilentErrorGrandfathered("sentinel-web/src/app/page.tsx", 62).
+SilentErrorGrandfathered("sentinel-web/src/app/page.tsx", 72).
+SilentErrorGrandfathered("sentinel-web/src/app/page.tsx", 81).
+SilentErrorGrandfathered("sentinel-web/src/app/page.tsx", 90).
+SilentErrorGrandfathered("sentinel-web/src/app/page.tsx", 108).
+SilentErrorGrandfathered("sentinel-web/src/app/page.tsx", 117).
+SilentErrorGrandfathered("sentinel-web/src/app/page.tsx", 127).
