@@ -130,7 +130,12 @@ export async function exportFacts(
       sym(mn.context || '_'), sym(mn.category),
     ])
   }
-  relations.push(unusedExportRel, longFunctionRel, magicNumberRel)
+  // Bug fix : fileRel + tagRel etaient peuples mais jamais pushes
+  // depuis Tier 17 (regression mid-Phase-5). Detecte via self-audit
+  // byte-comparison. Tests datalog ne casseraient pas (anti-joins
+  // matchent silencieusement personne) mais les rules ImportedFile +
+  // IsEntryPoint silencieusement degradent leur precision.
+  relations.push(fileRel, tagRel, unusedExportRel, longFunctionRel, magicNumberRel)
 
   // ─── Barrel (Tier 17) ──────────────────────────────────────────────
   // Files barrel (100% re-exports). lowValue=true ssi peu de consumers.
@@ -295,73 +300,7 @@ export async function exportFacts(
   }
   relations.push(listenerLitRel, listenerConstRel, listenerDynRel)
 
-  // ─── Code Quality Patterns (Tier 17) ─────────────────────────────────
-  // Source : extractors/code-quality-patterns.ts.
-  const regexLiteralRel: RelationDef = {
-    name: 'RegexLiteral',
-    decl: '(file:symbol, line:number, source:symbol, flags:symbol, hasNestedQuantifier:symbol)',
-    rows: [],
-  }
-  const tryCatchSwallowRel: RelationDef = {
-    name: 'TryCatchSwallow',
-    decl: '(file:symbol, line:number, kind:symbol, containingSymbol:symbol)',
-    rows: [],
-  }
-  const awaitInLoopRel: RelationDef = {
-    name: 'AwaitInLoop',
-    decl: '(file:symbol, line:number, loopKind:symbol, containingSymbol:symbol)',
-    rows: [],
-  }
-  const cqp = snapshot.codeQualityPatterns
-  if (cqp) {
-    for (const r of cqp.regexLiterals) {
-      regexLiteralRel.rows.push([
-        sym(r.file), num(r.line), sym(r.source), sym(r.flags || '_'),
-        sym(r.hasNestedQuantifier ? 'true' : 'false'),
-      ])
-    }
-    for (const r of cqp.tryCatchSwallows) {
-      tryCatchSwallowRel.rows.push([
-        sym(r.file), num(r.line), sym(r.kind), sym(r.containingSymbol),
-      ])
-    }
-    for (const r of cqp.awaitInLoops) {
-      awaitInLoopRel.rows.push([
-        sym(r.file), num(r.line), sym(r.loopKind), sym(r.containingSymbol),
-      ])
-    }
-  }
-  // AllocationInLoop (Top-5 perf)
-  const allocationInLoopRel: RelationDef = {
-    name: 'AllocationInLoop',
-    decl: '(file:symbol, line:number, allocKind:symbol, containingSymbol:symbol)',
-    rows: [],
-  }
-  if (cqp) {
-    for (const r of cqp.allocationInLoops ?? []) {
-      allocationInLoopRel.rows.push([
-        sym(r.file), num(r.line), sym(r.allocKind), sym(r.containingSymbol),
-      ])
-    }
-  }
-  relations.push(regexLiteralRel, tryCatchSwallowRel, awaitInLoopRel, allocationInLoopRel)
-
-  // ─── FunctionComplexity (Top-5 McCabe + Cognitive) ───────────────────
-  // Cyclomatic (McCabe 1976) + Cognitive (SonarQube/Campbell 2018).
-  // Toutes fonctions/methodes/arrows, pas seulement longues.
-  const fnComplexityRel: RelationDef = {
-    name: 'FunctionComplexity',
-    decl: '(file:symbol, name:symbol, line:number, cyclomatic:number, cognitive:number, containingClass:symbol)',
-    rows: [],
-  }
-  for (const fc of snapshot.functionComplexity ?? []) {
-    fnComplexityRel.rows.push([
-      sym(fc.file), sym(fc.name), num(fc.line),
-      num(fc.cyclomatic), num(fc.cognitive),
-      sym(fc.containingClass || '_'),
-    ])
-  }
-  relations.push(fnComplexityRel)
+  emitCodeQualityAndComplexityFacts(snapshot, relations)
 
   // ─── Imports / ImportEdge ─────────────────────────────────────────────
   // `Imports` est binaire (pratique pour la jointure transitive) ;
@@ -477,101 +416,7 @@ export async function exportFacts(
   }
   relations.push(fanInRel)
 
-  // ─── SQL Schema (Phase 2 enrichissement) ──────────────────────────────
-  // Émet 5 relations dérivées de l'extracteur sql-schema (parse des
-  // migrations Postgres). Source des invariants type "FK doit être
-  // indexé" exécutables via Datalog.
-  const sqlTableRel: RelationDef = {
-    name: 'SqlTable',
-    decl: '(name:symbol, file:symbol, line:number)',
-    rows: [],
-  }
-  const sqlColumnRel: RelationDef = {
-    name: 'SqlColumn',
-    decl: '(table:symbol, column:symbol, type:symbol, file:symbol, line:number)',
-    rows: [],
-  }
-  const sqlForeignKeyRel: RelationDef = {
-    name: 'SqlForeignKey',
-    decl: '(fromTable:symbol, fromCol:symbol, toTable:symbol, toCol:symbol, file:symbol, line:number)',
-    rows: [],
-  }
-  const sqlIndexRel: RelationDef = {
-    name: 'SqlIndex',
-    decl: '(name:symbol, table:symbol, firstCol:symbol, file:symbol, line:number)',
-    rows: [],
-  }
-  const sqlFkWithoutIndexRel: RelationDef = {
-    name: 'SqlFkWithoutIndex',
-    decl: '(fromTable:symbol, fromCol:symbol, toTable:symbol, toCol:symbol)',
-    rows: [],
-  }
-  const sqlPrimaryKeyRel: RelationDef = {
-    name: 'SqlPrimaryKey',
-    decl: '(table:symbol, column:symbol, file:symbol, line:number)',
-    rows: [],
-  }
-  if (snapshot.sqlSchema) {
-    for (const t of snapshot.sqlSchema.tables) {
-      sqlTableRel.rows.push([sym(t.name), sym(t.file), num(t.line)])
-      for (const c of t.columns) {
-        sqlColumnRel.rows.push([
-          sym(t.name),
-          sym(c.name),
-          sym(c.type),
-          sym(t.file),
-          num(c.line),
-        ])
-      }
-    }
-    for (const fk of snapshot.sqlSchema.foreignKeys) {
-      sqlForeignKeyRel.rows.push([
-        sym(fk.fromTable),
-        sym(fk.fromColumn),
-        sym(fk.toTable),
-        sym(fk.toColumn),
-        sym(fk.file),
-        num(fk.line),
-      ])
-    }
-    for (const idx of snapshot.sqlSchema.indexes) {
-      // Skip les indexes sur expression (firstColumn=null) — pas
-      // utilisables pour le matching FK→index.
-      if (idx.firstColumn === null) continue
-      sqlIndexRel.rows.push([
-        sym(idx.name),
-        sym(idx.table),
-        sym(idx.firstColumn),
-        sym(idx.file),
-        num(idx.line),
-      ])
-    }
-    // Dédupe les FkWithoutIndex (dans le snapshot ils peuvent apparaître
-    // 2× quand la même FK est définie dans deux fichiers — schema.sql +
-    // migration source). Pour le datalog on veut une violation par paire
-    // unique (fromTable, fromCol).
-    const seenFkPair = new Set<string>()
-    for (const fk of snapshot.sqlSchema.fkWithoutIndex) {
-      const key = fk.fromTable + '\x00' + fk.fromColumn
-      if (seenFkPair.has(key)) continue
-      seenFkPair.add(key)
-      sqlFkWithoutIndexRel.rows.push([
-        sym(fk.fromTable),
-        sym(fk.fromColumn),
-        sym(fk.toTable),
-        sym(fk.toColumn),
-      ])
-    }
-    for (const pk of snapshot.sqlSchema.primaryKeys ?? []) {
-      sqlPrimaryKeyRel.rows.push([
-        sym(pk.table),
-        sym(pk.column),
-        sym(pk.file),
-        num(pk.line),
-      ])
-    }
-  }
-  relations.push(sqlTableRel, sqlColumnRel, sqlForeignKeyRel, sqlIndexRel, sqlFkWithoutIndexRel, sqlPrimaryKeyRel)
+  emitSqlFacts(snapshot, relations)
 
   // ─── CycleNode ────────────────────────────────────────────────────────
   // Pour chaque cycle détecté (Tarjan SCC sur graphe combiné import + event +
@@ -787,94 +632,7 @@ export async function exportFacts(
   }
   relations.push(hardcodedSecretRel)
 
-  // ─── BooleanParam (Tier 2) ───────────────────────────────────────────
-  const booleanParamRel: RelationDef = {
-    name: 'BooleanParam',
-    decl: '(file:symbol, line:number, name:symbol, paramName:symbol, paramIndex:number, totalParams:number)',
-    rows: [],
-  }
-  for (const b of snapshot.booleanParams ?? []) {
-    booleanParamRel.rows.push([
-      sym(b.file),
-      num(b.line),
-      sym(b.name),
-      sym(b.paramName),
-      num(b.paramIndex),
-      num(b.totalParams),
-    ])
-  }
-  relations.push(booleanParamRel)
-
-  // ─── DeadCode (Tier 3) ───────────────────────────────────────────────
-  // Findings : identical-subexpressions (Sonar S1764) + return-then-else
-  // (Sonar S1126). 2 émetteurs partagent la même relation Datalog —
-  // discriminés par le champ `kind`.
-  const deadCodeRel: RelationDef = {
-    name: 'DeadCode',
-    decl: '(file:symbol, line:number, kind:symbol)',
-    rows: [],
-  }
-  for (const d of snapshot.deadCode ?? []) {
-    deadCodeRel.rows.push([
-      sym(d.file),
-      num(d.line),
-      sym(d.kind),
-    ])
-  }
-  relations.push(deadCodeRel)
-
-  // ─── FloatingPromise (Tier 4) ────────────────────────────────────────
-  const floatingPromiseRel: RelationDef = {
-    name: 'FloatingPromise',
-    decl: '(file:symbol, line:number, callee:symbol, containingSymbol:symbol)',
-    rows: [],
-  }
-  for (const fp of snapshot.floatingPromises ?? []) {
-    floatingPromiseRel.rows.push([
-      sym(fp.file),
-      num(fp.line),
-      sym(fp.callee),
-      sym(fp.containingSymbol || '_'),
-    ])
-  }
-  relations.push(floatingPromiseRel)
-
-  // ─── DeprecatedDecl + DeprecatedUsage (Tier 4) ──────────────────────
-  // Deux relations Datalog distinctes pour permettre des rules ad hoc :
-  //   "trouve toutes les declarations deprecated qui n'ont AUCUN
-  //    call-site (sûres à supprimer)"
-  // ou "compte les call-sites par symbole deprecated pour prioriser
-  //    le refactor".
-  const deprecatedDeclRel: RelationDef = {
-    name: 'DeprecatedDecl',
-    decl: '(name:symbol, file:symbol, line:number)',
-    rows: [],
-  }
-  const deprecatedUsageRel: RelationDef = {
-    name: 'DeprecatedUsage',
-    decl: '(file:symbol, line:number, callee:symbol)',
-    rows: [],
-  }
-  if (snapshot.deprecatedUsage) {
-    for (const d of snapshot.deprecatedUsage.declarations) {
-      deprecatedDeclRel.rows.push([sym(d.name), sym(d.file), num(d.line)])
-    }
-    for (const u of snapshot.deprecatedUsage.sites) {
-      deprecatedUsageRel.rows.push([sym(u.file), num(u.line), sym(u.callee)])
-    }
-  }
-  relations.push(deprecatedDeclRel, deprecatedUsageRel)
-
-  // ─── ArticulationPoint (Tier 5) ──────────────────────────────────────
-  const articulationPointRel: RelationDef = {
-    name: 'ArticulationPoint',
-    decl: '(file:symbol, severity:number)',
-    rows: [],
-  }
-  for (const ap of snapshot.articulationPoints ?? []) {
-    articulationPointRel.rows.push([sym(ap.file), num(ap.severity)])
-  }
-  relations.push(articulationPointRel)
+  emitTier234Facts(snapshot, relations)
 
   // ─── SqlNamingViolation (Tier 5) ─────────────────────────────────────
   const sqlNamingViolationRel: RelationDef = {
@@ -1160,6 +918,240 @@ export async function exportFacts(
  * remplace les tabs et newlines par un espace. Les autres caractères
  * (espaces, ponctuation, accents) sont préservés.
  */
+// ─── Helpers d'extraction par groupe (split de exportFacts) ────────────────
+// Self-audit refactor : reduit la cyclomatic + cognitive de exportFacts
+// en isolant les groupes logiques en sub-fns. Output byte-identique
+// preserve (push order conserve dans exportFacts).
+
+/**
+ * SQL Schema (Phase 2) — emit 6 relations issues de l'extracteur
+ * sql-schema (parse migrations Postgres).
+ */
+function emitSqlFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
+  const sqlTableRel: RelationDef = {
+    name: 'SqlTable',
+    decl: '(name:symbol, file:symbol, line:number)',
+    rows: [],
+  }
+  const sqlColumnRel: RelationDef = {
+    name: 'SqlColumn',
+    decl: '(table:symbol, column:symbol, type:symbol, file:symbol, line:number)',
+    rows: [],
+  }
+  const sqlForeignKeyRel: RelationDef = {
+    name: 'SqlForeignKey',
+    decl: '(fromTable:symbol, fromCol:symbol, toTable:symbol, toCol:symbol, file:symbol, line:number)',
+    rows: [],
+  }
+  const sqlIndexRel: RelationDef = {
+    name: 'SqlIndex',
+    decl: '(name:symbol, table:symbol, firstCol:symbol, file:symbol, line:number)',
+    rows: [],
+  }
+  const sqlFkWithoutIndexRel: RelationDef = {
+    name: 'SqlFkWithoutIndex',
+    decl: '(fromTable:symbol, fromCol:symbol, toTable:symbol, toCol:symbol)',
+    rows: [],
+  }
+  const sqlPrimaryKeyRel: RelationDef = {
+    name: 'SqlPrimaryKey',
+    decl: '(table:symbol, column:symbol, file:symbol, line:number)',
+    rows: [],
+  }
+  if (snapshot.sqlSchema) {
+    for (const t of snapshot.sqlSchema.tables) {
+      sqlTableRel.rows.push([sym(t.name), sym(t.file), num(t.line)])
+      for (const c of t.columns) {
+        sqlColumnRel.rows.push([
+          sym(t.name), sym(c.name), sym(c.type),
+          sym(t.file), num(c.line),
+        ])
+      }
+    }
+    for (const fk of snapshot.sqlSchema.foreignKeys) {
+      sqlForeignKeyRel.rows.push([
+        sym(fk.fromTable), sym(fk.fromColumn),
+        sym(fk.toTable), sym(fk.toColumn),
+        sym(fk.file), num(fk.line),
+      ])
+    }
+    for (const idx of snapshot.sqlSchema.indexes) {
+      // Skip les indexes sur expression (firstColumn=null).
+      if (idx.firstColumn === null) continue
+      sqlIndexRel.rows.push([
+        sym(idx.name), sym(idx.table), sym(idx.firstColumn),
+        sym(idx.file), num(idx.line),
+      ])
+    }
+    // Dedupe FkWithoutIndex par (fromTable, fromCol).
+    const seenFkPair = new Set<string>()
+    for (const fk of snapshot.sqlSchema.fkWithoutIndex) {
+      const key = fk.fromTable + '\x00' + fk.fromColumn
+      if (seenFkPair.has(key)) continue
+      seenFkPair.add(key)
+      sqlFkWithoutIndexRel.rows.push([
+        sym(fk.fromTable), sym(fk.fromColumn),
+        sym(fk.toTable), sym(fk.toColumn),
+      ])
+    }
+    for (const pk of snapshot.sqlSchema.primaryKeys ?? []) {
+      sqlPrimaryKeyRel.rows.push([
+        sym(pk.table), sym(pk.column),
+        sym(pk.file), num(pk.line),
+      ])
+    }
+  }
+  relations.push(
+    sqlTableRel, sqlColumnRel, sqlForeignKeyRel,
+    sqlIndexRel, sqlFkWithoutIndexRel, sqlPrimaryKeyRel,
+  )
+}
+
+/**
+ * Tier 2/3/4/5 misc facts — BooleanParam + DeadCode + FloatingPromise +
+ * Deprecated{Decl,Usage} + ArticulationPoint. Tous des facts simples
+ * (loop unique sur un array de snapshot, mapping flat). Extraits ensemble
+ * pour reduire la cyclomatic + cognitive de exportFacts.
+ */
+function emitTier234Facts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
+  const booleanParamRel: RelationDef = {
+    name: 'BooleanParam',
+    decl: '(file:symbol, line:number, name:symbol, paramName:symbol, paramIndex:number, totalParams:number)',
+    rows: [],
+  }
+  for (const b of snapshot.booleanParams ?? []) {
+    booleanParamRel.rows.push([
+      sym(b.file), num(b.line), sym(b.name),
+      sym(b.paramName), num(b.paramIndex), num(b.totalParams),
+    ])
+  }
+  relations.push(booleanParamRel)
+
+  const deadCodeRel: RelationDef = {
+    name: 'DeadCode',
+    decl: '(file:symbol, line:number, kind:symbol)',
+    rows: [],
+  }
+  for (const d of snapshot.deadCode ?? []) {
+    deadCodeRel.rows.push([sym(d.file), num(d.line), sym(d.kind)])
+  }
+  relations.push(deadCodeRel)
+
+  const floatingPromiseRel: RelationDef = {
+    name: 'FloatingPromise',
+    decl: '(file:symbol, line:number, callee:symbol, containingSymbol:symbol)',
+    rows: [],
+  }
+  for (const fp of snapshot.floatingPromises ?? []) {
+    floatingPromiseRel.rows.push([
+      sym(fp.file), num(fp.line),
+      sym(fp.callee), sym(fp.containingSymbol || '_'),
+    ])
+  }
+  relations.push(floatingPromiseRel)
+
+  const deprecatedDeclRel: RelationDef = {
+    name: 'DeprecatedDecl',
+    decl: '(name:symbol, file:symbol, line:number)',
+    rows: [],
+  }
+  const deprecatedUsageRel: RelationDef = {
+    name: 'DeprecatedUsage',
+    decl: '(file:symbol, line:number, callee:symbol)',
+    rows: [],
+  }
+  if (snapshot.deprecatedUsage) {
+    for (const d of snapshot.deprecatedUsage.declarations) {
+      deprecatedDeclRel.rows.push([sym(d.name), sym(d.file), num(d.line)])
+    }
+    for (const u of snapshot.deprecatedUsage.sites) {
+      deprecatedUsageRel.rows.push([sym(u.file), num(u.line), sym(u.callee)])
+    }
+  }
+  relations.push(deprecatedDeclRel, deprecatedUsageRel)
+
+  const articulationPointRel: RelationDef = {
+    name: 'ArticulationPoint',
+    decl: '(file:symbol, severity:number)',
+    rows: [],
+  }
+  for (const ap of snapshot.articulationPoints ?? []) {
+    articulationPointRel.rows.push([sym(ap.file), num(ap.severity)])
+  }
+  relations.push(articulationPointRel)
+}
+
+/**
+ * Code Quality (Tier 17) + FunctionComplexity (Top-5) — bundle de
+ * facts AST-level : RegexLiteral, TryCatchSwallow, AwaitInLoop,
+ * AllocationInLoop + FunctionComplexity. Tous emis ensemble car ils
+ * partagent la meme source (extractors AST par-fonction).
+ */
+function emitCodeQualityAndComplexityFacts(
+  snapshot: GraphSnapshot,
+  relations: RelationDef[],
+): void {
+  const regexLiteralRel: RelationDef = {
+    name: 'RegexLiteral',
+    decl: '(file:symbol, line:number, source:symbol, flags:symbol, hasNestedQuantifier:symbol)',
+    rows: [],
+  }
+  const tryCatchSwallowRel: RelationDef = {
+    name: 'TryCatchSwallow',
+    decl: '(file:symbol, line:number, kind:symbol, containingSymbol:symbol)',
+    rows: [],
+  }
+  const awaitInLoopRel: RelationDef = {
+    name: 'AwaitInLoop',
+    decl: '(file:symbol, line:number, loopKind:symbol, containingSymbol:symbol)',
+    rows: [],
+  }
+  const allocationInLoopRel: RelationDef = {
+    name: 'AllocationInLoop',
+    decl: '(file:symbol, line:number, allocKind:symbol, containingSymbol:symbol)',
+    rows: [],
+  }
+  const cqp = snapshot.codeQualityPatterns
+  if (cqp) {
+    for (const r of cqp.regexLiterals) {
+      regexLiteralRel.rows.push([
+        sym(r.file), num(r.line), sym(r.source), sym(r.flags || '_'),
+        sym(r.hasNestedQuantifier ? 'true' : 'false'),
+      ])
+    }
+    for (const r of cqp.tryCatchSwallows) {
+      tryCatchSwallowRel.rows.push([
+        sym(r.file), num(r.line), sym(r.kind), sym(r.containingSymbol),
+      ])
+    }
+    for (const r of cqp.awaitInLoops) {
+      awaitInLoopRel.rows.push([
+        sym(r.file), num(r.line), sym(r.loopKind), sym(r.containingSymbol),
+      ])
+    }
+    for (const r of cqp.allocationInLoops ?? []) {
+      allocationInLoopRel.rows.push([
+        sym(r.file), num(r.line), sym(r.allocKind), sym(r.containingSymbol),
+      ])
+    }
+  }
+  relations.push(regexLiteralRel, tryCatchSwallowRel, awaitInLoopRel, allocationInLoopRel)
+
+  const fnComplexityRel: RelationDef = {
+    name: 'FunctionComplexity',
+    decl: '(file:symbol, name:symbol, line:number, cyclomatic:number, cognitive:number, containingClass:symbol)',
+    rows: [],
+  }
+  for (const fc of snapshot.functionComplexity ?? []) {
+    fnComplexityRel.rows.push([
+      sym(fc.file), sym(fc.name), num(fc.line),
+      num(fc.cyclomatic), num(fc.cognitive),
+      sym(fc.containingClass || '_'),
+    ])
+  }
+  relations.push(fnComplexityRel)
+}
+
 function sym(value: string): string {
   return value.replace(/[\t\n\r]/g, ' ')
 }
