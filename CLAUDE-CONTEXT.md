@@ -92,14 +92,15 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ npm uninstall @liby-tools/codegraph + npm test_
 - **DEP-UNUSED** `typescript` — déclaré dans packages/codegraph-mcp/package.json, jamais importé  
   _→ npm uninstall typescript + npm test_
+- **DEP-UNUSED** `@liby-tools/datalog` — déclaré dans packages/codegraph/package.json, jamais importé  
+  _→ npm uninstall @liby-tools/datalog + npm test_
 - **DEP-UNUSED** `graphology-operators` — déclaré dans packages/codegraph/package.json, jamais importé  
   _→ npm uninstall graphology-operators + npm test_
-- **DEP-UNUSED** `graphology-types` — déclaré dans packages/codegraph/package.json, jamais importé  
-  _→ npm uninstall graphology-types + npm test_
 
 ## Activité récente (14 derniers jours)
 
 ```
+7fb30b0 feat(phase4-tier8): live datalog dans le hook PostToolUse — 70ms wall clock
 58278cb feat(phase4-tier7): composites multi-relation — 5 facts promus + 4 rules
 ee2ec36 feat(phase4-tier6): switch checks + controlling expr + audit cols + resource balance
 20a6abd feat(phase4-tier5): articulation-points + sql-naming + sql-migration-order
@@ -111,7 +112,6 @@ dfc3a9f feat(phase4-tier3): dead-code patterns (Sonar S1764 + S1126)
 d998e49 feat(phase4-axe5): @liby-tools/invariants-postgres-ts — catalogue portable
 3e2f4bc feat(phase4-axe4): drift agentique — 3 patterns V1 + MCP tool
 c423a80 feat(phase4-axe3): mémoire inter-sessions — store + MCP tools + CLI
-e61268d feat(phase4-axe2): SymbolCallEdge / SymbolSignature / EntryPoint facts
 ```
 
 ## Comment contribuer à ce brief

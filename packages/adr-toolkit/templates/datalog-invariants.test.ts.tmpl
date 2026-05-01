@@ -1,0 +1,105 @@
+// ============================================
+// Invariants Datalog — execute les .dl de invariants/ contre les
+// .facts de .codegraph/facts/, asserte 0 violations.
+// ============================================
+//
+// C'est l'unique test invariant pour TOUS les ADRs migres vers Datalog.
+// Chaque ADR ajoute son fichier `adr-NNN.dl` dans invariants/, pas un
+// nouveau fichier de test. La regle EST l'invariant executable.
+//
+// Pre-requis :
+//   1. `.codegraph/facts/` doit exister (regenere par
+//      `npx codegraph analyze` + `npx codegraph facts`). En CI /
+//      pre-commit, le hook s'en charge.
+//   2. `invariants/schema.dl` declare les relations partagees, les
+//      fichiers `*.dl` ajoutent des regles qui ecrivent dans
+//      `Violation`.
+//
+// Si le test echoue : lire le proof tree imprime, soit corriger le
+// code, soit corriger l'ADR si la regle est devenue trop stricte.
+//
+// Resolution `@liby-tools/datalog` : npm install. Indisponible dans le
+// Docker prod build → describe.skipIf preserve la gate sans casser.
+
+import { describe, it, expect } from 'vitest'
+import * as path from 'node:path'
+import * as fs from 'node:fs/promises'
+
+let lib: typeof import('@liby-tools/datalog') | null = null
+try {
+  lib = await import('@liby-tools/datalog')
+} catch {
+  // @liby-tools/datalog non resolu (ex: Docker prod build) — skip propre.
+}
+
+// __INVARIANTS_DIR__ et __TESTFILE_TO_REPO__ sont remplaces par
+// adr-toolkit init en fonction du layout detecte.
+const REPO_ROOT = path.resolve(__dirname, '__TESTFILE_TO_REPO__')
+const RULES_DIR = path.join(REPO_ROOT, '__INVARIANTS_DIR__')
+const FACTS_DIR = path.join(REPO_ROOT, '.codegraph/facts')
+
+async function dirExists(p: string): Promise<boolean> {
+  try { await fs.access(p); return true } catch { return false }
+}
+
+const factsAvailable = await dirExists(FACTS_DIR)
+const rulesAvailable = await dirExists(RULES_DIR)
+
+describe.skipIf(!lib || !factsAvailable || !rulesAvailable)(
+  'Datalog invariants',
+  () => {
+    it('zero violations across all .dl rules', async () => {
+      const { result } = await lib!.runFromDirs({
+        rulesDir: RULES_DIR,
+        factsDir: FACTS_DIR,
+        recordProofsFor: ['Violation'],
+        // Composites multi-relation (ex: fk-chain-without-index) utilisent
+        // des relations transitives recursives. Le runtime Datalog est
+        // stratifie et termine sur fixed-point.
+        allowRecursion: true,
+      })
+
+      const violations = result.outputs.get('Violation') ?? []
+      if (violations.length > 0) {
+        const proofs = result.proofs?.get('Violation')
+        const lines = violations.map((t) => {
+          const [adr, file, line, msg] = t as [string, string, number, string]
+          const head = `  [${adr}] ${file}:${line} — ${msg}`
+          if (!proofs) return head
+          const proofKey = lib!.tupleKey('Violation', t)
+          const proof = proofs.get(proofKey)
+          if (!proof) return head
+          const trail = lib!.formatProof(proof, 1)
+          return `${head}\n${trail}`
+        })
+        throw new Error(
+          `${violations.length} datalog invariant violation(s):\n${lines.join('\n\n')}`,
+        )
+      }
+      expect(violations).toEqual([])
+    })
+
+    it('the program merges + parses without error (sanity)', async () => {
+      const program = await lib!.loadProgramFromDir(RULES_DIR)
+      expect(program.decls.size).toBeGreaterThan(0)
+      const v = program.decls.get('Violation')
+      expect(v).toBeDefined()
+      expect(v!.isOutput).toBe(true)
+    })
+  },
+)
+
+describe('Datalog invariants — env check', () => {
+  it('@liby-tools/datalog is resolvable in this environment', () => {
+    if (!process.env.IS_DOCKER_BUILD) {
+      expect(
+        lib,
+        '@liby-tools/datalog must be installed (npm install --save-dev @liby-tools/datalog)',
+      ).not.toBeNull()
+    }
+  })
+
+  it('invariants/ directory exists', () => {
+    expect(rulesAvailable, 'invariants/ missing — see schema.dl').toBe(true)
+  })
+})

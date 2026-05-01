@@ -40,4 +40,19 @@ if [ -z "$SKIP_CONTEXT_BRIEF" ]; then
     echo -e "\033[0;32m  brief\033[0m ✓ brief regenerated"
 fi
 
+# 3. Datalog baseline update (Tier 8 live gate)
+#    Capture l'etat post-commit comme baseline pour le hook PostToolUse
+#    Claude Code. Les edits suivants verront uniquement les violations
+#    INTRODUITES depuis cette baseline (delta).
+if [ -z "$SKIP_DATALOG_BASELINE" ]; then
+  FAST_SCRIPT="$REPO_ROOT/node_modules/@liby-tools/codegraph/scripts/datalog-check-fast.mjs"
+  if [ -f "$FAST_SCRIPT" ]; then
+    BASELINE_OUT=$(node "$FAST_SCRIPT" "$REPO_ROOT" --update-baseline 2>&1)
+    if echo "$BASELINE_OUT" | grep -q '"updated":true'; then
+      COUNT=$(echo "$BASELINE_OUT" | python3 -c "import sys, json; print(json.load(sys.stdin).get('count', '?'))" 2>/dev/null || echo "?")
+      echo -e "\033[0;32m  datalog\033[0m ✓ baseline updated ($COUNT violations)"
+    fi
+  fi
+fi
+
 exit 0

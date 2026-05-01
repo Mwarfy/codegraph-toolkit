@@ -45,6 +45,13 @@ export interface InitOptions {
    * Le package doit déjà être installé (npm install) — sinon warning.
    */
   withInvariants?: 'postgres'
+  /**
+   * Si true, copie aussi le hook PostToolUse `codegraph-feedback.sh`
+   * (Tier 8 live datalog) ET wire dans `.claude/settings.json`. Plus
+   * fournit le test runner Datalog `tests/unit/datalog-invariants.test.ts`.
+   * Demande que `@liby-tools/codegraph` soit deja installe.
+   */
+  withClaudeHooks?: boolean
 }
 
 type LayoutKind = 'simple' | 'fullstack-monorepo' | 'workspaces-monorepo' | 'flat'
@@ -349,6 +356,11 @@ export async function initProject(
     await wireInvariantsPackage(rootDir, opts.withInvariants, result)
   }
 
+  // 5c. Claude hooks PostToolUse (Tier 9 — live datalog gate)
+  if (opts.withClaudeHooks) {
+    await wireClaudeHooks(rootDir, layout, result)
+  }
+
   // 6. .claude/settings.json (optionnel)
   if (opts.withClaudeSettings) {
     const claudeDir = path.join(rootDir, '.claude')
@@ -441,5 +453,135 @@ async function wireInvariantsPackage(
     result.warnings.push(
       `invariants/schema.dl existe — vérifier qu'il déclare CycleNode, SqlFkWithoutIndex, SqlForeignKey (cf. ${pkgName}/invariants/schema-subset.dl)`,
     )
+  }
+}
+
+/**
+ * Wire Tier 9 — Claude Code hooks PostToolUse + test runner Datalog.
+ *
+ *   1. Copie `codegraph-feedback.sh` (templated, paths dynamiques) dans
+ *      `<rootDir>/scripts/git-hooks/codegraph-feedback.sh` (chmod +x).
+ *   2. Wire dans `.claude/settings.json` : ajoute hook PostToolUse pour
+ *      `Edit|Write|MultiEdit` qui appelle ce script.
+ *   3. Copie le template `datalog-invariants.test.ts` dans le test dir
+ *      du projet (best-effort detect du layout : `tests/unit/`,
+ *      `__tests__/`, ou `<srcDirs[0]>/tests/unit/`).
+ *
+ *   Demande que `@liby-tools/codegraph` soit installe (le hook l'utilise
+ *   via `require.resolve` au runtime).
+ */
+async function wireClaudeHooks(
+  rootDir: string,
+  layout: DetectedLayout,
+  result: InitResult,
+): Promise<void> {
+  // 1. Copie codegraph-feedback.sh
+  const hooksDir = path.join(rootDir, 'scripts', 'git-hooks')
+  await mkdir(hooksDir, { recursive: true })
+  const target = path.join(hooksDir, 'codegraph-feedback.sh')
+  if (await exists(target)) {
+    result.skipped.push('scripts/git-hooks/codegraph-feedback.sh')
+  } else {
+    const source = path.join(HOOKS_TEMPLATES_DIR, 'codegraph-feedback.sh')
+    if (await exists(source)) {
+      await copyFile(source, target)
+      await chmod(target, 0o755)
+      result.created.push('scripts/git-hooks/codegraph-feedback.sh')
+    } else {
+      result.warnings.push(`hook source absent: ${source}`)
+      return
+    }
+  }
+
+  // 2. Wire dans .claude/settings.json
+  const claudeDir = path.join(rootDir, '.claude')
+  const claudeSettingsPath = path.join(claudeDir, 'settings.json')
+  await mkdir(claudeDir, { recursive: true })
+  const POST_TOOL_USE_HOOK = {
+    matcher: 'Edit|Write|MultiEdit',
+    hooks: [
+      {
+        type: 'command',
+        command: 'scripts/git-hooks/codegraph-feedback.sh',
+      },
+    ],
+  }
+  if (await exists(claudeSettingsPath)) {
+    try {
+      const existing = JSON.parse(await readFile(claudeSettingsPath, 'utf-8'))
+      const hasOurPostHook = JSON.stringify(existing).includes('codegraph-feedback.sh')
+      if (hasOurPostHook) {
+        result.skipped.push('.claude/settings.json (codegraph-feedback déjà wired)')
+      } else {
+        // Merge minimal : ajoute notre PostToolUse à existing.hooks
+        existing.hooks = existing.hooks ?? {}
+        existing.hooks.PostToolUse = existing.hooks.PostToolUse ?? []
+        existing.hooks.PostToolUse.push(POST_TOOL_USE_HOOK)
+        await writeFile(
+          claudeSettingsPath,
+          JSON.stringify(existing, null, 2) + '\n',
+          'utf-8',
+        )
+        result.created.push('.claude/settings.json (codegraph-feedback merged)')
+      }
+    } catch {
+      result.warnings.push('.claude/settings.json existe mais invalide JSON — non modifié')
+    }
+  } else {
+    const merged = {
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: 'Edit|Write|MultiEdit',
+            hooks: [{ type: 'command', command: 'scripts/git-hooks/adr-hook.sh' }],
+          },
+        ],
+        PostToolUse: [POST_TOOL_USE_HOOK],
+      },
+    }
+    await writeFile(claudeSettingsPath, JSON.stringify(merged, null, 2) + '\n', 'utf-8')
+    result.created.push('.claude/settings.json')
+  }
+
+  // 3. Copie le test runner Datalog dans le test dir détecté.
+  const testDirCandidates = [
+    'tests/unit',
+    '__tests__',
+    `${layout.srcDirs[0] ?? '.'}/tests/unit`,
+  ]
+  let testDir: string | null = null
+  for (const candidate of testDirCandidates) {
+    const abs = path.join(rootDir, candidate)
+    if (await exists(abs)) {
+      testDir = candidate
+      break
+    }
+  }
+  if (!testDir) {
+    testDir = 'tests/unit'
+    await mkdir(path.join(rootDir, testDir), { recursive: true })
+  }
+  const testTarget = path.join(rootDir, testDir, 'datalog-invariants.test.ts')
+  if (await exists(testTarget)) {
+    result.skipped.push(`${testDir}/datalog-invariants.test.ts`)
+  } else {
+    const tmplSource = path.join(TEMPLATES_DIR, 'datalog-invariants.test.ts.tmpl')
+    if (await exists(tmplSource)) {
+      const tmpl = await readFile(tmplSource, 'utf-8')
+      // Compute relative path from test file to repo root.
+      // ex: tests/unit/datalog-invariants.test.ts → ../..
+      const depth = testDir.split('/').filter(Boolean).length
+      const relToRoot = depth === 0 ? '.' : new Array(depth).fill('..').join('/')
+      // invariants dir : detected via wireInvariantsPackage si appele,
+      // sinon on suppose 'invariants/' standard.
+      const invariantsDir = (await exists(path.join(rootDir, 'invariants'))) ? 'invariants' : 'invariants'
+      const rendered = tmpl
+        .replaceAll('__TESTFILE_TO_REPO__', relToRoot)
+        .replaceAll('__INVARIANTS_DIR__', invariantsDir)
+      await writeFile(testTarget, rendered, 'utf-8')
+      result.created.push(`${testDir}/datalog-invariants.test.ts`)
+    } else {
+      result.warnings.push(`template absent: ${tmplSource}`)
+    }
   }
 }

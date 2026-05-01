@@ -63,6 +63,18 @@ if [ "${ADR_TOOLKIT_RUN_TSC:-false}" = "true" ]; then
   fi
 fi
 
+# 2a. Codegraph facts regen (recommande si Datalog gating actif).
+#     Reanalyse le tree STAGED en mode facts-only — sans ca, le test
+#     invariant Datalog tournerait sur les facts du commit precedent.
+if [ "${ADR_TOOLKIT_REGEN_FACTS:-true}" = "true" ]; then
+  if [ -d ".codegraph" ] && [ -f "codegraph.config.json" ]; then
+    echo -e "\033[0;36m  pre-commit\033[0m facts (regen)..."
+    if ! npx codegraph facts --regen > /tmp/precommit-facts.log 2>&1; then
+      echo -e "\033[0;33m  pre-commit\033[0m ⚠ codegraph facts --regen failed (non-blocking)"
+    fi
+  fi
+fi
+
 # 2. Tests d'invariant (optionnel)
 if [ -n "${ADR_TOOLKIT_INVARIANT_TESTS:-}" ]; then
   VITEST_DIR="${ADR_TOOLKIT_VITEST_DIR:-.}"

@@ -40,6 +40,12 @@ program
     'Copie les rules Datalog de @liby-tools/invariants-<flavor>-ts. V1: postgres. ' +
       'Le package doit être installé (npm install --save-dev) avant.',
   )
+  .option(
+    '--with-claude-hooks',
+    'Wire le hook PostToolUse codegraph-feedback.sh (Tier 9 live datalog) + ' +
+      'le test runner generic datalog-invariants.test.ts. Demande @liby-tools/codegraph installe.',
+    false,
+  )
   .action(async (opts) => {
     const withInvariants = opts.withInvariants
     if (withInvariants && withInvariants !== 'postgres') {
@@ -49,6 +55,7 @@ program
     const result = await initProject(process.cwd(), {
       withClaudeSettings: !!opts.withClaudeSettings,
       withInvariants: withInvariants as 'postgres' | undefined,
+      withClaudeHooks: !!opts.withClaudeHooks,
     })
     console.log(chalk.dim(`Layout détecté : ${result.layout}`))
     if (result.created.length > 0) {

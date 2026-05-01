@@ -12,10 +12,12 @@
     "./diff": "./dist/diff/index.js"
   },
   "bin": {
-    "codegraph": "./dist/cli/index.js"
+    "codegraph": "./dist/cli/index.js",
+    "codegraph-datalog-check-fast": "./scripts/datalog-check-fast.mjs"
   },
   "files": [
     "dist",
+    "scripts",
     "README.md"
   ],
   "engines": {
