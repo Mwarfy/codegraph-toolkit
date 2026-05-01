@@ -511,7 +511,24 @@ export interface GraphSnapshot {
     awaitInLoops: Array<{
       file: string; line: number; loopKind: string; containingSymbol: string
     }>
+    allocationInLoops: Array<{
+      file: string; line: number; allocKind: string; containingSymbol: string
+    }>
   }
+
+  /**
+   * Per-function cyclomatic + cognitive complexity (Top-5 graph theory uplift).
+   * Calcule pour TOUTES les fonctions/methodes/arrows (pas juste longues).
+   * Cf. extractors/function-complexity.ts.
+   */
+  functionComplexity?: Array<{
+    file: string
+    name: string
+    line: number
+    cyclomatic: number
+    cognitive: number
+    containingClass: string
+  }>
 
   /**
    * Security patterns (Phase 5 Tier 16) — 4 facts complementaires

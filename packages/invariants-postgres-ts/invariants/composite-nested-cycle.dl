@@ -1,0 +1,19 @@
+// COMPOSITE-NESTED-CYCLE — Tarjan SCC depth (Top-5 graph theory).
+//
+// Pourquoi : un cycle d'imports avec sccSize > size signifie que le path
+// affiche est extrait d'une SCC plus large. C'est-a-dire qu'il y a des
+// sous-cycles imbriques. Pathologique : impossible a refactorer
+// incrementalement (un fix en cascade plusieurs).
+//
+// Cycle benin : size == sccSize (un seul cycle simple)
+// Cycle pathologique : sccSize > size + 1 (au moins 2 niveaux)
+//
+// Source : Tarjan 1972 (snapshot.cycles deja calcule).
+
+.decl NestedCycleGrandfathered(cycleId: symbol)
+
+Violation("COMPOSITE-NESTED-CYCLE", C, 0,
+  "cycle niche dans une SCC plus large — sous-cycles inextricables, refactor incremental impossible") :-
+    CycleSize(C, Size, SccSize),
+    SccSize > Size,
+    !NestedCycleGrandfathered(C).

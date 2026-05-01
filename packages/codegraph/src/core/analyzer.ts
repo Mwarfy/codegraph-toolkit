@@ -48,6 +48,7 @@ import { analyzeCryptoCalls, type CryptoCall } from '../extractors/crypto-algo.j
 import { analyzeSecurityPatterns, type SecurityPatternsAggregated } from '../extractors/security-patterns.js'
 import { analyzeEventListenerSites, type EventListenerSite } from '../extractors/event-listener-sites.js'
 import { analyzeCodeQualityPatterns, type CodeQualityPatternsAggregated } from '../extractors/code-quality-patterns.js'
+import { analyzeFunctionComplexity, type FunctionComplexity } from '../extractors/function-complexity.js'
 import { analyzeHardcodedSecrets, type HardcodedSecret } from '../extractors/hardcoded-secrets.js'
 import { analyzeBooleanParams, type BooleanParamSite } from '../extractors/boolean-params.js'
 import { analyzeDeadCode, type DeadCodeFinding } from '../extractors/dead-code.js'
@@ -578,6 +579,7 @@ async function runDeterministicDetectors(
   let securityPatterns: SecurityPatternsAggregated | undefined
   let eventListenerSites: EventListenerSite[] | undefined
   let codeQualityPatterns: CodeQualityPatternsAggregated | undefined
+  let functionComplexity: FunctionComplexity[] | undefined
   let hardcodedSecrets: HardcodedSecret[] | undefined
   let booleanParams: BooleanParamSite[] | undefined
   let deadCode: DeadCodeFinding[] | undefined
@@ -692,6 +694,15 @@ async function runDeterministicDetectors(
   } catch (err) {
     timing.detectors['code-quality-patterns'] = performance.now() - tCodeQ
     console.error(`  ✗ code-quality-patterns failed: ${err}`)
+  }
+
+  const tFnComplex = performance.now()
+  try {
+    functionComplexity = await analyzeFunctionComplexity(config.rootDir, files, sharedProject)
+    timing.detectors['function-complexity'] = performance.now() - tFnComplex
+  } catch (err) {
+    timing.detectors['function-complexity'] = performance.now() - tFnComplex
+    console.error(`  ✗ function-complexity failed: ${err}`)
   }
 
   const tHardcoded = performance.now()
@@ -830,6 +841,7 @@ async function runDeterministicDetectors(
   if (securityPatterns) snapshot.securityPatterns = securityPatterns
   if (eventListenerSites) snapshot.eventListenerSites = eventListenerSites
   if (codeQualityPatterns) snapshot.codeQualityPatterns = codeQualityPatterns
+  if (functionComplexity) snapshot.functionComplexity = functionComplexity
   if (hardcodedSecrets) snapshot.hardcodedSecrets = hardcodedSecrets
   if (booleanParams) snapshot.booleanParams = booleanParams
   if (deadCode) snapshot.deadCode = deadCode

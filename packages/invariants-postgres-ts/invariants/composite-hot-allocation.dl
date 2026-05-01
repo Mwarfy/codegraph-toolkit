@@ -1,0 +1,225 @@
+// COMPOSITE-HOT-ALLOCATION — GC pressure marker (Top-5 perf).
+//
+// Pourquoi : `[]`, `{}`, `new X()` dans un loop = allocation par
+// iteration = pression GC linearia avec le nb d'iterations. Sur les
+// hot paths, c'est mesurable en latence p99.
+//
+// Composite : AllocationInLoop ∧ AwaitInLoop dans la meme fonction
+// (signal "ce loop fait beaucoup, et alloue beaucoup"). Si en plus
+// le file est central (PageRank haut), c'est la priorite #1 d'optim.
+//
+// Source : extractors/code-quality-patterns (alloc + await).
+
+.decl HotAllocationGrandfathered(file: symbol, line: number)
+
+Violation("COMPOSITE-HOT-ALLOCATION", F, L,
+  "allocation dans une boucle qui fait aussi du I/O await — GC pressure sur hot path") :-
+    AllocationInLoop(F, L, _, S),
+    AwaitInLoop(F, _, _, S),
+    !HotAllocationGrandfathered(F, L).
+
+// Grandfather list — 2026-05-01 (auto-generated, 204 entries).
+HotAllocationGrandfathered("sentinel-core/src/blocks/base-block.ts", 403).
+HotAllocationGrandfathered("sentinel-core/src/blocks/base-block.ts", 432).
+HotAllocationGrandfathered("sentinel-core/src/blocks/base-block.ts", 436).
+HotAllocationGrandfathered("sentinel-core/src/kernel/adaptive-scheduler.ts", 203).
+HotAllocationGrandfathered("sentinel-core/src/kernel/agent-commit.ts", 397).
+HotAllocationGrandfathered("sentinel-core/src/kernel/agent-commit.ts", 399).
+HotAllocationGrandfathered("sentinel-core/src/kernel/block-profiles-sync.ts", 41).
+HotAllocationGrandfathered("sentinel-core/src/kernel/block-profiles-sync.ts", 62).
+HotAllocationGrandfathered("sentinel-core/src/kernel/block-runtime.ts", 96).
+HotAllocationGrandfathered("sentinel-core/src/kernel/block-runtime.ts", 102).
+HotAllocationGrandfathered("sentinel-core/src/kernel/block-runtime.ts", 103).
+HotAllocationGrandfathered("sentinel-core/src/kernel/cli-latency-tracker.ts", 136).
+HotAllocationGrandfathered("sentinel-core/src/kernel/content-optimization-loop.ts", 119).
+HotAllocationGrandfathered("sentinel-core/src/kernel/content-optimization-loop.ts", 125).
+HotAllocationGrandfathered("sentinel-core/src/kernel/content-optimization-loop.ts", 146).
+HotAllocationGrandfathered("sentinel-core/src/kernel/deploy-client.ts", 562).
+HotAllocationGrandfathered("sentinel-core/src/kernel/dimension-learner.ts", 237).
+HotAllocationGrandfathered("sentinel-core/src/kernel/dimension-learner.ts", 238).
+HotAllocationGrandfathered("sentinel-core/src/kernel/dimension-learner.ts", 239).
+HotAllocationGrandfathered("sentinel-core/src/kernel/dimension-learner.ts", 261).
+HotAllocationGrandfathered("sentinel-core/src/kernel/event-queue.ts", 74).
+HotAllocationGrandfathered("sentinel-core/src/kernel/event-queue.ts", 100).
+HotAllocationGrandfathered("sentinel-core/src/kernel/event-queue.ts", 102).
+HotAllocationGrandfathered("sentinel-core/src/kernel/event-queue.ts", 129).
+HotAllocationGrandfathered("sentinel-core/src/kernel/feedback-aggregator.ts", 95).
+HotAllocationGrandfathered("sentinel-core/src/kernel/feedback-aggregator.ts", 120).
+HotAllocationGrandfathered("sentinel-core/src/kernel/feedback-aggregator.ts", 131).
+HotAllocationGrandfathered("sentinel-core/src/kernel/guardrails.ts", 426).
+HotAllocationGrandfathered("sentinel-core/src/kernel/guardrails.ts", 499).
+HotAllocationGrandfathered("sentinel-core/src/kernel/healer/autonomous.ts", 203).
+HotAllocationGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 144).
+HotAllocationGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 147).
+HotAllocationGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 162).
+HotAllocationGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 172).
+HotAllocationGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 185).
+HotAllocationGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 193).
+HotAllocationGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 205).
+HotAllocationGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 363).
+HotAllocationGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 369).
+HotAllocationGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 382).
+HotAllocationGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 394).
+HotAllocationGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 396).
+HotAllocationGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 397).
+HotAllocationGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 406).
+HotAllocationGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 411).
+HotAllocationGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 412).
+HotAllocationGrandfathered("sentinel-core/src/kernel/healer/directed.ts", 421).
+HotAllocationGrandfathered("sentinel-core/src/kernel/healer/escalation-policy.ts", 186).
+HotAllocationGrandfathered("sentinel-core/src/kernel/healer/escalation-policy.ts", 191).
+HotAllocationGrandfathered("sentinel-core/src/kernel/healer/reactive.ts", 125).
+HotAllocationGrandfathered("sentinel-core/src/kernel/healer/reactive.ts", 136).
+HotAllocationGrandfathered("sentinel-core/src/kernel/hypothesis-engine.ts", 73).
+HotAllocationGrandfathered("sentinel-core/src/kernel/impact-measurer.ts", 296).
+HotAllocationGrandfathered("sentinel-core/src/kernel/impact-measurer.ts", 297).
+HotAllocationGrandfathered("sentinel-core/src/kernel/impact-measurer.ts", 300).
+HotAllocationGrandfathered("sentinel-core/src/kernel/impact-measurer.ts", 303).
+HotAllocationGrandfathered("sentinel-core/src/kernel/learning/seed-synthesizer.ts", 133).
+HotAllocationGrandfathered("sentinel-core/src/kernel/learning/seed-synthesizer.ts", 182).
+HotAllocationGrandfathered("sentinel-core/src/kernel/learning/seed-synthesizer.ts", 184).
+HotAllocationGrandfathered("sentinel-core/src/kernel/learning/seed-synthesizer.ts", 194).
+HotAllocationGrandfathered("sentinel-core/src/kernel/learning/seed-synthesizer.ts", 197).
+HotAllocationGrandfathered("sentinel-core/src/kernel/learning/seed-synthesizer.ts", 305).
+HotAllocationGrandfathered("sentinel-core/src/kernel/learning/seed-synthesizer.ts", 311).
+HotAllocationGrandfathered("sentinel-core/src/kernel/llm-router.ts", 445).
+HotAllocationGrandfathered("sentinel-core/src/kernel/maintenance.ts", 106).
+HotAllocationGrandfathered("sentinel-core/src/kernel/maintenance.ts", 112).
+HotAllocationGrandfathered("sentinel-core/src/kernel/maintenance.ts", 187).
+HotAllocationGrandfathered("sentinel-core/src/kernel/maintenance.ts", 190).
+HotAllocationGrandfathered("sentinel-core/src/kernel/metrics-collector.ts", 77).
+HotAllocationGrandfathered("sentinel-core/src/kernel/metrics-collector.ts", 86).
+HotAllocationGrandfathered("sentinel-core/src/kernel/metrics-collector.ts", 88).
+HotAllocationGrandfathered("sentinel-core/src/kernel/metrics-collector.ts", 110).
+HotAllocationGrandfathered("sentinel-core/src/kernel/peer-review-coordinator.ts", 45).
+HotAllocationGrandfathered("sentinel-core/src/kernel/peer-review-coordinator.ts", 65).
+HotAllocationGrandfathered("sentinel-core/src/kernel/peer-review-coordinator.ts", 69).
+HotAllocationGrandfathered("sentinel-core/src/kernel/peer-review-coordinator.ts", 87).
+HotAllocationGrandfathered("sentinel-core/src/kernel/peer-review-coordinator.ts", 96).
+HotAllocationGrandfathered("sentinel-core/src/kernel/peer-review-coordinator.ts", 100).
+HotAllocationGrandfathered("sentinel-core/src/kernel/peer-review-coordinator.ts", 119).
+HotAllocationGrandfathered("sentinel-core/src/kernel/peer-review-coordinator.ts", 123).
+HotAllocationGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 130).
+HotAllocationGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 140).
+HotAllocationGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 141).
+HotAllocationGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 145).
+HotAllocationGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 156).
+HotAllocationGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 157).
+HotAllocationGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 161).
+HotAllocationGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 169).
+HotAllocationGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 171).
+HotAllocationGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 172).
+HotAllocationGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 176).
+HotAllocationGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 181).
+HotAllocationGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 189).
+HotAllocationGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 198).
+HotAllocationGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 199).
+HotAllocationGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 203).
+HotAllocationGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 209).
+HotAllocationGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 229).
+HotAllocationGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 236).
+HotAllocationGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 248).
+HotAllocationGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 252).
+HotAllocationGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 272).
+HotAllocationGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 279).
+HotAllocationGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 283).
+HotAllocationGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 289).
+HotAllocationGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 293).
+HotAllocationGrandfathered("sentinel-core/src/kernel/plan-executor.ts", 307).
+HotAllocationGrandfathered("sentinel-core/src/kernel/post-deploy-watchdog.ts", 177).
+HotAllocationGrandfathered("sentinel-core/src/kernel/post-deploy-watchdog.ts", 187).
+HotAllocationGrandfathered("sentinel-core/src/kernel/post-deploy-watchdog.ts", 194).
+HotAllocationGrandfathered("sentinel-core/src/kernel/post-deploy-watchdog.ts", 197).
+HotAllocationGrandfathered("sentinel-core/src/kernel/provisioning.ts", 109).
+HotAllocationGrandfathered("sentinel-core/src/kernel/provisioning.ts", 116).
+HotAllocationGrandfathered("sentinel-core/src/kernel/provisioning.ts", 118).
+HotAllocationGrandfathered("sentinel-core/src/kernel/provisioning.ts", 121).
+HotAllocationGrandfathered("sentinel-core/src/kernel/provisioning.ts", 126).
+HotAllocationGrandfathered("sentinel-core/src/kernel/provisioning.ts", 375).
+HotAllocationGrandfathered("sentinel-core/src/kernel/provisioning.ts", 388).
+HotAllocationGrandfathered("sentinel-core/src/kernel/publish-reconciler.ts", 273).
+HotAllocationGrandfathered("sentinel-core/src/kernel/publish-reconciler.ts", 292).
+HotAllocationGrandfathered("sentinel-core/src/kernel/redis-client.ts", 68).
+HotAllocationGrandfathered("sentinel-core/src/kernel/redis-client.ts", 79).
+HotAllocationGrandfathered("sentinel-core/src/kernel/redis-client.ts", 81).
+HotAllocationGrandfathered("sentinel-core/src/kernel/redis-client.ts", 110).
+HotAllocationGrandfathered("sentinel-core/src/kernel/schedule-sync.ts", 72).
+HotAllocationGrandfathered("sentinel-core/src/kernel/scheduler.ts", 198).
+HotAllocationGrandfathered("sentinel-core/src/kernel/scheduler.ts", 200).
+HotAllocationGrandfathered("sentinel-core/src/kernel/scheduler.ts", 363).
+HotAllocationGrandfathered("sentinel-core/src/kernel/scheduler.ts", 364).
+HotAllocationGrandfathered("sentinel-core/src/kernel/scheduler.ts", 505).
+HotAllocationGrandfathered("sentinel-core/src/kernel/scraping-health.ts", 119).
+HotAllocationGrandfathered("sentinel-core/src/kernel/scraping-health.ts", 138).
+HotAllocationGrandfathered("sentinel-core/src/kernel/scraping-health.ts", 140).
+HotAllocationGrandfathered("sentinel-core/src/kernel/scraping-health.ts", 141).
+HotAllocationGrandfathered("sentinel-core/src/kernel/scraping-health.ts", 157).
+HotAllocationGrandfathered("sentinel-core/src/kernel/scraping-health.ts", 159).
+HotAllocationGrandfathered("sentinel-core/src/kernel/scraping-health.ts", 160).
+HotAllocationGrandfathered("sentinel-core/src/kernel/scraping-health.ts", 195).
+HotAllocationGrandfathered("sentinel-core/src/kernel/scraping-health.ts", 202).
+HotAllocationGrandfathered("sentinel-core/src/kernel/scraping-health.ts", 203).
+HotAllocationGrandfathered("sentinel-core/src/kernel/slo-registry.ts", 97).
+HotAllocationGrandfathered("sentinel-core/src/kernel/slo-registry.ts", 101).
+HotAllocationGrandfathered("sentinel-core/src/kernel/slo-registry.ts", 111).
+HotAllocationGrandfathered("sentinel-core/src/kernel/slo-registry.ts", 112).
+HotAllocationGrandfathered("sentinel-core/src/kernel/video-chain-orchestrator.ts", 476).
+HotAllocationGrandfathered("sentinel-core/src/kernel/video-chain-orchestrator.ts", 479).
+HotAllocationGrandfathered("sentinel-core/src/kernel/video-chain-orchestrator.ts", 483).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 822).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 829).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 968).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 972).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 973).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 974).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 1060).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 1061).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 1089).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 1092).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 1126).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 1133).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 1134).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 1135).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 1138).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 1146).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 1169).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 1175).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 1179).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 1184).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 1185).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 1186).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 1188).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 1189).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 1190).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 2764).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 2855).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 2856).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 2871).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 2884).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 2888).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 2891).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 2895).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/execute.ts", 125).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/execute.ts", 126).
+HotAllocationGrandfathered("sentinel-core/src/mcp/tools/execute.ts", 130).
+HotAllocationGrandfathered("sentinel-core/src/packs/content-analytics/blocks/youtube-analytics.ts", 123).
+HotAllocationGrandfathered("sentinel-core/src/packs/llm-fanout/blocks/code-generator.ts", 286).
+HotAllocationGrandfathered("sentinel-core/src/packs/llm-fanout/blocks/code-generator.ts", 287).
+HotAllocationGrandfathered("sentinel-core/src/packs/llm-fanout/blocks/code-generator.ts", 292).
+HotAllocationGrandfathered("sentinel-core/src/packs/llm-fanout/blocks/code-generator.ts", 356).
+HotAllocationGrandfathered("sentinel-core/src/packs/llm-fanout/blocks/code-generator.ts", 382).
+HotAllocationGrandfathered("sentinel-core/src/packs/publishing/blocks/youtube-publisher.ts", 390).
+HotAllocationGrandfathered("sentinel-core/src/packs/thumbnail-generation/blocks/thumbnail-generator.ts", 146).
+HotAllocationGrandfathered("sentinel-core/src/packs/thumbnail-generation/blocks/thumbnail-generator.ts", 160).
+HotAllocationGrandfathered("sentinel-core/src/packs/thumbnail-generation/blocks/thumbnail-generator.ts", 163).
+HotAllocationGrandfathered("sentinel-core/src/packs/visual-render/blocks/renderer.ts", 297).
+HotAllocationGrandfathered("sentinel-core/src/packs/visual-render/blocks/renderer.ts", 355).
+HotAllocationGrandfathered("sentinel-core/src/packs/visual-render/blocks/renderer.ts", 363).
+HotAllocationGrandfathered("sentinel-core/src/packs/visual-render/blocks/renderer.ts", 546).
+HotAllocationGrandfathered("sentinel-core/src/shared/youtube-analytics-api.ts", 245).
+HotAllocationGrandfathered("sentinel-core/src/shared/youtube-analytics-api.ts", 256).
+HotAllocationGrandfathered("sentinel-web/src/lib/api-client.ts", 100).
+HotAllocationGrandfathered("sentinel-web/src/lib/api-client.ts", 103).
+HotAllocationGrandfathered("sentinel-web/src/lib/api-client.ts", 106).
+HotAllocationGrandfathered("sentinel-web/src/lib/api-client.ts", 109).
+HotAllocationGrandfathered("sentinel-web/src/lib/api-client.ts", 125).

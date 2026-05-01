@@ -35,13 +35,16 @@ const RULES_DIR = path.join(REPO_ROOT, 'packages/invariants-postgres-ts/invarian
 const FACTS_DIR = path.join(REPO_ROOT, '.codegraph/facts')
 
 /**
- * Budget de violations toolkit. Initial : ~180 (cf. SELF-AUDIT-2026-05-01.md).
- * Ce nombre doit DESCENDRE au fil des refactors. Toute violation NOUVELLE
- * (file:line non listee ailleurs) doit etre traitee.
+ * Budget de violations toolkit.
+ *  - 2026-05-01 baseline 1 : ~180 (cf. SELF-AUDIT-2026-05-01.md). Budget=250.
+ *  - 2026-05-01 baseline 2 : ~609 apres Top-5 graph-theory uplift (5 nouvelles
+ *    rules ajoutent ~430 hits sur le toolkit lui-meme — surtout cyclomatic
+ *    et hot-allocation, signal legitime que le toolkit est complexe).
  *
- * Set a un budget large initial — la valeur cible apres cleanup sera plus bas.
+ * Ce nombre doit DESCENDRE au fil des refactors (analyzer.ts, extractors).
+ * Toute violation NOUVELLE doit etre traitee.
  */
-const VIOLATION_BUDGET = 250
+const VIOLATION_BUDGET = 700
 
 async function dirExists(p: string): Promise<boolean> {
   try { await fs.access(p); return true } catch { return false }

@@ -1,0 +1,102 @@
+// COMPOSITE-CYCLOMATIC-BOMB — McCabe 1976 (Top-5 graph theory uplift).
+//
+// Pourquoi : une fonction avec cyclomatic > 15 a >= 32k chemins
+// possibles dans le pire cas (2^k pour k branches independantes).
+// Couverture de test devient impraticable, bugs combinatoires inevitables.
+//
+// Threshold > 15 : recommandation McCabe historique (10-15 = warning,
+// >15 = strong refactor signal). On choisit 15 = strict.
+//
+// Source : extractor function-complexity (Top-5 batch).
+// Fact : FunctionComplexity(file, name, line, cyclomatic, cognitive, containingClass)
+
+.decl CyclomaticBombGrandfathered(file: symbol, name: symbol)
+
+Violation("COMPOSITE-CYCLOMATIC-BOMB", F, L,
+  "fonction cyclomatic > 15 — branches combinatoires non-testables, refactor obligatoire") :-
+    FunctionComplexity(F, N, L, Cyclo, _, _),
+    Cyclo > 15,
+    !CyclomaticBombGrandfathered(F, N).
+
+// Grandfather list — 2026-05-01 (auto-generated, 81 entries).
+CyclomaticBombGrandfathered("sentinel-core/src/api/routes/accounts.ts", "handleAccountRoutes").
+CyclomaticBombGrandfathered("sentinel-core/src/api/routes/blocks.ts", "handleBlockRoutes").
+CyclomaticBombGrandfathered("sentinel-core/src/api/routes/improvement.ts", "handleImprovementRoutes").
+CyclomaticBombGrandfathered("sentinel-core/src/api/routes/projects.ts", "handleProjectRoutes").
+CyclomaticBombGrandfathered("sentinel-core/src/api/routes/system.ts", "handleSystemRoutes").
+CyclomaticBombGrandfathered("sentinel-core/src/api/server.ts", "startAPI").
+CyclomaticBombGrandfathered("sentinel-core/src/api/setup-api.ts", "handleSetupRequest").
+CyclomaticBombGrandfathered("sentinel-core/src/api/webhooks/admin.ts", "executeAdminCommand").
+CyclomaticBombGrandfathered("sentinel-core/src/api/webhooks/index.ts", "handleWebhookRequest").
+CyclomaticBombGrandfathered("sentinel-core/src/blocks/base-block.ts", "splitPlanByMode").
+CyclomaticBombGrandfathered("sentinel-core/src/blocks/base-block.ts", "handleEventInner").
+CyclomaticBombGrandfathered("sentinel-core/src/index.ts", "shutdown").
+CyclomaticBombGrandfathered("sentinel-core/src/kernel/agent-commit.ts", "validateProposeCommitInput").
+CyclomaticBombGrandfathered("sentinel-core/src/kernel/claude-cli.ts", "invokeClaudeCli").
+CyclomaticBombGrandfathered("sentinel-core/src/kernel/deploy-client.ts", "validateStagePath").
+CyclomaticBombGrandfathered("sentinel-core/src/kernel/deploy-client.ts", "requestDeploy").
+CyclomaticBombGrandfathered("sentinel-core/src/kernel/dimension-learner.ts", "refreshDimensionLearnings").
+CyclomaticBombGrandfathered("sentinel-core/src/kernel/email-policy.ts", "evaluateEmailPolicy").
+CyclomaticBombGrandfathered("sentinel-core/src/kernel/email-policy.ts", "detectEmailCategory").
+CyclomaticBombGrandfathered("sentinel-core/src/kernel/event-bus.ts", "validatePayload").
+CyclomaticBombGrandfathered("sentinel-core/src/kernel/healer/autonomous.ts", "attemptAutoDeploy").
+CyclomaticBombGrandfathered("sentinel-core/src/kernel/healer/directed.ts", "checkObjectives").
+CyclomaticBombGrandfathered("sentinel-core/src/kernel/healer/directed.ts", "checkMeasurementWindows").
+CyclomaticBombGrandfathered("sentinel-core/src/kernel/healer/reactive.ts", "diagnose").
+CyclomaticBombGrandfathered("sentinel-core/src/kernel/healer/reactive.ts", "propose").
+CyclomaticBombGrandfathered("sentinel-core/src/kernel/impact-measurer.ts", "measureHypothesis").
+CyclomaticBombGrandfathered("sentinel-core/src/kernel/plan-executor.ts", "classifyError").
+CyclomaticBombGrandfathered("sentinel-core/src/kernel/plan-executor.ts", "executePlan").
+CyclomaticBombGrandfathered("sentinel-core/src/kernel/publish-reconciler.ts", "attemptPublish").
+CyclomaticBombGrandfathered("sentinel-core/src/kernel/tool-validator.ts", "validate").
+CyclomaticBombGrandfathered("sentinel-core/src/kernel/tool-validator.ts", "validateProperty").
+CyclomaticBombGrandfathered("sentinel-core/src/kernel/trust-engine.ts", "computeEffectiveMode").
+CyclomaticBombGrandfathered("sentinel-core/src/kernel/video-chain-orchestrator.ts", "onAssemblyCompleted").
+CyclomaticBombGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", "computeMetrics").
+CyclomaticBombGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", "computeSymbolPageRank").
+CyclomaticBombGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", "queryCheck").
+CyclomaticBombGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", "detectDrift").
+CyclomaticBombGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", "querySuggest").
+CyclomaticBombGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", "queryContext").
+CyclomaticBombGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", "queryTrace").
+CyclomaticBombGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", "traceFileImpact").
+CyclomaticBombGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", "traceEvent").
+CyclomaticBombGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", "queryExports").
+CyclomaticBombGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", "queryAnalyze").
+CyclomaticBombGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", "queryDiff").
+CyclomaticBombGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", "querySymbol").
+CyclomaticBombGrandfathered("sentinel-core/src/mcp/transport-http.ts", "handleMCPHTTP").
+CyclomaticBombGrandfathered("sentinel-core/src/mcp/validate-args.ts", "validateMCPToolArgs").
+CyclomaticBombGrandfathered("sentinel-core/src/packs/publishing/blocks/youtube-publisher.ts", "publish").
+CyclomaticBombGrandfathered("sentinel-core/src/packs/video-assembly/blocks/assembler.ts", "assemble").
+CyclomaticBombGrandfathered("sentinel-core/src/packs/visual-render/blocks/renderer.ts", "renderVisual").
+CyclomaticBombGrandfathered("sentinel-core/src/packs/visual-render/blocks/renderer.ts", "captureSandbox").
+CyclomaticBombGrandfathered("sentinel-core/src/packs/visual-render/utils/sketch-complexity.ts", "classifySketchComplexity").
+CyclomaticBombGrandfathered("sentinel-core/src/shared/auth.ts", "checkAuth").
+CyclomaticBombGrandfathered("sentinel-core/src/shared/ffmpeg.ts", "composeShortGrid").
+CyclomaticBombGrandfathered("sentinel-core/src/shared/logger.ts", "getLogBuffer").
+CyclomaticBombGrandfathered("sentinel-core/src/shared/plan-parser.ts", "parsePlan").
+CyclomaticBombGrandfathered("sentinel-core/src/shared/title-generator.ts", "buildSystemPrompt").
+CyclomaticBombGrandfathered("sentinel-core/src/shared/youtube-analytics-api.ts", "fetchAnalyticsV2Stats").
+CyclomaticBombGrandfathered("sentinel-web/src/app/activity/page.tsx", "ActivityPage").
+CyclomaticBombGrandfathered("sentinel-web/src/app/approvals/page.tsx", "ApprovalsPage").
+CyclomaticBombGrandfathered("sentinel-web/src/app/connections/page.tsx", "ConnectionsPage").
+CyclomaticBombGrandfathered("sentinel-web/src/app/connections/page.tsx", "EnvForm").
+CyclomaticBombGrandfathered("sentinel-web/src/app/entities/page.tsx", "EntitiesPage").
+CyclomaticBombGrandfathered("sentinel-web/src/app/graph/page.tsx", "GraphPage").
+CyclomaticBombGrandfathered("sentinel-web/src/app/improvement/page.tsx", "ImprovementDashboard").
+CyclomaticBombGrandfathered("sentinel-web/src/app/operations/page.tsx", "ProjectsTab").
+CyclomaticBombGrandfathered("sentinel-web/src/app/operations/page.tsx", "ProductsTab").
+CyclomaticBombGrandfathered("sentinel-web/src/app/operations/page.tsx", "CommerceTab").
+CyclomaticBombGrandfathered("sentinel-web/src/app/page.tsx", "SystemDashboard").
+CyclomaticBombGrandfathered("sentinel-web/src/app/page.tsx", "GitSection").
+CyclomaticBombGrandfathered("sentinel-web/src/app/products/page.tsx", "ProductsPage").
+CyclomaticBombGrandfathered("sentinel-web/src/app/project/[id]/page.tsx", "ProjectDetailPage").
+CyclomaticBombGrandfathered("sentinel-web/src/app/projects/page.tsx", "ProjectsPage").
+CyclomaticBombGrandfathered("sentinel-web/src/app/setup/page.tsx", "SetupPage").
+CyclomaticBombGrandfathered("sentinel-web/src/components/ApprovalCard.tsx", "ApprovalCard").
+CyclomaticBombGrandfathered("sentinel-web/src/components/BlockCard.tsx", "BlockCard").
+CyclomaticBombGrandfathered("sentinel-web/src/components/ProjectCommerce.tsx", "ProjectCommerce").
+CyclomaticBombGrandfathered("sentinel-web/src/components/ProjectCommerce.tsx", "CommerceBlock").
+CyclomaticBombGrandfathered("sentinel-web/src/components/ProjectCommerce.tsx", "InsightsBlock").
+CyclomaticBombGrandfathered("sentinel-web/src/components/Shell.tsx", "Shell").

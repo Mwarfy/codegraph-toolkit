@@ -1,0 +1,27 @@
+// COMPOSITE-CRITICAL-REFACTOR — convergence centrality × complexite × no-test (Top-5).
+//
+// Pourquoi : 3 angles independants convergent →
+//   1. PageRank haut (impact systemique grand)
+//   2. Cyclomatic ou cognitive haut (difficulte refactor)
+//   3. Pas de test direct (risque maximum)
+// = LE fichier ou chaque heure de refactor a le plus d'impact.
+//
+// Approche scientifique : multipliquer les axes orthogonaux pour eviter
+// les faux signaux d'un seul.
+//
+// Threshold PageRank > 500 (sur 1000 — top 50% normalise).
+
+.decl CriticalRefactorGrandfathered(file: symbol, name: symbol)
+
+Violation("COMPOSITE-CRITICAL-REFACTOR", F, L,
+  "convergence : PageRank haut + complexite haute + non-teste — refactor priorise") :-
+    FunctionComplexity(F, N, L, Cyclo, _, _),
+    Cyclo > 10,
+    ModuleCentrality(F, PR, _),
+    PR > 500,
+    !TestedFile(F),
+    !CriticalRefactorGrandfathered(F, N).
+
+// Grandfather list — 2026-05-01 (auto-generated, 2 entries).
+CriticalRefactorGrandfathered("sentinel-core/src/shared/logger.ts", "getLogBuffer").
+CriticalRefactorGrandfathered("sentinel-core/src/shared/logger.ts", "log").

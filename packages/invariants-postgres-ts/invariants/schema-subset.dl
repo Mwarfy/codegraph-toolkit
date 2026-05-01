@@ -69,6 +69,10 @@
 .decl TryCatchSwallow(file: symbol, line: number, kind: symbol, containingSymbol: symbol)
 .decl AwaitInLoop(file: symbol, line: number, loopKind: symbol, containingSymbol: symbol)
 .decl IsPackageEntryPoint(file: symbol)
+.decl ModuleCentrality(file: symbol, pageRank: number, henryKafura: number)
+.decl FunctionComplexity(file: symbol, name: symbol, line: number, cyclomatic: number, cognitive: number, containingClass: symbol)
+.decl AllocationInLoop(file: symbol, line: number, allocKind: symbol, containingSymbol: symbol)
+.decl CycleSize(cycleId: symbol, size: number, sccSize: number)
 .decl SymbolCallEdge(fromFile: symbol, fromSymbol: symbol, toFile: symbol, toSymbol: symbol, line: number)
 .decl SymbolSignature(file: symbol, name: symbol, kind: symbol, line: number)
 .decl EntryPoint(file: symbol, kind: symbol, id: symbol)
@@ -133,6 +137,10 @@
 .input TryCatchSwallow
 .input AwaitInLoop
 .input IsPackageEntryPoint
+.input ModuleCentrality
+.input FunctionComplexity
+.input AllocationInLoop
+.input CycleSize
 .input SymbolCallEdge
 .input SymbolSignature
 .input EntryPoint

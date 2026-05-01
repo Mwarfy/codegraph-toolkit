@@ -1,0 +1,69 @@
+// COMPOSITE-COGNITIVE-BOMB — SonarQube cognitive complexity (Top-5).
+//
+// Pourquoi : cognitive penalise le nesting (linear ≠ nested). Une fonction
+// avec cognitive > 25 demande plus de "load mental" qu'un humain peut
+// suivre confortablement. Empiriquement plus correle aux bugs que
+// cyclomatic seul (Campbell 2018).
+//
+// Threshold > 25 : recommandation SonarQube par defaut (15 warning,
+// 25 strict).
+
+.decl CognitiveBombGrandfathered(file: symbol, name: symbol)
+
+Violation("COMPOSITE-COGNITIVE-BOMB", F, L,
+  "fonction cognitive > 25 — load mental excessif (nesting profond), refactor en sous-fns") :-
+    FunctionComplexity(F, N, L, _, Cog, _),
+    Cog > 25,
+    !CognitiveBombGrandfathered(F, N).
+
+// Grandfather list — 2026-05-01 (auto-generated, 50 entries).
+CognitiveBombGrandfathered("sentinel-core/src/api/routes/blocks.ts", "handleBlockRoutes").
+CognitiveBombGrandfathered("sentinel-core/src/api/routes/improvement.ts", "handleImprovementRoutes").
+CognitiveBombGrandfathered("sentinel-core/src/api/routes/projects.ts", "handleProjectRoutes").
+CognitiveBombGrandfathered("sentinel-core/src/api/routes/system.ts", "handleSystemRoutes").
+CognitiveBombGrandfathered("sentinel-core/src/api/server.ts", "startAPI").
+CognitiveBombGrandfathered("sentinel-core/src/api/setup-api.ts", "handleSetupRequest").
+CognitiveBombGrandfathered("sentinel-core/src/api/webhooks/admin.ts", "executeAdminCommand").
+CognitiveBombGrandfathered("sentinel-core/src/api/webhooks/index.ts", "handleWebhookRequest").
+CognitiveBombGrandfathered("sentinel-core/src/blocks/base-block.ts", "splitPlanByMode").
+CognitiveBombGrandfathered("sentinel-core/src/index.ts", "shutdown").
+CognitiveBombGrandfathered("sentinel-core/src/kernel/agent-commit.ts", "validateProposeCommitInput").
+CognitiveBombGrandfathered("sentinel-core/src/kernel/deploy-client.ts", "requestDeploy").
+CognitiveBombGrandfathered("sentinel-core/src/kernel/dimension-learner.ts", "refreshDimensionLearnings").
+CognitiveBombGrandfathered("sentinel-core/src/kernel/email-policy.ts", "detectEmailCategory").
+CognitiveBombGrandfathered("sentinel-core/src/kernel/event-bus.ts", "validatePayload").
+CognitiveBombGrandfathered("sentinel-core/src/kernel/healer/directed.ts", "checkObjectives").
+CognitiveBombGrandfathered("sentinel-core/src/kernel/healer/directed.ts", "checkMeasurementWindows").
+CognitiveBombGrandfathered("sentinel-core/src/kernel/healer/reactive.ts", "diagnose").
+CognitiveBombGrandfathered("sentinel-core/src/kernel/plan-executor.ts", "executePlan").
+CognitiveBombGrandfathered("sentinel-core/src/kernel/tool-validator.ts", "validate").
+CognitiveBombGrandfathered("sentinel-core/src/kernel/tool-validator.ts", "validateProperty").
+CognitiveBombGrandfathered("sentinel-core/src/kernel/trust-engine.ts", "computeEffectiveMode").
+CognitiveBombGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", "computeMetrics").
+CognitiveBombGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", "computeSymbolPageRank").
+CognitiveBombGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", "queryCheck").
+CognitiveBombGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", "detectDrift").
+CognitiveBombGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", "querySuggest").
+CognitiveBombGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", "queryContext").
+CognitiveBombGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", "queryTrace").
+CognitiveBombGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", "traceFileImpact").
+CognitiveBombGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", "traceEvent").
+CognitiveBombGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", "queryAnalyze").
+CognitiveBombGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", "queryDiff").
+CognitiveBombGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", "querySymbol").
+CognitiveBombGrandfathered("sentinel-core/src/mcp/transport-http.ts", "handleMCPHTTP").
+CognitiveBombGrandfathered("sentinel-core/src/mcp/validate-args.ts", "validateMCPToolArgs").
+CognitiveBombGrandfathered("sentinel-core/src/packs/publishing/blocks/youtube-publisher.ts", "publish").
+CognitiveBombGrandfathered("sentinel-core/src/packs/video-assembly/blocks/assembler.ts", "assemble").
+CognitiveBombGrandfathered("sentinel-core/src/packs/visual-render/blocks/renderer.ts", "renderVisual").
+CognitiveBombGrandfathered("sentinel-core/src/shared/ffmpeg.ts", "composeShortGrid").
+CognitiveBombGrandfathered("sentinel-core/src/shared/plan-parser.ts", "parsePlan").
+CognitiveBombGrandfathered("sentinel-core/src/shared/title-generator.ts", "buildSystemPrompt").
+CognitiveBombGrandfathered("sentinel-web/src/app/activity/page.tsx", "ActivityPage").
+CognitiveBombGrandfathered("sentinel-web/src/app/connections/page.tsx", "ConnectionsPage").
+CognitiveBombGrandfathered("sentinel-web/src/app/entities/page.tsx", "EntitiesPage").
+CognitiveBombGrandfathered("sentinel-web/src/app/graph/page.tsx", "GraphPage").
+CognitiveBombGrandfathered("sentinel-web/src/app/page.tsx", "SystemDashboard").
+CognitiveBombGrandfathered("sentinel-web/src/app/page.tsx", "GitSection").
+CognitiveBombGrandfathered("sentinel-web/src/app/setup/page.tsx", "SetupPage").
+CognitiveBombGrandfathered("sentinel-web/src/components/BlockCard.tsx", "BlockCard").

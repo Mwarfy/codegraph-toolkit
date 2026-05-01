@@ -44,10 +44,19 @@ export interface AwaitInLoopFact {
   containingSymbol: string
 }
 
+export interface AllocationInLoopFact {
+  file: string
+  line: number
+  /** Kind d'allocation : 'array-literal' | 'object-literal' | 'new-expression' | 'spread' */
+  allocKind: string
+  containingSymbol: string
+}
+
 export interface CodeQualityPatternsBundle {
   regexLiterals: RegexLiteralFact[]
   tryCatchSwallows: TryCatchSwallowFact[]
   awaitInLoops: AwaitInLoopFact[]
+  allocationInLoops: AllocationInLoopFact[]
 }
 
 // Heuristique nested quantifier : detecte (X+)+, (X*)*, (X+|X+)+, etc.
@@ -61,6 +70,7 @@ export function extractCodeQualityPatternsFileBundle(
 ): CodeQualityPatternsBundle {
   const out: CodeQualityPatternsBundle = {
     regexLiterals: [], tryCatchSwallows: [], awaitInLoops: [],
+    allocationInLoops: [],
   }
   if (TEST_FILE_RE.test(relPath)) return out
 
@@ -182,6 +192,41 @@ export function extractCodeQualityPatternsFileBundle(
     }
   }
 
+  // Pass 4 : Allocations in loops (GC pressure marker)
+  // Capture les allocations syntheticement creees par iteration :
+  //   `[]`, `{}`, `new X(...)`, `[...src]`, `{...src}` dans un loop direct.
+  // Filtre : skip si l'allocation est INITIALIZER d'un binding qui sort
+  // du scope de la loop (declaration outside-init pattern accepte).
+  const allocCandidates: Array<{ kind: number; alias: string }> = [
+    { kind: SyntaxKind.ArrayLiteralExpression, alias: 'array-literal' },
+    { kind: SyntaxKind.ObjectLiteralExpression, alias: 'object-literal' },
+    { kind: SyntaxKind.NewExpression, alias: 'new-expression' },
+  ]
+  for (const candidate of allocCandidates) {
+    for (const node of sf.getDescendantsOfKind(candidate.kind)) {
+      const line = node.getStartLineNumber()
+      if (isExempt(line, 'alloc-ok')) continue
+      // Walk up : si on rencontre une LoopKind avant une FN_KINDS, c'est dans un loop
+      let cur: Node | undefined = node.getParent()
+      let inLoop = false
+      while (cur) {
+        if (FN_KINDS.has(cur.getKind())) break
+        if (LOOP_KINDS.has(cur.getKind())) { inLoop = true; break }
+        cur = cur.getParent()
+      }
+      if (!inLoop) continue
+      // Skip object literal qui ne fait que servir d'arg destructure typing
+      // (`function f({a}: {a: number})` peut matcher si parsing genere un ObjectLiteral
+      // dans le type — sanity check : on skip les ObjectLiteral dans TypeNode).
+      if (candidate.alias === 'object-literal'
+       && node.getFirstAncestorByKind(SyntaxKind.TypeReference)) continue
+      out.allocationInLoops.push({
+        file: relPath, line, allocKind: candidate.alias,
+        containingSymbol: findContainingSymbol(node),
+      })
+    }
+  }
+
   return out
 }
 
@@ -210,6 +255,7 @@ export interface CodeQualityPatternsAggregated {
   regexLiterals: RegexLiteralFact[]
   tryCatchSwallows: TryCatchSwallowFact[]
   awaitInLoops: AwaitInLoopFact[]
+  allocationInLoops: AllocationInLoopFact[]
 }
 
 export async function analyzeCodeQualityPatterns(
@@ -220,6 +266,7 @@ export async function analyzeCodeQualityPatterns(
   const fileSet = new Set(files)
   const out: CodeQualityPatternsAggregated = {
     regexLiterals: [], tryCatchSwallows: [], awaitInLoops: [],
+    allocationInLoops: [],
   }
   for (const sf of project.getSourceFiles()) {
     const rel = relativize(sf.getFilePath(), rootDir)
@@ -228,12 +275,14 @@ export async function analyzeCodeQualityPatterns(
     out.regexLiterals.push(...bundle.regexLiterals)
     out.tryCatchSwallows.push(...bundle.tryCatchSwallows)
     out.awaitInLoops.push(...bundle.awaitInLoops)
+    out.allocationInLoops.push(...bundle.allocationInLoops)
   }
   const sortFn = (a: { file: string; line: number }, b: { file: string; line: number }) =>
     a.file !== b.file ? (a.file < b.file ? -1 : 1) : a.line - b.line
   out.regexLiterals.sort(sortFn)
   out.tryCatchSwallows.sort(sortFn)
   out.awaitInLoops.sort(sortFn)
+  out.allocationInLoops.sort(sortFn)
   return out
 }
 

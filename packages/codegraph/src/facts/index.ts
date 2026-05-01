@@ -207,6 +207,23 @@ export async function exportFacts(
   }
   relations.push(isPackageEntryPointRel)
 
+  // ─── ModuleCentrality (Top-5 graph theory uplift) ───────────────────
+  // PageRank normalise [0, 1000] (×1000 pour rester en int Datalog).
+  // Distinque hubs structurels (importes par d'autres hubs) vs hubs
+  // accidentels (importes par feuilles). Brin/Page 1998.
+  // henryKafura idem ×1 (deja int, mais on cap a 1e9 pour eviter overflow).
+  const moduleCentralityRel: RelationDef = {
+    name: 'ModuleCentrality',
+    decl: '(file:symbol, pageRank:number, henryKafura:number)',
+    rows: [],
+  }
+  for (const m of snapshot.moduleMetrics ?? []) {
+    const pr = Math.round(m.pageRank * 1000)
+    const hk = Math.min(m.henryKafura, 1_000_000_000)
+    moduleCentralityRel.rows.push([sym(m.file), num(pr), num(hk)])
+  }
+  relations.push(moduleCentralityRel)
+
   // ─── Fsm facts (Tier 17) ────────────────────────────────────────────
   // States declared per FSM concept + orphans. Detection deja faite par
   // state-machines extractor.
@@ -314,7 +331,37 @@ export async function exportFacts(
       ])
     }
   }
-  relations.push(regexLiteralRel, tryCatchSwallowRel, awaitInLoopRel)
+  // AllocationInLoop (Top-5 perf)
+  const allocationInLoopRel: RelationDef = {
+    name: 'AllocationInLoop',
+    decl: '(file:symbol, line:number, allocKind:symbol, containingSymbol:symbol)',
+    rows: [],
+  }
+  if (cqp) {
+    for (const r of cqp.allocationInLoops ?? []) {
+      allocationInLoopRel.rows.push([
+        sym(r.file), num(r.line), sym(r.allocKind), sym(r.containingSymbol),
+      ])
+    }
+  }
+  relations.push(regexLiteralRel, tryCatchSwallowRel, awaitInLoopRel, allocationInLoopRel)
+
+  // ─── FunctionComplexity (Top-5 McCabe + Cognitive) ───────────────────
+  // Cyclomatic (McCabe 1976) + Cognitive (SonarQube/Campbell 2018).
+  // Toutes fonctions/methodes/arrows, pas seulement longues.
+  const fnComplexityRel: RelationDef = {
+    name: 'FunctionComplexity',
+    decl: '(file:symbol, name:symbol, line:number, cyclomatic:number, cognitive:number, containingClass:symbol)',
+    rows: [],
+  }
+  for (const fc of snapshot.functionComplexity ?? []) {
+    fnComplexityRel.rows.push([
+      sym(fc.file), sym(fc.name), num(fc.line),
+      num(fc.cyclomatic), num(fc.cognitive),
+      sym(fc.containingClass || '_'),
+    ])
+  }
+  relations.push(fnComplexityRel)
 
   // ─── Imports / ImportEdge ─────────────────────────────────────────────
   // `Imports` est binaire (pratique pour la jointure transitive) ;
@@ -552,6 +599,20 @@ export async function exportFacts(
     }
   }
   relations.push(cycleNodeRel)
+
+  // ─── CycleSize (Top-5 SCC hierarchy) ─────────────────────────────────
+  // Distingue cycles benins (size==sccSize) vs cycles niches (size < sccSize,
+  // le path affiche est extrait d'une SCC plus large = signal pathologique).
+  // Tarjan SCC depth via comparaison size vs sccSize.
+  const cycleSizeRel: RelationDef = {
+    name: 'CycleSize',
+    decl: '(cycleId:symbol, size:number, sccSize:number)',
+    rows: [],
+  }
+  for (const c of snapshot.cycles ?? []) {
+    cycleSizeRel.rows.push([sym(c.id), num(c.size), num(c.sccSize)])
+  }
+  relations.push(cycleSizeRel)
 
   // ─── SymbolCallEdge / SymbolSignature ────────────────────────────────
   // Phase 4 axe 2 : path queries CFG-level via Datalog. Émet les call edges
