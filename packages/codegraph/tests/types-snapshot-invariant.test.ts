@@ -21,9 +21,16 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
+// Type-only import for test-coverage detector ('import' matching method).
+// Le test lit aussi le file en texte (regex baseline check) mais cet
+// import explicite signale au coverage extractor que ce file teste types.ts.
+import type { GraphSnapshot } from '../src/core/types.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const TYPES_FILE = path.resolve(__dirname, '../src/core/types.ts')
+
+// Used only to anchor the type import (prevents tree-shake / unused warning).
+type _Anchor = GraphSnapshot
 
 /**
  * Baseline des champs publics de GraphSnapshot à v0.2.0 (post npm publish).

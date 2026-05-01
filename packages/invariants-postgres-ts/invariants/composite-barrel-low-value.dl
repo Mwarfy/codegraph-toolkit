@@ -10,9 +10,14 @@
 
 .decl BarrelLowGrandfathered(file: symbol)
 
+// Tier 17 self-audit fix : skip les npm package entry points (main/bin/exports
+// dans package.json). Un barrel `packages/X/src/index.ts` a "1 re-export" est
+// legitime — c'est l'entry point public. La rule visait les barrels INTERNES
+// a faible utilite, pas les API surfaces npm.
 Violation("COMPOSITE-BARREL-LOW-VALUE", F, 0,
   "barrel a faible valeur (<= 2 re-exports, <= 1 consumer) — inline + supprimer") :-
     Barrel(F, _, _, "true"),
+    !IsPackageEntryPoint(F),
     !BarrelLowGrandfathered(F).
 
 // Grandfather list — 2026-05-01 (auto-generated, 3 entries).

@@ -1,19 +1,24 @@
-// Schema subset utilisé par les rules de @liby-tools/invariants-postgres-ts.
+// Schema commun aux invariants ADR Datalog.
 //
-// Le consumer doit avoir un schema.dl plus large (typiquement émis par
-// `codegraph facts`) qui couvre TOUTES les relations utilisées par TOUS
-// ses invariants. Ce fichier est fourni en référence — si le consumer
-// n'a pas encore de schema.dl, copier ce fichier ET le compléter avec
-// les autres relations qu'on consomme.
+// Décrit les relations exposées par `codegraph facts` (cf.
+// @liby/codegraph/src/facts/index.ts). Chaque fichier ADR ci-dessous
+// (adr-NNN.dl) consomme ces facts et écrit dans `Violation`.
 //
-// IMPORTANT : ne PAS copier ce schema-subset.dl tel quel à côté du
-// schema.dl du consumer — Datalog refuse les double-déclarations. Soit
-// on copie ce fichier comme schema.dl unique, soit on merge à la main.
+// Régénération automatique : `npx codegraph facts` après chaque
+// `codegraph analyze` réécrit les .facts dans `.codegraph/facts/`.
+// Si on étend codegraph pour exposer une nouvelle relation, mirror la
+// décl ici puis l'utiliser dans les .dl.
 
 .decl File(file: symbol)
 .decl FileTag(file: symbol, tag: symbol)
 .decl Imports(from: symbol, to: symbol)
 .decl ImportEdge(from: symbol, to: symbol, line: number)
+.decl EmitsLiteral(file: symbol, line: number, eventName: symbol)
+.decl EmitsConstRef(file: symbol, line: number, namespace: symbol, member: symbol)
+.decl EmitsDynamic(file: symbol, line: number)
+.decl EnvRead(file: symbol, line: number, varName: symbol, hasDefault: symbol)
+.decl EnvReadWrapped(file: symbol, line: number, varName: symbol, wrappedIn: symbol)
+.decl OauthScopeLiteral(file: symbol, line: number, scope: symbol)
 .decl ModuleFanIn(file: symbol, count: number)
 .decl CycleNode(file: symbol, cycleId: symbol, gated: symbol)
 .decl SqlTable(name: symbol, file: symbol, line: number)
@@ -27,8 +32,6 @@
 .decl BooleanParam(file: symbol, line: number, name: symbol, paramName: symbol, paramIndex: number, totalParams: number)
 .decl DeadCode(file: symbol, line: number, kind: symbol)
 .decl FloatingPromise(file: symbol, line: number, callee: symbol, containingSymbol: symbol)
-.decl EntryPoint(file: symbol, kind: symbol, id: symbol)
-.decl SymbolCallEdge(fromFile: symbol, fromSymbol: symbol, toFile: symbol, toSymbol: symbol, line: number)
 .decl DeprecatedDecl(name: symbol, file: symbol, line: number)
 .decl DeprecatedUsage(file: symbol, line: number, callee: symbol)
 .decl ArticulationPoint(file: symbol, severity: number)
@@ -46,11 +49,40 @@
 .decl TaintedArgCall(file: symbol, line: number, callee: symbol, argVarName: symbol, argIndex: number, source: symbol, containingSymbol: symbol)
 .decl TaintedArgumentToCall(callerFile: symbol, callerSymbol: symbol, callee: symbol, paramIndex: number, source: symbol)
 .decl FunctionParam(file: symbol, symbol: symbol, paramName: symbol, paramIndex: number)
+.decl CryptoCall(file: symbol, line: number, fn: symbol, algo: symbol, containingSymbol: symbol)
+.decl SecretVarRef(file: symbol, line: number, varName: symbol, kind: symbol, callee: symbol, containingSymbol: symbol)
+.decl CorsConfig(file: symbol, line: number, originKind: symbol, containingSymbol: symbol)
+.decl TlsConfigUnsafe(file: symbol, line: number, key: symbol, containingSymbol: symbol)
+.decl WeakRandomCall(file: symbol, line: number, varName: symbol, secretKind: symbol, containingSymbol: symbol)
+.decl UnusedExport(file: symbol, name: symbol, line: number, kind: symbol, confidence: symbol)
+.decl LongFunction(file: symbol, name: symbol, line: number, locCount: number)
+.decl MagicNumber(file: symbol, line: number, value: symbol, context: symbol, category: symbol)
+.decl Barrel(file: symbol, reExportCount: number, consumerCount: number, lowValue: symbol)
+.decl PackageDepIssue(packageName: symbol, packageJson: symbol, kind: symbol, declaredIn: symbol)
+.decl FsmStateDeclared(concept: symbol, state: symbol)
+.decl FsmStateOrphan(concept: symbol, state: symbol, confidence: symbol)
+.decl BackEdge(fromGroup: symbol, toGroup: symbol)
+.decl ListensLiteral(file: symbol, line: number, eventName: symbol)
+.decl ListensConstRef(file: symbol, line: number, namespace: symbol, member: symbol)
+.decl ListensDynamic(file: symbol, line: number)
+.decl RegexLiteral(file: symbol, line: number, source: symbol, flags: symbol, hasNestedQuantifier: symbol)
+.decl TryCatchSwallow(file: symbol, line: number, kind: symbol, containingSymbol: symbol)
+.decl AwaitInLoop(file: symbol, line: number, loopKind: symbol, containingSymbol: symbol)
+.decl IsPackageEntryPoint(file: symbol)
+.decl SymbolCallEdge(fromFile: symbol, fromSymbol: symbol, toFile: symbol, toSymbol: symbol, line: number)
+.decl SymbolSignature(file: symbol, name: symbol, kind: symbol, line: number)
+.decl EntryPoint(file: symbol, kind: symbol, id: symbol)
 
 .input File
 .input FileTag
 .input Imports
 .input ImportEdge
+.input EmitsLiteral
+.input EmitsConstRef
+.input EmitsDynamic
+.input EnvRead
+.input EnvReadWrapped
+.input OauthScopeLiteral
 .input ModuleFanIn
 .input CycleNode
 .input SqlTable
@@ -64,8 +96,6 @@
 .input BooleanParam
 .input DeadCode
 .input FloatingPromise
-.input EntryPoint
-.input SymbolCallEdge
 .input DeprecatedDecl
 .input DeprecatedUsage
 .input ArticulationPoint
@@ -83,7 +113,35 @@
 .input TaintedArgCall
 .input TaintedArgumentToCall
 .input FunctionParam
+.input CryptoCall
+.input SecretVarRef
+.input CorsConfig
+.input TlsConfigUnsafe
+.input WeakRandomCall
+.input UnusedExport
+.input LongFunction
+.input MagicNumber
+.input Barrel
+.input PackageDepIssue
+.input FsmStateDeclared
+.input FsmStateOrphan
+.input BackEdge
+.input ListensLiteral
+.input ListensConstRef
+.input ListensDynamic
+.input RegexLiteral
+.input TryCatchSwallow
+.input AwaitInLoop
+.input IsPackageEntryPoint
+.input SymbolCallEdge
+.input SymbolSignature
+.input EntryPoint
 
-// La relation cible commune : tous les fichiers de rules écrivent ici.
+// La relation cible commune : tous les fichiers ADR écrivent ici.
+// 4 colonnes :
+//   adr  : "ADR-NNN" — l'ADR violé
+//   file : chemin relatif (ex: "sentinel-core/src/.../foo.ts")
+//   line : ligne du violation site (0 si non-applicable)
+//   msg  : message court (≤ 80 chars idéalement)
 .decl Violation(adr: symbol, file: symbol, line: number, msg: symbol)
 .output Violation

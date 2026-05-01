@@ -26,4 +26,5 @@ Violation("COMPOSITE-ORPHAN-FILE", F, 0,
     File(F),
     !ImportedFile(F),
     !IsEntryPoint(F),
+    !IsPackageEntryPoint(F),
     !OrphanFileGrandfathered(F).

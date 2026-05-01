@@ -166,6 +166,47 @@ export async function exportFacts(
   }
   relations.push(packageDepIssueRel)
 
+  // ─── IsPackageEntryPoint (Tier 17 self-audit) ────────────────────────
+  // Resout les `main`/`bin`/`exports` de chaque package.json detecte vers
+  // les paths source TS correspondants. Sert a whitelister les entry
+  // points npm dans les rules composite-barrel-low-value et
+  // composite-orphan-file (faux positifs systemiques sinon).
+  const isPackageEntryPointRel: RelationDef = {
+    name: 'IsPackageEntryPoint',
+    decl: '(file:symbol)',
+    rows: [],
+  }
+  const seenPjs = new Set<string>()
+  for (const d of snapshot.packageDeps ?? []) {
+    if (seenPjs.has(d.packageJson)) continue
+    seenPjs.add(d.packageJson)
+    try {
+      const pjPath = path.resolve(snapshot.rootDir, d.packageJson)
+      const pjRaw = await fs.readFile(pjPath, 'utf8')
+      const pj = JSON.parse(pjRaw)
+      const pjDir = path.dirname(d.packageJson)
+      const candidates: string[] = []
+      const collect = (val: unknown): void => {
+        if (typeof val === 'string') candidates.push(val)
+        else if (val && typeof val === 'object') {
+          for (const v of Object.values(val)) collect(v)
+        }
+      }
+      collect(pj.main)
+      collect(pj.bin)
+      collect(pj.exports)
+      for (const c of candidates) {
+        // dist/foo.js → src/foo.ts (heuristique standard)
+        const srcGuess = c.replace(/^\.?\/?dist\//, 'src/').replace(/\.js$/, '.ts')
+        const fullPath = path.join(pjDir, srcGuess).replace(/\\/g, '/')
+        isPackageEntryPointRel.rows.push([sym(fullPath)])
+      }
+    } catch {
+      // pjson parse error — skip silently (fact emit best effort)
+    }
+  }
+  relations.push(isPackageEntryPointRel)
+
   // ─── Fsm facts (Tier 17) ────────────────────────────────────────────
   // States declared per FSM concept + orphans. Detection deja faite par
   // state-machines extractor.

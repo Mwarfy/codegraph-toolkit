@@ -28,7 +28,7 @@ import {
   type EnumDeclaration,
 } from 'ts-morph'
 import type { AdrToolkitConfig } from './config.js'
-import type { PatternCandidate } from './bootstrap.js'
+import type { PatternCandidate } from './bootstrap-types.js'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 

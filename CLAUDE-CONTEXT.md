@@ -66,8 +66,6 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 > pas verdict. Une tension non explorée n'est pas un bug — c'est un saut
 > latéral possible que le sol stable rend testable.
 
-- **CYCLE** `packages/adr-toolkit/src/bootstrap-fsm.ts → packages/adr-toolkit/src/bootstrap.ts` — boucle directe (2 fichiers)  
-  _→ inverser l'import OU extraire dans un 3e fichier_
 - **ORPHELIN** `packages/adr-toolkit/tests/fixtures/sample-project/src/core/event-bus.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/adr-toolkit/tests/fixtures/sample-project/src/services/state-service.ts` — aucun importeur  
@@ -92,14 +90,17 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ npm uninstall @liby-tools/codegraph + npm test_
 - **DEP-UNUSED** `typescript` — déclaré dans packages/codegraph-mcp/package.json, jamais importé  
   _→ npm uninstall typescript + npm test_
-- **DEP-UNUSED** `@liby-tools/datalog` — déclaré dans packages/codegraph/package.json, jamais importé  
-  _→ npm uninstall @liby-tools/datalog + npm test_
-- **DEP-UNUSED** `graphology-operators` — déclaré dans packages/codegraph/package.json, jamais importé  
-  _→ npm uninstall graphology-operators + npm test_
+- **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
+  _→ npm uninstall jest + npm test_
+- **DEP-UNUSED** `test-only-in-deps` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
+  _→ npm uninstall test-only-in-deps + npm test_
+- **DEP-UNUSED** `unused-pkg` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
+  _→ npm uninstall unused-pkg + npm test_
 
 ## Activité récente (14 derniers jours)
 
 ```
+9a62387 feat(invariants): Tier 18 — event-payload-cross-block-taint + closure backlog
 fa4032f feat(invariants): Tier 17 — 11 nouvelles rules library + grandfathers
 c3b4e3c feat(codegraph): Tier 17 — 13 nouveaux facts emis + 2 nouveaux extractors
 50a01d9 feat(invariants): Tier 16 — 7 nouvelles rules library
@@ -111,7 +112,6 @@ f9a0e3d feat(phase4-tier14): cross-function taint + 4 CWE rules + Datalog aggreg
 c4bcf00 feat(phase4-tier13): CWE rules library — 4 CVE classics portees (CodeQL inspiration)
 3579a04 feat(phase4-tier11+12): variable tracking + proof tree + 3 composites inspires
 17bc81c feat(phase4-tier10): taint analysis lite — extractors + composite (CodeQL inspiration)
-5e9aba3 docs(readme): update pour Phase 4 + Tiers 1-9
 ```
 
 ## Comment contribuer à ce brief

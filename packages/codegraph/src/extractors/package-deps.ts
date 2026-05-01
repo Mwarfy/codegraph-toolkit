@@ -36,7 +36,7 @@
  *     littéral non-asset. Trade-off accepté : mieux vaut conservateur.
  */
 
-import { Project, type SourceFile } from 'ts-morph'
+import { Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
 import { builtinModules } from 'node:module'
@@ -209,6 +209,31 @@ function collectImportSpecifiers(sf: SourceFile): string[] {
   for (const decl of sf.getExportDeclarations()) {
     const ms = decl.getModuleSpecifierValue()
     if (ms) specs.push(ms)
+  }
+  // Tier 17 self-audit fix : capture les imports dynamiques.
+  //   - `await import('pkg')` → CallExpression dont expression.kind === ImportKeyword
+  //   - `require.resolve('pkg')` → CallExpression dont expression matches `require.resolve`
+  //   - `require('pkg')` (CommonJS) → CallExpression dont expression === 'require'
+  // Sans ca, l'extractor classait des deps utilisees en "declared-unused" (5 FP
+  // sur le toolkit lui-meme : serve-handler, @liby-tools/datalog, etc.).
+  for (const call of sf.getDescendantsOfKind(SyntaxKind.CallExpression)) {
+    const callee = call.getExpression()
+    let isDynImport = false
+    // `import('pkg')` — l'expression est un ImportKeyword (kind=100).
+    if (callee.getKind() === SyntaxKind.ImportKeyword) isDynImport = true
+    // `require('pkg')` ou `require.resolve('pkg')`
+    else if (Node.isIdentifier(callee) && callee.getText() === 'require') isDynImport = true
+    else if (Node.isPropertyAccessExpression(callee)) {
+      const text = callee.getText()
+      if (text === 'require.resolve' || text === 'require') isDynImport = true
+    }
+    if (!isDynImport) continue
+    const args = call.getArguments()
+    if (args.length === 0) continue
+    const arg0 = args[0]
+    if (Node.isStringLiteral(arg0) || Node.isNoSubstitutionTemplateLiteral(arg0)) {
+      specs.push(arg0.getLiteralValue())
+    }
   }
   return specs
 }

@@ -32,17 +32,10 @@ export type { FsmCandidate, FsmWriteSite } from './bootstrap-fsm.js'
 
 // ─── Pattern candidates ─────────────────────────────────────────────────────
 
-export type PatternKind = 'singleton' | 'fsm' | 'write-isolation' | 'hub'
-
-export interface PatternCandidate {
-  kind: PatternKind
-  /** Path absolu du fichier candidat */
-  filePath: string
-  /** Path relatif au rootDir */
-  relativePath: string
-  /** Indice spécifique au pattern (line numbers, symbol names, etc.) */
-  evidence: string
-}
+// Tier 17 self-audit cleanup : types extraits dans bootstrap-types.ts
+// pour casser le cycle bootstrap.ts ↔ bootstrap-fsm.ts.
+import type { PatternKind, PatternCandidate } from './bootstrap-types.js'
+export type { PatternKind, PatternCandidate }
 
 const SINGLETON_REGEX = /(?:private\s+)?static\s+(?:readonly\s+)?instance\s*[:=]/
 

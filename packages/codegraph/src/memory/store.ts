@@ -186,6 +186,8 @@ function isValidKind(k: string): k is MemoryEntryKind {
  * Identique pour les mêmes inputs → permet l'idempotence du `addEntry`.
  */
 export function entryId(kind: MemoryEntryKind, fingerprint: string): string {
+  // SHA-1 collision resistance non requise — on tronque a 12 hex chars (memoization key).
+  // crypto-ok: content-addressable ID, not security-critical
   return crypto.createHash('sha1').update(`${kind}:${fingerprint}`).digest('hex').slice(0, 12)
 }
 
