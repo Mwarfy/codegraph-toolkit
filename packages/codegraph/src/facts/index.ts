@@ -1288,6 +1288,63 @@ function emitCrossDisciplineFacts(
     ])
   }
   relations.push(modularityRel)
+
+  // ─── FactKindStability (Markov stationary distribution) ────────────
+  const stabilityRel: RelationDef = {
+    name: 'FactKindStability',
+    decl: '(relationName:symbol, snapshotsTotal:number, stableTransitions:number, stationaryStableX1000:number, avgTupleCount:number)',
+    rows: [],
+  }
+  for (const fs of snapshot.factStabilities ?? []) {
+    stabilityRel.rows.push([
+      sym(fs.relationName), num(fs.snapshotsTotal),
+      num(fs.stableTransitions), num(fs.stationaryStableX1000),
+      num(fs.avgTupleCount),
+    ])
+  }
+  relations.push(stabilityRel)
+
+  // ─── BayesianCoChange (9e discipline : P(B|A) directionnelle) ──────
+  const bayesRel: RelationDef = {
+    name: 'BayesianCoChange',
+    decl: '(driver:symbol, follower:symbol, conditionalProbX1000:number)',
+    rows: [],
+  }
+  for (const b of snapshot.bayesianCoChanges ?? []) {
+    bayesRel.rows.push([
+      sym(b.driver), sym(b.follower),
+      num(b.conditionalProbX1000),
+    ])
+  }
+  relations.push(bayesRel)
+
+  // ─── CompressionDistance (10e discipline : NCD Kolmogorov) ─────────
+  const ncdRel: RelationDef = {
+    name: 'CompressionDistance',
+    decl: '(symbolA:symbol, symbolB:symbol, ncdX1000:number)',
+    rows: [],
+  }
+  for (const ncd of snapshot.compressionDistances ?? []) {
+    ncdRel.rows.push([
+      sym(ncd.symbolA), sym(ncd.symbolB),
+      num(ncd.ncdX1000),
+    ])
+  }
+  relations.push(ncdRel)
+
+  // ─── GrangerCausality (11e discipline : lag-1 causation git) ───────
+  const grangerRel: RelationDef = {
+    name: 'GrangerCausality',
+    decl: '(driverFile:symbol, followerFile:symbol, observations:number, excessConditionalX1000:number)',
+    rows: [],
+  }
+  for (const g of snapshot.grangerCausalities ?? []) {
+    grangerRel.rows.push([
+      sym(g.driverFile), sym(g.followerFile),
+      num(g.observations), num(g.excessConditionalX1000),
+    ])
+  }
+  relations.push(grangerRel)
 }
 
 function sym(value: string): string {

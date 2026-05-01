@@ -82,6 +82,10 @@
 .decl InformationBottleneck(symbol: symbol, callerCount: number, calleeCount: number, scoreX1000: number)
 .decl ImportCommunity(file: symbol, communityId: number, physicalPackage: symbol, misplaced: number)
 .decl ModularityScore(globalQX1000: number, communityCount: number, misplacedCount: number)
+.decl FactKindStability(relationName: symbol, snapshotsTotal: number, stableTransitions: number, stationaryStableX1000: number, avgTupleCount: number)
+.decl BayesianCoChange(driver: symbol, follower: symbol, conditionalProbX1000: number)
+.decl CompressionDistance(symbolA: symbol, symbolB: symbol, ncdX1000: number)
+.decl GrangerCausality(driverFile: symbol, followerFile: symbol, observations: number, excessConditionalX1000: number)
 .decl SymbolCallEdge(fromFile: symbol, fromSymbol: symbol, toFile: symbol, toSymbol: symbol, line: number)
 .decl SymbolSignature(file: symbol, name: symbol, kind: symbol, line: number)
 .decl EntryPoint(file: symbol, kind: symbol, id: symbol)
@@ -159,6 +163,10 @@
 .input InformationBottleneck
 .input ImportCommunity
 .input ModularityScore
+.input FactKindStability
+.input BayesianCoChange
+.input CompressionDistance
+.input GrangerCausality
 .input SymbolCallEdge
 .input SymbolSignature
 .input EntryPoint

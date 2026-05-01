@@ -1,0 +1,36 @@
+// COMPOSITE-GRANGER-DRIVER — 11e discipline (Granger causality).
+//
+// Origine : Clive Granger 1969 (Nobel Economics 2003). X "Granger-cause"
+// Y si la connaissance des PASSÉES valeurs de X améliore la prédiction
+// des FUTURES valeurs de Y, au-delà de ce que le passé de Y permet
+// seul.
+//
+// Application au code : sur les K derniers commits, lag-1 :
+//
+//     excess = P(follower at t+1 | driver at t) - P(follower at t+1)
+//
+// Si excess > 0.15 (= 15 percentage points au-dessus du baseline)
+// avec ≥3 observations = signal causal directionnel temporel.
+//
+// Différenciation vs Bayesian co-change conditional :
+//   - Bayesian P(B|A) : A et B changent dans le MÊME commit (lag 0)
+//     → couplage simultané (truth-point partagé, refactor ensemble)
+//   - Granger : A change à t, B change à t+1 (lag 1)
+//     → couplage SÉQUENTIEL (B doit s'adapter après A)
+//
+// Le pattern Granger révèle :
+//   - Refactor en 2 temps : "j'ai changé l'API de A, je dois maintenant
+//     adapter B au prochain commit"
+//   - Migration progressive : A est rebranché en t, B suit en t+1
+//   - Build cascade : A change → tests B fail → fix B en t+1
+//
+// Threshold : excessConditionalX1000 ≥ 200 (= excess > 0.20).
+// Conservateur. Avec ≥3 observations on évite les artefacts.
+
+.decl GrangerDriverGrandfathered(driver: symbol, follower: symbol)
+
+Violation("COMPOSITE-GRANGER-DRIVER", Driver, 0,
+  "Granger-cause >0.20 excess — driver est suivi par follower au commit t+1, couplage sequentiel implicite") :-
+    GrangerCausality(Driver, Follower, _, Excess),
+    Excess >= 200,
+    !GrangerDriverGrandfathered(Driver, Follower).

@@ -40,10 +40,27 @@ import type { GraphNode, GraphEdge } from '../core/types.js'
 
 // CommonJS interop : graphology ships as `.default`, louvain comme function.
 const Graph = (GraphologyModule as unknown as { default?: typeof GraphologyModule }).default ?? GraphologyModule
-type LouvainFn = ((g: unknown) => Record<string, number>) & {
-  detailed: (g: unknown) => { modularity: number; communities: Record<string, number> }
+type LouvainOptions = { rng?: () => number; randomWalk?: boolean; resolution?: number }
+type LouvainFn = ((g: unknown, opts?: LouvainOptions) => Record<string, number>) & {
+  detailed: (g: unknown, opts?: LouvainOptions) => { modularity: number; communities: Record<string, number> }
 }
 const louvain = ((louvainModule as unknown as { default?: LouvainFn }).default ?? louvainModule) as LouvainFn
+
+/**
+ * PRNG déterministe (mulberry32). Seed fixe = même partition à chaque
+ * run. Évite la stochasticité de Louvain qui produit des partitions
+ * différentes selon l'ordre random walk.
+ */
+function deterministicRng(seed: number): () => number {
+  let s = seed >>> 0
+  return () => {
+    s = (s + 0x6D2B79F5) >>> 0
+    let t = s
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
 
 export interface ImportCommunity {
   /** Fichier source. */
@@ -132,9 +149,11 @@ export function computeCommunityDetection(
     }
   }
 
-  // Louvain : retourne un mapping nodeId → communityId
-  const partition = louvain(g)
-  const modularity = louvain.detailed(g).modularity
+  // Louvain : retourne un mapping nodeId → communityId.
+  // Seed fixe (42) pour déterminisme — évite les partitions volatiles.
+  const rngOpts = { rng: deterministicRng(42), randomWalk: false }
+  const partition = louvain(g, rngOpts)
+  const modularity = louvain.detailed(g, rngOpts).modularity
 
   // Détecte le package physique majoritaire de chaque community
   const physicalPackageOf = (file: string): string => {

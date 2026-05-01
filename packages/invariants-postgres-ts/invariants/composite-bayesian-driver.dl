@@ -1,0 +1,33 @@
+// COMPOSITE-BAYESIAN-DRIVER — 9e discipline (Bayesian conditional).
+//
+// Origine : Bayes inference sur les co-changes git. P(follower|driver)
+// est la probabilité conditionnelle que `follower` change sachant que
+// `driver` a changé dans le même commit. Asymétrique : P(B|A) ≠ P(A|B)
+// en général.
+//
+// Différenciation vs Jaccard CoChange :
+//   - Jaccard = symétrique, ratio intersection/union des commit-sets
+//   - Bayesian P(B|A) = directionnelle, ratio commits-both / commits-A
+//
+// Une paire avec Jaccard=0.5 peut avoir P(B|A)=0.95 et P(A|B)=0.5 :
+// chaque fois que A change, B suit (B "subordonné" à A) ; mais B
+// change aussi sans A (B a sa vie propre).
+//
+// Threshold : conditionalProbX1000 ≥ 800 (= 80% des fois où driver
+// change, follower change avec). Capture les couplages forts non-
+// codifiés qui devraient probablement être :
+//   - co-localisés dans le même module
+//   - explicités via une fonction shared
+//   - factorisés dans un truth-point unique
+//
+// Combiner avec Jaccard faible (Jaccard < 0.5) = signal "follower
+// dépend de driver mais a sa vie propre" = relation hiérarchique
+// implicite à expliciter.
+
+.decl BayesianDriverGrandfathered(driver: symbol, follower: symbol)
+
+Violation("COMPOSITE-BAYESIAN-DRIVER", Driver, 0,
+  "couplage causal directionnel >=80% — follower suit driver presque toujours, expliciter (co-localisation ou shared abstraction)") :-
+    BayesianCoChange(Driver, Follower, P),
+    P >= 800,
+    !BayesianDriverGrandfathered(Driver, Follower).

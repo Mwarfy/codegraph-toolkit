@@ -1,0 +1,35 @@
+// COMPOSITE-NEAR-DUPLICATE-FN — 10e discipline (NCD Kolmogorov).
+//
+// Origine : Cilibrasi-Vitanyi 2005, Normalized Compression Distance
+// approximant la distance de Kolmogorov K(x,y).
+//
+//     NCD(x, y) = (C(xy) - min(C(x), C(y))) / max(C(x), C(y))
+//
+// où C est gzip. NCD ∈ [0, 1] : 0 = duplicat strict, 1 = totalement
+// différent. Threshold pratique 300 (= NCD < 0.3) capture les
+// duplications réelles modulo renamings et reformatting.
+//
+// Différenciation vs Hamming (composite-copy-paste-fork) :
+//   - Hamming compare des SIGNATURES encodées sur ~10 bits → exact mais
+//     grossier, ne capture que la shape (paramCount + kind + return)
+//   - NCD compare le CONTENU compressible des bodies → fin, capture
+//     les duplications PARTIELLES (refactor incomplet, fork divergent)
+//
+// Une paire peut avoir Hamming=0 (signature identique) ET NCD=0.6
+// (implémentations divergentes) → pas une duplication réelle malgré
+// la signature commune. NCD raffine le signal Hamming.
+//
+// Inversement, NCD < 0.3 ∧ Hamming = 0 = duplication TRÈS forte
+// (capté par les 2 disciplines orthogonales = high confidence).
+//
+// Capture typique : 2 fonctions homonymes dans 2 fichiers avec body
+// quasi-identique = candidate refactor extract-shared. Parfait pour
+// détecter les forks lents de helpers/utilities.
+
+.decl NearDuplicateFnGrandfathered(symbolA: symbol, symbolB: symbol)
+
+Violation("COMPOSITE-NEAR-DUPLICATE-FN", A, 0,
+  "fonction quasi-dupliquée (NCD<0.3) — refactor extract-shared candidat") :-
+    CompressionDistance(A, B, NCD),
+    NCD < 300,
+    !NearDuplicateFnGrandfathered(A, B).

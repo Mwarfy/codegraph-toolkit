@@ -638,6 +638,50 @@ export interface GraphSnapshot {
   }
 
   /**
+   * Markov chain stationary distribution sur stabilité des facts.
+   * Cf. extractors/fact-stability.ts.
+   */
+  factStabilities?: Array<{
+    relationName: string
+    snapshotsTotal: number
+    stableTransitions: number
+    stationaryStableX1000: number
+    avgTupleCount: number
+  }>
+
+  /**
+   * Bayesian co-change conditional P(B|A) — 9e discipline.
+   * Calculé depuis CoChangePair.totalCommitsFrom/To. Asymétrique
+   * (P(B|A) ≠ P(A|B)). Émis dans les facts uniquement.
+   */
+  bayesianCoChanges?: Array<{
+    driver: string
+    follower: string
+    conditionalProbX1000: number
+  }>
+
+  /**
+   * Normalized Compression Distance (NCD Kolmogorov-approximé).
+   * Cf. extractors/compression-similarity.ts.
+   */
+  compressionDistances?: Array<{
+    symbolA: string
+    symbolB: string
+    ncdX1000: number
+  }>
+
+  /**
+   * Granger causality sur séquences git (lag-1).
+   * Cf. extractors/granger-causality.ts.
+   */
+  grangerCausalities?: Array<{
+    driverFile: string
+    followerFile: string
+    observations: number
+    excessConditionalX1000: number
+  }>
+
+  /**
    * Security patterns (Phase 5 Tier 16) — 4 facts complementaires
    * captures en un seul AST walk : secret-named vars passees a un call,
    * CORS misconfig, TLS unsafe options, Math.random pour secrets.

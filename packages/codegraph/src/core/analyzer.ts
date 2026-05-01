@@ -57,6 +57,9 @@ import { computeLyapunovMetrics, type LyapunovMetric } from '../extractors/lyapu
 import { computePackageMinCuts, type PackageMinCut } from '../extractors/package-mincut.js'
 import { computeInformationBottleneck, type InformationBottleneck } from '../extractors/information-bottleneck.js'
 import { computeCommunityDetection, type ImportCommunity, type ModularityScore } from '../extractors/community-detection.js'
+import { computeFactStability, type FactKindStability } from '../extractors/fact-stability.js'
+import { analyzeCompressionSimilarity, type NormalizedCompressionDistance } from '../extractors/compression-similarity.js'
+import { computeGrangerCausality, type GrangerCausality } from '../extractors/granger-causality.js'
 import { analyzeHardcodedSecrets, type HardcodedSecret } from '../extractors/hardcoded-secrets.js'
 import { analyzeBooleanParams, type BooleanParamSite } from '../extractors/boolean-params.js'
 import { analyzeDeadCode, type DeadCodeFinding } from '../extractors/dead-code.js'
@@ -597,6 +600,10 @@ async function runDeterministicDetectors(
   let informationBottlenecks: InformationBottleneck[] | undefined
   let importCommunities: ImportCommunity[] | undefined
   let modularityScore: ModularityScore | undefined
+  let factStabilities: FactKindStability[] | undefined
+  let bayesianCoChanges: Array<{ driver: string; follower: string; conditionalProbX1000: number }> | undefined
+  let compressionDistances: NormalizedCompressionDistance[] | undefined
+  let grangerCausalities: GrangerCausality[] | undefined
   let hardcodedSecrets: HardcodedSecret[] | undefined
   let booleanParams: BooleanParamSite[] | undefined
   let deadCode: DeadCodeFinding[] | undefined
@@ -817,6 +824,80 @@ async function runDeterministicDetectors(
     console.error(`  ✗ community-detection failed: ${err}`)
   }
 
+  // ─── Fact stability (Markov stationary distribution) ─────────────────
+  const tFS = performance.now()
+  try {
+    factStabilities = await computeFactStability(config.rootDir)
+    timing.detectors['fact-stability'] = performance.now() - tFS
+  } catch (err) {
+    timing.detectors['fact-stability'] = performance.now() - tFS
+    console.error(`  ✗ fact-stability failed: ${err}`)
+  }
+
+  // ─── Bayesian co-change conditional P(B|A) — 9e discipline ───────────
+  // Calcul direct depuis coChangePairs existant (totalCommitsFrom/To).
+  const tBCC = performance.now()
+  try {
+    if (snapshot.coChangePairs) {
+      const out: Array<{ driver: string; follower: string; conditionalProbX1000: number }> = []
+      for (const pair of snapshot.coChangePairs) {
+        // P(B | A) = count / totalCommitsFrom — A est driver
+        if (pair.totalCommitsFrom > 0) {
+          const probBA = pair.count / pair.totalCommitsFrom
+          if (probBA >= 0.5) {
+            out.push({
+              driver: pair.from,
+              follower: pair.to,
+              conditionalProbX1000: Math.round(probBA * 1000),
+            })
+          }
+        }
+        // P(A | B) = count / totalCommitsTo — B est driver
+        if (pair.totalCommitsTo > 0) {
+          const probAB = pair.count / pair.totalCommitsTo
+          if (probAB >= 0.5) {
+            out.push({
+              driver: pair.to,
+              follower: pair.from,
+              conditionalProbX1000: Math.round(probAB * 1000),
+            })
+          }
+        }
+      }
+      out.sort((a, b) => {
+        if (a.conditionalProbX1000 !== b.conditionalProbX1000) return b.conditionalProbX1000 - a.conditionalProbX1000
+        if (a.driver !== b.driver) return a.driver < b.driver ? -1 : 1
+        return a.follower < b.follower ? -1 : 1
+      })
+      bayesianCoChanges = out
+    }
+    timing.detectors['bayesian-cochange'] = performance.now() - tBCC
+  } catch (err) {
+    timing.detectors['bayesian-cochange'] = performance.now() - tBCC
+    console.error(`  ✗ bayesian-cochange failed: ${err}`)
+  }
+
+  // ─── NCD Kolmogorov compression similarity — 10e discipline ──────────
+  const tNCD = performance.now()
+  try {
+    compressionDistances = await analyzeCompressionSimilarity(config.rootDir, files, sharedProject)
+    timing.detectors['compression-similarity'] = performance.now() - tNCD
+  } catch (err) {
+    timing.detectors['compression-similarity'] = performance.now() - tNCD
+    console.error(`  ✗ compression-similarity failed: ${err}`)
+  }
+
+  // ─── Granger causality sur séquences git — 11e discipline ────────────
+  const tGr = performance.now()
+  try {
+    const knownFiles = new Set(snapshot.nodes.map((n) => n.id))
+    grangerCausalities = await computeGrangerCausality(config.rootDir, { knownFiles })
+    timing.detectors['granger-causality'] = performance.now() - tGr
+  } catch (err) {
+    timing.detectors['granger-causality'] = performance.now() - tGr
+    console.error(`  ✗ granger-causality failed: ${err}`)
+  }
+
   const tHardcoded = performance.now()
   try {
     hardcodedSecrets = await analyzeHardcodedSecrets(config.rootDir, files, sharedProject)
@@ -963,6 +1044,10 @@ async function runDeterministicDetectors(
   if (informationBottlenecks) snapshot.informationBottlenecks = informationBottlenecks
   if (importCommunities) snapshot.importCommunities = importCommunities
   if (modularityScore) snapshot.modularityScore = modularityScore
+  if (factStabilities) snapshot.factStabilities = factStabilities
+  if (bayesianCoChanges) snapshot.bayesianCoChanges = bayesianCoChanges
+  if (compressionDistances) snapshot.compressionDistances = compressionDistances
+  if (grangerCausalities) snapshot.grangerCausalities = grangerCausalities
   if (hardcodedSecrets) snapshot.hardcodedSecrets = hardcodedSecrets
   if (booleanParams) snapshot.booleanParams = booleanParams
   if (deadCode) snapshot.deadCode = deadCode

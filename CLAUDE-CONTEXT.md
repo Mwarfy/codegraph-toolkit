@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+691337e feat(toolkit): 8e discipline Newman-Girvan + 4 méta-composites cross-disciplines
 c003043 docs: update READMEs for v0.5.0 — 91 rules, multi-dir, 7 cross-discipline
 443e072 feat(datalog): runFromDirs accepte rulesDir array (multi-dir loader)
 18a37a7 chore(toolkit): retire 3 exports dead code (UnusedExport.facts)
@@ -111,7 +112,6 @@ c003043 docs: update READMEs for v0.5.0 — 91 rules, multi-dir, 7 cross-discipl
 bc4fce3 feat(invariants): 2 rules auto-decouvertes via pattern mining
 1cc41ea refactor(facts): extract 3 emit helpers + fix File/FileTag regression
 c3750da feat(toolkit): Top-5 graph theory uplift — PageRank + complexity + perf + SCC
-f35acd1 feat(toolkit): self-audit — 5 quick-wins + 2 meta-fix + dogfood gate
 ```
 
 ## Comment contribuer à ce brief

@@ -1,0 +1,29 @@
+// COMPOSITE-VOLATILE-RELATION — Markov stationary distribution.
+//
+// Origine : théorie des chaînes de Markov (Markov 1906). Pour une
+// relation Datalog modélisée comme chaîne 2-states (stable/volatile),
+// la stationary distribution πₛ approxime la probabilité long-terme
+// que la relation soit stable.
+//
+// Application Salsa : si πₛ < 0.4 sur ≥10 snapshots = relation très
+// volatile = cache strategy doit privilégier LFU/ARC plutôt que LRU.
+// Inversement πₛ > 0.9 = cache aggressively (skip recompute jusqu'à
+// invalidation événementielle).
+//
+// Cette rule est INFORMATIONNELLE — elle ne signale pas un bug du
+// code source mais une caractéristique du fact pipeline qui peut
+// guider l'optim Salsa.
+//
+// Threshold : stationaryStableX1000 < 400 ∧ snapshotsTotal ≥ 10
+// (assez d'échantillons pour stationary fiable) ∧ avgTupleCount ≥ 5
+// (sinon trop petit pour être un signal cache utile).
+
+.decl VolatileRelationGrandfathered(relationName: symbol)
+
+Violation("COMPOSITE-VOLATILE-RELATION", RelName, 0,
+  "relation Datalog volatile (stationary stable < 40%) — cache strategy ARC/LFU plus appropriée que LRU") :-
+    FactKindStability(RelName, Total, _, Stat, Avg),
+    Total >= 10,
+    Stat < 400,
+    Avg >= 5,
+    !VolatileRelationGrandfathered(RelName).
