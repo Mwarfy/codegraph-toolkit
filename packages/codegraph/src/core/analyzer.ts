@@ -54,6 +54,7 @@ import { computeSymbolEntropy, type SymbolEntropyMetric } from '../extractors/sy
 import { detectSignatureDuplicates, type SignatureDuplicate } from '../extractors/signature-duplication.js'
 import { computePersistentCycles, type PersistentCycle } from '../extractors/persistent-cycles.js'
 import { computeLyapunovMetrics, type LyapunovMetric } from '../extractors/lyapunov-cochange.js'
+import { computePackageMinCuts, type PackageMinCut } from '../extractors/package-mincut.js'
 import { analyzeHardcodedSecrets, type HardcodedSecret } from '../extractors/hardcoded-secrets.js'
 import { analyzeBooleanParams, type BooleanParamSite } from '../extractors/boolean-params.js'
 import { analyzeDeadCode, type DeadCodeFinding } from '../extractors/dead-code.js'
@@ -590,6 +591,7 @@ async function runDeterministicDetectors(
   let signatureDuplicates: SignatureDuplicate[] | undefined
   let persistentCycles: PersistentCycle[] | undefined
   let lyapunovMetrics: LyapunovMetric[] | undefined
+  let packageMinCuts: PackageMinCut[] | undefined
   let hardcodedSecrets: HardcodedSecret[] | undefined
   let booleanParams: BooleanParamSite[] | undefined
   let deadCode: DeadCodeFinding[] | undefined
@@ -776,6 +778,16 @@ async function runDeterministicDetectors(
     console.error(`  ✗ lyapunov-cochange failed: ${err}`)
   }
 
+  // ─── Théorie des flots — min-cut entre packages (Ford-Fulkerson) ────
+  const tMinCut = performance.now()
+  try {
+    packageMinCuts = computePackageMinCuts(snapshot.nodes, snapshot.edges)
+    timing.detectors['package-mincut'] = performance.now() - tMinCut
+  } catch (err) {
+    timing.detectors['package-mincut'] = performance.now() - tMinCut
+    console.error(`  ✗ package-mincut failed: ${err}`)
+  }
+
   const tHardcoded = performance.now()
   try {
     hardcodedSecrets = await analyzeHardcodedSecrets(config.rootDir, files, sharedProject)
@@ -918,6 +930,7 @@ async function runDeterministicDetectors(
   if (signatureDuplicates) snapshot.signatureDuplicates = signatureDuplicates
   if (persistentCycles) snapshot.persistentCycles = persistentCycles
   if (lyapunovMetrics) snapshot.lyapunovMetrics = lyapunovMetrics
+  if (packageMinCuts) snapshot.packageMinCuts = packageMinCuts
   if (hardcodedSecrets) snapshot.hardcodedSecrets = hardcodedSecrets
   if (booleanParams) snapshot.booleanParams = booleanParams
   if (deadCode) snapshot.deadCode = deadCode

@@ -594,6 +594,19 @@ export interface GraphSnapshot {
   }>
 
   /**
+   * Min-cut entre paires de packages — théorie des flots (Ford-Fulkerson).
+   * Mesure objective du coût de séparation entre 2 packages.
+   * Cf. extractors/package-mincut.ts.
+   */
+  packageMinCuts?: Array<{
+    fromPackage: string
+    toPackage: string
+    edgeCount: number
+    minCut: number
+    sampleEdges: string[]
+  }>
+
+  /**
    * Security patterns (Phase 5 Tier 16) — 4 facts complementaires
    * captures en un seul AST walk : secret-named vars passees a un call,
    * CORS misconfig, TLS unsafe options, Math.random pour secrets.

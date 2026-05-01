@@ -1,0 +1,29 @@
+// COMPOSITE-PACKAGE-COUPLING — théorie des flots (Ford-Fulkerson 1956).
+//
+// Origine : aucun analyzer code n'utilise max-flow / min-cut pour
+// quantifier le coût de séparation entre 2 packages. Le théorème
+// max-flow min-cut garantit que le min-cut = nb minimum d'arêtes a
+// supprimer pour decoupler. C'est une mesure OBJECTIVE et exploitable
+// (pas une heuristique).
+//
+// Application : pour chaque paire de packages (P1, P2), calculer le
+// min-cut sur le graphe d'imports. min-cut > 5 = couplage fort
+// (>5 imports indépendants à casser pour séparer).
+//
+// Différence avec PageRank / Fiedler :
+//   - PageRank mesure la centralité globale d'un node
+//   - Fiedler mesure la connectivité algébrique d'un sous-graphe
+//   - min-cut mesure le coût SPECIFIQUE entre 2 ensembles
+//
+// Aucune des 2 autres ne donne le coût de séparation entre P1 et P2.
+//
+// Source : extractors/package-mincut.ts.
+// Fact : PackageMinCut(fromPackage, toPackage, edgeCount, minCut)
+
+.decl PackageCouplingGrandfathered(fromPackage: symbol, toPackage: symbol)
+
+Violation("COMPOSITE-PACKAGE-COUPLING", FromP, 0,
+  "min-cut > 5 entre 2 packages — couplage structurel fort, refactor en helpers partages") :-
+    PackageMinCut(FromP, _, _, MC),
+    MC > 5,
+    !PackageCouplingGrandfathered(FromP, _).

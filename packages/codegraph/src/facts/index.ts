@@ -1228,6 +1228,20 @@ function emitCrossDisciplineFacts(
     ])
   }
   relations.push(lyapunovRel)
+
+  // ─── PackageMinCut (théorie des flots, Ford-Fulkerson) ─────────────
+  const minCutRel: RelationDef = {
+    name: 'PackageMinCut',
+    decl: '(fromPackage:symbol, toPackage:symbol, edgeCount:number, minCut:number)',
+    rows: [],
+  }
+  for (const m of snapshot.packageMinCuts ?? []) {
+    minCutRel.rows.push([
+      sym(m.fromPackage), sym(m.toPackage),
+      num(m.edgeCount), num(m.minCut),
+    ])
+  }
+  relations.push(minCutRel)
 }
 
 function sym(value: string): string {
