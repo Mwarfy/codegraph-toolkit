@@ -42,6 +42,17 @@ These rules cross-reference 2+ fact relations to detect signals that no single r
 | `composite-todo-in-truth-point-writer` | TODO sans owner dans un fichier qui écrit un truth-point business — dette qui peut affecter le SSOT. Ratchet on `(file, line)`. |
 | `composite-boolean-trap-untested` | Boolean positionnel + fichier sans test direct — double risque, prioriser refactor options object. Ratchet on `(file, name)`. |
 
+### CWE rules library (Tier 13)
+
+CWE Top-tier rules portées avec variable tracking lite + sanitizer detection. Inspiration directe de CodeQL standard library.
+
+| CWE | What it catches |
+|---|---|
+| `cwe-022-path-traversal` | fs.readFile/writeFile avec user input sans path.normalize/resolve. Ratchet on `(file, line)`. |
+| `cwe-078-command-injection` | child_process.exec avec user input sans shell escape. Préférer spawn(cmd, [args]). Ratchet on `(file, line)`. |
+| `cwe-089-sql-injection` | db.query avec user input sans validateBody/parse. Préférer parameterized query. Ratchet on `(file, line)`. |
+| `cwe-918-ssrf` | fetch/axios avec user input URL sans validateUrl/isAllowedUrl/parse. Ratchet on `(file, line)`. |
+
 ## Why these two
 
 These rules survived the test of being lifted from a real production codebase (Sentinel) — they detect drift that costs real time when missed:

@@ -1,0 +1,39 @@
+// CWE-089 — SQL Injection (Improper Neutralization of Special Elements
+// used in an SQL Command).
+//
+// Pourquoi : db.query avec user input concatene en string permet a un
+// attaquant d'injecter du SQL arbitraire (DROP TABLE, UNION SELECT, etc.).
+// Le risque numero 1 historique des applications web.
+//
+// Solution propre : prepared statements / parameterized queries
+// (`db.query('SELECT * FROM users WHERE id = $1', [userId])`).
+//
+// Limites detection V1 :
+//   - On ne peut pas distinguer AST une query parametrisee
+//     (`db.query(sql, [params])`) d'une query concat (`db.query(${userId})`).
+//   - Approximation : si TaintedArgCall + TaintSink(sql) meme line ET
+//     pas de SanitizerCall (validateBody, parse, etc.) dans le file,
+//     on flag.
+//
+// References :
+//   - https://cwe.mitre.org/data/definitions/89.html
+//   - OWASP Top 10 2021 #A03 (Injection)
+
+.decl Cwe89Grandfathered(file: symbol, line: number)
+
+// HasSqlValidation : le fichier valide les inputs avant la query.
+// Pattern Sentinel : validateBody est appele en debut de handler avant
+// d'atteindre le sink. Approximation file-level.
+.decl HasSqlValidation(file: symbol)
+HasSqlValidation(F) :- SanitizerCall(F, _, "validateBody", _).
+HasSqlValidation(F) :- SanitizerCall(F, _, "validateQuery", _).
+HasSqlValidation(F) :- SanitizerCall(F, _, "validateParams", _).
+HasSqlValidation(F) :- SanitizerCall(F, _, "parse", _).
+HasSqlValidation(F) :- SanitizerCall(F, _, "safeParse", _).
+
+Violation("CWE-089", File, Line,
+  "SQL query avec user input — utiliser parameterized query, pas concat string") :-
+    TaintedArgCall(File, Line, _, _, _, _, _),
+    TaintSink(File, Line, "sql", _, _),
+    !HasSqlValidation(File),
+    !Cwe89Grandfathered(File, Line).

@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+3579a04 feat(phase4-tier11+12): variable tracking + proof tree + 3 composites inspires
 17bc81c feat(phase4-tier10): taint analysis lite — extractors + composite (CodeQL inspiration)
 5e9aba3 docs(readme): update pour Phase 4 + Tiers 1-9
 76ca900 fix(tests): reconstruct secret prefixes au runtime — secret scanning
@@ -111,7 +112,6 @@ ee2ec36 feat(phase4-tier6): switch checks + controlling expr + audit cols + reso
 806fb0f feat(phase4-tier4): floating-promises + switch-fallthrough + deprecated-usage
 dfc3a9f feat(phase4-tier3): dead-code patterns (Sonar S1764 + S1126)
 2f3d214 feat(phase4-tier2): 4 invariants + 2 drift patterns lift de Sonar/Bandit
-3c94c2d fix(sql-schema): strip les commentaires SQL avant splitTopLevel
 ```
 
 ## Comment contribuer à ce brief

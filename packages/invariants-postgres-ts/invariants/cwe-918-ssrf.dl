@@ -1,0 +1,43 @@
+// CWE-918 — Server-Side Request Forgery (SSRF).
+//
+// Pourquoi : fetch / axios.get / http.get avec une URL user-controlled
+// permet a un attaquant d'envoyer des requetes au reseau interne du
+// serveur (metadata AWS/GCP, services internes, port-scanning, etc.).
+// Pattern d'escalation cloud classique.
+//
+// Pattern :
+//   const target = req.body.url             <- tainted
+//   await fetch(target)                      <- http-out sink
+//   // PAS DE allowlist domain check
+//
+// La rule flag :
+//   TaintedArgCall + TaintSink(kind="http-out") sans validation URL
+//
+// Solution propre :
+//   - Allowlist explicite des domaines autorises
+//   - Skip 169.254.169.254 / localhost / 10.0.0.0/8 / 192.168.0.0/16
+//   - SSRF-aware fetch wrapper
+//
+// References :
+//   - https://cwe.mitre.org/data/definitions/918.html
+//   - OWASP Top 10 2021 #A10 (SSRF — nouvelle entree 2021)
+//   - CodeQL js/server-side-request-forgery
+
+.decl Cwe918Grandfathered(file: symbol, line: number)
+
+// HasUrlValidation : detection minimale de validation URL.
+// Convention naming : isAllowedUrl, isInternalIp, validateUrl, etc.
+.decl HasUrlValidation(file: symbol)
+HasUrlValidation(F) :- SanitizerCall(F, _, "validateUrl", _).
+HasUrlValidation(F) :- SanitizerCall(F, _, "isAllowedUrl", _).
+HasUrlValidation(F) :- SanitizerCall(F, _, "checkUrl", _).
+HasUrlValidation(F) :- SanitizerCall(F, _, "isInternalIp", _).
+HasUrlValidation(F) :- SanitizerCall(F, _, "validateBody", _).  // schema valide URL
+HasUrlValidation(F) :- SanitizerCall(F, _, "parse", _).         // URL.parse / zod parse
+
+Violation("CWE-918", File, Line,
+  "fetch/axios avec user input URL — SSRF possible ; allowlist domains + skip private IPs") :-
+    TaintedArgCall(File, Line, _, _, _, _, _),
+    TaintSink(File, Line, "http-out", _, _),
+    !HasUrlValidation(File),
+    !Cwe918Grandfathered(File, Line).

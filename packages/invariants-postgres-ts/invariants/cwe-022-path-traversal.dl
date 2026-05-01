@@ -1,0 +1,43 @@
+// CWE-022 — Path Traversal (Improper Limitation of a Pathname).
+//
+// Pourquoi : un user input passe directement a fs.readFile / writeFile
+// / readdir SANS path.normalize ou path.resolve = path traversal
+// classique. Un attaquant peut envoyer "../../../etc/passwd" et
+// l'application lit n'importe quel fichier du serveur.
+//
+// Pattern :
+//   const filename = req.body.filename       <- TaintedVarDecl
+//   fs.readFile(filename)                    <- TaintedArgCall + TaintSink(fs-read)
+//   // PAS DE path.normalize / path.resolve
+//
+// La rule flag :
+//   TaintedArgCall(F, L, Callee, _, _, _, _)
+//   ∩ TaintSink(F, L, kind, _, _) where kind in {fs-read, fs-write}
+//   ∩ ¬HasPathNormalizer(F)  // file n'utilise jamais path.normalize/resolve
+//
+// References :
+//   - https://cwe.mitre.org/data/definitions/22.html
+//   - OWASP Top 10 2021 #A01 (Broken Access Control)
+//   - CodeQL js/path-injection (similar pattern)
+
+.decl Cwe22Grandfathered(file: symbol, line: number)
+
+// HasPathNormalizer : le fichier contient au moins un call a normalize
+// ou resolve (path.* ou n'importe quel namespace).
+.decl HasPathNormalizer(file: symbol)
+HasPathNormalizer(F) :- SanitizerCall(F, _, "normalize", _).
+HasPathNormalizer(F) :- SanitizerCall(F, _, "resolve", _).
+HasPathNormalizer(F) :- SanitizerCall(F, _, "path.normalize", _).
+HasPathNormalizer(F) :- SanitizerCall(F, _, "path.resolve", _).
+
+// FsKindSink : relation auxiliaire pour eviter disjunction inline.
+.decl FsKindSink(file: symbol, line: number)
+FsKindSink(F, L) :- TaintSink(F, L, "fs-read", _, _).
+FsKindSink(F, L) :- TaintSink(F, L, "fs-write", _, _).
+
+Violation("CWE-022", File, Line,
+  "fs operation avec user input sans path.normalize/resolve — path traversal possible") :-
+    TaintedArgCall(File, Line, _, _, _, _, _),
+    FsKindSink(File, Line),
+    !HasPathNormalizer(File),
+    !Cwe22Grandfathered(File, Line).

@@ -1,0 +1,39 @@
+// CWE-078 — OS Command Injection (Improper Neutralization of Special
+// Elements used in an OS Command).
+//
+// Pourquoi : child_process.exec / execSync avec user input concatene
+// permet a un attaquant d'executer des commandes arbitraires via shell
+// metacharacters (`;`, `&&`, `|`, etc.). Le pire RCE classique en JS.
+//
+// Pattern :
+//   const cmd = `convert ${req.body.filename} out.png`  <- tainted
+//   child_process.exec(cmd)                              <- exec sink
+//
+// La rule flag :
+//   TaintedArgCall ∩ TaintSink(kind="exec") sans escape sanitizer
+//
+// Note : la solution propre est d'utiliser execFile/spawn avec args
+// arrayes (pas shell). On flag tous les sites exec avec user input
+// regardless — meme execFile peut etre dangereux si le BINAIRE est
+// user-controlled.
+//
+// References :
+//   - https://cwe.mitre.org/data/definitions/78.html
+//   - OWASP Top 10 2021 #A03 (Injection)
+
+.decl Cwe78Grandfathered(file: symbol, line: number)
+
+// HasShellEscape : detection minimale d'escape shell. La vraie solution
+// est de skipper exec et utiliser spawn(cmd, [args]) — pas un escape.
+// Mais on accepte les patterns qui semblent escaper explicitement.
+.decl HasShellEscape(file: symbol)
+HasShellEscape(F) :- SanitizerCall(F, _, "shellEscape", _).
+HasShellEscape(F) :- SanitizerCall(F, _, "shell-escape", _).
+HasShellEscape(F) :- SanitizerCall(F, _, "shell.escape", _).
+
+Violation("CWE-078", File, Line,
+  "child_process.exec avec user input — command injection possible ; preferer spawn(cmd, [args])") :-
+    TaintedArgCall(File, Line, _, _, _, _, _),
+    TaintSink(File, Line, "exec", _, _),
+    !HasShellEscape(File),
+    !Cwe78Grandfathered(File, Line).

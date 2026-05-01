@@ -951,6 +951,120 @@ describe('composite-boolean-trap-untested (Tier 11)', () => {
   })
 })
 
+describe('CWE-022 path-traversal (Tier 13)', () => {
+  it('flag fs.readFile avec user input sans normalize', async () => {
+    const facts = new Map([
+      ['TaintedArgCall', 'src/api.ts\t10\tfs.readFile\tfilename\t0\treq.body\thandler'],
+      ['TaintSink', 'src/api.ts\t10\tfs-read\tfs.readFile\thandler'],
+    ])
+    const { violations } = await runRule({ ruleName: 'cwe-022-path-traversal.dl', facts })
+    expect(violations).toHaveLength(1)
+    expect(violations[0][0]).toBe('CWE-022')
+  })
+
+  it('skip si path.normalize present dans le file', async () => {
+    const facts = new Map([
+      ['TaintedArgCall', 'src/api.ts\t10\tfs.readFile\tfilename\t0\treq.body\thandler'],
+      ['TaintSink', 'src/api.ts\t10\tfs-read\tfs.readFile\thandler'],
+      ['SanitizerCall', 'src/api.ts\t5\tnormalize\thandler'],
+    ])
+    const { violations } = await runRule({ ruleName: 'cwe-022-path-traversal.dl', facts })
+    expect(violations).toEqual([])
+  })
+
+  it('flag aussi fs-write', async () => {
+    const facts = new Map([
+      ['TaintedArgCall', 'src/api.ts\t20\tfs.writeFile\tpath\t0\treq.body\thandler'],
+      ['TaintSink', 'src/api.ts\t20\tfs-write\tfs.writeFile\thandler'],
+    ])
+    const { violations } = await runRule({ ruleName: 'cwe-022-path-traversal.dl', facts })
+    expect(violations).toHaveLength(1)
+  })
+})
+
+describe('CWE-078 command-injection (Tier 13)', () => {
+  it('flag exec avec user input', async () => {
+    const facts = new Map([
+      ['TaintedArgCall', 'src/api.ts\t10\tchild_process.exec\tcmd\t0\treq.body\thandler'],
+      ['TaintSink', 'src/api.ts\t10\texec\tchild_process.exec\thandler'],
+    ])
+    const { violations } = await runRule({ ruleName: 'cwe-078-command-injection.dl', facts })
+    expect(violations).toHaveLength(1)
+    expect(violations[0][0]).toBe('CWE-078')
+  })
+
+  it('skip si shellEscape utilise', async () => {
+    const facts = new Map([
+      ['TaintedArgCall', 'src/api.ts\t10\tchild_process.exec\tcmd\t0\treq.body\thandler'],
+      ['TaintSink', 'src/api.ts\t10\texec\tchild_process.exec\thandler'],
+      ['SanitizerCall', 'src/api.ts\t5\tshellEscape\thandler'],
+    ])
+    const { violations } = await runRule({ ruleName: 'cwe-078-command-injection.dl', facts })
+    expect(violations).toEqual([])
+  })
+})
+
+describe('CWE-089 sql-injection (Tier 13)', () => {
+  it('flag db.query avec user input', async () => {
+    const facts = new Map([
+      ['TaintedArgCall', 'src/api.ts\t10\tdb.query\tuserId\t0\treq.body\thandler'],
+      ['TaintSink', 'src/api.ts\t10\tsql\tdb.query\thandler'],
+    ])
+    const { violations } = await runRule({ ruleName: 'cwe-089-sql-injection.dl', facts })
+    expect(violations).toHaveLength(1)
+    expect(violations[0][0]).toBe('CWE-089')
+  })
+
+  it('skip si validateBody present', async () => {
+    const facts = new Map([
+      ['TaintedArgCall', 'src/api.ts\t10\tdb.query\tuserId\t0\treq.body\thandler'],
+      ['TaintSink', 'src/api.ts\t10\tsql\tdb.query\thandler'],
+      ['SanitizerCall', 'src/api.ts\t5\tvalidateBody\thandler'],
+    ])
+    const { violations } = await runRule({ ruleName: 'cwe-089-sql-injection.dl', facts })
+    expect(violations).toEqual([])
+  })
+})
+
+describe('CWE-918 ssrf (Tier 13)', () => {
+  it('flag fetch avec user input URL', async () => {
+    const facts = new Map([
+      ['TaintedArgCall', 'src/api.ts\t10\tfetch\ttarget\t0\treq.body\thandler'],
+      ['TaintSink', 'src/api.ts\t10\thttp-out\tfetch\thandler'],
+    ])
+    const { violations } = await runRule({ ruleName: 'cwe-918-ssrf.dl', facts })
+    expect(violations).toHaveLength(1)
+    expect(violations[0][0]).toBe('CWE-918')
+  })
+
+  it('skip si validateUrl ou isAllowedUrl present', async () => {
+    const facts = new Map([
+      ['TaintedArgCall', 'src/api.ts\t10\tfetch\ttarget\t0\treq.body\thandler'],
+      ['TaintSink', 'src/api.ts\t10\thttp-out\tfetch\thandler'],
+      ['SanitizerCall', 'src/api.ts\t5\tisAllowedUrl\thandler'],
+    ])
+    const { violations } = await runRule({ ruleName: 'cwe-918-ssrf.dl', facts })
+    expect(violations).toEqual([])
+  })
+
+  it('skip si grandfathered', async () => {
+    const schema = await loadRule('schema-subset.dl')
+    const baseRule = await loadRule('cwe-918-ssrf.dl')
+    const customRule = baseRule + '\nCwe918Grandfathered("src/api.ts", 10).\n'
+    const program = mergePrograms([
+      { name: 'schema.dl', content: schema },
+      { name: 'rule.dl', content: customRule },
+    ])
+    const facts = new Map([
+      ['TaintedArgCall', 'src/api.ts\t10\tfetch\ttarget\t0\treq.body\thandler'],
+      ['TaintSink', 'src/api.ts\t10\thttp-out\tfetch\thandler'],
+    ])
+    const db = loadFacts(program.decls, { factsByRelation: facts })
+    const result = evaluate(program, db, { allowRecursion: true })
+    expect(result.outputs.get('Violation') ?? []).toEqual([])
+  })
+})
+
 describe('schema-subset.dl est valide', () => {
   it('parse sans erreur et déclare les relations attendues', async () => {
     const schema = await loadRule('schema-subset.dl')
