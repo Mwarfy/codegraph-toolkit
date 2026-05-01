@@ -68,19 +68,46 @@ export interface RelationDecl {
   pos: SourcePos
 }
 
+// ─── AST: Constraint (Tier 15 — comparaison numérique) ────────────────────
+
+/**
+ * Contrainte numérique sur une variable bindée par le body positif.
+ * Syntaxe : `Var > 5`, `N >= 10`, `Score < Threshold`, `X != 0`.
+ *
+ * Position dans le body source : peut apparaître n'importe où entre virgules,
+ * mais à l'eval ces contraintes sont appliquées en post-filter après le
+ * join des body atoms positifs (avant les négatifs). Sémantiquement
+ * équivalent à inline.
+ *
+ * Range-restriction : toute variable d'une contrainte doit aussi apparaître
+ * dans au moins un atom positif du body (sinon unbound — caught at parse).
+ *
+ * `=` n'est pas une contrainte mais une unification déjà gérée par le join.
+ */
+export type ConstraintOp = '>' | '<' | '>=' | '<=' | '!='
+
+export interface Constraint {
+  op: ConstraintOp
+  left: Term
+  right: Term
+  pos: SourcePos
+}
+
 // ─── AST: Rule ─────────────────────────────────────────────────────────────
 
 /**
- * `Head(...) :- Body1(...), !Body2(...).`
+ * `Head(...) :- Body1(...), !Body2(...), X > 5.`
  *
  * Invariant validé au parse : le head ne peut PAS être négé. Toutes les
  * variables du head DOIVENT apparaître dans au moins un body atom positif
  * (range-restricted). Les variables qui n'apparaissent QUE dans un body
- * négé sont rejetées (unsafe).
+ * négé sont rejetées (unsafe). Idem pour les variables de constraints.
  */
 export interface Rule {
   head: Atom
   body: Atom[]
+  /** Contraintes numériques (Tier 15). Évaluées en post-filter du join. */
+  constraints?: Constraint[]
   pos: SourcePos
   /**
    * Index stable assigné au parse (ordre d'apparition dans le source).

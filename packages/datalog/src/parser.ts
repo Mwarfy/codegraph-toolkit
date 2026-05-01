@@ -46,6 +46,7 @@ import {
   DatalogError,
   type AggregateDef,
   type Atom, type ColumnDecl, type ColumnType,
+  type Constraint, type ConstraintOp,
   type DatalogValue, type Program, type RelationDecl,
   type Rule, type SourcePos, type Term,
 } from './types.js'
@@ -57,6 +58,7 @@ interface Token {
     | 'bang'             // !
     | 'directive'        // .decl / .input / .output
     | 'string' | 'number' | 'ident' | 'kw_not' | 'underscore'
+    | 'gt' | 'lt' | 'gte' | 'lte' | 'neq'   // Tier 15 — comparison ops
     | 'eof'
   value: string
   pos: SourcePos
@@ -188,7 +190,21 @@ class Lexer {
     if (c === ',') { this.advance(); return { kind: 'comma', value: ',', pos: start } }
     if (c === '(') { this.advance(); return { kind: 'lparen', value: '(', pos: start } }
     if (c === ')') { this.advance(); return { kind: 'rparen', value: ')', pos: start } }
-    if (c === '!') { this.advance(); return { kind: 'bang', value: '!', pos: start } }
+    if (c === '!') {
+      this.advance()
+      if (this.peek() === '=') { this.advance(); return { kind: 'neq', value: '!=', pos: start } }
+      return { kind: 'bang', value: '!', pos: start }
+    }
+    if (c === '>') {
+      this.advance()
+      if (this.peek() === '=') { this.advance(); return { kind: 'gte', value: '>=', pos: start } }
+      return { kind: 'gt', value: '>', pos: start }
+    }
+    if (c === '<') {
+      this.advance()
+      if (this.peek() === '=') { this.advance(); return { kind: 'lte', value: '<=', pos: start } }
+      return { kind: 'lt', value: '<', pos: start }
+    }
     if (c === ':') {
       this.advance()
       if (this.peek() === '-') {
@@ -306,10 +322,12 @@ class Parser {
         const next = this.peek()
         if (next.kind === 'turnstile') {
           this.advance()
-          const body = this.parseBody()
+          const { atoms: body, constraints } = this.parseBody()
           this.expect('dot', "'.' expected at end of rule")
-          this.validateRule(head, body, t.pos)
-          rules.push({ head, body, pos: t.pos, index: this.ruleCount++ })
+          this.validateRule(head, body, constraints, t.pos)
+          const rule: Rule = { head, body, pos: t.pos, index: this.ruleCount++ }
+          if (constraints.length > 0) rule.constraints = constraints
+          rules.push(rule)
         } else if (next.kind === 'dot') {
           this.advance()
           this.validateFact(head)
@@ -483,26 +501,58 @@ class Parser {
     return { rel: name.value, args, negated: false, pos: name.pos }
   }
 
-  private parseBody(): Atom[] {
-    const out: Atom[] = []
-    out.push(this.parseBodyAtom())
+  private parseBody(): { atoms: Atom[]; constraints: Constraint[] } {
+    const atoms: Atom[] = []
+    const constraints: Constraint[] = []
+    this.parseBodyItem(atoms, constraints)
     while (this.peek().kind === 'comma') {
       this.advance()
-      out.push(this.parseBodyAtom())
+      this.parseBodyItem(atoms, constraints)
     }
-    return out
+    return { atoms, constraints }
   }
 
-  private parseBodyAtom(): Atom {
-    let negated = false
+  /**
+   * Body item = either an atom (positif/négé) or a numeric constraint
+   * (`Var > N`, `Score >= Threshold`, etc.).
+   *
+   * Disambiguation : si le 1er token est `bang` ou `kw_not` → forcément
+   * atom négé. Sinon ident : on regarde le token suivant — `(` = atom,
+   * opérateur de comparaison = constraint.
+   */
+  private parseBodyItem(atoms: Atom[], constraints: Constraint[]): void {
     const t = this.peek()
     if (t.kind === 'bang' || t.kind === 'kw_not') {
       this.advance()
-      negated = true
+      const a = this.parseAtom()
+      a.negated = true
+      atoms.push(a)
+      return
+    }
+    if (t.kind === 'ident' && this.peek(1).kind !== 'lparen') {
+      // Var followed by comparison operator → constraint.
+      const left = this.parseTerm()
+      const op = this.parseConstraintOp()
+      const right = this.parseTerm()
+      constraints.push({ op, left, right, pos: t.pos })
+      return
     }
     const a = this.parseAtom()
-    a.negated = negated
-    return a
+    a.negated = false
+    atoms.push(a)
+  }
+
+  private parseConstraintOp(): ConstraintOp {
+    const t = this.peek()
+    if (t.kind === 'gt' || t.kind === 'lt'
+      || t.kind === 'gte' || t.kind === 'lte'
+      || t.kind === 'neq') {
+      this.advance()
+      return t.value as ConstraintOp
+    }
+    this.err('parse.expectedConstraintOp',
+      `expected comparison operator (>, <, >=, <=, !=) — got ${t.kind} '${t.value}'`,
+      t.pos)
   }
 
   private parseTerm(): Term {
@@ -563,9 +613,12 @@ class Parser {
   /**
    * Range-restriction : toute variable du head DOIT apparaître dans au moins
    * un atom positif du body. Une variable qui n'apparaît QUE dans un atom
-   * négé est unsafe (l'évaluateur ne peut pas l'instancier).
+   * négé ou dans une contrainte est unsafe (l'évaluateur ne peut pas
+   * l'instancier).
    */
-  private validateRule(head: Atom, body: Atom[], pos: SourcePos): void {
+  private validateRule(
+    head: Atom, body: Atom[], constraints: Constraint[], pos: SourcePos,
+  ): void {
     if (head.negated) {
       this.err('parse.negatedHead', 'rule head cannot be negated', head.pos)
     }
@@ -588,6 +641,19 @@ class Parser {
         if (term.kind === 'var' && !positiveVars.has(term.name)) {
           this.err('parse.unsafeNegatedVar',
             `variable '${term.name}' in negated atom must also appear in a positive atom`, term.pos)
+        }
+      }
+    }
+    for (const c of constraints) {
+      for (const term of [c.left, c.right]) {
+        if (term.kind === 'var' && !positiveVars.has(term.name)) {
+          this.err('parse.unsafeConstraintVar',
+            `variable '${term.name}' in constraint must also appear in a positive atom`,
+            term.pos)
+        }
+        if (term.kind === 'wildcard') {
+          this.err('parse.constraintWildcard',
+            'wildcard not allowed in numeric constraint', term.pos)
         }
       }
     }

@@ -27,7 +27,8 @@ import { insertTuple } from './facts-loader.js'
 import { stratify, type Stratum } from './stratify.js'
 import {
   DatalogError,
-  type Atom, type Database, type DatalogValue, type Program,
+  type Atom, type Constraint,
+  type Database, type DatalogValue, type Program,
   type ProofNode, type Provenance, type Relation, type RunResult, type Rule,
   type Tuple,
 } from './types.js'
@@ -86,29 +87,26 @@ export function evaluate(
     elapsedMs: 0,
   }
 
-  for (const stratum of strata) {
-    // Stratum without rules = pure-input stratum, nothing to do.
-    if (stratum.rules.length === 0) continue
-    // Saturate this stratum with naïve fixpoint.
-    // (Without recursion, one pass over each rule suffices, but we keep the
-    //  loop to support `allowRecursion` later.)
-    let changed = true
-    while (changed) {
-      changed = false
-      stats.iterations++
-      for (const rule of stratum.rules) {
-        stats.rulesExecuted++
-        const derived = evaluateRule(rule, db, recordSet, provenance, program)
-        if (derived > 0) {
-          stats.tuplesProduced += derived
-          changed = true
+  const runStrata = (): void => {
+    for (const stratum of strata) {
+      if (stratum.rules.length === 0) continue
+      let changed = true
+      while (changed) {
+        changed = false
+        stats.iterations++
+        for (const rule of stratum.rules) {
+          stats.rulesExecuted++
+          const derived = evaluateRule(rule, db, recordSet, provenance, program)
+          if (derived > 0) {
+            stats.tuplesProduced += derived
+            changed = true
+          }
         }
       }
-      // Without recursion: 1 iteration is enough — if no rule head appears
-      // in another rule's body within the same stratum, we won't derive
-      // anything new on a second pass. We still loop until stable for safety.
     }
   }
+
+  runStrata()
 
   // ─── Aggregates (Tier 14 alt2) ───
   // Post-strates : count/sum/min/max sur les relations matérialisées.
@@ -203,6 +201,11 @@ export function evaluate(
         insertTuple(resultRel, tuple)
       }
     }
+    // Tier 15 : after aggregates, re-run strata so rules consuming aggregate
+    // results (typical god-X / threshold patterns) can derive their heads.
+    // Idempotent thanks to insertTuple dedup — already-derived tuples are
+    // no-ops on re-evaluation.
+    runStrata()
   }
 
   // Build outputs : only relations marked .output, sorted lex.
@@ -241,10 +244,17 @@ function evaluateRule(
   const envs: Array<{ env: Env; bodyTuples: Array<{ rel: string; tuple: Tuple }> }> = []
   joinPositive(positives, 0, new Map(), [], db, envs)
 
+  const constraints = rule.constraints ?? []
+
   let derived = 0
   for (const { env, bodyTuples } of envs) {
-    // Negatives : reject if any matches.
+    // Constraints (Tier 15) : numeric post-filter on bound variables.
     let rejected = false
+    for (const c of constraints) {
+      if (!evaluateConstraint(c, env, program)) { rejected = true; break }
+    }
+    if (rejected) continue
+    // Negatives : reject if any matches.
     for (const neg of negatives) {
       if (matchesAny(neg, env, db)) { rejected = true; break }
     }
@@ -402,6 +412,58 @@ function matchesAny(atom: Atom, env: Env, db: Database): boolean {
 function valueEq(a: DatalogValue, b: DatalogValue): boolean {
   // typeof check is implicit in === for primitives.
   return a === b
+}
+
+/**
+ * Resolve a Term to its DatalogValue using the current env.
+ * Constants resolve directly. Vars look up env (must be bound — guaranteed
+ * by parser range-restriction check).
+ */
+function resolveTerm(
+  term: Constraint['left'],
+  env: Env,
+  program: Program,
+): DatalogValue {
+  if (term.kind === 'const') return term.value
+  if (term.kind === 'var') {
+    const v = env.get(term.name)
+    if (v === undefined) {
+      throw new DatalogError('eval.unboundConstraintVar',
+        `unbound variable '${term.name}' in constraint`,
+        term.pos, program.source)
+    }
+    return v
+  }
+  throw new DatalogError('eval.constraintWildcard',
+    'wildcard in constraint — caught earlier in parser?',
+    term.pos, program.source)
+}
+
+/**
+ * Evaluate a numeric constraint (`X > 5`, `A != B`, etc.) against current env.
+ * Both sides are resolved then compared per op. Both sides must be numbers
+ * for ordering ops (>, <, >=, <=). `!=` works on any type.
+ */
+function evaluateConstraint(
+  c: Constraint,
+  env: Env,
+  program: Program,
+): boolean {
+  const l = resolveTerm(c.left, env, program)
+  const r = resolveTerm(c.right, env, program)
+  if (c.op === '!=') return l !== r
+  if (typeof l !== 'number' || typeof r !== 'number') {
+    throw new DatalogError('eval.constraintNonNumber',
+      `constraint '${c.op}' requires numeric operands, got ${typeof l} and ${typeof r}`,
+      c.pos, program.source)
+  }
+  if (c.op === '>') return l > r
+  if (c.op === '<') return l < r
+  if (c.op === '>=') return l >= r
+  if (c.op === '<=') return l <= r
+  /* istanbul ignore next: covered by parser's whitelist */
+  throw new DatalogError('eval.unknownConstraintOp',
+    `unknown constraint op '${c.op}'`, c.pos, program.source)
 }
 
 // ─── Proof construction ────────────────────────────────────────────────────
