@@ -1,0 +1,22 @@
+// COMPOSITE-FAT-TABLE (Tier 15, aggregate .count).
+//
+// Pourquoi : une table SQL avec plus de 25 colonnes est un denormalization
+// smell — couplage de plusieurs concepts business dans une seule entite.
+// Candidats split (1:1 sub-tables) ou refactor en JSONB column.
+//
+// Threshold > 25 : empirique. Au-dela, l'ALTER TABLE devient risque,
+// les index couvrant impossibles, les SELECT * gaspillent IO.
+//
+// Pattern ratchet : grandfather par table. Les tables existantes >25 cols
+// dans Sentinel (orders, product_scores, daily_financials, etc.) sont
+// historiques — la rule attrape les nouveaux fat tables.
+
+.decl FatTableGrandfathered(table: symbol)
+
+.count TableColCount(table: symbol, n: number) by SqlColumn(T, _, _, _, _)
+
+Violation("COMPOSITE-FAT-TABLE", T, 0,
+  "table > 25 colonnes — denormalization smell, candidat split ou JSONB") :-
+    TableColCount(T, N),
+    N > 25,
+    !FatTableGrandfathered(T).

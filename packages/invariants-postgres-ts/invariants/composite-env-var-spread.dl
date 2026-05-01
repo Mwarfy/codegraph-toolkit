@@ -1,0 +1,27 @@
+// COMPOSITE-ENV-VAR-SPREAD (Tier 15, aggregate .count).
+//
+// Pourquoi : une variable d'environnement lue dans plus de 2 fichiers
+// est typiquement un secret/config qui devrait passer par un resolver
+// typé (cf. ADR-019). La duplication de `process.env.X` :
+//   - perd le tracking source/default (vs `resolveThreshold`)
+//   - rend les changements de nom risques (rename = grep)
+//   - empeche de logger les acces (audit secrets)
+//
+// Whitelist : NODE_ENV est legit (utilise pour brancher dev/test/prod
+// dans tout le code, pas un secret).
+//
+// Threshold > 2 : empirique. 1-2 reads = isolated (OK). 3+ = pattern
+// d'acces partage qui merite un wrapper.
+
+.decl EnvVarSpreadGrandfathered(varName: symbol)
+.decl EnvVarWhitelist(varName: symbol)
+EnvVarWhitelist("NODE_ENV").
+
+.count EnvVarReadCount(varName: symbol, n: number) by EnvRead(_, _, V, _)
+
+Violation("COMPOSITE-ENV-VAR-SPREAD", V, 0,
+  "env var lue dans > 2 sites — utiliser un resolver typé (cf. ADR-019)") :-
+    EnvVarReadCount(V, N),
+    N > 2,
+    !EnvVarWhitelist(V),
+    !EnvVarSpreadGrandfathered(V).

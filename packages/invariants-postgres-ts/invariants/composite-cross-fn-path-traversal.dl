@@ -1,0 +1,34 @@
+// COMPOSITE-CROSS-FN-PATH-TRAVERSAL — CWE-022 cross-fonction (Tier 15).
+//
+// Pourquoi : cwe-022-path-traversal.dl couvre intra-fn. Cross-fn pattern
+// courant :
+//
+//   function handler(req) {
+//     return loadFile(req.query.path)        // <- tainted arg
+//   }
+//   function loadFile(p) {
+//     return fs.readFile(`./uploads/${p}`)   // <- sink fs-read
+//   }
+//
+// Reuse :
+//   - TaintedParam (composite-cross-function-taint.dl)
+//   - HasPathNormalizer (cwe-022-path-traversal.dl)
+//   - FsKindSink (cwe-022-path-traversal.dl)
+//
+// Limites : 1 hop, message CWE-022 specifique pour triage.
+
+.decl CrossFnPathTraversalGrandfathered(file: symbol, line: number)
+
+Violation("COMPOSITE-CROSS-FN-PATH-TRAVERSAL", F, SinkLine,
+  "user input transite via parametre fonction jusqu'a fs.read/write — normalize/resolve avant ou rejeter") :-
+    TaintedParam(F, S, _, _),
+    TaintSink(F, SinkLine, "fs-read", _, S),
+    !HasPathNormalizer(F),
+    !CrossFnPathTraversalGrandfathered(F, SinkLine).
+
+Violation("COMPOSITE-CROSS-FN-PATH-TRAVERSAL", F, SinkLine,
+  "user input transite via parametre fonction jusqu'a fs.read/write — normalize/resolve avant ou rejeter") :-
+    TaintedParam(F, S, _, _),
+    TaintSink(F, SinkLine, "fs-write", _, S),
+    !HasPathNormalizer(F),
+    !CrossFnPathTraversalGrandfathered(F, SinkLine).

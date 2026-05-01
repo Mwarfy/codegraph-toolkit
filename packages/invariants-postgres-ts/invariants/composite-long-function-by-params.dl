@@ -1,0 +1,22 @@
+// COMPOSITE-LONG-FUNCTION-BY-PARAMS (Tier 15, aggregate .max).
+//
+// Pourquoi : une fonction avec >= 7 parametres est une "param trap" —
+// (1) ordre fragile pour les callers, (2) ajout/retrait force tous les
+// call-sites a changer, (3) souvent symptome d'un options-object manquant.
+// Cf. Clean Code (Martin) — l'arity ideal est 0-2.
+//
+// Threshold : max paramIndex >= 6 (paramIndex 0-based, donc >= 6 = 7+ params).
+//
+// Pattern ratchet : grandfather par (file, symbol). Quasi-tous les hits
+// Sentinel sont des dispatchers (handle*Routes) ou des setters/buildPrompt
+// — refactor possible mais pas prioritaire. La rule mord les nouveaux.
+
+.decl LongFnByParamsGrandfathered(file: symbol, symbol: symbol)
+
+.max MaxParamIdx(file: symbol, sym: symbol, m: number) by FunctionParam(F, S, _, V)
+
+Violation("COMPOSITE-LONG-FUNCTION-BY-PARAMS", F, 0,
+  "fn >= 7 params — refactor en options object (cf. Clean Code)") :-
+    MaxParamIdx(F, S, M),
+    M >= 6,
+    !LongFnByParamsGrandfathered(F, S).

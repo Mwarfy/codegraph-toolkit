@@ -1,0 +1,18 @@
+// COMPOSITE-FANOUT-OVERLOAD (Tier 15, aggregate .count).
+//
+// Pourquoi : un fichier qui importe > 25 modules = god-orchestrator,
+// trop de responsabilites. Toute modification de ses dependances
+// remonte. Refactor en sous-orchestrators specialises.
+//
+// Threshold > 25. Sentinel : un seul cas (index.ts:39 — root bootstrap,
+// legitimite forte). Grandfather + la rule mord les nouveaux god files.
+
+.decl FanoutOverloadGrandfathered(file: symbol)
+
+.count ImportFanOut(file: symbol, n: number) by Imports(F, _)
+
+Violation("COMPOSITE-FANOUT-OVERLOAD", F, 0,
+  "fichier importe > 25 modules — god-orchestrator, candidat split") :-
+    ImportFanOut(F, N),
+    N > 25,
+    !FanoutOverloadGrandfathered(F).

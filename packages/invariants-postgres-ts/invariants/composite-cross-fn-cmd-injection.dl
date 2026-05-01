@@ -1,0 +1,26 @@
+// COMPOSITE-CROSS-FN-CMD-INJECTION — CWE-078 cross-fonction (Tier 15).
+//
+// Pourquoi : cwe-078-command-injection.dl couvre intra-fn. Cross-fn
+// pattern courant :
+//
+//   function handler(req) {
+//     return runCmd(req.params.target)         // <- tainted arg
+//   }
+//   function runCmd(target) {
+//     exec(`ping ${target}`)                   // <- sink
+//   }
+//
+// Reuse :
+//   - TaintedParam (composite-cross-function-taint.dl)
+//   - HasShellEscape (cwe-078-command-injection.dl)
+//
+// Limites : 1 hop, message CWE-078 specifique pour triage.
+
+.decl CrossFnCmdInjGrandfathered(file: symbol, line: number)
+
+Violation("COMPOSITE-CROSS-FN-CMD-INJECTION", F, SinkLine,
+  "user input transite via parametre fonction jusqu'a un sink exec — preferer spawn(cmd, [args])") :-
+    TaintedParam(F, S, _, _),
+    TaintSink(F, SinkLine, "exec", _, S),
+    !HasShellEscape(F),
+    !CrossFnCmdInjGrandfathered(F, SinkLine).

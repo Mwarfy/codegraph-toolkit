@@ -1,0 +1,41 @@
+// COMPOSITE-CROSS-FN-SQL-INJECTION — CWE-089 cross-fonction (Tier 15).
+//
+// Pourquoi : cwe-089-sql-injection.dl couvre intra-fn (TaintedArgCall :
+// req.body.x → db.query meme symbol). En vrai code, la chaine traverse
+// souvent une frontiere de fonction :
+//
+//   function handler(req) {
+//     return executeQuery(req.body.id)        // <- cross-fn
+//   }
+//   function executeQuery(id) {
+//     return db.query(`SELECT * FROM x WHERE id=${id}`)  // <- sink
+//   }
+//
+// Cette rule join TaintedParam (deja calcule par
+// composite-cross-function-taint.dl) avec TaintSink(kind=sql) et skip
+// si le file a un validator (HasSqlValidation, defini dans
+// cwe-089-sql-injection.dl).
+//
+// Difference avec composite-cross-function-taint.dl : ce dernier flag
+// TOUS les kinds de sink ; ici on specialise SQL avec :
+//   - message CWE-089 specifique (triage)
+//   - skip via HasSqlValidation (precision)
+//
+// Limites :
+//   - 1 hop seulement (TaintedParam non-transitif). Voir
+//     composite-cross-fn-taint-multi-hop.dl pour la version recursive.
+//   - 0 violations Sentinel attendues au demarrage (validateBody
+//     systematique). La rule mord si un sanitizer disparait.
+//
+// References :
+//   - https://cwe.mitre.org/data/definitions/89.html
+//   - OWASP Top 10 2021 #A03 (Injection)
+
+.decl CrossFnSqliGrandfathered(file: symbol, line: number)
+
+Violation("COMPOSITE-CROSS-FN-SQLI", F, SinkLine,
+  "user input transite via parametre fonction jusqu'a un sink SQL — sanitize a la frontiere") :-
+    TaintedParam(F, S, _, _),
+    TaintSink(F, SinkLine, "sql", _, S),
+    !HasSqlValidation(F),
+    !CrossFnSqliGrandfathered(F, SinkLine).

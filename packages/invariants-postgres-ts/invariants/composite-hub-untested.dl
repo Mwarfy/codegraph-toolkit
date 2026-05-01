@@ -1,0 +1,21 @@
+// COMPOSITE-HUB-UNTESTED (Tier 15).
+//
+// Pourquoi : un fichier hub (>= 20 importeurs) sans test = blast radius
+// massif sans couverture. Toute regression silencieuse se propage a 20+
+// modules. Le ratchet force le test des nouveaux hubs.
+//
+// Lanza/Marinescu hub metric : un hub a un nombre d'in-imports tel que
+// le retirer / casser desorganise le graphe. Sentinel a 7 fichiers >=20
+// imports — la moitie ne sont pas testes.
+//
+// Threshold >= 20 : empirique. En-dessous = module utilitaire normal.
+// Au-dessus = composant structural.
+
+.decl HubUntestedGrandfathered(file: symbol)
+
+Violation("COMPOSITE-HUB-UNTESTED", F, 0,
+  "fichier importe par >= 20 modules sans test — blast radius critique") :-
+    ModuleFanIn(F, N),
+    N >= 20,
+    !TestedFile(F),
+    !HubUntestedGrandfathered(F).

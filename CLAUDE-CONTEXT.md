@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+ecc5303 feat(codegraph): tainted-vars supporte les destructurings (Tier 15)
 fd50aa4 feat(datalog): comparison ops (>, <, >=, <=, !=) + 2nd pass post-aggregate
 f9a0e3d feat(phase4-tier14): cross-function taint + 4 CWE rules + Datalog aggregates
 c4bcf00 feat(phase4-tier13): CWE rules library — 4 CVE classics portees (CodeQL inspiration)
@@ -111,7 +112,6 @@ e5ac979 feat(phase4-tier9): packaging shipping-ready — tout via npm install + 
 7fb30b0 feat(phase4-tier8): live datalog dans le hook PostToolUse — 70ms wall clock
 58278cb feat(phase4-tier7): composites multi-relation — 5 facts promus + 4 rules
 ee2ec36 feat(phase4-tier6): switch checks + controlling expr + audit cols + resource balance
-20a6abd feat(phase4-tier5): articulation-points + sql-naming + sql-migration-order
 ```
 
 ## Comment contribuer à ce brief

@@ -1,0 +1,25 @@
+// COMPOSITE-COCHANGE-WITHOUT-COTEST (Tier 15).
+//
+// Pourquoi : si fileA et fileB co-changent souvent (count >= 5, jaccard
+// >= 30), ils forment de facto un module logique. Si fileA est teste
+// mais fileB non, le test laisse passer les regressions de fileB qui
+// changeront fileA en cascade.
+//
+// Inspire de Bazel `coverage_targets` + Google Rosie "co-change without
+// co-test" anti-pattern.
+//
+// Reuse : CoChange (sous-utilise — 0 rules avant Tier 15), TestedFile.
+//
+// Threshold : count >= 5, jaccard >= 30. Ajustable. Au demarrage Sentinel,
+// 0 paires (testé / non-testé) — la rule est preventive.
+
+.decl CochangeWithoutCotestGrandfathered(fileA: symbol, fileB: symbol)
+
+Violation("COMPOSITE-COCHANGE-WITHOUT-COTEST", FB, 0,
+  "co-change frequent avec un fichier teste, mais celui-ci ne l'est pas — test gap cache") :-
+    CoChange(FA, FB, N, J),
+    N >= 5,
+    J >= 30,
+    TestedFile(FA),
+    !TestedFile(FB),
+    !CochangeWithoutCotestGrandfathered(FA, FB).

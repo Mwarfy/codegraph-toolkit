@@ -1,0 +1,22 @@
+// COMPOSITE-TRUTH-POINT-ASYMMETRIC (Tier 15).
+//
+// Pourquoi : un concept business ECRIT sans aucun READER = state mort.
+// Soit (a) feature WIP non encore wirée, (b) ancien code orphelin, (c)
+// table d'archivage legitime (à grandfather).
+//
+// Scope volontairement restreint au cas WRITER-WITHOUT-READER. L'inverse
+// (READER-WITHOUT-WRITER) genere trop de faux positifs sur Sentinel
+// (views/migrations/aliases que le detecteur de writer rate).
+//
+// Reuse : TruthPointWriter, TruthPointReader — facts existants.
+
+.decl TpAsymmetricGrandfathered(concept: symbol)
+
+.decl TpHasReader(concept: symbol)
+TpHasReader(C) :- TruthPointReader(C, _).
+
+Violation("COMPOSITE-TRUTH-POINT-ASYMMETRIC", F, 0,
+  "concept ecrit sans aucun reader — state mort, code orphelin ou WIP") :-
+    TruthPointWriter(C, F),
+    !TpHasReader(C),
+    !TpAsymmetricGrandfathered(C).

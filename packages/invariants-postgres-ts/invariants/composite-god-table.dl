@@ -1,0 +1,20 @@
+// COMPOSITE-GOD-TABLE (Tier 15, aggregate .count).
+//
+// Pourquoi : une table qui recoit > 10 FK incoming est referencee
+// partout = couplage central excessif. Souvent symptome qu'elle melange
+// plusieurs concepts ou que le modele est sur-normalise (split en
+// sous-entites ferait des FKs duplicates).
+//
+// Threshold > 10 : empirique. En-dessous = normal. Au-dessus = candidat
+// refactor en (a) join-table, (b) decoupage en sous-entites referencees,
+// (c) acceptation explicite (root entity, ex: projects).
+
+.decl GodTableGrandfathered(table: symbol)
+
+.count FkInDegree(table: symbol, n: number) by SqlForeignKey(_, _, T, _, _, _)
+
+Violation("COMPOSITE-GOD-TABLE", T, 0,
+  "table > 10 FK incoming — central, candidat refactor join-table ou decoupage") :-
+    FkInDegree(T, N),
+    N > 10,
+    !GodTableGrandfathered(T).

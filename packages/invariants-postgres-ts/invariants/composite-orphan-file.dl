@@ -1,0 +1,29 @@
+// COMPOSITE-ORPHAN-FILE (Tier 15).
+//
+// Pourquoi : un fichier ni importe par un autre, ni declare comme
+// EntryPoint, est un candidat dead code. Soit dette pure (a supprimer),
+// soit oubli d'export (manque dans un index/barrel).
+//
+// File-level vs symbol-level : le scope est volontairement file-level
+// car symbol-level produit ~200 violations sur Sentinel (faux positifs
+// : exports utilises par tests / dynamics). L'extractor unused-exports.ts
+// couvre le symbol-level via PostToolUse hook ("safe-to-remove"). Cette
+// rule est complementaire — file-level orphan = signal plus fort.
+//
+// Cas legitimes a grandfather :
+//   - Files framework-routed (Next.js page.tsx, layout.tsx) — chargees
+//     par convention filesystem, pas via import.
+//   - Files in-progress (kernel/* avec features WIP non encore wirees).
+
+.decl OrphanFileGrandfathered(file: symbol)
+.decl ImportedFile(file: symbol)
+ImportedFile(F) :- Imports(_, F).
+.decl IsEntryPoint(file: symbol)
+IsEntryPoint(F) :- EntryPoint(F, _, _).
+
+Violation("COMPOSITE-ORPHAN-FILE", F, 0,
+  "fichier ni importe ni entrypoint — dead code ou oubli d'export") :-
+    File(F),
+    !ImportedFile(F),
+    !IsEntryPoint(F),
+    !OrphanFileGrandfathered(F).

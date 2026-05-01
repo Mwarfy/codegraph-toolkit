@@ -1,0 +1,23 @@
+// COMPOSITE-ARTICULATION-WITH-FLOATING-PROMISE (Tier 15).
+//
+// Pourquoi : un articulation point est un fichier dont la suppression
+// desorganise le graphe (single point of failure). Si en plus il a une
+// floating promise (callee async non-awaite, exception silencieuse),
+// alors une erreur dans ce fichier disparait sans signal — viole ADR-021
+// (alertes sortantes pour briser le silence prod).
+//
+// Inspire de Erlang/OTP "supervisor strategy" + Go staticcheck SA2002.
+//
+// Reuse : ArticulationPoint, FloatingPromise — facts existants.
+//
+// Pattern ratchet : grandfather par (file, line). 0 violations attendues
+// au demarrage Sentinel (pas d'intersection actuellement). La rule mord
+// si quelqu'un ajoute une floating promise dans un fichier critique.
+
+.decl ArticFloatingGrandfathered(file: symbol, line: number)
+
+Violation("COMPOSITE-ARTICULATION-WITH-FLOATING-PROMISE", F, L,
+  "floating promise dans articulation point — exception silencieuse dans hub critique") :-
+    ArticulationPoint(F, _),
+    FloatingPromise(F, L, _, _),
+    !ArticFloatingGrandfathered(F, L).

@@ -1,0 +1,21 @@
+// COMPOSITE-DRIFT-SIGNAL-DENSITY (Tier 15, aggregate .count).
+//
+// Pourquoi : un fichier qui accumule plus de 2 DriftSignalFact (TODO,
+// HACK, FIXME, magic-number, deep-nesting, etc.) est un foyer de
+// degradation. La densite signale soit dette technique a payer, soit
+// pattern d'organisation defaillant.
+//
+// Threshold > 2 : empirique. 1-2 = isolated, 3+ = pattern.
+//
+// Pattern ratchet : grandfather par file. La rule attrape les nouveaux
+// foyers et empeche que la dette s'aggrave par concentration.
+
+.decl DriftDensityGrandfathered(file: symbol)
+
+.count DriftDensityCount(file: symbol, n: number) by DriftSignalFact(F, _, _)
+
+Violation("COMPOSITE-DRIFT-SIGNAL-DENSITY", F, 0,
+  "fichier > 2 drift signals — foyer de dette accumule, prioritize maintenance") :-
+    DriftDensityCount(F, N),
+    N > 2,
+    !DriftDensityGrandfathered(F).

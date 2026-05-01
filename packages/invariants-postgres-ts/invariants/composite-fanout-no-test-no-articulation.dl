@@ -1,0 +1,26 @@
+// COMPOSITE-FANOUT-NO-TEST-NO-ARTICULATION (Tier 15).
+//
+// Pourquoi : un fichier avec haut fan-in (>15 importeurs), non teste,
+// MAIS pas articulation point = paradoxe operationnel. Tout l'importe,
+// donc le toucher impacte plein de modules. Mais comme ce n'est pas
+// une articulation, le retirer ne casse pas le graphe — donc soit
+// inutile soit sous-couplage cache. Soit (a) refactor pour bouger les
+// users, soit (b) ajouter des tests, soit (c) accepter et grandfather.
+//
+// Inspire de Haskell stan "highly-connected unverified module" anti-pattern.
+//
+// Difference avec composite-hub-untested :
+//   - hub-untested : N >= 20, peu importe articulation
+//   - fanout-no-test-no-articulation : N > 15 ET !ArticulationPoint
+// Les deux peuvent fire ensemble sur un meme fichier — c'est OK,
+// c'est un signal cumule (sevrere).
+
+.decl FanoutNoTestNoArticGrandfathered(file: symbol)
+
+Violation("COMPOSITE-FANOUT-NO-TEST-NO-ARTIC", F, 0,
+  "haut fan-in (>15) mais ni teste ni articulation — paradox structurel") :-
+    ModuleFanIn(F, N),
+    N > 15,
+    !TestedFile(F),
+    !ArticulationPoint(F, _),
+    !FanoutNoTestNoArticGrandfathered(F).

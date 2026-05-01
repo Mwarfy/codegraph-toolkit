@@ -1,0 +1,19 @@
+// COMPOSITE-DEPRECATED-ON-TRUTH-POINT-WRITER (Tier 15).
+//
+// Pourquoi : un fichier qui ECRIT du business state (TruthPointWriter)
+// ET qui appelle une API @deprecated = bombe a retardement. Quand la
+// dependance disparait, c'est l'ecriture SSOT qui casse — propagation
+// en cascade dans tout le systeme qui lit ce concept.
+//
+// Inspire de Rust `#[deprecated]` lint + Erlang Dialyzer "deprecated
+// function called from supervised process".
+//
+// Reuse : DeprecatedUsage, TruthPointWriter — facts existants.
+
+.decl DeprecatedOnTpWriterGrandfathered(file: symbol, line: number)
+
+Violation("COMPOSITE-DEPRECATED-ON-TRUTH-POINT-WRITER", F, L,
+  "writer SSOT appelle une API @deprecated — bombe a retardement, propagation cascade") :-
+    DeprecatedUsage(F, L, _),
+    TruthPointWriter(_, F),
+    !DeprecatedOnTpWriterGrandfathered(F, L).

@@ -1,0 +1,20 @@
+// COMPOSITE-GOD-FUNCTION (Tier 15, aggregate .count).
+//
+// Pourquoi : une fonction appelee > 30 fois est une couche d'acces
+// cachee. Si c'est un SSOT legitime (ex: getPool de la vector store),
+// grandfather. Sinon, signal de god-function a refactorer (souvent un
+// helper qui devrait etre un service ou une classe injectee).
+//
+// Threshold > 30. Sentinel : 2 cas (getPool=207 SSOT legit, emit=39
+// le pattern event-bus typed donc legit).
+
+.decl GodFunctionGrandfathered(file: symbol, symbol: symbol)
+
+.count CalleeUsageCount(file: symbol, sym: symbol, n: number)
+  by SymbolCallEdge(_, _, F, S, _)
+
+Violation("COMPOSITE-GOD-FUNCTION", F, 0,
+  "fn appelee > 30x — god-function, refactor en service ou class injectee") :-
+    CalleeUsageCount(F, S, N),
+    N > 30,
+    !GodFunctionGrandfathered(F, S).

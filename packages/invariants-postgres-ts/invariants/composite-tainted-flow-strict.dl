@@ -1,0 +1,39 @@
+// COMPOSITE-TAINTED-FLOW-STRICT — high-confidence variant of
+// composite-tainted-flow (Tier 15).
+//
+// Pourquoi : composite-tainted-flow.dl utilise FileReach (closure
+// transitive sur SymbolCallEdge file-level) — tres permissif, ratchet
+// volumineux attendu. Cette rule strict utilise TaintedParam (deja
+// calcule par composite-cross-function-taint.dl) qui est var-level
+// confirmed cross-fn flow.
+//
+// Pattern : http-route -> appel direct -> callee dont un param est
+// tainte cross-fn ET qui contient un sink. Beaucoup plus precis que
+// "n'importe quel sink reachable depuis n'importe quel http-route".
+//
+// Reuse :
+//   - HasSanitizer (defini dans composite-tainted-flow.dl)
+//   - TaintedParam (defini dans composite-cross-function-taint.dl)
+//
+// Differenciation :
+//   - composite-tainted-flow : file-reach approximation, large couverture, bruit
+//   - composite-tainted-flow-strict : confirmed cross-fn taint, peu de FP
+//   - composite-cross-function-taint : sink dans n'importe quelle callee tainted
+//     (sans contrainte http-route en amont)
+//
+// Cette rule est l'intersection : http-route ∧ cross-fn taint confirmee.
+// Triage prioritaire (high-confidence).
+//
+// Limites : 1 hop seulement. Multi-hop = composite-cross-fn-taint-multi-hop.dl.
+
+.decl TaintedFlowStrictGrandfathered(file: symbol, line: number)
+
+Violation("COMPOSITE-TAINTED-FLOW-STRICT", F, SinkLine,
+  "http-route -> param tainte cross-fn -> sink (haute confiance, triage prio)") :-
+    EntryPoint(EntryF, "http-route", _),
+    SymbolCallEdge(EntryF, _, F, S, _),
+    TaintedParam(F, S, _, _),
+    TaintSink(F, SinkLine, _, _, S),
+    !HasSanitizer(EntryF),
+    !HasSanitizer(F),
+    !TaintedFlowStrictGrandfathered(F, SinkLine).

@@ -1,0 +1,33 @@
+// COMPOSITE-CROSS-FN-TAINT-MULTI-HOP (Tier 15).
+//
+// Pourquoi : composite-cross-function-taint.dl a TaintedParam(F, S, P, Src)
+// derive du 1-hop (callsite direct depuis caller). En vrai code Sentinel,
+// les chains sont plus longues : route -> service -> repo (2-3 hops).
+// Cette rule etend TaintedParam recursivement.
+//
+// Recursion :
+//   TaintedParam(F2, S2, P2, Src) :-
+//     TaintedParam(F1, S1, P1, _),    -- caller's param is tainted
+//     TaintedArgumentToCall(F1, S1, S2, I2, Src),  -- caller passes its tainted to S2
+//     FunctionParam(F2, S2, P2, I2).  -- S2's paramIdx I2 is named P2
+//
+// Stratification : TaintedParam est dans la meme strate (recursion sur
+// soi-meme), runner accepte avec allowRecursion=true (deja le cas).
+//
+// Reuse :
+//   - TaintedParam (composite-cross-function-taint.dl) - base case 1-hop
+//   - HasSqlValidation, HasShellEscape, HasPathNormalizer (skip si valide)
+//
+// Note : meme variable globale TaintedParam — la recursion etend
+// l'ensemble. Le composite-cross-function-taint.dl utilise deja
+// TaintedParam, donc cette rule l'ameliore transitivement (pas besoin
+// de violation specifique multi-hop, le composite original mord plus
+// loin).
+
+// La rule "Multi-Hop" elle-meme : juste etendre TaintedParam par recursion.
+// (Aucune nouvelle Violation necessaire — composite-cross-function-taint
+// recoupe les cas etendus.)
+TaintedParam(F2, S2, P2, Src) :-
+    TaintedParam(_, _, _, Src),
+    TaintedArgumentToCall(_, _, S2, I2, Src),
+    FunctionParam(F2, S2, P2, I2).

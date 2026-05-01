@@ -1,0 +1,26 @@
+// COMPOSITE-TRUTH-POINT-GOD-READER (Tier 15, aggregate .count).
+//
+// Pourquoi : un fichier qui lit > 5 truth-points (concepts business
+// au sens TruthPointReader) est un "knowledge sink" — couple a trop
+// d'etat partage, candidat refactor en module dedie ou en facade.
+//
+// Premiere rule a exploiter le .count aggregate Tier 14.
+//
+// Threshold > 5 : empiriquement le seuil ou la dependance arrete
+// d'etre "occasionnelle" et devient structurelle. Au-dessus, le
+// fichier devient un point de couplage qui amplifie chaque changement.
+//
+// Pattern ratchet : grandfather par file. Aujourd'hui les readers >5
+// dans Sentinel sont concentrés dans 8 fichiers (system.ts, dimension-learner,
+// publishers, video-chain-orchestrator, reconciler, etc.) — tous load-bearing
+// connus. La rule attrape les nouveaux god-readers sans bloquer l'existant.
+
+.decl TpReadHubGrandfathered(file: symbol)
+
+.count TpReadCount(file: symbol, n: number) by TruthPointReader(_, F)
+
+Violation("COMPOSITE-TRUTH-POINT-GOD-READER", F, 0,
+  "fichier lit > 5 truth-points — knowledge sink, candidat refactor") :-
+    TpReadCount(F, N),
+    N > 5,
+    !TpReadHubGrandfathered(F).
