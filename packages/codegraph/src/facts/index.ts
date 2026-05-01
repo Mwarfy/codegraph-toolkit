@@ -80,14 +80,200 @@ export async function exportFacts(
     decl: '(file:symbol, tag:symbol)',
     rows: [],
   }
+  // ─── UnusedExport (Tier 17) ──────────────────────────────────────────
+  // Symbols exportes avec confidence "safe-to-remove" — candidats dead
+  // code. Source : node.exports[] (calcule par unused-exports detector).
+  const unusedExportRel: RelationDef = {
+    name: 'UnusedExport',
+    decl: '(file:symbol, name:symbol, line:number, kind:symbol, confidence:symbol)',
+    rows: [],
+  }
+  // ─── LongFunction (Tier 17) ──────────────────────────────────────────
+  // Calcule par long-functions detector, deja en snapshot.longFunctions.
+  const longFunctionRel: RelationDef = {
+    name: 'LongFunction',
+    decl: '(file:symbol, name:symbol, line:number, locCount:number)',
+    rows: [],
+  }
+  // ─── MagicNumber (Tier 17) ──────────────────────────────────────────
+  // Litteraux numeriques hardcoded suspects (timeouts/thresholds/ratios).
+  // value en symbol pour preserver les forms decimales/grandes (1e9, etc.).
+  const magicNumberRel: RelationDef = {
+    name: 'MagicNumber',
+    decl: '(file:symbol, line:number, value:symbol, context:symbol, category:symbol)',
+    rows: [],
+  }
+
   for (const n of snapshot.nodes) {
     if (n.type !== 'file') continue
     fileRel.rows.push([sym(n.id)])
     for (const t of n.tags ?? []) {
       tagRel.rows.push([sym(n.id), sym(t)])
     }
+    for (const ex of n.exports ?? []) {
+      // Garde tous les exports avec confidence non-vide, la rule filtre.
+      if (!ex.confidence) continue
+      unusedExportRel.rows.push([
+        sym(n.id), sym(ex.name), num(ex.line),
+        sym(ex.kind), sym(ex.confidence),
+      ])
+    }
   }
-  relations.push(fileRel, tagRel)
+  for (const lf of snapshot.longFunctions ?? []) {
+    longFunctionRel.rows.push([
+      sym(lf.file), sym(lf.name), num(lf.line), num(lf.loc),
+    ])
+  }
+  for (const mn of snapshot.magicNumbers ?? []) {
+    magicNumberRel.rows.push([
+      sym(mn.file), num(mn.line), sym(mn.value),
+      sym(mn.context || '_'), sym(mn.category),
+    ])
+  }
+  relations.push(unusedExportRel, longFunctionRel, magicNumberRel)
+
+  // ─── Barrel (Tier 17) ──────────────────────────────────────────────
+  // Files barrel (100% re-exports). lowValue=true ssi peu de consumers.
+  const barrelRel: RelationDef = {
+    name: 'Barrel',
+    decl: '(file:symbol, reExportCount:number, consumerCount:number, lowValue:symbol)',
+    rows: [],
+  }
+  for (const b of snapshot.barrels ?? []) {
+    barrelRel.rows.push([
+      sym(b.file),
+      num(b.reExportCount),
+      num(b.consumerCount),
+      sym(b.lowValue ? 'true' : 'false'),
+    ])
+  }
+  relations.push(barrelRel)
+
+  // ─── PackageDepIssue (Tier 17) ──────────────────────────────────────
+  // Issues sur dependencies package.json (declared-unused, missing, etc.).
+  const packageDepIssueRel: RelationDef = {
+    name: 'PackageDepIssue',
+    decl: '(packageName:symbol, packageJson:symbol, kind:symbol, declaredIn:symbol)',
+    rows: [],
+  }
+  for (const d of snapshot.packageDeps ?? []) {
+    packageDepIssueRel.rows.push([
+      sym(d.packageName),
+      sym(d.packageJson),
+      sym(d.kind),
+      sym(d.declaredIn ?? '_'),
+    ])
+  }
+  relations.push(packageDepIssueRel)
+
+  // ─── Fsm facts (Tier 17) ────────────────────────────────────────────
+  // States declared per FSM concept + orphans. Detection deja faite par
+  // state-machines extractor.
+  const fsmStateDeclaredRel: RelationDef = {
+    name: 'FsmStateDeclared',
+    decl: '(concept:symbol, state:symbol)',
+    rows: [],
+  }
+  const fsmStateOrphanRel: RelationDef = {
+    name: 'FsmStateOrphan',
+    decl: '(concept:symbol, state:symbol, confidence:symbol)',
+    rows: [],
+  }
+  for (const sm of snapshot.stateMachines ?? []) {
+    for (const st of sm.states ?? []) {
+      fsmStateDeclaredRel.rows.push([sym(sm.concept), sym(st)])
+    }
+    for (const st of sm.orphanStates ?? []) {
+      fsmStateOrphanRel.rows.push([
+        sym(sm.concept), sym(st), sym(sm.detectionConfidence),
+      ])
+    }
+  }
+  relations.push(fsmStateDeclaredRel, fsmStateOrphanRel)
+
+  // ─── BackEdge (Tier 17) ─────────────────────────────────────────────
+  // Edges DSM qui inversent l'ordre architectural attendu (kernel ←
+  // blocks). Source : snapshot.dsm.backEdges (Tarjan-based).
+  const backEdgeRel: RelationDef = {
+    name: 'BackEdge',
+    decl: '(fromGroup:symbol, toGroup:symbol)',
+    rows: [],
+  }
+  for (const be of snapshot.dsm?.backEdges ?? []) {
+    backEdgeRel.rows.push([sym(be.from), sym(be.to)])
+  }
+  relations.push(backEdgeRel)
+
+  // ─── EventListener (Tier 17) — symetrique de Emits* ──────────────
+  // Source : extractors/event-listener-sites.ts.
+  const listenerLitRel: RelationDef = {
+    name: 'ListensLiteral',
+    decl: '(file:symbol, line:number, eventName:symbol)',
+    rows: [],
+  }
+  const listenerConstRel: RelationDef = {
+    name: 'ListensConstRef',
+    decl: '(file:symbol, line:number, namespace:symbol, member:symbol)',
+    rows: [],
+  }
+  const listenerDynRel: RelationDef = {
+    name: 'ListensDynamic',
+    decl: '(file:symbol, line:number)',
+    rows: [],
+  }
+  for (const ls of snapshot.eventListenerSites ?? []) {
+    if (ls.kind === 'literal' && ls.literalValue !== undefined) {
+      listenerLitRel.rows.push([sym(ls.file), num(ls.line), sym(ls.literalValue)])
+    } else if (ls.kind === 'eventConstRef' && ls.refExpression) {
+      const parts = ls.refExpression.split('.')
+      const ns = parts[0] ?? ''
+      const member = parts.slice(1).join('.') || ''
+      listenerConstRel.rows.push([
+        sym(ls.file), num(ls.line), sym(ns), sym(member),
+      ])
+    } else {
+      listenerDynRel.rows.push([sym(ls.file), num(ls.line)])
+    }
+  }
+  relations.push(listenerLitRel, listenerConstRel, listenerDynRel)
+
+  // ─── Code Quality Patterns (Tier 17) ─────────────────────────────────
+  // Source : extractors/code-quality-patterns.ts.
+  const regexLiteralRel: RelationDef = {
+    name: 'RegexLiteral',
+    decl: '(file:symbol, line:number, source:symbol, flags:symbol, hasNestedQuantifier:symbol)',
+    rows: [],
+  }
+  const tryCatchSwallowRel: RelationDef = {
+    name: 'TryCatchSwallow',
+    decl: '(file:symbol, line:number, kind:symbol, containingSymbol:symbol)',
+    rows: [],
+  }
+  const awaitInLoopRel: RelationDef = {
+    name: 'AwaitInLoop',
+    decl: '(file:symbol, line:number, loopKind:symbol, containingSymbol:symbol)',
+    rows: [],
+  }
+  const cqp = snapshot.codeQualityPatterns
+  if (cqp) {
+    for (const r of cqp.regexLiterals) {
+      regexLiteralRel.rows.push([
+        sym(r.file), num(r.line), sym(r.source), sym(r.flags || '_'),
+        sym(r.hasNestedQuantifier ? 'true' : 'false'),
+      ])
+    }
+    for (const r of cqp.tryCatchSwallows) {
+      tryCatchSwallowRel.rows.push([
+        sym(r.file), num(r.line), sym(r.kind), sym(r.containingSymbol),
+      ])
+    }
+    for (const r of cqp.awaitInLoops) {
+      awaitInLoopRel.rows.push([
+        sym(r.file), num(r.line), sym(r.loopKind), sym(r.containingSymbol),
+      ])
+    }
+  }
+  relations.push(regexLiteralRel, tryCatchSwallowRel, awaitInLoopRel)
 
   // ─── Imports / ImportEdge ─────────────────────────────────────────────
   // `Imports` est binaire (pratique pour la jointure transitive) ;

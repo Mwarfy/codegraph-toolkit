@@ -478,6 +478,42 @@ export interface GraphSnapshot {
   }>
 
   /**
+   * Event listener call sites (Phase 5 Tier 17). Symetrique de
+   * eventEmitSites pour permettre l'analyse event-orphan / listener-orphan.
+   * Cf. extractors/event-listener-sites.ts.
+   */
+  eventListenerSites?: Array<{
+    file: string
+    line: number
+    symbol: string
+    callee: string
+    isMethodCall: boolean
+    receiver?: string
+    kind: 'literal' | 'eventConstRef' | 'dynamic'
+    literalValue?: string
+    refExpression?: string
+  }>
+
+  /**
+   * Code quality patterns (Phase 5 Tier 17). Bundle 3 facts captures
+   * en un AST walk : RegexLiteral (pour ReDoS), TryCatchSwallow (silent
+   * errors), AwaitInLoop (sequential I/O bottleneck).
+   * Cf. extractors/code-quality-patterns.ts.
+   */
+  codeQualityPatterns?: {
+    regexLiterals: Array<{
+      file: string; line: number; source: string; flags: string
+      hasNestedQuantifier: boolean
+    }>
+    tryCatchSwallows: Array<{
+      file: string; line: number; kind: string; containingSymbol: string
+    }>
+    awaitInLoops: Array<{
+      file: string; line: number; loopKind: string; containingSymbol: string
+    }>
+  }
+
+  /**
    * Security patterns (Phase 5 Tier 16) — 4 facts complementaires
    * captures en un seul AST walk : secret-named vars passees a un call,
    * CORS misconfig, TLS unsafe options, Math.random pour secrets.

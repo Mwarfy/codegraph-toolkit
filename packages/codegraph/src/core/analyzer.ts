@@ -46,6 +46,8 @@ import { analyzeDriftPatterns, type DriftSignal } from '../extractors/drift-patt
 import { analyzeEvalCalls, type EvalCall } from '../extractors/eval-calls.js'
 import { analyzeCryptoCalls, type CryptoCall } from '../extractors/crypto-algo.js'
 import { analyzeSecurityPatterns, type SecurityPatternsAggregated } from '../extractors/security-patterns.js'
+import { analyzeEventListenerSites, type EventListenerSite } from '../extractors/event-listener-sites.js'
+import { analyzeCodeQualityPatterns, type CodeQualityPatternsAggregated } from '../extractors/code-quality-patterns.js'
 import { analyzeHardcodedSecrets, type HardcodedSecret } from '../extractors/hardcoded-secrets.js'
 import { analyzeBooleanParams, type BooleanParamSite } from '../extractors/boolean-params.js'
 import { analyzeDeadCode, type DeadCodeFinding } from '../extractors/dead-code.js'
@@ -574,6 +576,8 @@ async function runDeterministicDetectors(
   let evalCalls: EvalCall[] | undefined
   let cryptoCalls: CryptoCall[] | undefined
   let securityPatterns: SecurityPatternsAggregated | undefined
+  let eventListenerSites: EventListenerSite[] | undefined
+  let codeQualityPatterns: CodeQualityPatternsAggregated | undefined
   let hardcodedSecrets: HardcodedSecret[] | undefined
   let booleanParams: BooleanParamSite[] | undefined
   let deadCode: DeadCodeFinding[] | undefined
@@ -670,6 +674,24 @@ async function runDeterministicDetectors(
   } catch (err) {
     timing.detectors['security-patterns'] = performance.now() - tSecurity
     console.error(`  ✗ security-patterns failed: ${err}`)
+  }
+
+  const tListener = performance.now()
+  try {
+    eventListenerSites = await analyzeEventListenerSites(config.rootDir, files, sharedProject)
+    timing.detectors['event-listener-sites'] = performance.now() - tListener
+  } catch (err) {
+    timing.detectors['event-listener-sites'] = performance.now() - tListener
+    console.error(`  ✗ event-listener-sites failed: ${err}`)
+  }
+
+  const tCodeQ = performance.now()
+  try {
+    codeQualityPatterns = await analyzeCodeQualityPatterns(config.rootDir, files, sharedProject)
+    timing.detectors['code-quality-patterns'] = performance.now() - tCodeQ
+  } catch (err) {
+    timing.detectors['code-quality-patterns'] = performance.now() - tCodeQ
+    console.error(`  ✗ code-quality-patterns failed: ${err}`)
   }
 
   const tHardcoded = performance.now()
@@ -806,6 +828,8 @@ async function runDeterministicDetectors(
   if (evalCalls) snapshot.evalCalls = evalCalls
   if (cryptoCalls) snapshot.cryptoCalls = cryptoCalls
   if (securityPatterns) snapshot.securityPatterns = securityPatterns
+  if (eventListenerSites) snapshot.eventListenerSites = eventListenerSites
+  if (codeQualityPatterns) snapshot.codeQualityPatterns = codeQualityPatterns
   if (hardcodedSecrets) snapshot.hardcodedSecrets = hardcodedSecrets
   if (booleanParams) snapshot.booleanParams = booleanParams
   if (deadCode) snapshot.deadCode = deadCode
