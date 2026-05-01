@@ -3,12 +3,13 @@
 > **Rends ton projet TS lisible à un agent IA. Détecte les invariants architecturaux. Bloque les régressions structurelles avant qu'elles arrivent en prod.**
 
 ```bash
-npm install -g @liby-tools/codegraph @liby-tools/adr-toolkit @liby-tools/codegraph-mcp
+npm install --save-dev @liby-tools/codegraph @liby-tools/adr-toolkit @liby-tools/codegraph-mcp \
+                       @liby-tools/datalog @liby-tools/invariants-postgres-ts
 cd ton-projet
-npx adr-toolkit init --with-claude-settings
+npx adr-toolkit init --with-invariants postgres --with-claude-hooks
 ```
 
-C'est tout. Le toolkit détecte ta stack (Express/Hono/Next, raw SQL/Drizzle, mono ou monorepo), génère la config, installe les hooks git + Claude Code, et te livre une mental map déterministe régénérée à chaque commit.
+C'est tout. Le toolkit détecte ta stack (Express/Hono/Next, raw SQL/Drizzle, mono ou monorepo), génère la config, installe **24 invariants Datalog** (20 mono-relation + 4 composites multi-relation), wire les hooks git + Claude Code (PreToolUse + PostToolUse avec **live Datalog gate à 70ms par edit**), et te livre une mental map déterministe régénérée à chaque commit.
 
 ---
 
@@ -32,15 +33,26 @@ C'est une **infra de concentration**, pas une infra de code.
 
 Tu poses `// ADR-018` au top d'un fichier. Le toolkit régénère automatiquement la section `## Anchored in` de l'ADR. Renames absorbés gratuitement (le marqueur suit le code). Les claims sémantiques (`fonction X existe`, `Y est de type Set<string>`) deviennent **exécutables via ts-morph asserts**.
 
-### 3. Invariants Datalog ratchetés
+### 3. 24 invariants Datalog ratchetés (package `@liby-tools/invariants-postgres-ts`)
 
-Tu écris une règle déclarative (`fk-needs-index.dl`), elle s'exécute contre les facts émis par codegraph (`SqlForeignKey`, `SqlIndex`, etc.). La rule attrape **toute nouvelle violation** sans bloquer sur l'existant (pattern ratchet). Exemples livrés :
-- **Cycles d'import non-gated** — bloqués au pre-commit
-- **FK Postgres sans index** — détecte les futurs `DELETE CASCADE` en full scan
-- **OAuth scopes hardcodés** — force l'usage du registry typé
-- **Threshold runtime via `parseInt(process.env.X)` inline** — force `envInt(...)` typé
+Tu écris une règle déclarative (`fk-needs-index.dl`), elle s'exécute contre les facts émis par codegraph (37 relations émises : `SqlForeignKey`, `EvalCall`, `EntryPoint`, `ArticulationPoint`, `TruthPointWriter`, etc.). La rule attrape **toute nouvelle violation** sans bloquer sur l'existant (pattern ratchet).
 
-### 4. 9 MCP tools pour l'agent IA
+**20 invariants mono-relation** packagés :
+- **Architecture** : `cycles-no-new`, `no-new-articulation-point` (Tarjan O(V+E) — révèle les hubs cachés)
+- **SQL/Postgres** : `sql-fk-needs-index`, `sql-table-needs-pk`, `sql-timestamp-needs-tz`, `sql-orphan-fk`, `sql-naming-convention`, `sql-migration-order`, `sql-audit-columns`
+- **Sécurité** : `no-eval`, `no-hardcoded-secret` (regex + Shannon entropy)
+- **Code quality** : `no-boolean-positional-param` (Sonar S2301), `no-identical-subexpressions` (S1764), `no-return-then-else` (S1126), `no-switch-fallthrough` (gcc -Wimplicit-fallthrough), `no-switch-empty-or-no-default` (MISRA 16.6), `no-controlling-expression-constant` (MISRA 14.3)
+- **JS-specific** : `no-floating-promise` (rustc unused_must_use porté JS), `no-deprecated-usage` (Go SA1019), `no-resource-imbalance` (Reed-Solomon parity acquire/release)
+
+**4 composites multi-relation** (Tier 7) — patterns qu'aucune rule isolée ne capture :
+- `composite-eval-in-http-route` — `EvalCall` ∩ `EntryPoint(http-route)` = RCE chemin court
+- `composite-fk-chain-without-index` — closure transitive `A→B→C` avec maillon faible
+- `composite-high-critical-untested` — `ArticulationPoint ∩ TruthPointWriter ∩ ¬TestedFile` = blast radius max sans safety net
+- `composite-double-drift-wrapper-boolean` — drift wrapper-superfluous + boolean param = double dette agentique
+
+Validation Sentinel : 0 violations hors grandfathered, **2 vrais HIGH-CRITICAL révélés par les composites** que aucune rule isolée ne voyait.
+
+### 4. 14 MCP tools pour l'agent IA
 
 Le serveur MCP `codegraph-mcp` expose le snapshot comme outils queryable. Ton agent peut demander à la volée :
 
@@ -56,12 +68,46 @@ Le serveur MCP `codegraph-mcp` expose le snapshot comme outils queryable. Ton ag
 | `codegraph_extract_candidates(file)` | Fonctions à extraire en priorité (loc × fanIn) |
 | `codegraph_recent(file)` | Git archaeology : commits récents + top contributor |
 | `codegraph_uncovered()` | Fichiers sans test rankés par criticité |
+| `codegraph_datalog_query(rule)` | **Datalog ad hoc** sur les 37 facts émis (transitivité, anti-jointure, agrégation) |
+| `codegraph_drift(file?)` | Drift agentique : excessive params, wrappers superflus, TODO sans owner, deep nesting, empty catch |
+| `codegraph_memory_recall(scope?)` | **Mémoire inter-sessions** : false-positives marqués, decisions, incidents |
+| `codegraph_memory_mark(kind, fp, reason)` | Persiste un FP/decision/incident — survit aux sessions |
 
-### 5. Watch mode + hook PostToolUse
+### 5. Watch mode + hook PostToolUse + **Live Datalog gate** (~70ms par edit)
 
-`codegraph watch &` maintient `.codegraph/snapshot-live.json` à jour à chaque save (~50ms warm via cache Salsa). Le hook PostToolUse Claude Code lit ce snapshot live et injecte le contexte structurel (HIGH-RISK header, importers, exports problématiques, co-change, activité git récente) AVANT chaque réponse de l'agent — il voit l'impact de son edit avant de répondre.
+`codegraph watch &` maintient `.codegraph/snapshot-live.json` à jour à chaque save (~50ms warm via cache Salsa). Le hook PostToolUse Claude Code lit ce snapshot live et injecte le contexte structurel **plus** :
 
-### 6. Stacks DB supportées (mêmes invariants partout)
+- **Live Datalog** (Tier 8) — exécute les 24 rules contre les facts live à chaque edit, affiche uniquement les **nouvelles violations** vs baseline post-commit. Latence mesurée 70ms wall clock. Si je m'apprête à introduire un FK chain pathologique, un eval dans un http handler, ou faire devenir un fichier HIGH-CRITICAL-UNTESTED, je le sais immédiatement — pas en bloc au pre-commit
+- **Drift signals** (Tier 4) — patterns que l'agent crée plus que les humains, par fichier touché
+- **Mémoire inter-sessions** (Tier 3) — décisions / FP / incidents marqués lors de sessions précédentes affichés quand le fichier est touché
+
+Le résultat : l'agent voit l'impact structurel + les invariants violés + la mémoire historique AVANT chaque réponse.
+
+### 6. Mémoire inter-sessions (Tier 3)
+
+Store local `~/.codegraph-toolkit/memory/<projet>.json` qui survit aux sessions. 3 kinds : `false-positive`, `decision`, `incident`. Per-projet, slug stable, soft-validation au load.
+
+```bash
+codegraph memory mark false-positive "tp:items" "Drizzle FP — pas un truth-point business" --scope-file src/db/schema.ts
+codegraph memory list
+codegraph memory obsolete <id>
+```
+
+Sans mémoire, l'agent redécouvre chaque session ce que tu as déjà validé. Avec : il consulte avant de proposer, il marque au passage, la prochaine session bénéficie. Privacy : `recall()` retourne uniquement une projection scopée — jamais le dump complet via MCP.
+
+### 7. Drift agentique (Tier 4)
+
+5 patterns AST/regex déterministe que l'agent crée plus que les humains :
+
+- `excessive-optional-params` — fonction avec >5 params optionnels (future-proof non demandé)
+- `wrapper-superfluous` — function dont le body = single forward call (pas de transformation)
+- `todo-no-owner` — TODO/FIXME sans `@user` ni `#issue`
+- `deep-nesting` — pyramide if/for/while >5 niveaux
+- `empty-catch-no-comment` — try/catch silencieux sans rationale
+
+Convention exempt : `// drift-ok: <reason>` sur ligne précédente. Skip fichiers de test. Le but n'est pas de bloquer mais de **ralentir** l'agent au bon moment.
+
+### 8. Stacks DB supportées (mêmes invariants partout)
 
 Le pattern "**mêmes facts Datalog, plusieurs back-ends d'extraction**" :
 
@@ -79,12 +125,13 @@ La rule Datalog `sql-fk-needs-index.dl` que tu écris **une seule fois** marche 
 ## Quickstart 30 secondes
 
 ```bash
-# 1. Install global (une fois par machine)
-npm install -g @liby-tools/codegraph @liby-tools/adr-toolkit @liby-tools/codegraph-mcp
+# 1. Install dans ton projet
+npm install --save-dev @liby-tools/codegraph @liby-tools/adr-toolkit @liby-tools/codegraph-mcp \
+                       @liby-tools/datalog @liby-tools/invariants-postgres-ts
 
-# 2. Dans ton projet
+# 2. Init complet (24 invariants Datalog + 4 hooks Claude + test runner Datalog + git hooks)
 cd ton-projet
-npx adr-toolkit init --with-claude-settings
+npx adr-toolkit init --with-invariants postgres --with-claude-hooks
 
 # 3. Premier ADR
 cp docs/adr/_TEMPLATE.md docs/adr/001-mon-invariant.md
@@ -98,7 +145,11 @@ npx adr-toolkit brief
 git commit -am "feat: ADR-001"
 ```
 
-À partir d'ici : le pre-commit hook prend le relais. Régen + brief + facts Datalog + invariants checkés à chaque commit.
+À partir d'ici :
+- **pre-commit** : `codegraph facts --regen` + `tsc` + 24 invariants Datalog + ADR anchors regen + brief sync
+- **post-commit** : `codegraph analyze` + brief regen + datalog baseline update
+- **Edit/Write Claude** : PreToolUse (ADR check) + PostToolUse (HIGH-RISK + drift + mémoire + **live Datalog 70ms**)
+- **Watch mode** (optionnel, recommandé) : `codegraph watch &` régen facts à chaque save (~50ms)
 
 ---
 
@@ -225,7 +276,7 @@ Maintient `.codegraph/snapshot-live.json` à jour en temps réel (~50ms par save
 
 ```bash
 # Setup + maintenance ADR
-adr-toolkit init [--with-claude-settings]
+adr-toolkit init [--with-claude-settings] [--with-invariants postgres] [--with-claude-hooks]
 adr-toolkit regen [--check]
 adr-toolkit linker <file>
 adr-toolkit check-asserts [--json]
@@ -245,6 +296,18 @@ codegraph reach <from-glob> <to-glob>
 codegraph dsm [--granularity file|container]
 codegraph deps [--only declared-unused|missing|devOnly]
 codegraph facts <out-dir>                      # Datalog facts emission
+
+# Datalog gating (Tier 8 live + post-commit baseline)
+codegraph datalog-check [--diff] [--update-baseline] [--json]
+
+# Memory inter-sessions (Tier 3)
+codegraph memory list [--kind X] [--file F]
+codegraph memory mark <kind> <fingerprint> <reason> [--scope-file F]
+codegraph memory obsolete <id>
+codegraph memory delete <id>
+codegraph memory prune                         # dur-delete les obsolètes
+codegraph memory export                        # JSON dump pour backup
+codegraph memory where                         # path du store
 ```
 
 ---
@@ -268,7 +331,7 @@ LSP fait du **sémantique fin-grained** (symbols, types, refs).
 codegraph-mcp fait du **structurel coarse-grained** (fichiers, ADRs, SSOT, dette, co-change, FK sans index, etc.).
 Les deux ensemble : architecture push (hooks) + pull (MCP) symétrique.
 
-Détails des 9 outils : voir [`packages/codegraph-mcp/README.md`](packages/codegraph-mcp/README.md).
+Détails des 14 outils : voir [`packages/codegraph-mcp/README.md`](packages/codegraph-mcp/README.md).
 
 ---
 
@@ -352,29 +415,44 @@ L'exception : `adr-toolkit bootstrap --apply` lance des agents Sonnet pour rédi
 
 ## Détecteurs déterministes additionnels
 
-En plus de la cartographie de base :
+En plus de la cartographie de base, 20+ extracteurs émettent des facts Datalog (37 relations) :
 
 - **todos** — TODO/FIXME/HACK/XXX/NOTE markers avec file + line + message
 - **long-functions** — fonctions/méthodes >100 LOC (configurable)
 - **magic-numbers** — littéraux hardcodés en positions suspectes (timeouts, thresholds)
 - **test-coverage** — coverage structurel (pas runtime) : pour chaque fichier, liste les tests qui le couvrent
 - **co-change** — paires de fichiers fréquemment co-modifiés (90j window) avec coefficient de Jaccard
-- **sql-schema** — tables, colonnes, FK, indexes depuis migrations `.sql` raw
-- **drizzle-schema** — tables, colonnes, FK, indexes depuis exports `pgTable(...)`
-- **fk-without-index** — dérivé : FK sans index correspondant (= DELETE CASCADE en full scan)
+- **sql-schema** — tables, colonnes, FK, indexes, primary keys depuis migrations `.sql` raw
+- **drizzle-schema** — idem depuis exports `pgTable(...)`
+- **sql-naming** — conventions Codd-era (snake_case, `_at` suffix, `_id` suffix, audit columns)
+- **sql-migration-order** — topological sort : FK forward references détectées
+- **eval-calls** — `eval()` et `new Function()` (vecteurs RCE)
+- **hardcoded-secrets** — regex + Shannon entropy
+- **boolean-params** — Sonar S2301 (boolean trap)
+- **drift-patterns** — 5 patterns agentiques (excessive params, wrappers, TODO no owner, deep nesting, empty catch)
+- **dead-code** — Sonar S1764, S1126, gcc switch-fallthrough, MISRA 16.6/14.3
+- **floating-promises** — rustc `unused_must_use` porté JS
+- **deprecated-usage** — JSDoc `@deprecated` declarations + cross-ref call sites
+- **articulation-points** — Tarjan O(V+E) : hubs cachés du graphe d'imports
+- **resource-balance** — parity acquire/release, setInterval/clearInterval, etc.
 
 ---
 
-## Hook Claude Code
+## Hooks Claude Code
 
-Deux hooks installés via `init --with-claude-settings` :
+Installés via `init --with-claude-settings` (PreToolUse seul) ou `init --with-claude-hooks` (PreToolUse + PostToolUse complet).
 
 ### PreToolUse — `adr-hook.sh`
 Avant chaque Edit/Write, injecte la liste des ADRs liés au fichier édité dans `additionalContext`. L'agent voit le bloc `📋 ADR check` AVANT de modifier.
 
-### PostToolUse — `codegraph-feedback.sh`
-Après chaque Edit/Write, injecte un bloc `📍 codegraph context` :
-- HIGH-RISK header si fichier sensible (hub, truth-point writer, cycle)
+### PostToolUse — `codegraph-feedback.sh` (Tier 8 live datalog)
+
+Après chaque Edit/Write, injecte un bloc `📍 codegraph context` complet :
+
+- **Live Datalog** — exécute les 24 rules (mono + composites) en ~70ms wall clock contre les facts régénérés par le watcher. Affiche uniquement les **nouvelles violations** vs baseline post-commit
+- **HIGH-RISK header** si fichier sensible (hub, truth-point writer, cycle)
+- **Drift signals** — patterns agentiques pour ce fichier (excessive params, wrappers, TODO sans owner, etc.)
+- **Mémoire inter-sessions** — décisions / FP / incidents marqués lors de sessions précédentes
 - In/out degree, top importers, exports problématiques
 - Cycles, truth-points participants
 - Dette : long fns, magic numbers, FIXME, coverage gaps
@@ -382,7 +460,7 @@ Après chaque Edit/Write, injecte un bloc `📍 codegraph context` :
 - Activité git récente
 - WIP intent depuis git diff
 
-L'agent voit l'impact de son edit AVANT de répondre.
+L'agent voit l'impact structurel + les invariants violés + la mémoire historique AVANT chaque réponse. Resolution dynamique des paths (walk-up `.git`, `require.resolve` du fast script via node_modules) — le hook survit à un déplacement du repo ou du toolkit.
 
 ---
 
@@ -452,7 +530,7 @@ import {
 
 ## Consommateurs
 
-- **Sentinel** (référence) — Express + raw SQL Postgres. 22 ADRs, 47+ marqueurs, 11 ts-morph asserts, 7 invariants Datalog actifs (cycles, OAuth, events, thresholds, FK indexes, …), 4 hooks Claude Code.
+- **Sentinel** (référence) — Express + raw SQL Postgres. 23 ADRs, 47+ marqueurs, 11 ts-morph asserts, **28 invariants Datalog actifs** (24 portables + 4 Sentinel-specific), hooks Claude Code (PreToolUse + PostToolUse avec live Datalog 70ms par edit).
 - **Morovar** — Hono + Drizzle ORM + Postgres. MMORPG 2D. Validé Phase 3 portabilité (rule SQL Sentinel marche identiquement sur facts Drizzle).
 - **Ton projet ?** — ouvre une issue avec ton retour.
 
@@ -473,6 +551,16 @@ import {
 - `v0.1.0` — premier release npm
 - `v0.2.0` — détecteurs bootstrap (singleton + write-isolation + hub) + types invariant + install.sh moderne
 - `v0.3.0` — détecteur fsm bootstrap, refactor analyzer.ts (Phase A+B+C), 13 axes d'enrichissement (Phase 1+2+3 multi-projet)
+- `v0.4.0` — **Phase 4 agent-first** (Tiers 1-9) :
+  - `@liby-tools/invariants-postgres-ts` package — 24 rules Datalog packagées (20 mono + 4 composites multi-relation)
+  - 4 nouveaux MCP tools (`codegraph_datalog_query`, `codegraph_drift`, `codegraph_memory_recall`, `codegraph_memory_mark`)
+  - Mémoire inter-sessions (Tier 3) — store local `~/.codegraph-toolkit/memory/<projet>.json`
+  - Drift agentique (Tier 4) — 5 patterns AST (excessive params, wrappers, TODO no owner, deep nesting, empty catch)
+  - 11 nouveaux extracteurs : eval-calls, hardcoded-secrets, boolean-params, drift-patterns, dead-code, floating-promises, deprecated-usage, articulation-points, sql-naming, sql-migration-order, resource-balance
+  - Composites multi-relation (Tier 7) — `composite-eval-in-http-route`, `composite-fk-chain-without-index`, `composite-high-critical-untested`, `composite-double-drift-wrapper-boolean`
+  - Live Datalog gate dans hook PostToolUse (Tier 8) — 70ms wall clock par edit, delta vs baseline post-commit
+  - Packaging shipping-ready (Tier 9) — `--with-invariants postgres --with-claude-hooks` install tout en 1 commande
+  - Snapshot relations émises 17 → 37, suite tests toolkit 191 → 452
 
 Pour le détail : [`CHANGELOG.md`](CHANGELOG.md).
 
@@ -480,7 +568,8 @@ Pour le détail : [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Liens
 
-- [`packages/codegraph-mcp/README.md`](packages/codegraph-mcp/README.md) — détail des 9 MCP tools
+- [`packages/codegraph-mcp/README.md`](packages/codegraph-mcp/README.md) — détail des 14 MCP tools
+- [`packages/invariants-postgres-ts/README.md`](packages/invariants-postgres-ts/README.md) — 24 rules Datalog packagées
 - [`packages/datalog/README.md`](packages/datalog/README.md) — runtime Datalog interne
 - [`packages/salsa/README.md`](packages/salsa/README.md) — incremental computation
 - [`docs/REFACTOR-ANALYZER-PLAN.md`](docs/REFACTOR-ANALYZER-PLAN.md) — détail du refactor 3-phases (god-file → registry)
