@@ -364,34 +364,43 @@
 
 ---
 
-## Tier 18 — speculative / large effort (transitive closure ou extractor lourd)
+## Tier 18 — speculative / large effort (statut livraison)
 
-### 47. composite-multi-hop-route-service-repo-sql
-- **Why** : pattern Sentinel typique = route → kernel/* service → memory/vector-store getPool().query() (2-3 hops). Tier 14 1-hop manque la chaîne.
-- **Effort** : medium côté Datalog (transitive closure de `TaintedParam` avec depth≤3), nécessite tests anti-explosion.
-- **Sentinel example** : `api/routes/improvement.ts:46 → kernel/improvement-engine? → memory/vector-store.ts:queryByEmbedding` ; `webhooks/admin.ts:executeAdminCommand → block-runtime.stopAll`.
-
-### 48. composite-multi-hop-cmd-via-shared-util
-- **Why** : `shared/ffmpeg.ts:spawn` appelé depuis `packs/visual-render/blocks/transcoder.ts` lui-même appelé par scheduler = 3 hops.
-- **Effort** : medium (même algo que #47).
+### 47-48. composite-multi-hop-* (route→service→repo SQL, cmd-via-shared-util)
+- **Statut** : ✅ **ABSORBÉ par Tier 15** (`composite-cross-fn-taint-multi-hop.dl`).
+  Cette rule étend `TaintedParam` récursivement, donc les 7 rules
+  cross-fn-X-injection (sql/cmd/path/redirect/log/deser/eval) deviennent
+  automatiquement multi-hop sans code additionnel. La recursion termine
+  au fixed-point Datalog stratifie. Aucune rule dédiée nécessaire.
+- **Verification** : `composite-cross-fn-sql-injection.dl` produit
+  désormais des violations même quand le path passe par 2-3 hops, dès
+  que `TaintedParam` se propage.
 
 ### 49. composite-event-payload-cross-block-taint
-- **Why** : event-bus découple emitter et listener. Besoin de `EventPayloadFlow(emit_file, listen_file, eventType)` joint avec taint des deux côtés.
-- **Effort** : large (NEW fact provenance + multi-relation).
-- **Sentinel example** : `webhooks/admin.ts:executeAdminCommand` → `event-bus.emit({payload: data.params})` → `kernel/decision-journal.ts:handleApprovalResolved` → `db.query`.
+- **Statut** : ✅ **LIVRÉ Tier 18** (`composite-event-payload-cross-block-taint.dl`).
+  Approche conservatrice sans nouveau fact provenance dédié :
+  joint `EmitsLiteral` (depuis http-route entry-point) + `ListensLiteral`
+  (avec `TaintSink` dans le même file). Même eventName + cross-file =
+  cross-block taint suspect.
+- **Sentinel hits** : 0 (ADR-004 écouteurs propres). Préventive.
 
 ### 50. composite-multi-hop-deser-with-shape-checker
-- **Why** : `validateBody` appelé en haut, sanitization passée à travers N fonctions intermédiaires. File-level rule perd la trace = faux positifs.
-- **Effort** : large (CodeQL `barrier` concept à implémenter).
+- **Statut** : ⊘ **SKIPPED** — barrier-aware tracking demande un refactor
+  majeur (CodeQL barrier concept). Les rules existantes file-level
+  (`HasShapeValidation` dans cwe-502, etc.) couvrent ~80% des cas avec
+  granularité acceptable. Le 20% restant ne justifie pas le coût.
 
 ### 51. composite-fsm-transitions-reconstruction
-- **Why** : V2 du FSM detector — reconstruire les transitions (read state X → write state Y). Aujourd'hui v0.3.0 capture juste write sites.
-- **Effort** : large (CFG + state-var tracking).
-- **Valeur** : débloque 5 FSM-ORPHAN avec contexte complet.
+- **Statut** : ⊘ **SKIPPED** — refactor lourd du `state-machines.ts`
+  extractor (CFG + state-var tracking inter-fn). Hors scope rapide.
+  Voir `~/Documents/codegraph-toolkit/docs/SPRINT-13-FSM-DETECTOR-PLAN.md`
+  pour le plan v2 dédié si on attaque le sujet.
+  Tier 17 livre déjà `composite-fsm-orphan` avec data v1 (write-only
+  detection) — suffisant pour gater nouveaux états zombies.
 
 ### 52. composite-data-flows-container-aware
-- **Why** : marqueur explicite `data-flows.ts:817` ("void ranges // placeholder pour future détection container-aware"). Variable `ranges` calculée mais unused.
-- **Effort** : medium-large (intent à confirmer avant code).
+- **Statut** : ⊘ **SKIPPED** — intent à clarifier avant code (placeholder
+  flou dans `data-flows.ts:817`). Pas de TP business identifié.
 
 ---
 

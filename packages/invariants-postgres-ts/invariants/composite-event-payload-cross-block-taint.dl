@@ -1,0 +1,50 @@
+// COMPOSITE-EVENT-PAYLOAD-CROSS-BLOCK-TAINT — Tier 18.
+//
+// Pourquoi : l'event-bus decouple emitter et listener. Une route HTTP
+// peut emit({type, payload}) avec un payload contenant du user input,
+// et un listener distant traiter ce payload — y compris dans un sink
+// (db.query, fs.writeFile, etc.). Le taint cross-block est invisible
+// aux rules intra-fn et meme aux rules cross-fn (TaintedArgumentToCall
+// ne traverse pas le bus).
+//
+// Approche conservatrice (sans EventPayloadFlow fact dedie) :
+//   1. Trouver les emits dans des http-routes (entry points)
+//   2. Trouver les listeners du meme eventName dans un autre fichier
+//   3. Si le listener contient un TaintSink → cross-block taint suspect
+//
+// Sentinel example :
+//   `webhooks/admin.ts:executeAdminCommand` emit('approval.resolved', payload)
+//   → `kernel/decision-journal.ts:handleApprovalResolved` listen + db.query
+//
+// Sources :
+//   - EmitsLiteral / EmitsConstRef (existants)
+//   - ListensLiteral / ListensConstRef (Tier 17)
+//   - EntryPoint (existant)
+//   - TaintSink (existant)
+//
+// Limites :
+//   - Pas de tracking direct du payload (faux positifs si l'event ne
+//     transporte pas d'input user, ou si le sink n'utilise pas le payload).
+//   - Vrai-positif si emit dans http-route + listener avec sink + meme
+//     eventName.
+//
+// Pattern ratchet : grandfather par (emitFile, listenFile, eventName).
+
+.decl EventCrossBlockGrandfathered(emitFile: symbol, listenFile: symbol, eventName: symbol)
+
+.decl EmitsLiteralFromRoute(file: symbol, eventName: symbol)
+EmitsLiteralFromRoute(F, E) :-
+    EmitsLiteral(F, _, E),
+    EntryPoint(F, "http-route", _).
+
+.decl ListensWithSink(file: symbol, eventName: symbol)
+ListensWithSink(F, E) :-
+    ListensLiteral(F, _, E),
+    TaintSink(F, _, _, _, _).
+
+Violation("COMPOSITE-EVENT-PAYLOAD-CROSS-BLOCK-TAINT", LF, 0,
+  "event emis depuis http-route, traite par listener contenant un sink — verifier le payload") :-
+    EmitsLiteralFromRoute(EF, E),
+    ListensWithSink(LF, E),
+    EF != LF,
+    !EventCrossBlockGrandfathered(EF, LF, E).

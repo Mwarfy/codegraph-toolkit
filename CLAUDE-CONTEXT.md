@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+fa4032f feat(invariants): Tier 17 — 11 nouvelles rules library + grandfathers
 c3b4e3c feat(codegraph): Tier 17 — 13 nouveaux facts emis + 2 nouveaux extractors
 50a01d9 feat(invariants): Tier 16 — 7 nouvelles rules library
 4418c90 feat(codegraph): Tier 16 extractors — crypto-algo + security-patterns + 2 sink kinds
@@ -111,7 +112,6 @@ c4bcf00 feat(phase4-tier13): CWE rules library — 4 CVE classics portees (CodeQ
 3579a04 feat(phase4-tier11+12): variable tracking + proof tree + 3 composites inspires
 17bc81c feat(phase4-tier10): taint analysis lite — extractors + composite (CodeQL inspiration)
 5e9aba3 docs(readme): update pour Phase 4 + Tiers 1-9
-76ca900 fix(tests): reconstruct secret prefixes au runtime — secret scanning
 ```
 
 ## Comment contribuer à ce brief
