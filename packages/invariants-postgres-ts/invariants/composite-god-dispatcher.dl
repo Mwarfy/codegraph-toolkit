@@ -1,0 +1,31 @@
+// COMPOSITE-GOD-DISPATCHER — théorie de l'information (Shannon 1948).
+//
+// Origine : aucun analyzer ne mesure l'entropie de la distribution
+// callee par fonction. Pourtant H(callees) > 4 bits sur un fonction
+// avec cyclomatic > 10 = signature classique d'un god dispatcher
+// (orchestre N actions hétéroclites).
+//
+// Distinction theorique :
+//   cyclomatic seul         : N branches (pas de signal sur diversite)
+//   entropy seul            : N callees (pas de signal sur control flow)
+//   cyclomatic ∧ entropy    : god dispatcher (orchestre + decide)
+//
+// Aucune des 2 disciplines (McCabe + Shannon) seule ne capture ce
+// pattern. La COMPOSITION les combine pour un signal nouveau.
+//
+// Sources :
+//   - SymbolEntropy(fromSymbol, callCount, distinctCallees, entropyX1000)
+//   - FunctionComplexity(file, name, line, cyclomatic, cognitive, ...)
+
+.decl GodDispatcherGrandfathered(symbol: symbol)
+
+Violation("COMPOSITE-GOD-DISPATCHER", S, 0,
+  "fonction haut-cyclomatic + haute-entropy callees — god dispatcher, refactor en strategy pattern") :-
+    SymbolEntropy(S, _, DistinctCallees, EntX1000),
+    EntX1000 > 4000,
+    DistinctCallees >= 10,
+    !GodDispatcherGrandfathered(S).
+
+// Grandfather list — 2026-05-01 (cross-discipline auto-disco).
+GodDispatcherGrandfathered("sentinel-core/src/api/server.ts:startAPI").
+GodDispatcherGrandfathered("sentinel-core/src/index.ts:startSystem").

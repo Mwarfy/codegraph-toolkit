@@ -73,6 +73,9 @@
 .decl FunctionComplexity(file: symbol, name: symbol, line: number, cyclomatic: number, cognitive: number, containingClass: symbol)
 .decl AllocationInLoop(file: symbol, line: number, allocKind: symbol, containingSymbol: symbol)
 .decl CycleSize(cycleId: symbol, size: number, sccSize: number)
+.decl SpectralMetric(scope: symbol, nodeCount: number, edgeCount: number, fiedlerX1000: number, cheegerBound: number)
+.decl SymbolEntropy(fromSymbol: symbol, callCount: number, distinctCallees: number, entropyX1000: number)
+.decl SignatureNearDuplicate(symbolA: symbol, symbolB: symbol, hamming: number)
 .decl SymbolCallEdge(fromFile: symbol, fromSymbol: symbol, toFile: symbol, toSymbol: symbol, line: number)
 .decl SymbolSignature(file: symbol, name: symbol, kind: symbol, line: number)
 .decl EntryPoint(file: symbol, kind: symbol, id: symbol)
@@ -141,6 +144,9 @@
 .input FunctionComplexity
 .input AllocationInLoop
 .input CycleSize
+.input SpectralMetric
+.input SymbolEntropy
+.input SignatureNearDuplicate
 .input SymbolCallEdge
 .input SymbolSignature
 .input EntryPoint

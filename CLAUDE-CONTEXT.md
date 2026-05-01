@@ -41,7 +41,7 @@
 
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
-- `packages/codegraph/src/core/types.ts` (in: 68) · gov by ADR-006
+- `packages/codegraph/src/core/types.ts` (in: 71) · gov by ADR-006
 - `packages/codegraph/src/incremental/queries.ts` (in: 22)
 - `packages/codegraph/src/incremental/database.ts` (in: 20)
 - `packages/salsa/dist/index.d.ts` (in: 19)
@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+bc4fce3 feat(invariants): 2 rules auto-decouvertes via pattern mining
 1cc41ea refactor(facts): extract 3 emit helpers + fix File/FileTag regression
 c3750da feat(toolkit): Top-5 graph theory uplift — PageRank + complexity + perf + SCC
 f35acd1 feat(toolkit): self-audit — 5 quick-wins + 2 meta-fix + dogfood gate
@@ -111,7 +112,6 @@ c3b4e3c feat(codegraph): Tier 17 — 13 nouveaux facts emis + 2 nouveaux extract
 10f4bf9 feat(invariants): Tier 15 — 21 nouvelles rules library + PHASE-5 backlog
 ecc5303 feat(codegraph): tainted-vars supporte les destructurings (Tier 15)
 fd50aa4 feat(datalog): comparison ops (>, <, >=, <=, !=) + 2nd pass post-aggregate
-f9a0e3d feat(phase4-tier14): cross-function taint + 4 CWE rules + Datalog aggregates
 ```
 
 ## Comment contribuer à ce brief

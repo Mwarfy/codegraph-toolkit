@@ -1,0 +1,25 @@
+// COMPOSITE-COPY-PASTE-FORK — théorie des codes (Hamming 1950).
+//
+// Origine : aucun analyzer TS/JS ne detecte les forks de fonctions
+// identiques (meme exportName, meme signature structurelle, files
+// differents). jscpd / simian font du token-based exact match qui
+// rate les copy-paste avec adaptations mineures.
+//
+// Approche Hamming : encoder la "shape" de chaque fonction (paramCount
+// + returnKind + kind + line bucket) sur un nombre compact de bits.
+// 2 fonctions avec MEME nom + Hamming ≤ 0 entre files differents =
+// copy-paste fork = candidat extraction de helper partage.
+//
+// Source : extractors/signature-duplication.ts.
+// Fact : SignatureNearDuplicate(symbolA, symbolB, hamming)
+
+.decl CopyPasteForkGrandfathered(symbolA: symbol, symbolB: symbol)
+
+Violation("COMPOSITE-COPY-PASTE-FORK", A, 0,
+  "fonction quasi-identique a l'autre file — extraire en helper partage") :-
+    SignatureNearDuplicate(A, B, 0),
+    !CopyPasteForkGrandfathered(A, B).
+
+// Grandfather list — 2026-05-01 (cross-discipline auto-disco).
+CopyPasteForkGrandfathered("sentinel-core/src/api/webhooks/admin.ts:pauseProject", "sentinel-core/src/project-manager.ts:pauseProject").
+CopyPasteForkGrandfathered("sentinel-core/src/kernel/block-policies-cache.ts:_resetCacheForTest", "sentinel-core/src/kernel/measurable-metrics-cache.ts:_resetCacheForTest").

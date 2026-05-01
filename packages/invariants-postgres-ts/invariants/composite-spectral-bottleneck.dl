@@ -1,0 +1,27 @@
+// COMPOSITE-SPECTRAL-BOTTLENECK — théorie spectrale (Fiedler 1973).
+//
+// Origine : aucun analyzer TS/JS du marché ne calcule la connectivité
+// algébrique. Pourtant le 2e plus petit eigenvalue du Laplacien (λ₂)
+// est un invariant fondamental pour la robustesse / partitionnabilité
+// des graphes.
+//
+// Cheeger inequality : λ₂/2 ≤ h(G) ≤ √(2λ₂)
+// h(G) = constante isoperimétrique = facilite de couper le graphe
+// en deux moities equivalentes.
+//
+// Application au code : λ₂ très bas (× 1000 < 50) sur un sous-graphe
+// signale que les modules cluster sont presque deconnectes — soit
+// frontiere artificielle (refactor pour separer plus proprement),
+// soit deja decouple naturellement (split candidate).
+//
+// Source : extractors/spectral-graph.ts.
+// Fact : SpectralMetric(scope, nodeCount, edgeCount, fiedlerX1000, cheegerBound)
+
+.decl SpectralBottleneckGrandfathered(scope: symbol)
+
+Violation("COMPOSITE-SPECTRAL-BOTTLENECK", S, 0,
+  "scope sous-graphe avec λ₂ tres bas — quasi-deconnecte, candidat split package") :-
+    SpectralMetric(S, N, _, F, _),
+    N >= 5,
+    F < 50,
+    !SpectralBottleneckGrandfathered(S).

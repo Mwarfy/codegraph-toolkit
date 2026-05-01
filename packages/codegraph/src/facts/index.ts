@@ -301,6 +301,7 @@ export async function exportFacts(
   relations.push(listenerLitRel, listenerConstRel, listenerDynRel)
 
   emitCodeQualityAndComplexityFacts(snapshot, relations)
+  emitCrossDisciplineFacts(snapshot, relations)
 
   // ─── Imports / ImportEdge ─────────────────────────────────────────────
   // `Imports` est binaire (pratique pour la jointure transitive) ;
@@ -1150,6 +1151,55 @@ function emitCodeQualityAndComplexityFacts(
     ])
   }
   relations.push(fnComplexityRel)
+}
+
+/**
+ * Cross-discipline metrics (Cycle 2bis) — emit Spectral, Entropy, SignatureDup
+ * facts depuis les compute-helpers correspondants. Origine : disciplines
+ * classiques en math/info theory pas portees aux analyzers TS/JS.
+ */
+function emitCrossDisciplineFacts(
+  snapshot: GraphSnapshot,
+  relations: RelationDef[],
+): void {
+  // ─── SpectralMetric (théorie spectrale, Fiedler λ₂) ─────────────────
+  const spectralRel: RelationDef = {
+    name: 'SpectralMetric',
+    decl: '(scope:symbol, nodeCount:number, edgeCount:number, fiedlerX1000:number, cheegerBound:number)',
+    rows: [],
+  }
+  for (const m of snapshot.spectralMetrics ?? []) {
+    spectralRel.rows.push([
+      sym(m.scope), num(m.nodeCount), num(m.edgeCount),
+      num(m.fiedlerX1000), num(m.cheegerBound),
+    ])
+  }
+  relations.push(spectralRel)
+
+  // ─── SymbolEntropy (théorie de l'information, Shannon) ──────────────
+  const entropyRel: RelationDef = {
+    name: 'SymbolEntropy',
+    decl: '(fromSymbol:symbol, callCount:number, distinctCallees:number, entropyX1000:number)',
+    rows: [],
+  }
+  for (const e of snapshot.symbolEntropy ?? []) {
+    entropyRel.rows.push([
+      sym(e.fromSymbol), num(e.callCount),
+      num(e.distinctCallees), num(e.entropyX1000),
+    ])
+  }
+  relations.push(entropyRel)
+
+  // ─── SignatureNearDuplicate (théorie des codes, Hamming) ────────────
+  const sigDupRel: RelationDef = {
+    name: 'SignatureNearDuplicate',
+    decl: '(symbolA:symbol, symbolB:symbol, hamming:number)',
+    rows: [],
+  }
+  for (const d of snapshot.signatureDuplicates ?? []) {
+    sigDupRel.rows.push([sym(d.symbolA), sym(d.symbolB), num(d.hamming)])
+  }
+  relations.push(sigDupRel)
 }
 
 function sym(value: string): string {

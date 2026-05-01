@@ -531,6 +531,42 @@ export interface GraphSnapshot {
   }>
 
   /**
+   * Spectral graph metrics — Fiedler eigenvalue λ₂ (Cycle 2bis cross-discipline).
+   * Cf. extractors/spectral-graph.ts. Calcule la connectivité algébrique
+   * par sous-graphe (scope = 3 path segments).
+   */
+  spectralMetrics?: Array<{
+    scope: string
+    nodeCount: number
+    edgeCount: number
+    fiedlerX1000: number
+    cheegerBound: number
+  }>
+
+  /**
+   * Symbol callee Shannon entropy (Cycle 2bis cross-discipline). Cf.
+   * extractors/symbol-entropy.ts.
+   */
+  symbolEntropy?: Array<{
+    fromSymbol: string
+    callCount: number
+    distinctCallees: number
+    entropyX1000: number
+  }>
+
+  /**
+   * Signature near-duplicates via Hamming distance (Cycle 2bis). Cf.
+   * extractors/signature-duplication.ts.
+   */
+  signatureDuplicates?: Array<{
+    symbolA: string
+    symbolB: string
+    hamming: number
+    signatureA: string
+    signatureB: string
+  }>
+
+  /**
    * Security patterns (Phase 5 Tier 16) — 4 facts complementaires
    * captures en un seul AST walk : secret-named vars passees a un call,
    * CORS misconfig, TLS unsafe options, Math.random pour secrets.

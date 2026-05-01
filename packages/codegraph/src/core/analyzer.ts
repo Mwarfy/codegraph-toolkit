@@ -49,6 +49,9 @@ import { analyzeSecurityPatterns, type SecurityPatternsAggregated } from '../ext
 import { analyzeEventListenerSites, type EventListenerSite } from '../extractors/event-listener-sites.js'
 import { analyzeCodeQualityPatterns, type CodeQualityPatternsAggregated } from '../extractors/code-quality-patterns.js'
 import { analyzeFunctionComplexity, type FunctionComplexity } from '../extractors/function-complexity.js'
+import { computeSpectralMetrics, type SpectralMetric } from '../extractors/spectral-graph.js'
+import { computeSymbolEntropy, type SymbolEntropyMetric } from '../extractors/symbol-entropy.js'
+import { detectSignatureDuplicates, type SignatureDuplicate } from '../extractors/signature-duplication.js'
 import { analyzeHardcodedSecrets, type HardcodedSecret } from '../extractors/hardcoded-secrets.js'
 import { analyzeBooleanParams, type BooleanParamSite } from '../extractors/boolean-params.js'
 import { analyzeDeadCode, type DeadCodeFinding } from '../extractors/dead-code.js'
@@ -580,6 +583,9 @@ async function runDeterministicDetectors(
   let eventListenerSites: EventListenerSite[] | undefined
   let codeQualityPatterns: CodeQualityPatternsAggregated | undefined
   let functionComplexity: FunctionComplexity[] | undefined
+  let spectralMetrics: SpectralMetric[] | undefined
+  let symbolEntropy: SymbolEntropyMetric[] | undefined
+  let signatureDuplicates: SignatureDuplicate[] | undefined
   let hardcodedSecrets: HardcodedSecret[] | undefined
   let booleanParams: BooleanParamSite[] | undefined
   let deadCode: DeadCodeFinding[] | undefined
@@ -703,6 +709,45 @@ async function runDeterministicDetectors(
   } catch (err) {
     timing.detectors['function-complexity'] = performance.now() - tFnComplex
     console.error(`  ✗ function-complexity failed: ${err}`)
+  }
+
+  // ─── Cross-discipline metrics (Cycle 2bis) ────────────────────────
+  // Composent des disciplines mathématiques sous-utilisees dans le code
+  // analysis : théorie spectrale (Fiedler), info theory (Shannon),
+  // coding theory (Hamming).
+  const tSpectral = performance.now()
+  try {
+    spectralMetrics = computeSpectralMetrics(snapshot.nodes, snapshot.edges)
+    timing.detectors['spectral-graph'] = performance.now() - tSpectral
+  } catch (err) {
+    timing.detectors['spectral-graph'] = performance.now() - tSpectral
+    console.error(`  ✗ spectral-graph failed: ${err}`)
+  }
+
+  const tEntropy = performance.now()
+  try {
+    if (snapshot.symbolRefs) {
+      symbolEntropy = computeSymbolEntropy(snapshot.symbolRefs)
+    }
+    timing.detectors['symbol-entropy'] = performance.now() - tEntropy
+  } catch (err) {
+    timing.detectors['symbol-entropy'] = performance.now() - tEntropy
+    console.error(`  ✗ symbol-entropy failed: ${err}`)
+  }
+
+  const tSigDup = performance.now()
+  try {
+    if (snapshot.typedCalls) {
+      signatureDuplicates = detectSignatureDuplicates(snapshot.typedCalls.signatures ?? [], {
+        hammingThreshold: 0,
+        sameKindOnly: true,
+        sameNameOnly: true,  // Same exportName = copy-paste avec rename file
+      })
+    }
+    timing.detectors['signature-duplication'] = performance.now() - tSigDup
+  } catch (err) {
+    timing.detectors['signature-duplication'] = performance.now() - tSigDup
+    console.error(`  ✗ signature-duplication failed: ${err}`)
   }
 
   const tHardcoded = performance.now()
@@ -842,6 +887,9 @@ async function runDeterministicDetectors(
   if (eventListenerSites) snapshot.eventListenerSites = eventListenerSites
   if (codeQualityPatterns) snapshot.codeQualityPatterns = codeQualityPatterns
   if (functionComplexity) snapshot.functionComplexity = functionComplexity
+  if (spectralMetrics) snapshot.spectralMetrics = spectralMetrics
+  if (symbolEntropy) snapshot.symbolEntropy = symbolEntropy
+  if (signatureDuplicates) snapshot.signatureDuplicates = signatureDuplicates
   if (hardcodedSecrets) snapshot.hardcodedSecrets = hardcodedSecrets
   if (booleanParams) snapshot.booleanParams = booleanParams
   if (deadCode) snapshot.deadCode = deadCode
