@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+40b2842 refactor(toolkit): SQL DROP/skip-rollbacks + disable noisy composite rules
 51d7e5f refactor(toolkit): sql-naming exemptions + ADD/RENAME ordering + edge-case patterns
 0c9d608 test(toolkit): contract tests pour CrossDisciplineDetector POC
 bbfa9d6 feat(toolkit): SQL ALTER TABLE tracking + CrossDisciplineDetector POC
@@ -111,7 +112,6 @@ dc48f25 feat(toolkit): 4 nouvelles disciplines mathématiques (8e→11e)
 691337e feat(toolkit): 8e discipline Newman-Girvan + 4 méta-composites cross-disciplines
 c003043 docs: update READMEs for v0.5.0 — 91 rules, multi-dir, 7 cross-discipline
 443e072 feat(datalog): runFromDirs accepte rulesDir array (multi-dir loader)
-18a37a7 chore(toolkit): retire 3 exports dead code (UnusedExport.facts)
 ```
 
 ## Comment contribuer à ce brief

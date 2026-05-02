@@ -5,17 +5,24 @@
 // hot paths, c'est mesurable en latence p99.
 //
 // Composite : AllocationInLoop ∧ AwaitInLoop dans la meme fonction
-// (signal "ce loop fait beaucoup, et alloue beaucoup"). Si en plus
-// le file est central (PageRank haut), c'est la priorite #1 d'optim.
+// ∧ file central (ModuleCentrality.pageRank > 200 = vraiment dans le
+// critical path). Sans le filter centrality, la rule firait sur TOUS
+// les loops avec await + allocation — la plupart sont cold paths
+// (init, restore, batch-purge) où GC pressure n'est pas mesurable.
 //
-// Source : extractors/code-quality-patterns (alloc + await).
+// CALIBRATION (mai 2026) : ajout PageRank > 200. Réduit ~220 → ~20%
+// les sites flaggés, garde uniquement le critical path.
+//
+// Source : extractors/code-quality-patterns (alloc + await) + ModuleCentrality.
 
 .decl HotAllocationGrandfathered(file: symbol, line: number)
 
 Violation("COMPOSITE-HOT-ALLOCATION", F, L,
-  "allocation dans une boucle qui fait aussi du I/O await — GC pressure sur hot path") :-
+  "allocation dans une boucle hot path (file central) — GC pressure mesurable") :-
     AllocationInLoop(F, L, _, S),
     AwaitInLoop(F, _, _, S),
+    ModuleCentrality(F, PR, _),
+    PR > 200,
     !HotAllocationGrandfathered(F, L).
 
 // Grandfather list — 2026-05-01 (auto-generated, 204 entries).
