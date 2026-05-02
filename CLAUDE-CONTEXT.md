@@ -72,11 +72,11 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/adr-toolkit/tests/fixtures/sample-project/src/services/state-service.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/src/core/detectors/cross-discipline-detector.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/b.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/c.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **FSM-ORPHAN** `ApprovalStatus#expired` — état déclaré mais jamais écrit dans le code  
   _→ supprimer l'état OU ajouter la transition manquante_
@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+51d7e5f refactor(toolkit): sql-naming exemptions + ADD/RENAME ordering + edge-case patterns
 0c9d608 test(toolkit): contract tests pour CrossDisciplineDetector POC
 bbfa9d6 feat(toolkit): SQL ALTER TABLE tracking + CrossDisciplineDetector POC
 7362f13 refactor(invariants): raffiner composite-orphan-file (Next.js framework-routed)
@@ -111,7 +112,6 @@ dc48f25 feat(toolkit): 4 nouvelles disciplines mathématiques (8e→11e)
 c003043 docs: update READMEs for v0.5.0 — 91 rules, multi-dir, 7 cross-discipline
 443e072 feat(datalog): runFromDirs accepte rulesDir array (multi-dir loader)
 18a37a7 chore(toolkit): retire 3 exports dead code (UnusedExport.facts)
-87f2ac1 feat(toolkit): Information Bottleneck (Tishby 1999) — 7e cross-discipline
 ```
 
 ## Comment contribuer à ce brief

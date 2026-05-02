@@ -6,11 +6,20 @@
  * Approche : regex robuste, pattern des migrations Sentinel-style.
  * Pas de tree-sitter (overkill — cf. docs/PHASE-2-SQL-DETECTOR-PLAN.md).
  *
+ * Timeline DROP/RENAME/ADD :
+ *   - CREATE TABLE → ajoute table
+ *   - ALTER ADD COLUMN → ajoute col à toutes les entrées matchant le nom
+ *   - ALTER RENAME COLUMN → renomme col (après ADD merge)
+ *   - DROP TABLE → retire la table SI elle n'apparaît dans aucun fichier
+ *     `schema.sql` post-pivot. Permet de retirer les tables dropping en
+ *     migration N (ex: dropshipping mig 039) sans tirer les FP.
+ *
+ * Rollback files (`db/rollbacks/`) sont exclus par défaut — ce sont des
+ * scripts d'urgence, pas le canonical schema. Override via opts.includeRollbacks.
+ *
  * Limitations connues v1 :
  *   - FK composites (multi-col) non supportées
  *   - Index sur expression (CREATE INDEX ... ON foo(lower(col))) skip
- *   - Pas de timeline DROP/RENAME (on agrège tout, le state final n'est
- *     pas reconstruit)
  *
  * Cf. axe Phase 2 du plan d'enrichissement.
  */
@@ -95,6 +104,17 @@ export interface SqlSchemaResult {
   primaryKeys: SqlPrimaryKey[]
 }
 
+/**
+ * Internal helper type for ALTER TABLE DROP TABLE tracking.
+ * Une table droppée sera exclue du résultat final SAUF si une migration
+ * ultérieure (numéro plus élevé) ou `schema.sql` la re-crée.
+ */
+interface DroppedTable {
+  table: string
+  file: string
+  line: number
+}
+
 // ═════════════════════════════════════════════════════════════════════
 // Discovery
 // ═════════════════════════════════════════════════════════════════════
@@ -103,6 +123,11 @@ const DEFAULT_GLOBS = ['**/*.sql']
 const SKIP_DIRS = new Set([
   'node_modules', '.git', 'dist', 'build', '.next',
   'coverage', '.turbo', '.cache', 'docker-data',
+  // Rollback scripts re-créent les tables droppées — c'est de la
+  // recovery, pas du canonical schema. Skip par défaut sinon les
+  // rules sql-naming/sql-audit-columns flagent des FP sur tables
+  // mortes (cf. mig 039 dropshipping cleanup).
+  'rollbacks',
 ])
 
 async function discoverSqlFiles(rootDir: string, globs: string[]): Promise<string[]> {
@@ -143,6 +168,7 @@ export async function analyzeSqlSchema(
   const foreignKeys: SqlForeignKey[] = []
   const addedColumns: AddedColumn[] = []
   const renamedColumns: RenamedColumn[] = []
+  const droppedTables: DroppedTable[] = []
 
   for (const file of sqlFiles) {
     let content: string
@@ -153,6 +179,54 @@ export async function analyzeSqlSchema(
     foreignKeys.push(...fileResult.foreignKeys)
     addedColumns.push(...fileResult.addedColumns)
     renamedColumns.push(...fileResult.renamedColumns)
+    droppedTables.push(...fileResult.droppedTables)
+  }
+
+  // Timeline DROP TABLE : retire les tables droppées du résultat final.
+  // Heuristique : une table est considérée "réellement droppée" si elle
+  // n'apparaît PAS dans `schema.sql` (canonical post-state). Si schema.sql
+  // la contient, c'est qu'elle a été re-créée OU droppée par accident
+  // historique mais re-existe — on garde.
+  //
+  // Rationale : `db/schema.sql` est typiquement régénéré post-migrations
+  // comme snapshot du schema courant. C'est notre source de vérité pour
+  // "ce qui existe en prod" vs "ce qui a existé un jour".
+  if (droppedTables.length > 0) {
+    // Match basename exact `schema.sql` — pas `000_initial_schema.sql` etc.
+    // Le canonical schema (post-migrations snapshot) est typiquement
+    // `db/schema.sql`. Les migrations historiques ne comptent pas comme
+    // "table vivante" — sinon une table créée en mig 000 puis droppée
+    // en mig 039 serait considérée vivante par sa présence dans 000.
+    const isCanonicalSchema = (file: string): boolean =>
+      path.basename(file) === 'schema.sql' && !file.includes('rollbacks/')
+
+    const livingTablesInSchemaSql = new Set<string>()
+    for (const t of tables) {
+      if (isCanonicalSchema(t.file)) {
+        livingTablesInSchemaSql.add(t.name)
+      }
+    }
+    const droppedNames = new Set(
+      droppedTables
+        .map((d) => d.table)
+        .filter((name) => !livingTablesInSchemaSql.has(name)),
+    )
+    if (droppedNames.size > 0) {
+      // Filter out toutes les entrées (CREATE TABLE + indexes + FKs)
+      // qui pointent vers des tables effectivement droppées.
+      for (let i = tables.length - 1; i >= 0; i--) {
+        if (droppedNames.has(tables[i].name)) tables.splice(i, 1)
+      }
+      for (let i = indexes.length - 1; i >= 0; i--) {
+        if (droppedNames.has(indexes[i].table)) indexes.splice(i, 1)
+      }
+      for (let i = foreignKeys.length - 1; i >= 0; i--) {
+        if (droppedNames.has(foreignKeys[i].fromTable) ||
+            droppedNames.has(foreignKeys[i].toTable)) {
+          foreignKeys.splice(i, 1)
+        }
+      }
+    }
   }
 
   // Cross-file merge : ALTER TABLE ADD COLUMN extend les tables existantes.
@@ -259,12 +333,13 @@ export function derivePrimaryKeys(tables: SqlTable[], indexes: SqlIndex[]): SqlP
 export function parseSqlFile(
   content: string,
   file: string,
-): { tables: SqlTable[]; indexes: SqlIndex[]; foreignKeys: SqlForeignKey[]; addedColumns: AddedColumn[]; renamedColumns: RenamedColumn[] } {
+): { tables: SqlTable[]; indexes: SqlIndex[]; foreignKeys: SqlForeignKey[]; addedColumns: AddedColumn[]; renamedColumns: RenamedColumn[]; droppedTables: DroppedTable[] } {
   const tables: SqlTable[] = []
   const indexes: SqlIndex[] = []
   const foreignKeys: SqlForeignKey[] = []
   const addedColumns: AddedColumn[] = []
   const renamedColumns: RenamedColumn[] = []
+  const droppedTables: DroppedTable[] = []
 
   // ─── CREATE TABLE ────────────────────────────────────────────────
   // Capture: nom + bloc parenthèses (avec parenthèses imbriquées).
@@ -376,6 +451,12 @@ export function parseSqlFile(
     // Skip si match a déjà été parsed comme FK (ALTER TABLE ... ADD CONSTRAINT FK ...)
     if (/FOREIGN\s+KEY/i.test(m[0])) continue
     if (/CONSTRAINT/i.test(m[0])) continue
+    // Skip table-level constraints sans CONSTRAINT keyword :
+    // `ALTER TABLE x ADD PRIMARY KEY (id)`, `ADD UNIQUE (col)`, `ADD CHECK (...)`.
+    // Sans ce skip, le parseur croit voir une col `PRIMARY` de type `KEY`
+    // → FP `column-not-snake-case` sur "PRIMARY".
+    const colName = m[2].toUpperCase()
+    if (colName === 'PRIMARY' || colName === 'UNIQUE' || colName === 'CHECK' || colName === 'EXCLUDE') continue
     addedColumns.push({
       table: stripSchema(m[1]),
       column: m[2],
@@ -404,7 +485,21 @@ export function parseSqlFile(
     })
   }
 
-  return { tables, indexes, foreignKeys, addedColumns, renamedColumns }
+  // ─── DROP TABLE ───────────────────────────────────────────────────
+  // Pattern : `DROP TABLE [IF EXISTS] table [CASCADE|RESTRICT]`.
+  // Une table droppée DOIT être retirée du résultat — sinon les rules
+  // sql-naming/sql-audit-columns flaggent des violations sur des tables
+  // mortes (cf. mig 039 dropshipping cleanup).
+  const dropTableRe = /DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(\w+(?:\.\w+)?)\s*(?:CASCADE|RESTRICT)?\s*[;,\n]/gi
+  while ((m = dropTableRe.exec(content)) !== null) {
+    droppedTables.push({
+      table: stripSchema(m[1]),
+      file,
+      line: lineNumberAt(content, m.index),
+    })
+  }
+
+  return { tables, indexes, foreignKeys, addedColumns, renamedColumns, droppedTables }
 }
 
 // Internal helper type for ALTER TABLE ADD COLUMN tracking

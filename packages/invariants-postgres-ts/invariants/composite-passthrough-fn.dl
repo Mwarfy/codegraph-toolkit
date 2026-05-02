@@ -1,36 +1,40 @@
-// COMPOSITE-PASSTHROUGH-FN — Information Bottleneck (Tishby 1999).
+// COMPOSITE-PASSTHROUGH-FN — DISABLED (mai 2026).
 //
-// Origine : aucun analyzer code n'utilise IB. Pourtant log(callers) ×
-// log(callees) capture la "richesse du flow" qui traverse une fonction.
+// Origine : Information Bottleneck (Tishby 1999). log(callers) ×
+// log(callees) capture la "richesse du flow" — IB(1,1) = candidat
+// inline.
 //
-// IB tres bas (~1000) : 1 caller × 1 callee = wrapper inutile (sauf
-// abstraction explicite). Candidate INLINE : supprimer la fonction et
-// remplacer ses call-sites par le call direct.
+// LIMITATION FONDAMENTALE DÉCOUVERTE :
+// `SymbolRefEdge` ne tracke QUE les CROSS-FILE refs (export-to-export).
+// Une fonction avec N helpers intra-fichier voit calleeCount=1 (le seul
+// cross-file ref qu'elle utilise vraiment, ex: `getPool`), même si son
+// body fait 30 lignes avec 5 helpers locaux. Audit Sentinel mai 2026
+// (52 grandfathers) montre que 95% des candidates IB(1,1) ne sont PAS
+// des passthroughs littéraux — ce sont des entry-functions normales
+// avec body substantiel et helpers locaux.
 //
-// Compose avec :
-//   - !TestedFile : si testé, l'inline casserait les tests (skip)
-//   - !articulation : si pas critique, inline safe
+// On peut composer avec `FunctionComplexity(_, _, _, 1, 0, _)` pour
+// requérir cyclomatic=1 ET cognitive=0, mais ça reste insuffisant —
+// un init-function (ex: `initDecisionJournal`) a cyclo=1, cog=0, mais
+// fait 3 calls de wiring listeners — pas inline-able.
 //
-// Threshold : score × 1000 = 1000 (1 × 1 caller/callee, log₂(2)² = 1).
+// VRAIE solution : full intra-file call tracking dans SymbolRefEdge.
+// Hors scope toolkit v0.5 — c'est un changement majeur de l'extracteur
+// de symboles AST.
 //
-// Raffinement Phase suivante : EXCLURE les fonctions dans des fichiers
-// HTTP route (pattern API normal — handler délègue à kernel/manager,
-// 1c×1c systématique). Audit Phase A avait montré 68 grandfathers FP
-// rule sur Sentinel : ~80% étaient des HTTP handlers.
-// Le ratchet Sentinel via SymbolFile + EntryPoint(http-route) nettoie.
+// EN ATTENDANT : rule désactivée. Les facts InformationBottleneck
+// restent émis (utiles pour d'autres queries — hubs, etc.) mais la
+// rule ne génère plus de Violation.
+//
+// Si on veut détecter les VRAIS passthroughs littéraux (`return f(args)`),
+// il faut un détecteur AST dédié, pas un proxy via IB.
 
 .decl PassthroughFnGrandfathered(symbol: symbol)
 
-// Helper : un fichier est-il dans la couche API ? Soit EntryPoint
-// http-route directement, soit FileTag "api" (handler/dispatcher
-// sous-file qui est délégué depuis un router parent).
+// Helper IsApiLayerFile gardé pour si la rule est ré-activée.
 .decl IsApiLayerFile(file: symbol)
 IsApiLayerFile(F) :- EntryPoint(F, "http-route", _).
 IsApiLayerFile(F) :- FileTag(F, "api").
 
-Violation("COMPOSITE-PASSTHROUGH-FN", S, 0,
-  "fonction passe-plat (1 caller, 1 callee) — candidate inline") :-
-    InformationBottleneck(S, 1, 1, _),
-    SymbolFile(S, F),
-    !IsApiLayerFile(F),
-    !PassthroughFnGrandfathered(S).
+// Rule désactivée — voir bloc commentaire ci-dessus.
+// Si jamais ré-activée, voir versions antérieures dans git history.

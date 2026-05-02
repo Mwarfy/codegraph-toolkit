@@ -1,27 +1,30 @@
-// COMPOSITE-LEGACY-HOT-ZONE — auto-decouverte via pattern mining.
+// COMPOSITE-LEGACY-HOT-ZONE — DISABLED (mai 2026).
 //
 // Origine : co-occurrence MagicNumber × TryCatchSwallow detectee a
-// lift 6.09 sur le corpus. Pattern caracteristique du legacy "ca marche
-// ne touche pas" :
-//   - MagicNumber : configs hardcodees (timeouts, thresholds)
-//   - TryCatchSwallow : gestion defensive faible (try/catch vide ou
-//     log-only)
+// lift 6.09 sur le corpus. Pattern auto-decouvert via pattern mining.
 //
-// Combine, ces 2 patterns signalent typiquement du code ecrit dans
-// l'urgence ou peu maintenu. Risque : a la moindre evolution des
-// requirements (timeout change, nouvelle erreur a surfacer), le code
-// craque silencieusement.
+// PROBLÈME (audit Sentinel mai 2026, 48 grandfathers) :
+// La rule signale les fichiers ayant À LA FOIS des magic numbers ET
+// des try/catch swallow. Mais les rules individuelles (`magic-numbers`,
+// `try-catch-swallow`) flagent déjà ces signaux. La composite n'ajoute
+// QUE de la redondance — elle attrape les mêmes fichiers que les
+// rules de base, multipliant les violations sans ajouter d'actionable.
 //
-// La rule N'A PAS ETE ECRITE PAR UN HUMAIN. Synthetisee depuis les
-// patterns observes.
+// Tous les fichiers grandfathered (kernel/scheduler.ts, llm-router.ts,
+// peer-review.ts, etc.) sont des fichiers métier importants — pas du
+// "legacy hot zone" au sens "ça marche, ne touche pas". Ce sont des
+// fichiers ACTIFS. Le signal est mal calibré.
+//
+// Pattern mining découverte ≠ signal actionable. La co-occurrence à
+// lift 6 est statistiquement réelle mais pas révélatrice en pratique.
+//
+// Désactivée — les rules de base (magic-numbers, try-catch-swallow)
+// gardent leur valeur individuelle.
 
 .decl LegacyHotZoneGrandfathered(file: symbol)
 
+// Helper relations gardées au cas où on voudrait re-explorer le pattern.
 .decl HasMagicNumberFile(file: symbol)
 HasMagicNumberFile(F) :- MagicNumber(F, _, _, _, _).
 
-Violation("COMPOSITE-LEGACY-HOT-ZONE", F, 0,
-  "magic numbers + silent errors = legacy hot zone, audit avant prochain change") :-
-    HasMagicNumberFile(F),
-    HasTryCatchSwallow(F),
-    !LegacyHotZoneGrandfathered(F).
+// Rule désactivée — voir bloc commentaire ci-dessus.

@@ -24,13 +24,19 @@
 //   - Migration progressive : A est rebranché en t, B suit en t+1
 //   - Build cascade : A change → tests B fail → fix B en t+1
 //
-// Threshold : excessConditionalX1000 ≥ 200 (= excess > 0.20).
-// Conservateur. Avec ≥3 observations on évite les artefacts.
+// Threshold : excessConditionalX1000 ≥ 500 (= excess > 0.50).
+//
+// CALIBRATION (mai 2026, audit Sentinel) : threshold 200 produisait
+// 29 grandfathers FP, tous sur des pairs domain-natural (kernel/event-bus
+// → kernel/scheduler, types.ts → index.ts, api/server.ts → index.ts).
+// Pour un projet solo, sequential coupling à 0.20 = bruit normal de
+// "j'ai touché des fichiers liés sur 2 commits". Signal actionable
+// commence à 0.50 (50% above baseline) — couplage VRAIMENT serré.
 
 .decl GrangerDriverGrandfathered(driver: symbol, follower: symbol)
 
 Violation("COMPOSITE-GRANGER-DRIVER", Driver, 0,
-  "Granger-cause >0.20 excess — driver est suivi par follower au commit t+1, couplage sequentiel implicite") :-
+  "Granger-cause >0.50 excess — driver est suivi par follower au commit t+1, couplage sequentiel tres serre") :-
     GrangerCausality(Driver, Follower, _, Excess),
-    Excess >= 200,
+    Excess >= 500,
     !GrangerDriverGrandfathered(Driver, Follower).
