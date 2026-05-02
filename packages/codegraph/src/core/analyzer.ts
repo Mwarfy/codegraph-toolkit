@@ -315,6 +315,23 @@ export async function analyze(
   // ─── 6b. New deterministic detectors (Sprint 12) ───────────────────
   if (!factsOnly) {
     await runDeterministicDetectors(config, files, readFile, sharedProject, snapshot, timing)
+  } else {
+    // ─── factsOnly always-run subset ─────────────────────────────────
+    // test-coverage est cheap (import-based mapping) ET load-bearing
+    // pour la rule composite-hub-untested (CI gate datalog). Sans lui,
+    // tout fichier hub testé apparaît comme untested → faux positifs
+    // bloquants au pre-commit. Cf. Sentinel pre-commit hook qui fait
+    // `codegraph facts --regen` (mode factsOnly) puis exécute
+    // datalog-invariants test : hub testé sans TestedFile → fail.
+    const tCovFO = performance.now()
+    try {
+      const testCoverageFO = await analyzeTestCoverage(config.rootDir, files, snapshot.edges)
+      snapshot.testCoverage = testCoverageFO
+      timing.detectors['test-coverage'] = performance.now() - tCovFO
+    } catch (err) {
+      timing.detectors['test-coverage'] = performance.now() - tCovFO
+      console.error(`  ✗ test-coverage (factsOnly) failed: ${err}`)
+    }
   }
 
   // ─── 7. Post-snapshot metrics phase ────────────────────────────────
