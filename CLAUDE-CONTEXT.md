@@ -48,7 +48,7 @@
 - `packages/codegraph/src/core/detector-registry.ts` (in: 18)
 - `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 14)
 - `packages/adr-toolkit/src/config.ts` (in: 10) · gov by ADR-002
-- `packages/codegraph-mcp/src/snapshot-loader.ts` (in: 9)
+- `packages/runtime-graph/src/core/types.ts` (in: 10)
 
 ## ⚠ ADR anchor suggestions
 
@@ -66,8 +66,6 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 > pas verdict. Une tension non explorée n'est pas un bug — c'est un saut
 > latéral possible que le sol stable rend testable.
 
-- **CYCLE** `packages/codegraph/src/extractors/_shared/sql-helpers.ts → packages/codegraph/src/extractors/sql-schema.ts` — boucle directe (2 fichiers)  
-  _→ inverser l'import OU extraire dans un 3e fichier_
 - **ORPHELIN** `packages/adr-toolkit/tests/fixtures/sample-project/src/core/event-bus.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/adr-toolkit/tests/fixtures/sample-project/src/services/state-service.ts` — aucun importeur  
@@ -96,10 +94,13 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ npm uninstall jest + npm test_
 - **DEP-UNUSED** `test-only-in-deps` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall test-only-in-deps + npm test_
+- **DEP-UNUSED** `unused-pkg` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
+  _→ npm uninstall unused-pkg + npm test_
 
 ## Activité récente (14 derniers jours)
 
 ```
+e9a2b44 feat(runtime-graph): Phase γ — 4 mathematical disciplines runtime + composite rules
 f642620 fix(runtime-graph): CLI rulesDir resolution via __dirname (no package.json export)
 cd9a769 feat(runtime-graph): Phase β — replay-tests + chaos + Express + MongoDB + config-driven
 ca252d2 fix(runtime-graph): retire grandfathers + refine rules + self-probe E2E validated
@@ -111,7 +112,6 @@ e65ea40 feat(runtime-graph): Phase α — runtime observability framework with d
 0c9d608 test(toolkit): contract tests pour CrossDisciplineDetector POC
 bbfa9d6 feat(toolkit): SQL ALTER TABLE tracking + CrossDisciplineDetector POC
 7362f13 refactor(invariants): raffiner composite-orphan-file (Next.js framework-routed)
-84544b9 refactor(invariants): raffiner extractor empty-catch + rule passthrough-fn
 ```
 
 ## Comment contribuer à ce brief

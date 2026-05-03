@@ -4,7 +4,9 @@
  * l'invariant fondamental capté par la rule sql-fk-needs-index.
  */
 
-import type { SqlForeignKey, SqlIndex, SqlFkWithoutIndex } from '../sql-schema.js'
+// Import depuis sql-types.ts (no cycle) au lieu de sql-schema.ts.
+// Cycle direct sql-helpers ↔ sql-schema cassé via extraction des types.
+import type { SqlForeignKey, SqlIndex, SqlFkWithoutIndex } from './sql-types.js'
 
 /**
  * Calcule l'ensemble des FK sans index correspondant sur leur source
