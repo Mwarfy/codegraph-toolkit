@@ -102,36 +102,35 @@ interface TriggerContext {
 
 // ─── Public API ─────────────────────────────────────────────────────────────
 
-export async function analyzeStateMachines(
-  rootDir: string,
-  files: string[],
+// Skip test/fixture files — leur FSM concepts (ApprovalStatus,
+// DocumentPhase, WorkerStatus) sont des declarations synthétiques
+// pour tester le detecteur, pas du code production a valider.
+const FSM_TEST_FILE_RE = /(\.test\.tsx?|\.spec\.tsx?|(^|\/)tests?\/|(^|\/)fixtures?\/)/
+
+function extractFileBundles(
   project: Project,
-  options: StateMachinesOptions = {},
-): Promise<StateMachine[]> {
-  const suffixes = options.suffixes ?? DEFAULT_SUFFIXES
-  const listenFns = new Set(options.listenFnNames ?? ['listen', 'on'])
-  const fileSet = new Set(files)
-
-  // ─── Per-file extraction (Salsa-isable) ─────────────────────────────
-  // Tous les artefacts qu'on peut tirer d'UN SourceFile sans cross-file
-  // dependency : concepts, fn ranges, listener/route triggers locaux,
-  // writes. Cette structure est calculable en parallèle et cachable
-  // par-fichier (cf. incremental/state-machines.ts).
-
-  // Skip test/fixture files — leur FSM concepts (ApprovalStatus,
-  // DocumentPhase, WorkerStatus) sont des declarations synthétiques
-  // pour tester le detecteur, pas du code production a valider.
-  const TEST_FILE_RE = /(\.test\.tsx?|\.spec\.tsx?|(^|\/)tests?\/|(^|\/)fixtures?\/)/
+  rootDir: string,
+  fileSet: Set<string>,
+  listenFns: Set<string>,
+  suffixes: string[],
+): Map<string, StateMachineFileBundle> {
   const fileBundles = new Map<string, StateMachineFileBundle>()
   for (const sf of project.getSourceFiles()) {
     const relPath = relativize(sf.getFilePath(), rootDir)
     if (!relPath || !fileSet.has(relPath)) continue
-    if (TEST_FILE_RE.test(relPath)) continue
+    if (FSM_TEST_FILE_RE.test(relPath)) continue
     fileBundles.set(relPath, extractStateMachineFileBundle(sf, relPath, listenFns, suffixes))
   }
+  return fileBundles
+}
 
-  // ─── Cross-file aggregation (concepts + triggers + writes) ──────────
+interface AggregatedFsmBundles {
+  concepts: StateConcept[]
+  triggerCtx: TriggerContext
+  writes: WriteSignal[]
+}
 
+function aggregateFsmBundles(fileBundles: Map<string, StateMachineFileBundle>): AggregatedFsmBundles {
   const concepts: StateConcept[] = []
   const conceptNames = new Set<string>()
   const triggerCtx: TriggerContext = {
@@ -140,8 +139,7 @@ export async function analyzeStateMachines(
   }
   const writes: WriteSignal[] = []
 
-  for (const [relPath, bundle] of fileBundles) {
-    void relPath
+  for (const bundle of fileBundles.values()) {
     for (const c of bundle.concepts) {
       if (conceptNames.has(c.name)) continue
       conceptNames.add(c.name)
@@ -157,38 +155,62 @@ export async function analyzeStateMachines(
     }
     writes.push(...bundle.writes)
   }
+  return { concepts, triggerCtx, writes }
+}
 
-  if (concepts.length === 0) return []
-
-  // Value → concept name (premier arrivé gagne en cas de conflit).
+function buildValueToConcept(concepts: StateConcept[]): Map<string, string> {
   const valueToConcept = new Map<string, string>()
   for (const c of concepts) {
     for (const s of c.states) {
       if (!valueToConcept.has(s)) valueToConcept.set(s, c.name)
     }
   }
+  return valueToConcept
+}
 
-  // ─── Pass 3b : SQL schema DEFAULT reading ───────────────────────────
-  // Les colonnes PG `DEFAULT 'value'` sont des writes implicites à l'INSERT
-  // (si la colonne n'est pas fournie). Sans ce pass, un state utilisé
-  // uniquement via DEFAULT apparaît orphan (cas typique : `ProjectStatus.draft`
-  // sur Sentinel — le default est `draft`, aucun INSERT ne le nomme).
-  if (options.sqlGlobs !== null) {
-    const sqlGlobs = options.sqlGlobs ?? ['**/*.sql']
-    const sqlFiles = await discoverSqlFiles(rootDir, sqlGlobs)
-    // Lit N SQL files en parallèle (indépendants), scan séquentiel.
-    const sqlContents = await Promise.all(
-      sqlFiles.map(async (sqlFile) => {
-        try {
-          return { sqlFile, content: await fs.readFile(path.join(rootDir, sqlFile), 'utf-8') }
-        } catch { return null /* skip silencieux */ }
-      }),
-    )
-    for (const entry of sqlContents) {
-      if (!entry) continue
-      scanSqlColumnDefaults(entry.content, entry.sqlFile, writes)
-    }
+/**
+ * Pass 3b : SQL schema DEFAULT reading. Les colonnes PG `DEFAULT 'value'`
+ * sont des writes implicites a l'INSERT. Sans ce pass, un state utilise
+ * uniquement via DEFAULT apparait orphan.
+ */
+async function appendSqlDefaultWrites(
+  rootDir: string,
+  options: StateMachinesOptions,
+  writes: WriteSignal[],
+): Promise<void> {
+  if (options.sqlGlobs === null) return
+  const sqlGlobs = options.sqlGlobs ?? ['**/*.sql']
+  const sqlFiles = await discoverSqlFiles(rootDir, sqlGlobs)
+  const sqlContents = await Promise.all(
+    sqlFiles.map(async (sqlFile) => {
+      try {
+        return { sqlFile, content: await fs.readFile(path.join(rootDir, sqlFile), 'utf-8') }
+      } catch { return null /* skip silencieux */ }
+    }),
+  )
+  for (const entry of sqlContents) {
+    if (!entry) continue
+    scanSqlColumnDefaults(entry.content, entry.sqlFile, writes)
   }
+}
+
+export async function analyzeStateMachines(
+  rootDir: string,
+  files: string[],
+  project: Project,
+  options: StateMachinesOptions = {},
+): Promise<StateMachine[]> {
+  const suffixes = options.suffixes ?? DEFAULT_SUFFIXES
+  const listenFns = new Set(options.listenFnNames ?? ['listen', 'on'])
+  const fileSet = new Set(files)
+
+  const fileBundles = extractFileBundles(project, rootDir, fileSet, listenFns, suffixes)
+  const { concepts, triggerCtx, writes } = aggregateFsmBundles(fileBundles)
+
+  if (concepts.length === 0) return []
+
+  const valueToConcept = buildValueToConcept(concepts)
+  await appendSqlDefaultWrites(rootDir, options, writes)
 
   return buildStateMachinesFromBundles(concepts, writes, triggerCtx, valueToConcept)
 }
@@ -198,66 +220,71 @@ export async function analyzeStateMachines(
  * context, construit les `StateMachine[]`. Réutilisé côté Salsa après
  * l'agrégation des bundles per-file.
  */
+function dedupeTransitions(transitions: StateTransition[]): StateTransition[] {
+  const seen = new Set<string>()
+  const deduped: StateTransition[] = []
+  for (const t of transitions) {
+    const k = `${t.trigger.kind}|${t.trigger.id}|${t.to}|${t.file}|${t.line}`
+    if (seen.has(k)) continue
+    seen.add(k)
+    deduped.push(t)
+  }
+  deduped.sort((a, b) => {
+    if (a.trigger.kind !== b.trigger.kind) return a.trigger.kind < b.trigger.kind ? -1 : 1
+    if (a.trigger.id !== b.trigger.id) return a.trigger.id < b.trigger.id ? -1 : 1
+    if (a.to !== b.to) return a.to < b.to ? -1 : 1
+    if (a.file !== b.file) return a.file < b.file ? -1 : 1
+    return a.line - b.line
+  })
+  return deduped
+}
+
+function buildMachineForConcept(
+  c: StateConcept,
+  writes: WriteSignal[],
+  triggerCtx: TriggerContext,
+  valueToConcept: Map<string, string>,
+): StateMachine {
+  const stateSet = new Set(c.states)
+  const relevant = writes.filter((w) => stateSet.has(w.value) && valueToConcept.get(w.value) === c.name)
+  const transitions: StateTransition[] = relevant.map((w) => ({
+    from: '*',
+    to: w.value,
+    trigger: resolveTrigger(w.container, triggerCtx),
+    file: w.file,
+    line: w.line,
+  }))
+  const deduped = dedupeTransitions(transitions)
+  const writtenStates = new Set(deduped.map((t) => t.to))
+  const orphanStates = c.states.filter((s) => !writtenStates.has(s))
+  const fromStates = new Set(deduped.filter((t) => t.from !== '*').map((t) => t.from as string))
+  const deadStates = [...writtenStates].filter((s) => !fromStates.has(s) && fromStates.size > 0)
+
+  return {
+    concept: c.name,
+    states: c.states,
+    transitions: deduped,
+    orphanStates,
+    deadStates,
+    detectionConfidence: deduped.length > 0 ? 'observed' : 'declared-only',
+  }
+}
+
 export function buildStateMachinesFromBundles(
   concepts: StateConcept[],
   writes: WriteSignal[],
   triggerCtx: TriggerContext,
   valueToConcept: Map<string, string>,
 ): StateMachine[] {
-  const machines: StateMachine[] = []
-
-  for (const c of concepts) {
-    const stateSet = new Set(c.states)
-    const relevant = writes.filter((w) => stateSet.has(w.value) && valueToConcept.get(w.value) === c.name)
-
-    const transitions: StateTransition[] = relevant.map((w) => ({
-      from: '*',
-      to: w.value,
-      trigger: resolveTrigger(w.container, triggerCtx),
-      file: w.file,
-      line: w.line,
-    }))
-
-    const seen = new Set<string>()
-    const deduped: StateTransition[] = []
-    for (const t of transitions) {
-      const k = `${t.trigger.kind}|${t.trigger.id}|${t.to}|${t.file}|${t.line}`
-      if (seen.has(k)) continue
-      seen.add(k)
-      deduped.push(t)
-    }
-
-    deduped.sort((a, b) => {
-      if (a.trigger.kind !== b.trigger.kind) return a.trigger.kind < b.trigger.kind ? -1 : 1
-      if (a.trigger.id !== b.trigger.id) return a.trigger.id < b.trigger.id ? -1 : 1
-      if (a.to !== b.to) return a.to < b.to ? -1 : 1
-      if (a.file !== b.file) return a.file < b.file ? -1 : 1
-      return a.line - b.line
-    })
-
-    const writtenStates = new Set(deduped.map((t) => t.to))
-    const orphanStates = c.states.filter((s) => !writtenStates.has(s))
-
-    const fromStates = new Set(deduped.filter((t) => t.from !== '*').map((t) => t.from as string))
-    const deadStates = [...writtenStates].filter((s) => !fromStates.has(s) && fromStates.size > 0)
-
-    machines.push({
-      concept: c.name,
-      states: c.states,
-      transitions: deduped,
-      orphanStates,
-      deadStates,
-      detectionConfidence: deduped.length > 0 ? 'observed' : 'declared-only',
-    })
-  }
-
+  const machines: StateMachine[] = concepts.map(c =>
+    buildMachineForConcept(c, writes, triggerCtx, valueToConcept),
+  )
   machines.sort((a, b) => {
     const ha = a.transitions.length > 0 ? 0 : 1
     const hb = b.transitions.length > 0 ? 0 : 1
     if (ha !== hb) return ha - hb
     return a.concept < b.concept ? -1 : a.concept > b.concept ? 1 : 0
   })
-
   return machines
 }
 
