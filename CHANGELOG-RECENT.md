@@ -5,7 +5,7 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T23:51:22Z
+Last update : 2026-05-03T23:52:55Z
 
 ## By type
 
@@ -19,6 +19,7 @@ Last update : 2026-05-03T23:51:22Z
 
 ### `refactor` (46)
 
+- **1898604** refactor(codegraph-mcp): split codegraphDrift (cyclo 19→5, cog 28→1) — drift.ts cleared — 2026-05-04
 - **ca65576** refactor(runtime-graph): split mergeFactsDirs (cyclo 18→2, cog 45→1) — cli.ts mergeFactsDirs cleared — 2026-05-04
 - **47c470a** refactor(codegraph): split HttpRouteDetector.detect (cyclo 20→1, cog 29→0) — http-routes.ts cleared — 2026-05-04
 - **78eeb86** refactor(codegraph): split parseSqlFile (cyclo 20→1, cog 32→0) — sql-schema.ts cleared — 2026-05-04
@@ -38,11 +39,11 @@ Last update : 2026-05-03T23:51:22Z
 - **bd9fcb0** refactor(codegraph): split printDiffSummary (cyclo 24→4, cog 42→3) — diff.ts cleared — 2026-05-04
 - **dc507d3** refactor(codegraph): split findArticulationPoints (cyclo 23→2, cog 46→0) — articulation-points.ts cleared — 2026-05-04
 - **df37db7** refactor(codegraph): split diffTypedCalls (cyclo 25→5, cog 30→0) — diff/typed-calls.ts cleared — 2026-05-04
-- **3814233** refactor(codegraph): split findSqlNamingViolations (cyclo 26→3, cog 42→3) — sql-naming.ts bomb-free — 2026-05-04
 
 
 ## Full history
 
+- **1898604** refactor(codegraph-mcp): split codegraphDrift (cyclo 19→5, cog 28→1) — drift.ts cleared — 2026-05-04
 - **ca65576** refactor(runtime-graph): split mergeFactsDirs (cyclo 18→2, cog 45→1) — cli.ts mergeFactsDirs cleared — 2026-05-04
 - **47c470a** refactor(codegraph): split HttpRouteDetector.detect (cyclo 20→1, cog 29→0) — http-routes.ts cleared — 2026-05-04
 - **78eeb86** refactor(codegraph): split parseSqlFile (cyclo 20→1, cog 32→0) — sql-schema.ts cleared — 2026-05-04
@@ -92,4 +93,3 @@ Last update : 2026-05-03T23:51:22Z
 - **c9e30bd** perf(toolkit): Salsa-iso magic-numbers detector — 539ms → 0ms warm (top hot detector eliminé) — 2026-05-04
 - **702a89f** refactor(toolkit): split codegraphContext (cyclo 50→<15) — context.ts ALL bombs cleared — 2026-05-03
 - **7369852** refactor(toolkit): split extractDeadCodeFileBundle (cyclo 50→3, cog 78→0) — dead-code.ts ALL bombs cleared — 2026-05-03
-- **8caddca** refactor(toolkit): split computeAffectedFromCli + scanTestsImportingAffected — cli/index.ts ALL bombs cleared — 2026-05-03

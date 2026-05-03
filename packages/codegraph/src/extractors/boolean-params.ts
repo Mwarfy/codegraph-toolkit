@@ -51,59 +51,96 @@ const SETTER_PREDICATE_RE = /^(set|is|has|can|should|enable|disable|toggle)/i
  */
 const TEST_FILE_RE = /(\.test\.tsx?|\.spec\.tsx?|(^|\/)tests?\/|(^|\/)fixtures?\/)/
 
-export function extractBooleanParamsFileBundle(
-  sf: SourceFile,
-  relPath: string,
-): BooleanParamsFileBundle {
-  if (TEST_FILE_RE.test(relPath)) return { sites: [] }
-  const sites: BooleanParamSite[] = []
+type ParamLike = {
+  getName(): string
+  getType(): { getText(): string }
+  getTypeNode(): Node | undefined
+}
 
-  const isExempt = makeIsExemptForMarker(sf, 'boolean-ok')
+interface FnScope {
+  name: string
+  params: ReadonlyArray<ParamLike>
+  line: number
+}
 
-  const checkFn = (
-    name: string,
-    params: ReadonlyArray<{ getName(): string; getType(): { getText(): string }; getTypeNode(): Node | undefined }>,
-    line: number,
-  ): void => {
-    if (isExempt(line)) return
-    if (params.length === 0) return
-    // Skip setters / predicates avec 1 param boolean — pattern explicite.
-    if (params.length === 1 && SETTER_PREDICATE_RE.test(name)) return
-
-    for (let i = 0; i < params.length; i++) {
-      const p = params[i]
-      const typeText = (p.getTypeNode()?.getText() ?? p.getType().getText()).trim()
-      // Match `boolean` ou `bool` exact. Skip `boolean | undefined` ou
-      // unions élargies — souvent un flag optionnel intentionnel.
-      if (typeText !== 'boolean' && typeText !== 'bool') continue
-      sites.push({
-        file: relPath,
-        name,
-        line,
-        paramIndex: i,
-        paramName: p.getName(),
-        totalParams: params.length,
-      })
-    }
-  }
-
+/** Itère les function-likes : décl, méthodes de classe, arrow vars assignés. */
+function* iterateFnScopes(sf: SourceFile): Generator<FnScope> {
   for (const fn of sf.getFunctions()) {
-    checkFn(fn.getName() ?? '(anonymous)', fn.getParameters() as any, fn.getStartLineNumber())
+    yield {
+      name: fn.getName() ?? '(anonymous)',
+      params: fn.getParameters() as any,
+      line: fn.getStartLineNumber(),
+    }
   }
   for (const cls of sf.getClasses()) {
     const className = cls.getName() ?? '(anonymous)'
     for (const method of cls.getMethods()) {
-      checkFn(`${className}.${method.getName()}`, method.getParameters() as any, method.getStartLineNumber())
+      yield {
+        name: `${className}.${method.getName()}`,
+        params: method.getParameters() as any,
+        line: method.getStartLineNumber(),
+      }
     }
   }
   for (const v of sf.getVariableDeclarations()) {
     const init = v.getInitializer()
     if (!init) continue
     if (!Node.isArrowFunction(init) && !Node.isFunctionExpression(init)) continue
-    checkFn(v.getName(), init.getParameters() as any, v.getStartLineNumber())
+    yield {
+      name: v.getName(),
+      params: init.getParameters() as any,
+      line: v.getStartLineNumber(),
+    }
   }
+}
 
+export function extractBooleanParamsFileBundle(
+  sf: SourceFile,
+  relPath: string,
+): BooleanParamsFileBundle {
+  if (TEST_FILE_RE.test(relPath)) return { sites: [] }
+  const sites: BooleanParamSite[] = []
+  const isExempt = makeIsExemptForMarker(sf, 'boolean-ok')
+
+  for (const scope of iterateFnScopes(sf)) {
+    if (isExempt(scope.line)) continue
+    pushBooleanParamSites(scope, relPath, sites)
+  }
   return { sites }
+}
+
+/**
+ * Skip patterns explicites :
+ *   - 0 params : rien à check.
+ *   - 1 param + setter/predicate name (setX, isY, hasZ) : pattern intentionnel.
+ *   - param non-`boolean`/`bool` : exclut les unions (`boolean | undefined`),
+ *     souvent un flag optionnel intentionnel.
+ */
+function pushBooleanParamSites(
+  scope: FnScope,
+  relPath: string,
+  sites: BooleanParamSite[],
+): void {
+  if (scope.params.length === 0) return
+  if (scope.params.length === 1 && SETTER_PREDICATE_RE.test(scope.name)) return
+
+  for (let i = 0; i < scope.params.length; i++) {
+    const p = scope.params[i]
+    if (!isExactBooleanParam(p)) continue
+    sites.push({
+      file: relPath,
+      name: scope.name,
+      line: scope.line,
+      paramIndex: i,
+      paramName: p.getName(),
+      totalParams: scope.params.length,
+    })
+  }
+}
+
+function isExactBooleanParam(p: ParamLike): boolean {
+  const typeText = (p.getTypeNode()?.getText() ?? p.getType().getText()).trim()
+  return typeText === 'boolean' || typeText === 'bool'
 }
 
 export async function analyzeBooleanParams(
