@@ -656,248 +656,10 @@ export async function exportFacts(
   relations.push(hardcodedSecretRel)
 
   emitTier234Facts(snapshot, relations)
-
-  // ─── SqlNamingViolation (Tier 5) ─────────────────────────────────────
-  const sqlNamingViolationRel: RelationDef = {
-    name: 'SqlNamingViolation',
-    decl: '(file:symbol, line:number, table:symbol, column:symbol, kind:symbol)',
-    rows: [],
-  }
-  for (const v of snapshot.sqlNamingViolations ?? []) {
-    sqlNamingViolationRel.rows.push([
-      sym(v.file),
-      num(v.line),
-      sym(v.table),
-      sym(v.column || '_'),
-      sym(v.kind),
-    ])
-  }
-  relations.push(sqlNamingViolationRel)
-
-  // ─── SqlMigrationOrderViolation (Tier 5) ────────────────────────────
-  const sqlMigOrderRel: RelationDef = {
-    name: 'SqlMigrationOrderViolation',
-    decl: '(file:symbol, line:number, fromTable:symbol, fromCol:symbol, toTable:symbol, fkMig:number, targetMig:number)',
-    rows: [],
-  }
-  for (const v of snapshot.sqlMigrationOrderViolations ?? []) {
-    sqlMigOrderRel.rows.push([
-      sym(v.file),
-      num(v.line),
-      sym(v.fromTable),
-      sym(v.fromColumn),
-      sym(v.toTable),
-      num(v.fkMigrationNumber),
-      num(v.targetMigrationNumber),
-    ])
-  }
-  relations.push(sqlMigOrderRel)
-
-  // ─── TruthPointWriter / TruthPointReader (Tier 7 prereq) ──────────────
-  // Promotion de snapshot.truthPoints[].writers[]/readers[] vers facts
-  // Datalog plats. Permet aux composites multi-relation de raisonner
-  // sur "fichier = writer du SSOT X". Dédup par (concept, file).
-  const truthPointWriterRel: RelationDef = {
-    name: 'TruthPointWriter',
-    decl: '(concept:symbol, file:symbol)',
-    rows: [],
-  }
-  const truthPointReaderRel: RelationDef = {
-    name: 'TruthPointReader',
-    decl: '(concept:symbol, file:symbol)',
-    rows: [],
-  }
-  if (snapshot.truthPoints) {
-    const writerSeen = new Set<string>()
-    const readerSeen = new Set<string>()
-    for (const tp of snapshot.truthPoints) {
-      for (const w of tp.writers ?? []) {
-        const key = tp.concept + '\x00' + w.file
-        if (writerSeen.has(key)) continue
-        writerSeen.add(key)
-        truthPointWriterRel.rows.push([sym(tp.concept), sym(w.file)])
-      }
-      for (const r of tp.readers ?? []) {
-        const key = tp.concept + '\x00' + r.file
-        if (readerSeen.has(key)) continue
-        readerSeen.add(key)
-        truthPointReaderRel.rows.push([sym(tp.concept), sym(r.file)])
-      }
-    }
-  }
-  relations.push(truthPointWriterRel, truthPointReaderRel)
-
-  // ─── TestCoverage (Tier 7 prereq) ────────────────────────────────────
-  // Un fichier source A des tests. La rule "fichier untested" est juste
-  // l'absence de cette relation dans une rule Datalog.
-  const testedFileRel: RelationDef = {
-    name: 'TestedFile',
-    decl: '(file:symbol)',
-    rows: [],
-  }
-  if (snapshot.testCoverage) {
-    for (const e of snapshot.testCoverage.entries) {
-      if (e.testFiles.length > 0) {
-        testedFileRel.rows.push([sym(e.sourceFile)])
-      }
-    }
-  }
-  relations.push(testedFileRel)
-
-  // ─── DriftSignalFact (Tier 7 prereq) ─────────────────────────────────
-  // Promotion de snapshot.driftSignals vers fact Datalog. Permet aux
-  // composites de combiner drift avec d'autres signaux (boolean param +
-  // wrapper-superfluous = double dette, etc.).
-  const driftSignalFactRel: RelationDef = {
-    name: 'DriftSignalFact',
-    decl: '(file:symbol, line:number, kind:symbol)',
-    rows: [],
-  }
-  for (const ds of snapshot.driftSignals ?? []) {
-    driftSignalFactRel.rows.push([sym(ds.file), num(ds.line), sym(ds.kind)])
-  }
-  relations.push(driftSignalFactRel)
-
-  // ─── CoChange (Tier 7 prereq) ────────────────────────────────────────
-  // Promotion de snapshot.coChangePairs. Jaccard * 100 pour rester en
-  // int Datalog. Émet les paires dans les 2 sens pour faciliter les
-  // joins symétriques côté rules.
-  const coChangeRel: RelationDef = {
-    name: 'CoChange',
-    decl: '(fileA:symbol, fileB:symbol, count:number, jaccardX100:number)',
-    rows: [],
-  }
-  if (snapshot.coChangePairs) {
-    const seen = new Set<string>()
-    for (const pair of snapshot.coChangePairs) {
-      const key1 = pair.from + '\x00' + pair.to
-      const key2 = pair.to + '\x00' + pair.from
-      if (seen.has(key1) || seen.has(key2)) continue
-      seen.add(key1)
-      const j100 = Math.round((pair.jaccard ?? 0) * 100)
-      coChangeRel.rows.push([sym(pair.from), sym(pair.to), num(pair.count), num(j100)])
-      coChangeRel.rows.push([sym(pair.to), sym(pair.from), num(pair.count), num(j100)])
-    }
-  }
-  relations.push(coChangeRel)
-
-  // ─── ResourceImbalance (Tier 6) ──────────────────────────────────────
-  const resourceImbalanceRel: RelationDef = {
-    name: 'ResourceImbalance',
-    decl: '(file:symbol, line:number, containingSymbol:symbol, pair:symbol, acquireCount:number, releaseCount:number)',
-    rows: [],
-  }
-  for (const r of snapshot.resourceImbalances ?? []) {
-    resourceImbalanceRel.rows.push([
-      sym(r.file),
-      num(r.line),
-      sym(r.containingSymbol || '_'),
-      sym(r.pair),
-      num(r.acquireCount),
-      num(r.releaseCount),
-    ])
-  }
-  relations.push(resourceImbalanceRel)
-
-  // ─── TaintSink (Tier 10) — sources/sinks pour taint analysis lite ───
-  const taintSinkRel: RelationDef = {
-    name: 'TaintSink',
-    decl: '(file:symbol, line:number, kind:symbol, callee:symbol, containingSymbol:symbol)',
-    rows: [],
-  }
-  for (const s of snapshot.taintSinks ?? []) {
-    taintSinkRel.rows.push([
-      sym(s.file),
-      num(s.line),
-      sym(s.kind),
-      sym(s.callee),
-      sym(s.containingSymbol || '_'),
-    ])
-  }
-  relations.push(taintSinkRel)
-
-  // ─── SanitizerCall (Tier 10) ────────────────────────────────────────
-  const sanitizerCallRel: RelationDef = {
-    name: 'SanitizerCall',
-    decl: '(file:symbol, line:number, callee:symbol, containingSymbol:symbol)',
-    rows: [],
-  }
-  for (const s of snapshot.sanitizerCalls ?? []) {
-    sanitizerCallRel.rows.push([
-      sym(s.file),
-      num(s.line),
-      sym(s.callee),
-      sym(s.containingSymbol || '_'),
-    ])
-  }
-  relations.push(sanitizerCallRel)
-
-  // ─── TaintedVarDecl + TaintedArgCall (Tier 11 — variable tracking) ──
-  const taintedVarDeclRel: RelationDef = {
-    name: 'TaintedVarDecl',
-    decl: '(file:symbol, containingSymbol:symbol, varName:symbol, line:number, source:symbol)',
-    rows: [],
-  }
-  const taintedArgCallRel: RelationDef = {
-    name: 'TaintedArgCall',
-    decl: '(file:symbol, line:number, callee:symbol, argVarName:symbol, argIndex:number, source:symbol, containingSymbol:symbol)',
-    rows: [],
-  }
-  if (snapshot.taintedVars) {
-    for (const d of snapshot.taintedVars.decls) {
-      taintedVarDeclRel.rows.push([
-        sym(d.file),
-        sym(d.containingSymbol || '_'),
-        sym(d.varName),
-        num(d.line),
-        sym(d.source),
-      ])
-    }
-    for (const ac of snapshot.taintedVars.argCalls) {
-      taintedArgCallRel.rows.push([
-        sym(ac.file),
-        num(ac.line),
-        sym(ac.callee),
-        sym(ac.argVarName),
-        num(ac.argIndex),
-        sym(ac.source),
-        sym(ac.containingSymbol || '_'),
-      ])
-    }
-  }
-  relations.push(taintedVarDeclRel, taintedArgCallRel)
-
-  // ─── TaintedArgumentToCall + FunctionParam (Tier 14 — cross-function) ─
-  const taintedArgumentToCallRel: RelationDef = {
-    name: 'TaintedArgumentToCall',
-    decl: '(callerFile:symbol, callerSymbol:symbol, callee:symbol, paramIndex:number, source:symbol)',
-    rows: [],
-  }
-  const functionParamRel: RelationDef = {
-    name: 'FunctionParam',
-    decl: '(file:symbol, symbol:symbol, paramName:symbol, paramIndex:number)',
-    rows: [],
-  }
-  if (snapshot.argumentsFacts) {
-    for (const ta of snapshot.argumentsFacts.taintedArgs) {
-      taintedArgumentToCallRel.rows.push([
-        sym(ta.callerFile),
-        sym(ta.callerSymbol),
-        sym(ta.callee),
-        num(ta.paramIndex),
-        sym(ta.source),
-      ])
-    }
-    for (const p of snapshot.argumentsFacts.params) {
-      functionParamRel.rows.push([
-        sym(p.file),
-        sym(p.symbol),
-        sym(p.paramName),
-        num(p.paramIndex),
-      ])
-    }
-  }
-  relations.push(taintedArgumentToCallRel, functionParamRel)
+  emitSqlViolationFacts(snapshot, relations)
+  emitTruthAndCoverageFacts(snapshot, relations)
+  emitDriftAndCoChangeFacts(snapshot, relations)
+  emitTaintFacts(snapshot, relations)
 
   // ─── Write to disk ────────────────────────────────────────────────────
   await fs.mkdir(options.outDir, { recursive: true })
@@ -948,6 +710,217 @@ export async function exportFacts(
 // Self-audit refactor : reduit la cyclomatic + cognitive de exportFacts
 // en isolant les groupes logiques en sub-fns. Output byte-identique
 // preserve (push order conserve dans exportFacts).
+
+/**
+ * SqlNamingViolation + SqlMigrationOrderViolation (Tier 5).
+ */
+function emitSqlViolationFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
+  const sqlNamingViolationRel: RelationDef = {
+    name: 'SqlNamingViolation',
+    decl: '(file:symbol, line:number, table:symbol, column:symbol, kind:symbol)',
+    rows: [],
+  }
+  for (const v of snapshot.sqlNamingViolations ?? []) {
+    sqlNamingViolationRel.rows.push([
+      sym(v.file), num(v.line), sym(v.table), sym(v.column || '_'), sym(v.kind),
+    ])
+  }
+  relations.push(sqlNamingViolationRel)
+
+  const sqlMigOrderRel: RelationDef = {
+    name: 'SqlMigrationOrderViolation',
+    decl: '(file:symbol, line:number, fromTable:symbol, fromCol:symbol, toTable:symbol, fkMig:number, targetMig:number)',
+    rows: [],
+  }
+  for (const v of snapshot.sqlMigrationOrderViolations ?? []) {
+    sqlMigOrderRel.rows.push([
+      sym(v.file), num(v.line), sym(v.fromTable), sym(v.fromColumn),
+      sym(v.toTable), num(v.fkMigrationNumber), num(v.targetMigrationNumber),
+    ])
+  }
+  relations.push(sqlMigOrderRel)
+}
+
+/**
+ * TruthPointWriter + TruthPointReader + TestedFile (Tier 7 prereq).
+ * Promotion de snapshot.truthPoints[].writers[]/readers[] vers facts
+ * Datalog plats. Dédup par (concept, file).
+ */
+function emitTruthAndCoverageFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
+  const truthPointWriterRel: RelationDef = {
+    name: 'TruthPointWriter',
+    decl: '(concept:symbol, file:symbol)',
+    rows: [],
+  }
+  const truthPointReaderRel: RelationDef = {
+    name: 'TruthPointReader',
+    decl: '(concept:symbol, file:symbol)',
+    rows: [],
+  }
+  if (snapshot.truthPoints) {
+    const writerSeen = new Set<string>()
+    const readerSeen = new Set<string>()
+    for (const tp of snapshot.truthPoints) {
+      for (const w of tp.writers ?? []) {
+        const key = tp.concept + '\x00' + w.file
+        if (writerSeen.has(key)) continue
+        writerSeen.add(key)
+        truthPointWriterRel.rows.push([sym(tp.concept), sym(w.file)])
+      }
+      for (const r of tp.readers ?? []) {
+        const key = tp.concept + '\x00' + r.file
+        if (readerSeen.has(key)) continue
+        readerSeen.add(key)
+        truthPointReaderRel.rows.push([sym(tp.concept), sym(r.file)])
+      }
+    }
+  }
+  relations.push(truthPointWriterRel, truthPointReaderRel)
+
+  const testedFileRel: RelationDef = {
+    name: 'TestedFile',
+    decl: '(file:symbol)',
+    rows: [],
+  }
+  if (snapshot.testCoverage) {
+    for (const e of snapshot.testCoverage.entries) {
+      if (e.testFiles.length > 0) {
+        testedFileRel.rows.push([sym(e.sourceFile)])
+      }
+    }
+  }
+  relations.push(testedFileRel)
+}
+
+/**
+ * DriftSignalFact + CoChange + ResourceImbalance (Tier 6/7).
+ * CoChange émise dans les 2 sens pour faciliter les joins symétriques.
+ */
+function emitDriftAndCoChangeFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
+  const driftSignalFactRel: RelationDef = {
+    name: 'DriftSignalFact',
+    decl: '(file:symbol, line:number, kind:symbol)',
+    rows: [],
+  }
+  for (const ds of snapshot.driftSignals ?? []) {
+    driftSignalFactRel.rows.push([sym(ds.file), num(ds.line), sym(ds.kind)])
+  }
+  relations.push(driftSignalFactRel)
+
+  const coChangeRel: RelationDef = {
+    name: 'CoChange',
+    decl: '(fileA:symbol, fileB:symbol, count:number, jaccardX100:number)',
+    rows: [],
+  }
+  if (snapshot.coChangePairs) {
+    const seen = new Set<string>()
+    for (const pair of snapshot.coChangePairs) {
+      const key1 = pair.from + '\x00' + pair.to
+      const key2 = pair.to + '\x00' + pair.from
+      if (seen.has(key1) || seen.has(key2)) continue
+      seen.add(key1)
+      const j100 = Math.round((pair.jaccard ?? 0) * 100)
+      coChangeRel.rows.push([sym(pair.from), sym(pair.to), num(pair.count), num(j100)])
+      coChangeRel.rows.push([sym(pair.to), sym(pair.from), num(pair.count), num(j100)])
+    }
+  }
+  relations.push(coChangeRel)
+
+  const resourceImbalanceRel: RelationDef = {
+    name: 'ResourceImbalance',
+    decl: '(file:symbol, line:number, containingSymbol:symbol, pair:symbol, acquireCount:number, releaseCount:number)',
+    rows: [],
+  }
+  for (const r of snapshot.resourceImbalances ?? []) {
+    resourceImbalanceRel.rows.push([
+      sym(r.file), num(r.line), sym(r.containingSymbol || '_'), sym(r.pair),
+      num(r.acquireCount), num(r.releaseCount),
+    ])
+  }
+  relations.push(resourceImbalanceRel)
+}
+
+/**
+ * Taint analysis facts (Tier 10/11/14) — TaintSink, SanitizerCall,
+ * TaintedVarDecl, TaintedArgCall, TaintedArgumentToCall, FunctionParam.
+ */
+function emitTaintFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
+  const taintSinkRel: RelationDef = {
+    name: 'TaintSink',
+    decl: '(file:symbol, line:number, kind:symbol, callee:symbol, containingSymbol:symbol)',
+    rows: [],
+  }
+  for (const s of snapshot.taintSinks ?? []) {
+    taintSinkRel.rows.push([
+      sym(s.file), num(s.line), sym(s.kind), sym(s.callee),
+      sym(s.containingSymbol || '_'),
+    ])
+  }
+  relations.push(taintSinkRel)
+
+  const sanitizerCallRel: RelationDef = {
+    name: 'SanitizerCall',
+    decl: '(file:symbol, line:number, callee:symbol, containingSymbol:symbol)',
+    rows: [],
+  }
+  for (const s of snapshot.sanitizerCalls ?? []) {
+    sanitizerCallRel.rows.push([
+      sym(s.file), num(s.line), sym(s.callee), sym(s.containingSymbol || '_'),
+    ])
+  }
+  relations.push(sanitizerCallRel)
+
+  const taintedVarDeclRel: RelationDef = {
+    name: 'TaintedVarDecl',
+    decl: '(file:symbol, containingSymbol:symbol, varName:symbol, line:number, source:symbol)',
+    rows: [],
+  }
+  const taintedArgCallRel: RelationDef = {
+    name: 'TaintedArgCall',
+    decl: '(file:symbol, line:number, callee:symbol, argVarName:symbol, argIndex:number, source:symbol, containingSymbol:symbol)',
+    rows: [],
+  }
+  if (snapshot.taintedVars) {
+    for (const d of snapshot.taintedVars.decls) {
+      taintedVarDeclRel.rows.push([
+        sym(d.file), sym(d.containingSymbol || '_'), sym(d.varName),
+        num(d.line), sym(d.source),
+      ])
+    }
+    for (const ac of snapshot.taintedVars.argCalls) {
+      taintedArgCallRel.rows.push([
+        sym(ac.file), num(ac.line), sym(ac.callee), sym(ac.argVarName),
+        num(ac.argIndex), sym(ac.source), sym(ac.containingSymbol || '_'),
+      ])
+    }
+  }
+  relations.push(taintedVarDeclRel, taintedArgCallRel)
+
+  const taintedArgumentToCallRel: RelationDef = {
+    name: 'TaintedArgumentToCall',
+    decl: '(callerFile:symbol, callerSymbol:symbol, callee:symbol, paramIndex:number, source:symbol)',
+    rows: [],
+  }
+  const functionParamRel: RelationDef = {
+    name: 'FunctionParam',
+    decl: '(file:symbol, symbol:symbol, paramName:symbol, paramIndex:number)',
+    rows: [],
+  }
+  if (snapshot.argumentsFacts) {
+    for (const ta of snapshot.argumentsFacts.taintedArgs) {
+      taintedArgumentToCallRel.rows.push([
+        sym(ta.callerFile), sym(ta.callerSymbol), sym(ta.callee),
+        num(ta.paramIndex), sym(ta.source),
+      ])
+    }
+    for (const p of snapshot.argumentsFacts.params) {
+      functionParamRel.rows.push([
+        sym(p.file), sym(p.symbol), sym(p.paramName), num(p.paramIndex),
+      ])
+    }
+  }
+  relations.push(taintedArgumentToCallRel, functionParamRel)
+}
 
 /**
  * SQL Schema (Phase 2) — emit 6 relations issues de l'extracteur
