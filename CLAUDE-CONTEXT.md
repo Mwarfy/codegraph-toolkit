@@ -185,6 +185,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+0485ce4 feat(toolkit): self-optim Niveau 2A + Niveau 4 — math cost predict + auto-synth Salsa
 3ca2f45 feat(toolkit): self-optim auto-loop — connect probe → diag → brief → scaffold
 ce4e6e8 perf(toolkit): deprecated-usage Salsa-isolation + math regression gate
 afd0965 perf(toolkit): self-discovered Salsa optimizations — warm runtime −40%
@@ -196,7 +197,6 @@ c484f1f refactor(codegraph): runDeterministicDetectors 279→108 LOC + git-fixtu
 fc1c79d feat(runtime-graph): Phase γ.2b — true time-series Lyapunov 1D
 5c78f3a feat(runtime-graph): Phase γ.2a — Granger causality runtime + time-series infra
 81b8fb9 fix(toolkit): self-detected defects via codegraph + runtime-graph
-e73e85d fix(codegraph): break direct cycle sql-helpers ↔ sql-schema via type extraction
 ```
 
 ## Comment contribuer à ce brief

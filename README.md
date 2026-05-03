@@ -2,16 +2,41 @@
 
 > **Rends ton projet TS lisible à un agent IA. Détecte les invariants architecturaux. Bloque les régressions structurelles avant qu'elles arrivent en prod.**
 
+> ⚠ **Status : POC personnel, alpha — pas encore publié sur npm.**
+> Le toolkit est dogfooded sur 1 projet réel ([Sentinel](https://github.com/Mwarfy/sentinel)).
+> Les heuristiques mathématiques (Lyapunov, Information Bottleneck, TDA persistent
+> homology, Granger) sont **inspirées** de leurs références scientifiques mais
+> implémentées comme heuristiques scalaires, **pas comme les vrais objets
+> mathématiques** (cf. disclaimer dans chaque fichier `extractors/*.ts`).
+
 ```bash
-npm install --save-dev @liby-tools/codegraph @liby-tools/adr-toolkit @liby-tools/codegraph-mcp \
-                       @liby-tools/datalog @liby-tools/invariants-postgres-ts
+# Install (mode dev — packages pas encore sur npm registry public)
+git clone https://github.com/Mwarfy/codegraph-toolkit.git
+cd codegraph-toolkit
+npm install
+npm run build
+# npm link les packages depuis le toolkit vers ton projet
 cd ton-projet
+npm link ../codegraph-toolkit/packages/codegraph
+npm link ../codegraph-toolkit/packages/adr-toolkit
+# (autres packages au besoin)
 npx adr-toolkit init --with-invariants postgres --with-claude-hooks
 ```
 
-C'est tout. Le toolkit détecte ta stack (Express/Hono/Next, raw SQL/Drizzle, mono ou monorepo), génère la config, installe **91 rules Datalog** (20 mono-relation + 56 composites + 8 CWE + 7 cross-discipline mathématique), wire les hooks git + Claude Code (PreToolUse + PostToolUse avec **live Datalog gate à 70ms par edit**), et te livre une mental map déterministe régénérée à chaque commit.
+C'est tout. Le toolkit détecte ta stack (Express/Hono/Next, raw SQL/Drizzle, mono ou monorepo), génère la config, installe **91 rules Datalog** (20 mono-relation + 56 composites + 8 CWE + 7 heuristiques inspirées de cross-discipline math), wire les hooks git + Claude Code (PreToolUse + PostToolUse avec **live Datalog gate à 70ms par edit**), et te livre une mental map déterministe régénérée à chaque commit.
 
-**74 relations Datalog émises** depuis 50+ extracteurs : graph theory (PageRank, Tarjan SCC, articulation points), théorie spectrale (Fiedler λ₂), théorie de l'information (Shannon entropy, Tishby information bottleneck), théorie des codes (Hamming distance), TDA (persistent homology), systèmes dynamiques (Lyapunov exponent), théorie des flots (Ford-Fulkerson min-cut). Première fois portées dans un analyzer TS/JS à notre connaissance.
+**74 relations Datalog émises** depuis 50+ extracteurs. Implémentations
+**rigoureuses** : graph theory (PageRank, Tarjan SCC, articulation points),
+théorie spectrale (Fiedler λ₂ via power iteration sur Laplacien — déterministe
+via van der Corput init), théorie des codes (Hamming distance), théorie des
+flots (Ford-Fulkerson min-cut).
+
+**Heuristiques inspirées** (PAS les vrais objets mathématiques — cf.
+disclaimers dans chaque fichier `extractors/*.ts`) : "Lyapunov-cochange"
+= log(avg co_change), "Information Bottleneck" = log fan-in × log fan-out,
+"persistent cycles" = fréquence temporelle, "Granger" = lag-1 conditional
+probability sur commits. Utiles comme signal heuristique, pas comme
+science formelle.
 
 ---
 

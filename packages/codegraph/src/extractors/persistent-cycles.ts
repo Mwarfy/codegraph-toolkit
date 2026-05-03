@@ -1,29 +1,35 @@
 /**
- * Persistent cycles — Topological Data Analysis (TDA) approximation.
+ * Cycle temporal frequency — heuristique INSPIRÉE par TDA persistent
+ * homology, **pas un véritable calcul d'homologie persistante**.
  *
- * Origine : la persistent homology (Edelsbrunner-Letscher-Zomorodian
- * 2002) etudie comment les invariants topologiques (composantes connexes
- * H₀, cycles H₁) apparaissent et disparaissent au cours d'une filtration.
+ * ⚠ HONESTY DISCLAIMER : la persistent homology
+ * (Edelsbrunner-Letscher-Zomorodian 2002) demande :
+ *   - construction d'un complexe simplicial (≠ graphe d'imports)
+ *   - filtration paramétrée (par ε ou edge weight desc)
+ *   - calcul des Betti numbers via boundary matrices et Smith normal form
+ *   - barcode (birth, death) en dim k via persistence pairing algorithm
  *
- * Application au code : un cycle d'imports qui APPARAIT puis DISPARAIT
- * dans l'historique git est probablement accidentel (introduit par un
- * commit specifique, retire par un refactor). A l'inverse, un cycle
- * present dans la majorite des snapshots historiques = cycle
- * STRUCTUREL inherent a l'architecture.
+ * Aucun de ces éléments n'est implémenté ici. Ce que l'extracteur
+ * calcule réellement :
  *
- * Distinction :
- *   - persistence faible (1-3 snapshots) : cycle accidentel, transient
- *   - persistence haute (≥ 50% des snapshots) : cycle inherent, design
- *     decision implicite. Souvent valide a accepter (gated) plutot
- *     qu'a essayer de refactorer.
+ *   persistence = appearances_in_snapshots / total_snapshots
  *
- * Approche pratique : pour chaque cycle (identifie par son id stable
- * = hash des nodes participants), compter dans combien de snapshots
- * historiques il apparait.
+ * C'est une **fréquence temporelle** (= dans combien de snapshots
+ * historiques le cycle apparaît). Le nom "persistent" est conservé
+ * pour compatibilité backward, mais le concept réel est
+ * "snapshot frequency", pas TDA persistence dim-1.
+ *
+ * NB : un VRAI calcul de persistence dim-0 sur edge-count filtration
+ * existe dans `runtime-graph/src/metrics/tda-persistence.ts` (γ.2c).
+ * Celui-ci est une heuristique git-historical différente.
+ *
+ * Utilité pratique (l'heuristique signal) :
+ *   - frequency < 10% snapshots : cycle transient (bug refactor)
+ *   - frequency ≥ 50% snapshots : cycle structurel (= accepter via gate)
  *
  * Compose avec composite-cycles + composite-nested-cycle :
- *   - cycle persistent (>50% snapshots) ∧ non-gated = vrai design issue
- *   - cycle transient (<10% snapshots) ∧ recent = bug refactor incomplet
+ *   - frequency haute ∧ non-gated = vrai design issue
+ *   - frequency basse ∧ recent = bug refactor incomplet
  */
 
 import * as fs from 'node:fs/promises'

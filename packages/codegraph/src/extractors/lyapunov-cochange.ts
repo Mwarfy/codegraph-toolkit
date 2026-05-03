@@ -1,27 +1,29 @@
 /**
- * Lyapunov exponent approximation — théorie des systèmes dynamiques.
+ * Co-change cascade score — heuristique INSPIRÉE par Lyapunov,
+ * **pas un véritable exposant de Lyapunov**.
  *
- * Origine : en physique, l'exposant de Lyapunov mesure la divergence
- * exponentielle de trajectoires initialement proches. λ > 0 = chaos
- * deterministe (sensibilite extreme aux conditions initiales).
+ * ⚠ HONESTY DISCLAIMER : le vrai exposant de Lyapunov d'un système
+ * dynamique est λ = lim (1/t) log(|δ(t)|/|δ(0)|) où δ(t) mesure la
+ * divergence de 2 trajectoires initialement proches dans un système
+ * d'évolution défini. Ici nous N'AVONS NI :
+ *   - système dynamique formel (juste des commits git successifs),
+ *   - trajectoires (juste des sets de fichiers modifiés par commit),
+ *   - mesure de séparation (juste un compte de co-changes).
  *
- * Application au code : si un changement à un fichier provoque, en
- * moyenne, un changement à K fichiers correlés au commit suivant, et
- * que K^N croit exponentiellement (K > 1), le systeme est "chaotique"
- * — petite perturbation explose en cascade de modifs.
+ * Ce que l'extracteur calcule réellement :
+ *   score = log(avg(co_change_count) + 1)
  *
- * Approximation pratique :
- *   λ_file = log(avg(co_change_count + 1)) sur les N derniers commits
+ * C'est une moyenne géométrique du fan-out de co-modification. Le
+ * nom historique "lyapunov" est conservé pour compatibilité backward
+ * mais le concept porté est "co-change cascade volatility", pas
+ * Lyapunov.
  *
- * Si λ > 0 (avg > 1 file co-change par commit touchant ce file) =
- * chaos. Si λ très grand (>2) = file qui declenche cascade refactor.
+ * Utilité pratique (l'heuristique signal) :
+ *   - score > 2 : fichier dont les modifs corrèlent avec ≥ 7 autres
+ *     fichiers dans les commits passés — candidat refactor cross-cutting.
+ *   - score < 1 : fichier isolé, modifs locales.
  *
- * Compose avec :
- *   - PageRank : λ haut + PageRank haut = file central qui propage
- *   - CoChange : variant temporel, λ aggrege la dynamique
- *
- * Source : utilise CoChange facts existants. Pas besoin d'extracteur
- * git additionnel — la donnee est deja calculee par co-change.ts.
+ * Source : utilise CoChange facts existants.
  */
 
 import type { CoChangePair } from './co-change.js'

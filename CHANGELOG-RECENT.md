@@ -1,0 +1,133 @@
+# Recent activity
+
+> Auto-generated from `git log` by `scripts/regen-changelog.sh`.
+> Reflects the last 50 commits, grouped by conventional
+> commit type. The semantic version per package lives in each
+> `package.json`.
+
+Last update : 2026-05-03T13:28:31Z
+
+## By type
+
+### `feat` (28)
+
+- **0485ce4** feat(toolkit): self-optim Niveau 2A + Niveau 4 — math cost predict + auto-synth Salsa — 2026-05-03
+- **3ca2f45** feat(toolkit): self-optim auto-loop — connect probe → diag → brief → scaffold — 2026-05-03
+- **67c5581** feat(toolkit): mathematical self-governance — 100% load-bearing files governed — 2026-05-03
+- **79c4fed** feat(runtime-graph): Phase γ.2c — TDA Persistent Homology dim-0 — 2026-05-03
+- **fc1c79d** feat(runtime-graph): Phase γ.2b — true time-series Lyapunov 1D — 2026-05-03
+- **5c78f3a** feat(runtime-graph): Phase γ.2a — Granger causality runtime + time-series infra — 2026-05-03
+- **e9a2b44** feat(runtime-graph): Phase γ — 4 mathematical disciplines runtime + composite rules — 2026-05-03
+- **cd9a769** feat(runtime-graph): Phase β — replay-tests + chaos + Express + MongoDB + config-driven — 2026-05-03
+- **e65ea40** feat(runtime-graph): Phase α — runtime observability framework with datalog query language — 2026-05-03
+- **bbfa9d6** feat(toolkit): SQL ALTER TABLE tracking + CrossDisciplineDetector POC — 2026-05-01
+- **dc48f25** feat(toolkit): 4 nouvelles disciplines mathématiques (8e→11e) — 2026-05-01
+- **691337e** feat(toolkit): 8e discipline Newman-Girvan + 4 méta-composites cross-disciplines — 2026-05-01
+- **443e072** feat(datalog): runFromDirs accepte rulesDir array (multi-dir loader) — 2026-05-01
+- **87f2ac1** feat(toolkit): Information Bottleneck (Tishby 1999) — 7e cross-discipline — 2026-05-01
+- **9ee3547** feat(toolkit): min-cut/max-flow — coût objectif de séparation packages — 2026-05-01
+- **4cb7ffa** feat(toolkit): TDA + Lyapunov — cycles structurels + chaos detection — 2026-05-01
+- **375d5a2** feat(toolkit): cross-discipline rules — Fiedler λ₂ + Shannon entropy + Hamming dup — 2026-05-01
+- **bc4fce3** feat(invariants): 2 rules auto-decouvertes via pattern mining — 2026-05-01
+- **c3750da** feat(toolkit): Top-5 graph theory uplift — PageRank + complexity + perf + SCC — 2026-05-01
+- **f35acd1** feat(toolkit): self-audit — 5 quick-wins + 2 meta-fix + dogfood gate — 2026-05-01
+
+
+### `fix` (5)
+
+- **81b8fb9** fix(toolkit): self-detected defects via codegraph + runtime-graph — 2026-05-03
+- **e73e85d** fix(codegraph): break direct cycle sql-helpers ↔ sql-schema via type extraction — 2026-05-03
+- **f642620** fix(runtime-graph): CLI rulesDir resolution via __dirname (no package.json export) — 2026-05-03
+- **ca252d2** fix(runtime-graph): retire grandfathers + refine rules + self-probe E2E validated — 2026-05-03
+- **8c49ff7** fix(analyzer): factsOnly mode must populate TestedFile — 2026-05-03
+
+
+### `perf` (2)
+
+- **ce4e6e8** perf(toolkit): deprecated-usage Salsa-isolation + math regression gate — 2026-05-03
+- **afd0965** perf(toolkit): self-discovered Salsa optimizations — warm runtime −40% — 2026-05-03
+
+
+### `refactor` (9)
+
+- **c484f1f** refactor(codegraph): runDeterministicDetectors 279→108 LOC + git-fixture determinism — 2026-05-03
+- **6eb35b2** refactor(toolkit): HotAllocation requires ModuleCentrality>200 (FP reduction) — 2026-05-02
+- **40b2842** refactor(toolkit): SQL DROP/skip-rollbacks + disable noisy composite rules — 2026-05-02
+- **51d7e5f** refactor(toolkit): sql-naming exemptions + ADD/RENAME ordering + edge-case patterns — 2026-05-01
+- **7362f13** refactor(invariants): raffiner composite-orphan-file (Next.js framework-routed) — 2026-05-01
+- **84544b9** refactor(invariants): raffiner extractor empty-catch + rule passthrough-fn — 2026-05-01
+- **8eb80b8** refactor(invariants): raffiner composite-async-sink-with-swallow — 2026-05-01
+- **81dd087** refactor(toolkit): extract NCD-detected duplications + analyzer.ts cross-discipline — 2026-05-01
+- **1cc41ea** refactor(facts): extract 3 emit helpers + fix File/FileTag regression — 2026-05-01
+
+
+### `chore` (3)
+
+- **173915c** chore(toolkit): self-discipline pass — close credibility gap from external review — 2026-05-03
+- **03ef857** chore(runtime-graph): OSS launch prep — alpha.4 publish-ready — 2026-05-03
+- **18a37a7** chore(toolkit): retire 3 exports dead code (UnusedExport.facts) — 2026-05-01
+
+
+### `docs` (2)
+
+- **c003043** docs: update READMEs for v0.5.0 — 91 rules, multi-dir, 7 cross-discipline — 2026-05-01
+- **3ecfa05** docs: cross-discipline metrics — synthese 6 disciplines portees — 2026-05-01
+
+
+### `test` (1)
+
+- **0c9d608** test(toolkit): contract tests pour CrossDisciplineDetector POC — 2026-05-01
+
+
+## Full history
+
+- **0485ce4** feat(toolkit): self-optim Niveau 2A + Niveau 4 — math cost predict + auto-synth Salsa — 2026-05-03
+- **3ca2f45** feat(toolkit): self-optim auto-loop — connect probe → diag → brief → scaffold — 2026-05-03
+- **ce4e6e8** perf(toolkit): deprecated-usage Salsa-isolation + math regression gate — 2026-05-03
+- **afd0965** perf(toolkit): self-discovered Salsa optimizations — warm runtime −40% — 2026-05-03
+- **67c5581** feat(toolkit): mathematical self-governance — 100% load-bearing files governed — 2026-05-03
+- **c484f1f** refactor(codegraph): runDeterministicDetectors 279→108 LOC + git-fixture determinism — 2026-05-03
+- **173915c** chore(toolkit): self-discipline pass — close credibility gap from external review — 2026-05-03
+- **03ef857** chore(runtime-graph): OSS launch prep — alpha.4 publish-ready — 2026-05-03
+- **79c4fed** feat(runtime-graph): Phase γ.2c — TDA Persistent Homology dim-0 — 2026-05-03
+- **fc1c79d** feat(runtime-graph): Phase γ.2b — true time-series Lyapunov 1D — 2026-05-03
+- **5c78f3a** feat(runtime-graph): Phase γ.2a — Granger causality runtime + time-series infra — 2026-05-03
+- **81b8fb9** fix(toolkit): self-detected defects via codegraph + runtime-graph — 2026-05-03
+- **e73e85d** fix(codegraph): break direct cycle sql-helpers ↔ sql-schema via type extraction — 2026-05-03
+- **e9a2b44** feat(runtime-graph): Phase γ — 4 mathematical disciplines runtime + composite rules — 2026-05-03
+- **f642620** fix(runtime-graph): CLI rulesDir resolution via __dirname (no package.json export) — 2026-05-03
+- **cd9a769** feat(runtime-graph): Phase β — replay-tests + chaos + Express + MongoDB + config-driven — 2026-05-03
+- **ca252d2** fix(runtime-graph): retire grandfathers + refine rules + self-probe E2E validated — 2026-05-03
+- **e65ea40** feat(runtime-graph): Phase α — runtime observability framework with datalog query language — 2026-05-03
+- **8c49ff7** fix(analyzer): factsOnly mode must populate TestedFile — 2026-05-03
+- **6eb35b2** refactor(toolkit): HotAllocation requires ModuleCentrality>200 (FP reduction) — 2026-05-02
+- **40b2842** refactor(toolkit): SQL DROP/skip-rollbacks + disable noisy composite rules — 2026-05-02
+- **51d7e5f** refactor(toolkit): sql-naming exemptions + ADD/RENAME ordering + edge-case patterns — 2026-05-01
+- **0c9d608** test(toolkit): contract tests pour CrossDisciplineDetector POC — 2026-05-01
+- **bbfa9d6** feat(toolkit): SQL ALTER TABLE tracking + CrossDisciplineDetector POC — 2026-05-01
+- **7362f13** refactor(invariants): raffiner composite-orphan-file (Next.js framework-routed) — 2026-05-01
+- **84544b9** refactor(invariants): raffiner extractor empty-catch + rule passthrough-fn — 2026-05-01
+- **8eb80b8** refactor(invariants): raffiner composite-async-sink-with-swallow — 2026-05-01
+- **81dd087** refactor(toolkit): extract NCD-detected duplications + analyzer.ts cross-discipline — 2026-05-01
+- **dc48f25** feat(toolkit): 4 nouvelles disciplines mathématiques (8e→11e) — 2026-05-01
+- **691337e** feat(toolkit): 8e discipline Newman-Girvan + 4 méta-composites cross-disciplines — 2026-05-01
+- **c003043** docs: update READMEs for v0.5.0 — 91 rules, multi-dir, 7 cross-discipline — 2026-05-01
+- **443e072** feat(datalog): runFromDirs accepte rulesDir array (multi-dir loader) — 2026-05-01
+- **18a37a7** chore(toolkit): retire 3 exports dead code (UnusedExport.facts) — 2026-05-01
+- **87f2ac1** feat(toolkit): Information Bottleneck (Tishby 1999) — 7e cross-discipline — 2026-05-01
+- **3ecfa05** docs: cross-discipline metrics — synthese 6 disciplines portees — 2026-05-01
+- **9ee3547** feat(toolkit): min-cut/max-flow — coût objectif de séparation packages — 2026-05-01
+- **4cb7ffa** feat(toolkit): TDA + Lyapunov — cycles structurels + chaos detection — 2026-05-01
+- **375d5a2** feat(toolkit): cross-discipline rules — Fiedler λ₂ + Shannon entropy + Hamming dup — 2026-05-01
+- **bc4fce3** feat(invariants): 2 rules auto-decouvertes via pattern mining — 2026-05-01
+- **1cc41ea** refactor(facts): extract 3 emit helpers + fix File/FileTag regression — 2026-05-01
+- **c3750da** feat(toolkit): Top-5 graph theory uplift — PageRank + complexity + perf + SCC — 2026-05-01
+- **f35acd1** feat(toolkit): self-audit — 5 quick-wins + 2 meta-fix + dogfood gate — 2026-05-01
+- **9a62387** feat(invariants): Tier 18 — event-payload-cross-block-taint + closure backlog — 2026-05-01
+- **fa4032f** feat(invariants): Tier 17 — 11 nouvelles rules library + grandfathers — 2026-05-01
+- **c3b4e3c** feat(codegraph): Tier 17 — 13 nouveaux facts emis + 2 nouveaux extractors — 2026-05-01
+- **50a01d9** feat(invariants): Tier 16 — 7 nouvelles rules library — 2026-05-01
+- **4418c90** feat(codegraph): Tier 16 extractors — crypto-algo + security-patterns + 2 sink kinds — 2026-05-01
+- **10f4bf9** feat(invariants): Tier 15 — 21 nouvelles rules library + PHASE-5 backlog — 2026-05-01
+- **ecc5303** feat(codegraph): tainted-vars supporte les destructurings (Tier 15) — 2026-05-01
+- **fd50aa4** feat(datalog): comparison ops (>, <, >=, <=, !=) + 2nd pass post-aggregate — 2026-05-01

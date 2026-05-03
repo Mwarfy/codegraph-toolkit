@@ -40,7 +40,13 @@ if [ -z "$SKIP_CONTEXT_BRIEF" ]; then
     echo -e "\033[0;32m  brief\033[0m ✓ brief regenerated"
 fi
 
-# 3. Self-optim brief injection (best-effort, no hard fail)
+# 3. CHANGELOG-RECENT regeneration (auto-generated from git log)
+if [ -z "$SKIP_CHANGELOG" ] && [ -x "$REPO_ROOT/scripts/regen-changelog.sh" ]; then
+  "$REPO_ROOT/scripts/regen-changelog.sh" > /dev/null 2>&1 && \
+    echo -e "\033[0;32m  changelog\033[0m ✓ CHANGELOG-RECENT.md updated" || true
+fi
+
+# 4. Self-optim brief injection (best-effort, no hard fail)
 #    Si .codegraph/facts-self-runtime/DetectorTiming.facts existe, on
 #    injecte la section "Self-optim opportunities" dans le brief. Le
 #    probe lui-même ne tourne PAS au post-commit (~10s, trop lent).

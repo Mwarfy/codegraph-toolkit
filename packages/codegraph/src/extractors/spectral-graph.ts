@@ -74,7 +74,13 @@ function fiedlerEigenvalue(adjacency: number[][]): number {
 
   // Power iteration sur L, projection orthogonale à v₁ = (1,1,...,1)/√n
   // (vecteur propre trivial pour λ₁ = 0).
-  let v = new Array<number>(n).fill(0).map(() => Math.random() - 0.5)
+  //
+  // DÉTERMINISME : init seedé deterministically (pas Math.random) — sinon
+  // le pipeline `analyze` produit un snapshot non-byte-équivalent entre 2
+  // runs, ce qui casse l'invariant ADR-001. Pattern utilisé : low-discrepancy
+  // sequence pseudo-random (van der Corput) qui est déterministe ET
+  // suffisamment "random-looking" pour briser la symétrie de v₁.
+  let v = new Array<number>(n).fill(0).map((_, i) => vanDerCorput(i + 1) - 0.5)
   for (let iter = 0; iter < 200; iter++) {
     // Project out v₁ (constant vector)
     const mean = v.reduce((a, b) => a + b, 0) / n
@@ -98,6 +104,25 @@ function fiedlerEigenvalue(adjacency: number[][]): number {
   }
   for (let i = 0; i < n; i++) { num += v[i] * Lv[i]; den += v[i] * v[i] }
   return den > 0 ? num / den : 0
+}
+
+/**
+ * Van der Corput sequence — low-discrepancy quasi-random suite déterministe.
+ * Pour chaque entier n, retourne un nombre dans [0,1) en inversant les bits
+ * de n en base 2. Garantit la non-symétrie nécessaire pour briser le
+ * vecteur trivial v₁ dans l'init du power iteration, sans Math.random.
+ *
+ * Référence : Halton sequence, base 2 case (van der Corput 1935).
+ */
+function vanDerCorput(n: number): number {
+  let result = 0
+  let denom = 1
+  while (n > 0) {
+    denom *= 2
+    result += (n % 2) / denom
+    n = Math.floor(n / 2)
+  }
+  return result
 }
 
 /**

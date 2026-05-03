@@ -1,31 +1,35 @@
 /**
- * Information Bottleneck approximation — Tishby/Pereira/Bialek 1999.
+ * Fan-in × fan-out chokepoint score — heuristique INSPIRÉE par
+ * Information Bottleneck (Tishby/Pereira/Bialek 1999), **pas le vrai
+ * Information Bottleneck**.
  *
- * Origine : "The Information Bottleneck Method" propose une mesure de
- * la quantite d'information qu'une variable Y transmet de X vers Z.
- * I(X; Z) sous contrainte I(X; Y) <= ε.
+ * ⚠ HONESTY DISCLAIMER : Le vrai Information Bottleneck calcule
+ * l'information mutuelle I(X; Z) sous la contrainte I(X; Y) ≤ ε,
+ * en optimisant un Lagrangien L = I(X; Z) − β·I(Z; Y). Cela
+ * demande :
+ *   - distributions de probabilité jointe P(X, Y),
+ *   - calcul de mutual information via somme sur états ×log(p/q),
+ *   - itération sur β (annealing trade-off).
  *
- * Application au code : chaque fonction F est un "bottleneck" entre
- * ses callers (input X) et ses callees (output Z). On approxime
- * I(callers; callees) via :
+ * Aucune de ces 3 conditions n'est implémentée ici. L'extracteur
+ * calcule un score scalaire trivial :
  *
- *   bottleneckScore = log₂(callerCount + 1) × log₂(calleeCount + 1)
+ *   chokepointScore = log₂(callerCount + 1) × log₂(calleeCount + 1)
  *
- * Cette approximation capture la "richesse" du flow d'information
- * traversant F :
- *   - score très bas (1×1=1) : fn passe-plat (1 caller, 1 callee) =
- *     candidate inline
- *   - score modéré (3×3=9) : fonction utility normale
- *   - score très haut (>30) : information hub (point de convergence
- *     puis redistribution = bon candidat extension point)
+ * C'est un PRODUIT de fan-in et fan-out passé au log. Ce n'est PAS
+ * de la mutual information. Le nom "InformationBottleneck" est
+ * conservé pour compatibilité backward, mais le concept réel est
+ * "log-product chokepoint score".
  *
- * Different de PageRank et entropy :
- *   - PageRank : centralite globale (importance dans le graphe entier)
- *   - Shannon entropy : diversite des callees (quoi appelé)
- *   - IB : largeur du transfer caller→callee (combien circule)
+ * Utilité pratique (l'heuristique signal) :
+ *   - score 1×1=0 : fn passe-plat (1 caller, 1 callee) → candidate inline
+ *   - score modéré (~9) : fonction utility normale
+ *   - score haut (>30) : node très connecté (caller diversity + callee
+ *     diversity haute) → candidat extension point ou refactor
  *
- * Les 3 mesures cohabitent : IB peut être bas pour une fonction haute
- * en entropy (1 caller mais beaucoup de callees diverses = wrapper).
+ * Cohabite avec PageRank (centralité globale) et Shannon entropy
+ * (diversité de callees) — les 3 mesurent différentes facettes du
+ * couplage, pas la mutual information de Tishby.
  */
 
 import type { SymbolRefEdge } from '../core/types.js'

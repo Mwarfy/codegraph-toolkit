@@ -1,41 +1,38 @@
 /**
- * Granger causality — qui drive vraiment qui dans les séquences git.
+ * Lag-1 conditional probability — heuristique INSPIRÉE par Granger
+ * causality (Granger 1969), **pas un test de Granger formel**.
  *
- * Origine : Clive Granger 1969 (Nobel Economics 2003). Une variable X
- * "Granger-cause" Y si la connaissance des valeurs PASSÉES de X améliore
- * la prédiction des valeurs FUTURES de Y, au-delà de ce que les valeurs
- * passées de Y permettent de prédire seules.
+ * ⚠ HONESTY DISCLAIMER : Le vrai test de Granger demande :
+ *   - 2 modèles VAR (vector autoregression) imbriqués :
+ *     restricted = AR(Y_t | Y_{t-1..t-k})
+ *     unrestricted = AR(Y_t | Y_{t-1..t-k}, X_{t-1..t-k})
+ *   - test F sur la réduction du résidu : F = ((SSR_r - SSR_ur)/k) / (SSR_ur/(N-2k-1))
+ *   - p-value vs seuil α
+ *   - séries TEMPORELLES régulières (Δt constant entre observations)
  *
- * Distinction critique vs corrélation :
- *   - Corrélation symétrique : A et B varient ensemble (Jaccard CoChange)
- *   - Causation directionnelle : A change PRÉCÉDE B change (Granger)
+ * Aucune de ces conditions n'est implémentée ici. De plus, les
+ * "pas de temps" sont ici les commits successifs git, qui sont
+ * IRRÉGULIERS (50 commits en 1 jour vs 0 commits pendant 1 mois) —
+ * ce ne sont pas des time series proprement dites.
  *
- * Application au code : sur les K derniers commits dans l'ordre temporel,
- * pour chaque paire (A, B), regarder la lag-correlation :
+ * Ce que l'extracteur calcule réellement :
+ *   excess = P(B in commit t+1 | A in commit t) − P(B in commit t+1)
  *
- *     P(B change at commit t | A changed at commit t-1) > P(B change at t)
+ * C'est l'excess conditional probability d'un évènement (B modifié)
+ * sachant un autre évènement à l'index commit précédent. Le nom
+ * "Granger" est conservé pour cohérence backward, mais le concept
+ * réel est "lag-1 commit-conditional excess probability".
  *
- * Si oui par marge significative = A Granger-cause B. Cela révèle le
- * "driver" architectural : si A bouge, B suit dans le commit suivant.
+ * Utilité pratique (l'heuristique signal) :
+ *   - excess > 0.15 (15 percentage points au-dessus du baseline) +
+ *     observations ≥ 3 = pattern lag-1 reproductible : "modifier A
+ *     entraîne souvent modifier B au prochain commit".
+ *   - Capture les couplages séquentiels qui ne se voient pas dans
+ *     un co-change lag-0 (Bayesian conditional dans le même commit).
  *
  * Différenciation vs Bayesian co-change conditional :
- *   - Bayesian P(B|A) : A et B changent dans le MÊME commit (lag 0)
- *   - Granger : A change à t, B change à t+1 (lag 1)
- *
- * Le pattern Granger révèle les vraies dépendances temporelles —
- * "j'ai modifié A, je dois modifier B au prochain commit pour faire
- * passer les tests / refléter la nouvelle interface". Capture les
- * couplages SÉQUENTIELS qui ne se voient pas dans le co-change.
- *
- * Test simplifié : on calcule l'excess conditional probability
- *
- *     excess = P(B at t+1 | A at t) - P(B at t+1)
- *
- * et on émet uniquement si excess > 0.15 (= signal de 15 percentage
- * points au-dessus du baseline). Ratchet bayésien sur fréquence
- * minimale (≥3 occurrences) pour éviter les artefacts statistiques.
- *
- * Discipline : économétrie / time-series analysis (Granger 1969).
+ *   - Bayesian P(B|A) : A et B dans le MÊME commit (lag 0)
+ *   - Cet extracteur : A à index t, B à index t+1 (lag 1)
  */
 
 import { execSync } from 'node:child_process'

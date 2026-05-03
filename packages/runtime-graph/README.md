@@ -1,8 +1,11 @@
 # @liby-tools/runtime-graph
 
 > **Phase γ.2 (alpha.4)** — runtime observability framework with datalog query language.
-> The OSS alternative to Datadog Live Code Coverage / JFrog X-Ray, with composable
-> mathematical rules instead of black-box dashboards.
+> POC for joining static call graphs with runtime OpenTelemetry data via composable
+> rules. **Not** a replacement for Datadog/JFrog — they do APM, this does
+> static×runtime correlation. The math labels (Lyapunov, Granger, TDA, IB) are
+> heuristics inspired by their references, NOT the rigorous mathematical objects
+> (cf. disclaimers dans `src/extractors/*.ts` du package `codegraph`).
 
 ## What it does
 

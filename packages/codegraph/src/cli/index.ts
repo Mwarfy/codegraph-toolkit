@@ -3,11 +3,27 @@
 /**
  * CodeGraph CLI
  *
- * Commands:
- *   analyze   Run all detectors, generate snapshot JSON
- *   diff      Compare two snapshots, show what changed
- *   orphans   List orphan nodes from a snapshot
- *   serve     Start a local HTTP server for the web viewer
+ * ⚠ GOD FILE WARNING (2176 LOC, 24+ commands) — Split planifié :
+ *   Ce fichier monolithique est à découper en `cli/commands/<name>.ts` —
+ *   un module par command group. Le pattern (PoC done) : extraire les
+ *   action handlers dans des modules dédiés, garder uniquement les
+ *   `.command()` registrations + option declarations ici.
+ *
+ *   Ordre de migration (par taille décroissante) :
+ *     - datalog-check (137 LOC)   → cli/commands/datalog-check.ts
+ *     - diff (230 LOC)            → cli/commands/diff.ts
+ *     - analyze (170 LOC)         → cli/commands/analyze.ts
+ *     - check (78 LOC)            → cli/commands/check.ts
+ *     - memory subcmds (135 LOC)  → cli/commands/memory.ts
+ *
+ *   Chaque extraction = 1 commit séparé pour facilité review + git
+ *   blame préservation. Voir `cli/commands/_template.ts` pour le shape.
+ *
+ * Commands actuels :
+ *   analyze, watch, map, synopsis, orphans, arch-check, reach,
+ *   affected, exports, taint, dsm, deps, diff, check, facts,
+ *   datalog-check, memory {list,mark,obsolete,delete,prune,export,where},
+ *   serve
  */
 
 import { Command } from 'commander'
@@ -32,6 +48,8 @@ import {
   loadMemoryRaw, addEntry, markObsolete, deleteEntry, recall,
   memoryPathFor, memoryDir,
 } from '../memory/store.js'
+// Extracted commands (P2a god-file split — commands moved to cli/commands/)
+import { runMemoryWhere } from './commands/memory-where.js'
 
 const program = new Command()
 
@@ -1741,11 +1759,7 @@ memoryCmd
   .command('where')
   .description('Print the memory store path for the current project')
   .option('-r, --root <path>', 'Project root (default: cwd)')
-  .action((opts) => {
-    const root = opts.root ?? process.cwd()
-    console.log(memoryPathFor(root))
-    console.log(chalk.dim(`  (memory dir: ${memoryDir()})`))
-  })
+  .action((opts) => runMemoryWhere(opts))
 
 // ─── serve ────────────────────────────────────────────────────────────────
 
