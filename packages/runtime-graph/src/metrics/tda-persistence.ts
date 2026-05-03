@@ -102,28 +102,62 @@ export function tdaPersistence(
 ): PersistentComponentFact[] {
   const opts = { ...DEFAULT_OPTIONS, ...options }
 
-  // 1. Build file-level edges : Map<"a→b", count> aggregating multi-edges.
   const fileEdges = aggregateToFileLevel(snap.callEdges)
   if (fileEdges.length === 0) return []
 
-  // 2. Collect all nodes and sort edges by count desc (filtration order).
+  const nodes = collectNodes(fileEdges)
+  if (nodes.size <= 1) return []
+
+  sortFiltrationEdges(fileEdges)
+
+  const uf = createUnionFind(nodes)
+  const deaths: PersistentComponentFact[] = []
+  for (const e of fileEdges) {
+    processFiltrationEdge(e, uf, opts.minPersistence, deaths)
+  }
+
+  if (opts.includeSurviving) emitSurvivors(nodes, uf, deaths)
+
+  deaths.sort(comparePersistence)
+  return deaths
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+interface FileLevelEdge { from: string; to: string; count: number }
+
+function collectNodes(fileEdges: FileLevelEdge[]): Set<string> {
   const nodes = new Set<string>()
   for (const e of fileEdges) {
     nodes.add(e.from)
     nodes.add(e.to)
   }
-  if (nodes.size <= 1) return []
+  return nodes
+}
 
-  // Stable sort : count desc, then (from, to) for determinism.
+/** Stable sort : count desc, puis (from, to) pour le déterminisme. */
+function sortFiltrationEdges(fileEdges: FileLevelEdge[]): void {
   fileEdges.sort((a, b) =>
     b.count - a.count
       || a.from.localeCompare(b.from)
       || a.to.localeCompare(b.to),
   )
+}
 
-  // 3. Union-find with size tracking and birth-count per representative.
-  // birthCount[rep] = count of the highest-weight edge incident to rep's component
-  // when the component was first formed (= when its rep first received an edge).
+/**
+ * Union-find with size tracking + birth-count per representative.
+ * birthCount[rep] = count of the highest-weight edge incident to rep's
+ * component when the component was first formed.
+ */
+interface UnionFind {
+  parent: Map<string, string>
+  rank: Map<string, number>
+  compSize: Map<string, number>
+  compBirthCount: Map<string, number>
+  find: (x: string) => string
+}
+
+function createUnionFind(nodes: Set<string>): UnionFind {
   const parent = new Map<string, string>()
   const rank = new Map<string, number>()
   const compSize = new Map<string, number>()
@@ -132,11 +166,9 @@ export function tdaPersistence(
     parent.set(n, n)
     rank.set(n, 0)
     compSize.set(n, 1)
-    // Born at "infinity" — for a singleton with no edge yet, birth is unset.
-    // We initialize to 0 ; will be overwritten by the first edge.
+    // Born at "infinity" — singleton with no edge yet, birth is unset.
   }
-
-  function find(x: string): string {
+  const find = (x: string): string => {
     let r = x
     while (parent.get(r) !== r) r = parent.get(r)!
     // Path compression
@@ -148,110 +180,124 @@ export function tdaPersistence(
     }
     return r
   }
+  return { parent, rank, compSize, compBirthCount, find }
+}
 
-  const deaths: PersistentComponentFact[] = []
+/**
+ * Pour un edge dans l'ordre de filtration, décide le rep mort, émet
+ * éventuellement un persistence event, et merge les composants.
+ */
+function processFiltrationEdge(
+  e: FileLevelEdge,
+  uf: UnionFind,
+  minPersistence: number,
+  deaths: PersistentComponentFact[],
+): void {
+  const ru = uf.find(e.from)
+  const rv = uf.find(e.to)
+  if (ru === rv) return  // dim-1 loop, γ.3 territory
 
-  for (const e of fileEdges) {
-    const ru = find(e.from)
-    const rv = find(e.to)
-    if (ru === rv) {
-      // Same component already — this edge creates a loop (dim-1 feature).
-      // γ.2c skip ; γ.3 will track these for cycle persistence.
-      continue
-    }
-    const su = compSize.get(ru)!
-    const sv = compSize.get(rv)!
+  const su = uf.compSize.get(ru)!
+  const sv = uf.compSize.get(rv)!
+  const { dyingRep, survivingRep } = pickDyingAndSurviving(ru, rv, uf.compBirthCount)
+  const dyingSize = dyingRep === ru ? su : sv
+  const dyingBirth = uf.compBirthCount.get(dyingRep)
 
-    // Convention de mort, par cas :
-    //   1. Both singletons (no compBirthCount) : lex-larger rep dies, no
-    //      meaningful persistence (both born at "∞" from filtration POV).
-    //      The merge forms a new 2-node cluster ; we don't emit death.
-    //   2. One singleton + one cluster : the SINGLETON dies (joins the
-    //      cluster). Cluster lives on, no real death event.
-    //   3. Two real clusters : the YOUNGER (lower birth count, formed by
-    //      weaker initial edge) dies. Persistence = birth - death > 0.
-    //      → C'est le seul cas qui produit un death event significatif.
-    const aBirth = compBirthCount.get(ru)
-    const bBirth = compBirthCount.get(rv)
-    const aIsCluster = aBirth !== undefined
-    const bIsCluster = bBirth !== undefined
-
-    let dyingRep: string
-    let survivingRep: string
-    if (aIsCluster && bIsCluster) {
-      // Younger dies (= cluster with smaller birth value, formed by weaker edge)
-      if (aBirth! < bBirth!) { dyingRep = ru; survivingRep = rv }
-      else if (aBirth! > bBirth!) { dyingRep = rv; survivingRep = ru }
-      else {
-        // Tie : lex-larger dies (deterministic)
-        dyingRep = ru < rv ? rv : ru
-        survivingRep = dyingRep === ru ? rv : ru
-      }
-    } else if (aIsCluster) {
-      dyingRep = rv; survivingRep = ru
-    } else if (bIsCluster) {
-      dyingRep = ru; survivingRep = rv
-    } else {
-      // Both singletons — lex-larger dies, but no real persistence
-      dyingRep = ru < rv ? rv : ru
-      survivingRep = dyingRep === ru ? rv : ru
-    }
-    const dyingSize = dyingRep === ru ? su : sv
-
-    const dyingBirth = compBirthCount.get(dyingRep)
-    const death = e.count
-    if (dyingBirth !== undefined) {
-      // Real cluster dying — emit persistence event
-      const persistence = dyingBirth - death
-      if (persistence >= opts.minPersistence) {
-        deaths.push({
-          rep: dyingRep,
-          birthCount: dyingBirth,
-          deathCount: death,
-          persistence,
-          size: dyingSize,
-        })
-      }
-    }
-
-    // Union dyingRep INTO survivingRep
-    parent.set(dyingRep, survivingRep)
-    compSize.set(survivingRep, su + sv)
-    rank.set(survivingRep, Math.max(rank.get(survivingRep) ?? 0, (rank.get(dyingRep) ?? 0) + 1))
-
-    // Surviving's birth :
-    //   - Si surviving était déjà cluster : garde sa birth (l'absorbé est mort)
-    //   - Si surviving était singleton + dying singleton (case 1) : nouvelle
-    //     cluster formée at this edge → birth = e.count
-    //   - Si surviving était singleton + dying cluster (impossible en notre
-    //     convention : singleton meurt toujours) — pas de cas.
-    if (compBirthCount.get(survivingRep) === undefined) {
-      compBirthCount.set(survivingRep, e.count)
-    }
-  }
-
-  // 4. Optionally emit the surviving component (infinite persistence).
-  if (opts.includeSurviving) {
-    const survivors = new Set<string>()
-    for (const n of nodes) survivors.add(find(n))
-    for (const rep of survivors) {
+  if (dyingBirth !== undefined) {
+    const persistence = dyingBirth - e.count
+    if (persistence >= minPersistence) {
       deaths.push({
-        rep,
-        birthCount: compBirthCount.get(rep) ?? 0,
-        deathCount: 0,
-        persistence: 0,
-        size: compSize.get(rep) ?? 1,
+        rep: dyingRep,
+        birthCount: dyingBirth,
+        deathCount: e.count,
+        persistence,
+        size: dyingSize,
       })
     }
   }
 
-  // Determinism : sort by persistence desc, then by rep asc.
-  deaths.sort((a, b) =>
-    b.persistence - a.persistence
-      || a.rep.localeCompare(b.rep),
-  )
+  mergeComponents(uf, dyingRep, survivingRep, su + sv, e.count)
+}
 
-  return deaths
+/**
+ * Convention de mort, par cas :
+ *   1. Both singletons : lex-larger rep dies, no meaningful persistence
+ *      (caller voit dyingBirth === undefined → pas d'event émis).
+ *   2. One singleton + one cluster : SINGLETON dies, cluster survit
+ *      (idem, dyingBirth undefined sur le singleton).
+ *   3. Two real clusters : YOUNGER dies (smaller birth = weaker initial
+ *      edge). C'est le seul cas qui émet un death event significatif.
+ */
+function pickDyingAndSurviving(
+  ru: string,
+  rv: string,
+  compBirthCount: Map<string, number>,
+): { dyingRep: string; survivingRep: string } {
+  const aBirth = compBirthCount.get(ru)
+  const bBirth = compBirthCount.get(rv)
+  const aIsCluster = aBirth !== undefined
+  const bIsCluster = bBirth !== undefined
+
+  if (aIsCluster && bIsCluster) {
+    if (aBirth! < bBirth!) return { dyingRep: ru, survivingRep: rv }
+    if (aBirth! > bBirth!) return { dyingRep: rv, survivingRep: ru }
+    // Tie : lex-larger dies (deterministic)
+    return ru < rv ? { dyingRep: rv, survivingRep: ru } : { dyingRep: ru, survivingRep: rv }
+  }
+  if (aIsCluster) return { dyingRep: rv, survivingRep: ru }
+  if (bIsCluster) return { dyingRep: ru, survivingRep: rv }
+  // Both singletons — lex-larger dies
+  return ru < rv ? { dyingRep: rv, survivingRep: ru } : { dyingRep: ru, survivingRep: rv }
+}
+
+/**
+ * Union dyingRep INTO survivingRep + maintain size/rank/birth :
+ *   - Surviving déjà cluster : garde sa birth.
+ *   - Surviving singleton + dying singleton : nouvelle cluster formée à
+ *     ce edge → birth = edgeCount.
+ *   - Surviving singleton + dying cluster : impossible (singleton meurt
+ *     toujours par convention pickDyingAndSurviving).
+ */
+function mergeComponents(
+  uf: UnionFind,
+  dyingRep: string,
+  survivingRep: string,
+  combinedSize: number,
+  edgeCount: number,
+): void {
+  uf.parent.set(dyingRep, survivingRep)
+  uf.compSize.set(survivingRep, combinedSize)
+  uf.rank.set(
+    survivingRep,
+    Math.max(uf.rank.get(survivingRep) ?? 0, (uf.rank.get(dyingRep) ?? 0) + 1),
+  )
+  if (uf.compBirthCount.get(survivingRep) === undefined) {
+    uf.compBirthCount.set(survivingRep, edgeCount)
+  }
+}
+
+/** Emit la composante survivante (jamais morte) en convention persistence=0. */
+function emitSurvivors(
+  nodes: Set<string>,
+  uf: UnionFind,
+  deaths: PersistentComponentFact[],
+): void {
+  const survivors = new Set<string>()
+  for (const n of nodes) survivors.add(uf.find(n))
+  for (const rep of survivors) {
+    deaths.push({
+      rep,
+      birthCount: uf.compBirthCount.get(rep) ?? 0,
+      deathCount: 0,
+      persistence: 0,
+      size: uf.compSize.get(rep) ?? 1,
+    })
+  }
+}
+
+/** Determinism : persistence desc, then rep asc. */
+function comparePersistence(a: PersistentComponentFact, b: PersistentComponentFact): number {
+  return b.persistence - a.persistence || a.rep.localeCompare(b.rep)
 }
 
 /**
