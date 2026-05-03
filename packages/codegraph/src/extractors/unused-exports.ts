@@ -482,6 +482,110 @@ export async function buildTestFilesIndex(rootDir: string): Promise<TestFilesInd
  * Helper pure : classifie les exports per file à partir des bundles +
  * index globaux. Pas d'I/O ni Project — réutilisable côté Salsa.
  */
+interface ClassifyContext {
+  filePath: string
+  decl: UnusedExportsDeclaredExport
+  allUsers: Set<string>
+  allTestUsers: Set<string>
+  dynamicSymbolHits: Set<string>
+}
+
+/**
+ * Classify confidence selon priorite : used > framework > tool-config >
+ * test-only > possibly-dynamic > local-only > safe-to-remove. La 1ere
+ * regle qui matche gagne (early-return guard clauses).
+ */
+function classifyExportConfidence(ctx: ClassifyContext): { confidence: ExportConfidence; reason?: string } {
+  const { filePath, decl, allUsers, allTestUsers, dynamicSymbolHits } = ctx
+  const name = decl.rawName
+
+  if (allUsers.size > 0 || decl.isReExport) {
+    return { confidence: 'used' }
+  }
+  if (isNextJsFrameworkExport(filePath, name)) {
+    return { confidence: 'used', reason: 'Next.js framework convention export (read reflectively by runtime)' }
+  }
+  if (isToolConfigExport(filePath, name)) {
+    return { confidence: 'used', reason: 'Tool config (read by runner)' }
+  }
+  if (allTestUsers.size > 0) {
+    return {
+      confidence: 'test-only',
+      reason: `imported by ${allTestUsers.size} test file(s): ${[...allTestUsers].slice(0, 3).map(f => shortPath(f)).join(', ')}`,
+    }
+  }
+  if (name !== 'default' && dynamicSymbolHits.has(name)) {
+    return {
+      confidence: 'possibly-dynamic',
+      reason: `symbol name "${name}" found in string literals (possible dynamic lookup)`,
+    }
+  }
+  if (decl.isUsedLocally) {
+    return {
+      confidence: 'local-only',
+      reason: `referenced in same file but not imported elsewhere — remove \`export\` keyword`,
+    }
+  }
+  return {
+    confidence: 'safe-to-remove',
+    reason: 'no imports in source, tests, or dynamic patterns',
+  }
+}
+
+interface ClassifyDeclArgs {
+  filePath: string
+  decl: UnusedExportsDeclaredExport
+  importUsageMap: Map<string, Set<string>>
+  nsUsers: Set<string>
+  dynamicSymbolHits: Set<string>
+  testIndex: TestFilesIndex
+}
+
+function classifyDeclaredExport(args: ClassifyDeclArgs): ExportSymbol {
+  const { filePath, decl, importUsageMap, nsUsers, dynamicSymbolHits, testIndex } = args
+  const name = decl.rawName
+
+  const key = name === 'default' ? `${filePath}:default` : `${filePath}:${name}`
+  const directUsers = importUsageMap.get(key) || new Set<string>()
+  const allUsers = new Set([...directUsers, ...nsUsers])
+  allUsers.delete(filePath)
+
+  const testHits = name !== 'default' ? (testIndex.symbolHits[name] || []) : []
+  const allTestUsers = new Set(testHits)
+
+  const { confidence, reason } = classifyExportConfidence({
+    filePath, decl, allUsers, allTestUsers, dynamicSymbolHits,
+  })
+
+  return {
+    name: decl.symbolName,
+    kind: decl.kind,
+    line: decl.line,
+    usageCount: allUsers.size,
+    usedBy: allUsers.size > 0 ? [...allUsers].sort() : undefined,
+    reExport: decl.isReExport || undefined,
+    confidence,
+    reason,
+  }
+}
+
+function summarizeFileExports(filePath: string, fileExports: ExportSymbol[]): FileExportInfo {
+  const unusedCount = fileExports.filter(e => e.usageCount === 0 && !e.reExport).length
+  const byConfidence: Record<ExportConfidence, number> = {
+    'used': 0, 'test-only': 0, 'possibly-dynamic': 0, 'local-only': 0, 'safe-to-remove': 0,
+  }
+  for (const e of fileExports) {
+    if (e.confidence) byConfidence[e.confidence]++
+  }
+  return {
+    file: filePath,
+    exports: fileExports.sort((a, b) => a.line - b.line),
+    unusedCount,
+    totalCount: fileExports.length,
+    byConfidence,
+  }
+}
+
 export function classifyExportsFromBundles(
   files: string[],
   bundlesByFile: Map<string, UnusedExportsFileBundle>,
@@ -496,81 +600,13 @@ export function classifyExportsFromBundles(
   for (const [filePath, bundle] of bundlesByFile) {
     if (!fileSet.has(filePath)) continue
 
-    const fileExports: ExportSymbol[] = []
     const nsUsers = namespaceImporters.get(filePath) || new Set<string>()
-
-    for (const decl of bundle.declaredExports) {
-      const name = decl.rawName
-      const symbolName = decl.symbolName
-      const line = decl.line
-      const isReExport = decl.isReExport
-
-      // Source usage
-      const key = name === 'default' ? `${filePath}:default` : `${filePath}:${name}`
-      const directUsers = importUsageMap.get(key) || new Set<string>()
-      const allUsers = new Set([...directUsers, ...nsUsers])
-      allUsers.delete(filePath)
-
-      // Test usage (lightweight regex-based)
-      const testHits = name !== 'default'
-        ? (testIndex.symbolHits[name] || [])
-        : []
-      const allTestUsers = new Set(testHits)
-
-      // Classify confidence
-      let confidence: ExportConfidence = 'used'
-      let reason: string | undefined
-
-      if (allUsers.size > 0 || isReExport) {
-        confidence = 'used'
-      } else if (isNextJsFrameworkExport(filePath, name)) {
-        confidence = 'used'
-        reason = 'Next.js framework convention export (read reflectively by runtime)'
-      } else if (isToolConfigExport(filePath, name)) {
-        confidence = 'used'
-        reason = 'Tool config (read by runner)'
-      } else if (allTestUsers.size > 0) {
-        confidence = 'test-only'
-        reason = `imported by ${allTestUsers.size} test file(s): ${[...allTestUsers].slice(0, 3).map(f => shortPath(f)).join(', ')}`
-      } else if (name !== 'default' && dynamicSymbolHits.has(name)) {
-        confidence = 'possibly-dynamic'
-        reason = `symbol name "${name}" found in string literals (possible dynamic lookup)`
-      } else if (decl.isUsedLocally) {
-        confidence = 'local-only'
-        reason = `referenced in same file but not imported elsewhere — remove \`export\` keyword`
-      } else if (allUsers.size === 0 && !isReExport) {
-        confidence = 'safe-to-remove'
-        reason = 'no imports in source, tests, or dynamic patterns'
-      }
-
-      fileExports.push({
-        name: symbolName,
-        kind: decl.kind,
-        line,
-        usageCount: allUsers.size,
-        usedBy: allUsers.size > 0 ? [...allUsers].sort() : undefined,
-        reExport: isReExport || undefined,
-        confidence,
-        reason,
-      })
-    }
+    const fileExports: ExportSymbol[] = bundle.declaredExports.map((decl) =>
+      classifyDeclaredExport({ filePath, decl, importUsageMap, nsUsers, dynamicSymbolHits, testIndex }),
+    )
 
     if (fileExports.length > 0) {
-      const unusedCount = fileExports.filter(e => e.usageCount === 0 && !e.reExport).length
-      const byConfidence: Record<ExportConfidence, number> = {
-        'used': 0, 'test-only': 0, 'possibly-dynamic': 0, 'local-only': 0, 'safe-to-remove': 0,
-      }
-      for (const e of fileExports) {
-        if (e.confidence) byConfidence[e.confidence]++
-      }
-
-      results.push({
-        file: filePath,
-        exports: fileExports.sort((a, b) => a.line - b.line),
-        unusedCount,
-        totalCount: fileExports.length,
-        byConfidence,
-      })
+      results.push(summarizeFileExports(filePath, fileExports))
     }
   }
 
