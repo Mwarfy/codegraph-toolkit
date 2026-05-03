@@ -5,7 +5,7 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T15:18:52Z
+Last update : 2026-05-03T15:19:18Z
 
 ## By type
 
@@ -50,7 +50,7 @@ Last update : 2026-05-03T15:18:52Z
 - **afd0965** perf(toolkit): self-discovered Salsa optimizations — warm runtime −40% — 2026-05-03
 
 
-### `refactor` (10)
+### `refactor` (9)
 
 - **5f8d691** refactor(toolkit): split god-files + fix REDOS detector + tests hubs — 2026-05-03
 - **c484f1f** refactor(codegraph): runDeterministicDetectors 279→108 LOC + git-fixture determinism — 2026-05-03
@@ -61,11 +61,11 @@ Last update : 2026-05-03T15:18:52Z
 - **84544b9** refactor(invariants): raffiner extractor empty-catch + rule passthrough-fn — 2026-05-01
 - **8eb80b8** refactor(invariants): raffiner composite-async-sink-with-swallow — 2026-05-01
 - **81dd087** refactor(toolkit): extract NCD-detected duplications + analyzer.ts cross-discipline — 2026-05-01
-- **1cc41ea** refactor(facts): extract 3 emit helpers + fix File/FileTag regression — 2026-05-01
 
 
-### `chore` (4)
+### `chore` (5)
 
+- **f2f93bc** chore(brief): regen CLAUDE-CONTEXT + CHANGELOG post-refactor (553→534) — 2026-05-03
 - **2067d1f** chore(release): v0.3.0 consolidation — npm-publishable core, experimental gated — 2026-05-03
 - **173915c** chore(toolkit): self-discipline pass — close credibility gap from external review — 2026-05-03
 - **03ef857** chore(runtime-graph): OSS launch prep — alpha.4 publish-ready — 2026-05-03
@@ -89,6 +89,7 @@ Last update : 2026-05-03T15:18:52Z
 
 ## Full history
 
+- **f2f93bc** chore(brief): regen CLAUDE-CONTEXT + CHANGELOG post-refactor (553→534) — 2026-05-03
 - **5f8d691** refactor(toolkit): split god-files + fix REDOS detector + tests hubs — 2026-05-03
 - **ee89730** docs(validation): self-analysis run #2 — toolkit voit 553 violations sur lui-même — 2026-05-03
 - **9a5d5ac** docs(validation): run #1.5 — composite rules sur Sentinel — 33× signal-to-noise — 2026-05-03
@@ -138,4 +139,3 @@ Last update : 2026-05-03T15:18:52Z
 - **4cb7ffa** feat(toolkit): TDA + Lyapunov — cycles structurels + chaos detection — 2026-05-01
 - **375d5a2** feat(toolkit): cross-discipline rules — Fiedler λ₂ + Shannon entropy + Hamming dup — 2026-05-01
 - **bc4fce3** feat(invariants): 2 rules auto-decouvertes via pattern mining — 2026-05-01
-- **1cc41ea** refactor(facts): extract 3 emit helpers + fix File/FileTag regression — 2026-05-01

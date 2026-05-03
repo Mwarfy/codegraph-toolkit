@@ -69,6 +69,21 @@ export async function analyzeCoChange(
   rootDir: string,
   options: CoChangeOptions = {},
 ): Promise<CoChangePair[]> {
+  return analyzeCoChangeSync(rootDir, options)
+}
+
+/**
+ * Variante sync — utilisée par le wrapper Salsa `incremental/co-change.ts`.
+ * Salsa derived ne supporte que les fonctions sync. L'algo est entièrement
+ * sync (execSync + parsing) — l'`async` upstream est purement décoratif.
+ *
+ * Garde-fou : si tu rends un jour `analyzeCoChange` réellement async (await
+ * I/O), refactor d'abord ce sync helper séparément.
+ */
+export function analyzeCoChangeSync(
+  rootDir: string,
+  options: CoChangeOptions = {},
+): CoChangePair[] {
   const sinceDays = options.sinceDays ?? 90
   const minCount = options.minCount ?? 3
   const minJaccard = options.minJaccard ?? 0

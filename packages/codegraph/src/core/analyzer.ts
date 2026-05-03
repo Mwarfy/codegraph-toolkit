@@ -113,6 +113,14 @@ import { allCodeQualityPatterns as incAllCodeQualityPatterns } from '../incremen
 import { allSecurityPatterns as incAllSecurityPatterns } from '../incremental/security-patterns.js'
 import { allDeadCode as incAllDeadCode } from '../incremental/dead-code.js'
 import { allDeprecatedUsage as incAllDeprecatedUsage } from '../incremental/deprecated-usage.js'
+import { allConstantExpressions as incAllConstantExpressions } from '../incremental/constant-expressions.js'
+import { allDriftPatternsAst as incAllDriftPatternsAst } from '../incremental/drift-patterns.js'
+import {
+  allCoChangePairs as incAllCoChangePairs,
+  coChangeGitHeadInput as incCoChangeGitHead,
+  coChangeKnownFilesInput as incCoChangeKnownFiles,
+} from '../incremental/co-change.js'
+import { todoToDriftSignal } from '../extractors/drift-patterns.js'
 import { setTsImportPrebuiltProject } from '../detectors/ts-imports.js'
 import {
   allModuleMetrics as incAllModuleMetrics,
@@ -129,6 +137,23 @@ import { computeModuleMetrics } from '../metrics/module-metrics.js'
 import { computeComponentMetrics } from '../metrics/component-metrics.js'
 import { computeDsm } from '../graph/dsm.js'
 import { aggregateByContainer } from '../map/dsm-renderer.js'
+import { execSync } from 'node:child_process'
+
+/**
+ * Récupère le SHA HEAD courant. Utilisé comme clé d'invalidation Salsa
+ * pour les détecteurs git-driven (co-change). Retourne `''` si le repo
+ * n'est pas git ou si git n'est pas installé — Salsa traitera cette
+ * "absence" comme une key stable.
+ */
+function getGitHead(rootDir: string): string {
+  try {
+    return execSync('git rev-parse HEAD', {
+      cwd: rootDir, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim()
+  } catch {
+    return ''
+  }
+}
 
 export interface AnalyzeResult {
   snapshot: GraphSnapshot
@@ -620,14 +645,40 @@ async function runDeterministicDetectors(
     () => analyzeTestCoverage(config.rootDir, files, snapshot.edges))
   const coChangePairs = await runDetectorTimed(timing, 'co-change',
     () => {
-      const knownFiles = new Set(snapshot.nodes.filter((n) => n.type === 'file').map((n) => n.id))
-      return analyzeCoChange(config.rootDir, { knownFiles })
+      const knownFilesArr = snapshot.nodes
+        .filter((n) => n.type === 'file').map((n) => n.id).sort()
+      if (incremental) {
+        // Salsa-iso : keying sur (gitHead, knownFiles). Cache hit warm
+        // tant que HEAD n'a pas bougé et les fichiers connus sont stables.
+        incSetInputIfChanged(incCoChangeGitHead, 'all', getGitHead(config.rootDir))
+        incSetInputIfChanged(incCoChangeKnownFiles, 'all', knownFilesArr)
+        return Promise.resolve(incAllCoChangePairs.get('all'))
+      }
+      return analyzeCoChange(config.rootDir, { knownFiles: new Set(knownFilesArr) })
     })
 
   // Phase 2 : détecteurs avec dep sur Phase 1.
   // drift-patterns dépend de todos (pattern 3) — run après.
   const driftSignals = await runDetectorTimed(timing, 'drift-patterns',
-    () => analyzeDriftPatterns(config.rootDir, files, sharedProject, todos))
+    () => {
+      if (incremental) {
+        // Salsa cache UNIQUEMENT les patterns 1+2+4+5 (per-file AST).
+        // Pattern 3 (todo-no-owner) dépend de snapshot.todos (extracteur
+        // séparé) — on l'ajoute hors-cache puis on re-trie globalement.
+        const astSignals = incAllDriftPatternsAst.get('all')
+        const todoSignals = (todos ?? [])
+          .map(todoToDriftSignal)
+          .filter((s): s is NonNullable<typeof s> => s !== null)
+        const merged = [...astSignals, ...todoSignals]
+        merged.sort((a, b) => {
+          if (a.file !== b.file) return a.file < b.file ? -1 : 1
+          if (a.line !== b.line) return a.line - b.line
+          return a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0
+        })
+        return Promise.resolve(merged)
+      }
+      return analyzeDriftPatterns(config.rootDir, files, sharedProject, todos)
+    })
   const evalCalls = await runDetectorTimed(timing, 'eval-calls',
     () => analyzeEvalCalls(config.rootDir, files, sharedProject))
   const cryptoCalls = await runDetectorTimed(timing, 'crypto-algo',
@@ -680,7 +731,9 @@ async function runDeterministicDetectors(
   // Constant expressions — patterns simplification symbolique (tautology,
   // contradiction, gratuitous bool comparison). Cf. extractor.
   const constantExpressions = await runDetectorTimed(timing, 'constant-expressions',
-    () => analyzeConstantExpressionsBatch(config.rootDir, files, sharedProject))
+    () => incremental
+      ? Promise.resolve(incAllConstantExpressions.get('all'))
+      : analyzeConstantExpressionsBatch(config.rootDir, files, sharedProject))
 
   // ESLint ingester — read .codegraph/eslint.json if user provided it.
   const eslintViolations = await runDetectorTimed(timing, 'eslint-import',

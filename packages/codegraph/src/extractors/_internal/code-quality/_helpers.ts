@@ -1,7 +1,12 @@
+// ADR-005
 /**
  * Helpers partagés des sous-détecteurs code-quality.
  *
  * Internes au dossier — pas d'import depuis l'extérieur du toolkit.
+ *
+ * Anchored ADR-005 (Per-file extractor bundle pattern) : ces helpers
+ * factorisent les invariants AST partagés (TEST_FILE_RE skip, FN_KINDS
+ * boundary stop pour les ancestor walks, isExempt comment marker).
  */
 
 import { type SourceFile, type Node, SyntaxKind } from 'ts-morph'

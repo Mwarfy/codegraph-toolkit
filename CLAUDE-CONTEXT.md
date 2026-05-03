@@ -68,6 +68,7 @@
 - `packages/codegraph/src/detectors/index.ts` → ADR-003
 - `packages/codegraph/src/detectors/ts-imports.ts` → ADR-008
 - `packages/codegraph/src/diff/types.ts` → ADR-006
+- `packages/codegraph/src/extractors/_internal/code-quality/_helpers.ts` → ADR-005
 - `packages/codegraph/src/extractors/_shared/ast-helpers.ts` → ADR-012
 - `packages/codegraph/src/extractors/_shared/sql-helpers.ts` → ADR-012
 - `packages/codegraph/src/extractors/_shared/sql-types.ts` → ADR-012
@@ -79,13 +80,16 @@
 - `packages/codegraph/src/extractors/state-machines.ts` → ADR-005
 - `packages/codegraph/src/extractors/unused-exports.ts` → ADR-005
 - `packages/codegraph/src/incremental/barrels.ts` → ADR-007
+- `packages/codegraph/src/incremental/co-change.ts` → ADR-007
 - `packages/codegraph/src/incremental/code-quality-patterns.ts` → ADR-007
 - `packages/codegraph/src/incremental/complexity.ts` → ADR-007
+- `packages/codegraph/src/incremental/constant-expressions.ts` → ADR-007
 - `packages/codegraph/src/incremental/cycles.ts` → ADR-007
 - `packages/codegraph/src/incremental/data-flows.ts` → ADR-007
 - `packages/codegraph/src/incremental/database.ts` → ADR-007
 - `packages/codegraph/src/incremental/dead-code.ts` → ADR-007
 - `packages/codegraph/src/incremental/deprecated-usage.ts` → ADR-007
+- `packages/codegraph/src/incremental/drift-patterns.ts` → ADR-007
 - `packages/codegraph/src/incremental/env-usage.ts` → ADR-007
 - `packages/codegraph/src/incremental/event-emit-sites.ts` → ADR-007
 - `packages/codegraph/src/incremental/metrics.ts` → ADR-007
@@ -188,6 +192,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+f2f93bc chore(brief): regen CLAUDE-CONTEXT + CHANGELOG post-refactor (553→534)
 5f8d691 refactor(toolkit): split god-files + fix REDOS detector + tests hubs
 ee89730 docs(validation): self-analysis run #2 — toolkit voit 553 violations sur lui-même
 9a5d5ac docs(validation): run #1.5 — composite rules sur Sentinel — 33× signal-to-noise
@@ -199,7 +204,6 @@ a191d61 docs(validation): full-chain run #1 — 4 bugs trouvés sur Hono
 2f84a70 feat(toolkit): Niveau 5 effect-analysis + roadmap defers Niveaux 6/7
 0146402 fix(toolkit): close P0+P1+P2+P3 — review credibility gap part 2
 0485ce4 feat(toolkit): self-optim Niveau 2A + Niveau 4 — math cost predict + auto-synth Salsa
-3ca2f45 feat(toolkit): self-optim auto-loop — connect probe → diag → brief → scaffold
 ```
 
 ## Comment contribuer à ce brief
