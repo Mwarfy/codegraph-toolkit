@@ -175,9 +175,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/audit-listener.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/scheduler.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/b.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
@@ -199,6 +199,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+c55801c refactor(toolkit): split evaluateRule (cyclo 16→4) — 3 helpers (guards + head + proof)
 953ea56 refactor(toolkit): split Lexer.skipWS (cyclo 16→3) — parser.ts ALL bombs cleared
 a023167 refactor(toolkit): split Lexer.next (cyclo 19→under) — table single-char + tryTwoCharOp helper
 4b0c89d refactor(toolkit): split Parser.validateRule (cyclo 20→3) — 4 helpers safety checks
@@ -210,7 +211,6 @@ ce0b0a8 refactor(toolkit): split detectListenerEntries (cyclo 23→under) — 4 
 2e2a8e8 refactor(toolkit): split prebuildSharedProjectIncremental (cyclo 16→3) — 3 helpers + reuse findTsConfigPath
 673129e refactor(toolkit): split resolveTsConfigAndSharedProject (cyclo 16→4) — 3 helpers
 4b6165c refactor(toolkit): split buildFlow (cyclo 19→4) — 4 helpers BFS-extracted
-a5ac751 refactor(toolkit): split buildTestFilesIndex (cyclo 17→1) — 5 helpers + ImportIndices struct
 ```
 
 ## Comment contribuer à ce brief

@@ -27,7 +27,7 @@ import { insertTuple } from './facts-loader.js'
 import { stratify, type Stratum } from './stratify.js'
 import {
   DatalogError,
-  type Atom, type Constraint,
+  type AggregateDef, type Atom, type Constraint,
   type Database, type DatalogValue, type Program,
   type ProofNode, type Provenance, type Relation, type RunResult, type Rule,
   type Tuple,
@@ -49,18 +49,20 @@ interface ProofRecord {
   bodyTuples: Array<{ rel: string; tuple: Tuple }>
 }
 
-export function evaluate(
-  program: Program,
-  db: Database,
-  options: EvalOptions = {},
-): RunResult {
-  const t0 = performance.now()
-  const recordSet = new Set(options.recordProofsFor ?? [])
+interface EvalStats {
+  rulesExecuted: number
+  tuplesProduced: number
+  iterations: number
+  elapsedMs: number
+}
 
-  // Add inline facts (parsed from `.dl` source) into the DB.
-  // Acceptés sur n'importe quelle relation déclarée — utile pour les
-  // lookup tables (`.decl ForbiddenCoercion` + facts inline) et pour
-  // pré-remplir une relation aussi écrite par des rules.
+/**
+ * Add inline facts (parsed from `.dl` source) into the DB.
+ * Acceptes sur n'importe quelle relation declaree — utile pour les
+ * lookup tables (`.decl ForbiddenCoercion` + facts inline) et pour
+ * pre-remplir une relation aussi ecrite par des rules.
+ */
+function addInlineFacts(program: Program, db: Database): void {
   for (const fact of program.inlineFacts) {
     const tuple: DatalogValue[] = fact.args.map((t) => {
       if (t.kind !== 'const') {
@@ -72,6 +74,142 @@ export function evaluate(
     })
     insertTuple(db.relations.get(fact.rel)!, tuple)
   }
+}
+
+function runStrata(
+  strata: Stratum[],
+  db: Database,
+  recordSet: Set<string>,
+  provenance: Map<string, Map<string, ProofRecord>>,
+  program: Program,
+  stats: EvalStats,
+): void {
+  for (const stratum of strata) {
+    if (stratum.rules.length === 0) continue
+    let changed = true
+    while (changed) {
+      changed = false
+      stats.iterations++
+      for (const rule of stratum.rules) {
+        stats.rulesExecuted++
+        const derived = evaluateRule(rule, db, recordSet, provenance, program)
+        if (derived > 0) {
+          stats.tuplesProduced += derived
+          changed = true
+        }
+      }
+    }
+  }
+}
+
+function computeGroupCols(pattern: Atom['args']): number[] {
+  const groupCols: number[] = []
+  for (let i = 0; i < pattern.length; i++) {
+    if (pattern[i].kind === 'var') groupCols.push(i)
+  }
+  return groupCols
+}
+
+function initBucketAccum(kind: 'count' | 'sum' | 'min' | 'max'): number {
+  if (kind === 'count' || kind === 'sum') return 0
+  if (kind === 'min') return Number.POSITIVE_INFINITY
+  return Number.NEGATIVE_INFINITY
+}
+
+function rowMatchesPattern(row: Tuple, pattern: Atom['args']): boolean {
+  for (let i = 0; i < pattern.length; i++) {
+    const term = pattern[i]
+    if (term.kind === 'const' && row[i] !== term.value) return false
+  }
+  return true
+}
+
+function applyAggregateValue(
+  bucket: { keyTuple: DatalogValue[]; accum: number },
+  agg: AggregateDef,
+  row: Tuple,
+  valueColIdx: number,
+  program: Program,
+): void {
+  if (agg.kind === 'count') {
+    bucket.accum += 1
+    return
+  }
+  const v = row[valueColIdx]
+  if (typeof v !== 'number') {
+    const valueColName = agg.pattern[valueColIdx].kind === 'var'
+      ? (agg.pattern[valueColIdx] as { name: string }).name : '?'
+    throw new DatalogError('eval.aggregateNonNumber',
+      `'${agg.kind}' aggregate '${agg.resultRel}': value column '${valueColName}' must be number, got ${typeof v} '${v}'`,
+      agg.pos, program.source)
+  }
+  if (agg.kind === 'sum') bucket.accum += v
+  else if (agg.kind === 'min') bucket.accum = Math.min(bucket.accum, v)
+  else if (agg.kind === 'max') bucket.accum = Math.max(bucket.accum, v)
+}
+
+function deriveAggregateValueColIdx(agg: AggregateDef, groupCols: number[], program: Program): number {
+  if (agg.kind === 'count') return -1
+  if (groupCols.length === 0) {
+    throw new DatalogError('eval.aggregateNoValueCol',
+      `'${agg.kind}' aggregate '${agg.resultRel}' needs at least one value variable in source pattern`,
+      agg.pos, program.source)
+  }
+  const valueColIdx = groupCols[groupCols.length - 1]
+  // La last group var devient la value col — on l'enleve des group keys.
+  groupCols.pop()
+  return valueColIdx
+}
+
+function executeAggregate(agg: AggregateDef, db: Database, program: Program): void {
+  const sourceRel = db.relations.get(agg.sourceRel)
+  if (!sourceRel) {
+    throw new DatalogError('eval.aggregateUnknownSource',
+      `aggregate '${agg.resultRel}' references unknown source '${agg.sourceRel}'`,
+      agg.pos, program.source)
+  }
+  const groupCols = computeGroupCols(agg.pattern)
+  const valueColIdx = deriveAggregateValueColIdx(agg, groupCols, program)
+
+  if (groupCols.length !== agg.resultDecl.columns.length - 1) {
+    throw new DatalogError('eval.aggregateArityMismatch',
+      `aggregate '${agg.resultRel}': ${groupCols.length} group var(s) but result has ${agg.resultDecl.columns.length - 1} non-aggregate col(s)`,
+      agg.pos, program.source)
+  }
+
+  const buckets = new Map<string, { keyTuple: DatalogValue[]; accum: number }>()
+  for (const row of sourceRel.tuples) {
+    if (!rowMatchesPattern(row, agg.pattern)) continue
+    const keyTuple = groupCols.map((i) => row[i])
+    const key = keyTuple.map((v) => String(v)).join('\x00')
+    let bucket = buckets.get(key)
+    if (!bucket) {
+      bucket = { keyTuple: keyTuple.slice(), accum: initBucketAccum(agg.kind) }
+      buckets.set(key, bucket)
+    }
+    applyAggregateValue(bucket, agg, row, valueColIdx, program)
+  }
+
+  const resultRel = db.relations.get(agg.resultRel)
+  if (!resultRel) {
+    throw new DatalogError('eval.aggregateMissingResultRel',
+      `aggregate result relation '${agg.resultRel}' not initialized in DB — bug?`,
+      agg.pos, program.source)
+  }
+  for (const bucket of buckets.values()) {
+    insertTuple(resultRel, [...bucket.keyTuple, bucket.accum])
+  }
+}
+
+export function evaluate(
+  program: Program,
+  db: Database,
+  options: EvalOptions = {},
+): RunResult {
+  const t0 = performance.now()
+  const recordSet = new Set(options.recordProofsFor ?? [])
+
+  addInlineFacts(program, db)
 
   // Provenance map : (relName -> tupleKey -> ProofRecord). Populated only
   // for relations in `recordSet`.
@@ -80,132 +218,23 @@ export function evaluate(
 
   const strata: Stratum[] = stratify(program, { allowRecursion: options.allowRecursion })
 
-  const stats = {
+  const stats: EvalStats = {
     rulesExecuted: 0,
     tuplesProduced: 0,
     iterations: 0,
     elapsedMs: 0,
   }
 
-  const runStrata = (): void => {
-    for (const stratum of strata) {
-      if (stratum.rules.length === 0) continue
-      let changed = true
-      while (changed) {
-        changed = false
-        stats.iterations++
-        for (const rule of stratum.rules) {
-          stats.rulesExecuted++
-          const derived = evaluateRule(rule, db, recordSet, provenance, program)
-          if (derived > 0) {
-            stats.tuplesProduced += derived
-            changed = true
-          }
-        }
-      }
-    }
-  }
+  runStrata(strata, db, recordSet, provenance, program, stats)
 
-  runStrata()
-
-  // ─── Aggregates (Tier 14 alt2) ───
-  // Post-strates : count/sum/min/max sur les relations matérialisées.
-  // Les relations résultats ne sont PAS marquées .output par défaut —
-  // l'utilisateur peut ajouter `.output X` dans son source pour les
-  // exposer, ou les utiliser comme input de rules ultérieures.
+  // Aggregates (Tier 14 alt2) post-strates : count/sum/min/max sur les
+  // relations materialisees. Re-run strata apres pour que les rules
+  // consommant les results d'aggregate puissent deriver leurs heads.
   if (program.aggregates && program.aggregates.length > 0) {
     for (const agg of program.aggregates) {
-      const sourceRel = db.relations.get(agg.sourceRel)
-      if (!sourceRel) {
-        throw new DatalogError('eval.aggregateUnknownSource',
-          `aggregate '${agg.resultRel}' references unknown source '${agg.sourceRel}'`,
-          agg.pos, program.source)
-      }
-      // Déterminer les indices "clés" (positions de variables dans pattern)
-      // et les renvoyer dans l'ordre d'apparition (= ordre des cols résultat,
-      // sauf la dernière col qui est la valeur agrégée).
-      const groupCols: number[] = []
-      for (let i = 0; i < agg.pattern.length; i++) {
-        if (agg.pattern[i].kind === 'var') groupCols.push(i)
-      }
-
-      // Pour sum/min/max : on a besoin de désigner LA colonne valeur du
-      // source. Convention : c'est la dernière variable dans pattern qui
-      // mappe à la dernière col du résultat (l'agrégat). On extrait avant
-      // l'arity check pour que celui-ci voie les "vraies" group cols.
-      let valueColIdx = -1
-      if (agg.kind !== 'count') {
-        if (groupCols.length === 0) {
-          throw new DatalogError('eval.aggregateNoValueCol',
-            `'${agg.kind}' aggregate '${agg.resultRel}' needs at least one value variable in source pattern`,
-            agg.pos, program.source)
-        }
-        valueColIdx = groupCols[groupCols.length - 1]
-        // La last group var devient la value col → on l'enlève des group keys.
-        groupCols.pop()
-      }
-
-      // resultDecl arity = groupCols.length + 1 (l'agrégat).
-      if (groupCols.length !== agg.resultDecl.columns.length - 1) {
-        throw new DatalogError('eval.aggregateArityMismatch',
-          `aggregate '${agg.resultRel}': ${groupCols.length} group var(s) but result has ${agg.resultDecl.columns.length - 1} non-aggregate col(s)`,
-          agg.pos, program.source)
-      }
-
-      // Map<canonicalGroupKey, { groupKey: tuple, accum: number }>
-      const buckets = new Map<string, { keyTuple: DatalogValue[]; accum: number }>()
-      for (const row of sourceRel.tuples) {
-        // Match constants in pattern (non-var, non-wildcard) — skip si mismatch.
-        let matches = true
-        for (let i = 0; i < agg.pattern.length; i++) {
-          const term = agg.pattern[i]
-          if (term.kind === 'const' && row[i] !== term.value) { matches = false; break }
-        }
-        if (!matches) continue
-
-        const keyTuple = groupCols.map((i) => row[i])
-        const key = keyTuple.map((v) => String(v)).join('\x00')
-        let bucket = buckets.get(key)
-        if (!bucket) {
-          const initAccum = agg.kind === 'count' ? 0
-            : agg.kind === 'sum' ? 0
-            : agg.kind === 'min' ? Number.POSITIVE_INFINITY
-            : Number.NEGATIVE_INFINITY                                // max
-          bucket = { keyTuple: keyTuple.slice(), accum: initAccum }
-          buckets.set(key, bucket)
-        }
-        if (agg.kind === 'count') bucket.accum += 1
-        else {
-          const v = row[valueColIdx]
-          if (typeof v !== 'number') {
-            throw new DatalogError('eval.aggregateNonNumber',
-              `'${agg.kind}' aggregate '${agg.resultRel}': value column '${agg.pattern[valueColIdx].kind === 'var' ? (agg.pattern[valueColIdx] as { name: string }).name : '?'}' must be number, got ${typeof v} '${v}'`,
-              agg.pos, program.source)
-          }
-          if (agg.kind === 'sum') bucket.accum += v
-          else if (agg.kind === 'min') bucket.accum = Math.min(bucket.accum, v)
-          else if (agg.kind === 'max') bucket.accum = Math.max(bucket.accum, v)
-        }
-      }
-
-      // Insérer les résultats dans la DB. La relation résultat doit déjà
-      // exister via initRelations (créée à partir de decls.set en parsing).
-      const resultRel = db.relations.get(agg.resultRel)
-      if (!resultRel) {
-        throw new DatalogError('eval.aggregateMissingResultRel',
-          `aggregate result relation '${agg.resultRel}' not initialized in DB — bug?`,
-          agg.pos, program.source)
-      }
-      for (const bucket of buckets.values()) {
-        const tuple: DatalogValue[] = [...bucket.keyTuple, bucket.accum]
-        insertTuple(resultRel, tuple)
-      }
+      executeAggregate(agg, db, program)
     }
-    // Tier 15 : after aggregates, re-run strata so rules consuming aggregate
-    // results (typical god-X / threshold patterns) can derive their heads.
-    // Idempotent thanks to insertTuple dedup — already-derived tuples are
-    // no-ops on re-evaluation.
-    runStrata()
+    runStrata(strata, db, recordSet, provenance, program, stats)
   }
 
   // Build outputs : only relations marked .output, sorted lex.

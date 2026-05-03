@@ -5,7 +5,7 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T20:26:02Z
+Last update : 2026-05-03T20:27:26Z
 
 ## By type
 
@@ -28,6 +28,7 @@ Last update : 2026-05-03T20:26:02Z
 
 ### `refactor` (41)
 
+- **c55801c** refactor(toolkit): split evaluateRule (cyclo 16→4) — 3 helpers (guards + head + proof) — 2026-05-03
 - **953ea56** refactor(toolkit): split Lexer.skipWS (cyclo 16→3) — parser.ts ALL bombs cleared — 2026-05-03
 - **a023167** refactor(toolkit): split Lexer.next (cyclo 19→under) — table single-char + tryTwoCharOp helper — 2026-05-03
 - **4b0c89d** refactor(toolkit): split Parser.validateRule (cyclo 20→3) — 4 helpers safety checks — 2026-05-03
@@ -47,11 +48,11 @@ Last update : 2026-05-03T20:26:02Z
 - **6190869** refactor(toolkit): split state-machines top-level — analyze + buildFromBundles — 2026-05-03
 - **bddfb2a** refactor(toolkit): split data-flows top-level (analyzeDataFlows + buildDataFlowsFromBundles) — 2026-05-03
 - **d176584** refactor(toolkit): split renderLevel1/2/3 — synopsis/builder.ts ALL bombs cleared — 2026-05-03
-- **8f1792b** refactor(toolkit): split buildComponents (cyclo 24→under) — 5 helpers (groupByComp, edgeDeg, topFiles, tags, adrs) — 2026-05-03
 
 
 ## Full history
 
+- **c55801c** refactor(toolkit): split evaluateRule (cyclo 16→4) — 3 helpers (guards + head + proof) — 2026-05-03
 - **953ea56** refactor(toolkit): split Lexer.skipWS (cyclo 16→3) — parser.ts ALL bombs cleared — 2026-05-03
 - **a023167** refactor(toolkit): split Lexer.next (cyclo 19→under) — table single-char + tryTwoCharOp helper — 2026-05-03
 - **4b0c89d** refactor(toolkit): split Parser.validateRule (cyclo 20→3) — 4 helpers safety checks — 2026-05-03
@@ -101,4 +102,3 @@ Last update : 2026-05-03T20:26:02Z
 - **fbebea4** refactor(toolkit): extract makeIsExempt helper (NCD: 25→16, total 434→422) — 2026-05-03
 - **25fc296** fix(toolkit): kill META-CRITICAL (7→0) + 2 bugs détecteur + 6 tests — 2026-05-03
 - **70afbdc** fix(toolkit): clean 93 violations (534→441, −17.4%) sans bypass — 2026-05-03
-- **b0f2c9a** refactor(toolkit): split cli/index.ts god-file (2190→1520 LOC, −30%) — 2026-05-03
