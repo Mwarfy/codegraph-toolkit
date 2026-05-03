@@ -53,6 +53,7 @@ DB via `new SalsaDatabase()` LOCAL au test, jamais exporté.
 - `packages/codegraph/src/extractors/tainted-vars.ts`
 - `packages/codegraph/src/incremental/arguments.ts`
 - `packages/codegraph/src/incremental/barrels.ts`
+- `packages/codegraph/src/incremental/boolean-params.ts`
 - `packages/codegraph/src/incremental/co-change.ts`
 - `packages/codegraph/src/incremental/code-quality-patterns.ts`
 - `packages/codegraph/src/incremental/complexity.ts`

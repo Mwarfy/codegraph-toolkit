@@ -122,6 +122,7 @@ import { allSanitizers as incAllSanitizers } from '../incremental/sanitizers.js'
 import { allTaintedVars as incAllTaintedVars } from '../incremental/tainted-vars.js'
 import { allArguments as incAllArguments } from '../incremental/arguments.js'
 import { allCryptoCalls as incAllCryptoCalls } from '../incremental/crypto-algo.js'
+import { allBooleanParams as incAllBooleanParams } from '../incremental/boolean-params.js'
 import { allFunctionComplexity as incAllFunctionComplexity } from '../incremental/function-complexity.js'
 import { allEvalCalls as incAllEvalCalls } from '../incremental/eval-calls.js'
 import { allDriftPatternsAst as incAllDriftPatternsAst } from '../incremental/drift-patterns.js'
@@ -848,7 +849,9 @@ async function runPhase4SecurityAndQuality(ctx: DetectorPhaseContext) {
       ? Promise.resolve(incAllHardcodedSecrets.get('all'))
       : analyzeHardcodedSecrets(config.rootDir, files, sharedProject))
   const booleanParams = await runDetectorTimed(timing, 'boolean-params',
-    () => analyzeBooleanParams(config.rootDir, files, sharedProject))
+    () => incremental
+      ? Promise.resolve(incAllBooleanParams.get('all'))
+      : analyzeBooleanParams(config.rootDir, files, sharedProject))
   const deadCode = await runDetectorTimed(timing, 'dead-code',
     () => incremental
       ? Promise.resolve(incAllDeadCode.get('all'))

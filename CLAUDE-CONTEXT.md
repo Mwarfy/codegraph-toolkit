@@ -88,6 +88,7 @@
 - `packages/codegraph/src/facts/index.ts` → ADR-010
 - `packages/codegraph/src/incremental/arguments.ts` → ADR-007
 - `packages/codegraph/src/incremental/barrels.ts` → ADR-007
+- `packages/codegraph/src/incremental/boolean-params.ts` → ADR-007
 - `packages/codegraph/src/incremental/co-change.ts` → ADR-007
 - `packages/codegraph/src/incremental/code-quality-patterns.ts` → ADR-007
 - `packages/codegraph/src/incremental/complexity.ts` → ADR-007
@@ -156,9 +157,9 @@
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
 - `packages/codegraph/src/core/types.ts` (in: 77) · gov by ADR-006
-- `packages/codegraph/src/incremental/queries.ts` (in: 40) · gov by ADR-007
-- `packages/codegraph/src/incremental/database.ts` (in: 38) · gov by ADR-007
-- `packages/salsa/dist/index.d.ts` (in: 37)
+- `packages/codegraph/src/incremental/queries.ts` (in: 41) · gov by ADR-007
+- `packages/codegraph/src/incremental/database.ts` (in: 39) · gov by ADR-007
+- `packages/salsa/dist/index.d.ts` (in: 38)
 - `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 25) · gov by ADR-012
 - `packages/codegraph/src/core/detector-registry.ts` (in: 18) · gov by ADR-008
 - `packages/runtime-graph/src/core/types.ts` (in: 13) · gov by ADR-009
@@ -168,7 +169,7 @@
 
 Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `// ADR-NNN`** dans le code. Intentionnel ? Sinon poser un marqueur ou créer un ADR :
 
-- **37** `packages/salsa/dist/index.d.ts` _(top-hub)_
+- **38** `packages/salsa/dist/index.d.ts` _(top-hub)_
 
 ## Tensions actives — invitations à explorer
 
@@ -177,9 +178,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 > pas verdict. Une tension non explorée n'est pas un bug — c'est un saut
 > latéral possible que le sol stable rend testable.
 
-- **ORPHELIN** `packages/datalog/src/cli.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/datalog/src/cli.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
@@ -211,6 +212,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+20b9ace perf(toolkit): Salsa-iso 5 taint chain detectors — 5×0ms warm
 231be93 perf(toolkit): Salsa-iso resource-balance detector — 82ms → 0ms warm
 c9e30bd perf(toolkit): Salsa-iso magic-numbers detector — 539ms → 0ms warm (top hot detector eliminé)
 702a89f refactor(toolkit): split codegraphContext (cyclo 50→<15) — context.ts ALL bombs cleared
@@ -222,7 +224,6 @@ e27c2be refactor(toolkit): split codegraphAffected + dedup computeAffected — a
 22ced53 refactor(toolkit): split walkForManifests + buildPackageDepsIssues — package-deps.ts ALL bombs cleared
 3b1d650 refactor(toolkit): split scanObjectWrites + detectListenerTriggers — state-machines.ts ALL bombs cleared
 d534d97 refactor(toolkit): split constant-expressions (cyclo 35+23→under) — constant-expressions.ts ALL bombs cleared
-f4ee98f refactor(toolkit): split typed-calls (cyclo 18+16→under) — typed-calls.ts ALL bombs cleared
 ```
 
 ## Comment contribuer à ce brief

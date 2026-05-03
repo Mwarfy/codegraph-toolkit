@@ -5,17 +5,18 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T22:06:12Z
+Last update : 2026-05-03T22:10:41Z
 
 ## By type
 
-### `perf` (2)
+### `perf` (3)
 
+- **20b9ace** perf(toolkit): Salsa-iso 5 taint chain detectors — 5×0ms warm — 2026-05-04
 - **231be93** perf(toolkit): Salsa-iso resource-balance detector — 82ms → 0ms warm — 2026-05-04
 - **c9e30bd** perf(toolkit): Salsa-iso magic-numbers detector — 539ms → 0ms warm (top hot detector eliminé) — 2026-05-04
 
 
-### `refactor` (48)
+### `refactor` (47)
 
 - **702a89f** refactor(toolkit): split codegraphContext (cyclo 50→<15) — context.ts ALL bombs cleared — 2026-05-03
 - **7369852** refactor(toolkit): split extractDeadCodeFileBundle (cyclo 50→3, cog 78→0) — dead-code.ts ALL bombs cleared — 2026-05-03
@@ -41,6 +42,7 @@ Last update : 2026-05-03T22:06:12Z
 
 ## Full history
 
+- **20b9ace** perf(toolkit): Salsa-iso 5 taint chain detectors — 5×0ms warm — 2026-05-04
 - **231be93** perf(toolkit): Salsa-iso resource-balance detector — 82ms → 0ms warm — 2026-05-04
 - **c9e30bd** perf(toolkit): Salsa-iso magic-numbers detector — 539ms → 0ms warm (top hot detector eliminé) — 2026-05-04
 - **702a89f** refactor(toolkit): split codegraphContext (cyclo 50→<15) — context.ts ALL bombs cleared — 2026-05-03
@@ -90,4 +92,3 @@ Last update : 2026-05-03T22:06:12Z
 - **275466c** refactor(toolkit): split buildSynopsis (cyclo 75→5, cog 130→4) — 9 helpers + ctx struct — 2026-05-03
 - **e4019fb** refactor(toolkit): builder.ts ALL bombs cleared — split TruthPoints + PackageDeps + TaintViolations — 2026-05-03
 - **af4705f** refactor(toolkit): split renderCoreFlows (cyclo 22→4) — 3 helpers (group + table + detail) — 2026-05-03
-- **69911dc** refactor(toolkit): split renderStats (cyclo 24→11) — 5 helpers stats lines — 2026-05-03
