@@ -86,20 +86,21 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer l'état OU ajouter la transition manquante_
 - **FSM-ORPHAN** `NodeStatus#uncertain` — état déclaré mais jamais écrit dans le code  
   _→ supprimer l'état OU ajouter la transition manquante_
-- **DEP-UNUSED** `@liby-tools/codegraph` — déclaré dans packages/adr-toolkit/package.json, jamais importé  
-  _→ npm uninstall @liby-tools/codegraph + npm test_
-- **DEP-UNUSED** `typescript` — déclaré dans packages/codegraph-mcp/package.json, jamais importé  
-  _→ npm uninstall typescript + npm test_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
 - **DEP-UNUSED** `test-only-in-deps` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall test-only-in-deps + npm test_
 - **DEP-UNUSED** `unused-pkg` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall unused-pkg + npm test_
+- **BARREL-LOW** `packages/adr-toolkit/src/index.ts` — barrel à 15 re-export(s) pour 0 consumer(s)  
+  _→ inline les imports + supprimer le barrel_
+- **BARREL-LOW** `packages/codegraph/src/index.ts` — barrel à 8 re-export(s) pour 0 consumer(s)  
+  _→ inline les imports + supprimer le barrel_
 
 ## Activité récente (14 derniers jours)
 
 ```
+e73e85d fix(codegraph): break direct cycle sql-helpers ↔ sql-schema via type extraction
 e9a2b44 feat(runtime-graph): Phase γ — 4 mathematical disciplines runtime + composite rules
 f642620 fix(runtime-graph): CLI rulesDir resolution via __dirname (no package.json export)
 cd9a769 feat(runtime-graph): Phase β — replay-tests + chaos + Express + MongoDB + config-driven
@@ -111,7 +112,6 @@ e65ea40 feat(runtime-graph): Phase α — runtime observability framework with d
 51d7e5f refactor(toolkit): sql-naming exemptions + ADD/RENAME ordering + edge-case patterns
 0c9d608 test(toolkit): contract tests pour CrossDisciplineDetector POC
 bbfa9d6 feat(toolkit): SQL ALTER TABLE tracking + CrossDisciplineDetector POC
-7362f13 refactor(invariants): raffiner composite-orphan-file (Next.js framework-routed)
 ```
 
 ## Comment contribuer à ce brief

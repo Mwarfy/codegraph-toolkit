@@ -39,6 +39,14 @@
   "devDependencies": {
     "@types/node": "^22.0.0"
   },
+  "peerDependencies": {
+    "@liby-tools/datalog": ">=0.1.0"
+  },
+  "peerDependenciesMeta": {
+    "@liby-tools/datalog": {
+      "optional": true
+    }
+  },
   "publishConfig": {
     "access": "public"
   },

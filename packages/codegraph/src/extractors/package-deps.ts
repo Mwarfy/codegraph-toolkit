@@ -54,6 +54,12 @@ interface PackageManifest {
   rel: string
   dir: string
   declared: Map<string, DepBlock>
+  /**
+   * Texte concaténé des `scripts` (npm scripts) du manifest. Servir au
+   * matching `script-asset` : un package mentionné dans une script CLI
+   * (`tsc`, `vitest`, `eslint`) est used, pas declared-unused.
+   */
+  scriptsText: string
 }
 
 const NODE_BUILTINS = new Set<string>(builtinModules)
@@ -173,11 +179,15 @@ async function walkForManifests(
         for (const name of Object.keys(raw.peerDependencies ?? {})) {
           if (!declared.has(name)) declared.set(name, 'peerDependencies')
         }
+        const scriptsText = Object.values(raw.scripts ?? {})
+          .filter((v): v is string => typeof v === 'string')
+          .join(' \n ')
         acc.push({
           abs: full,
           rel: path.relative(rootDir, full).replace(/\\/g, '/'),
           dir,
           declared,
+          scriptsText,
         })
       } catch {
         // JSON invalide — skip silencieusement.
@@ -199,6 +209,18 @@ function findClosestManifest(
     if (filePath.startsWith(m.dir + sep)) return m
   }
   return null
+}
+
+/**
+ * Détecte la directive `@ts-nocheck` au file-level (commentaire dans les
+ * 5 premières lignes non-vides). Les fixtures de codegraph (truth-points
+ * orm-drizzle, orm-prisma) l'utilisent comme marqueur "stub data, pas de
+ * runtime" — leurs imports doivent être ignorés par package-deps.
+ */
+function hasTsNocheckDirective(sf: SourceFile): boolean {
+  const text = sf.getFullText()
+  const head = text.split('\n').slice(0, 20).join('\n')
+  return /\/\/\s*@ts-nocheck\b/.test(head) || /\/\*[^*]*@ts-nocheck\b/.test(head)
 }
 
 function collectImportSpecifiers(sf: SourceFile): string[] {
@@ -251,6 +273,13 @@ export function collectPackageRefsInSourceFile(sf: SourceFile): {
   imports: string[]
   runtimeAssets: string[]
 } {
+  // Fichiers `@ts-nocheck` = stubs / fixtures opt-out du type checking.
+  // Leurs imports sont déclaratifs (alimentent un extracteur, p.ex.
+  // truth-points orm-drizzle/orm-prisma), pas runtime. Les inclure
+  // produit des FP `missing` sur des packages que le code de prod
+  // n'importe jamais (cf. self-audit codegraph 2026-05).
+  if (hasTsNocheckDirective(sf)) return { imports: [], runtimeAssets: [] }
+
   const importSet = new Set<string>()
   for (const spec of collectImportSpecifiers(sf)) {
     const pkg = normalizePackageName(spec)
@@ -305,6 +334,9 @@ function buildPackageDepsIssues(
           declaredIn: block,
           runtimeAssetReferences: [...runtimeRefs].sort(),
         })
+      } else if (isReferencedInScripts(name, m.scriptsText)) {
+        // Le package est invoqué via npm script (ex: `tsc -b`, `vitest run`).
+        // Pas un import, mais usage légitime — skip le flag.
       } else {
         issues.push({
           kind: 'declared-unused',
@@ -351,6 +383,45 @@ function buildPackageDepsIssues(
 }
 
 /**
+ * Mapping pkgname → noms binaires courants. Pour un pkg dont le bin name
+ * diffère du package name (ex: `typescript` → `tsc`), un script qui
+ * appelle le binaire ne mentionne pas le pkgname. Cette table couvre
+ * les cas qu'on rencontre en pratique (build/test/lint tooling).
+ *
+ * Liste minimale par design : on ajoute uniquement les pkg dont le bin
+ * diffère ET qu'on rencontre dans des scripts npm. Les autres (`vitest`,
+ * `eslint`, `prettier`) ont bin = pkgname et sont matchés directement.
+ */
+const PKG_BIN_ALIASES: Record<string, readonly string[]> = {
+  typescript: ['tsc', 'tsserver'],
+  '@types/node': [], // jamais en script
+  '@biomejs/biome': ['biome'],
+  '@vitejs/plugin-react': [],
+}
+
+/**
+ * Vrai si `name` apparaît dans `scriptsText` soit comme pkgname soit
+ * comme un de ses bin aliases. Match conservateur : whole-word boundary
+ * pour éviter qu'un nom court (ex: `tsx`) matche `tsxxx`.
+ */
+function isReferencedInScripts(name: string, scriptsText: string): boolean {
+  if (!scriptsText) return false
+  // Match pkgname tel quel (whole word, autorise / et @ pour scoped pkgs).
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const reName = new RegExp(`(^|[\\s;&|=()'"\`])${escaped}([\\s;&|=()'"\`]|$)`, 'm')
+  if (reName.test(scriptsText)) return true
+  // Match bin aliases si configurés.
+  const bins = PKG_BIN_ALIASES[name]
+  if (bins) {
+    for (const bin of bins) {
+      const reBin = new RegExp(`(^|[\\s;&|=()'"\`])${bin}([\\s;&|=()'"\`]|$)`, 'm')
+      if (reBin.test(scriptsText)) return true
+    }
+  }
+  return false
+}
+
+/**
  * Détecte les noms de packages référencés via des paths runtime
  * (`node_modules/<pkg>/...`). Couvre les patterns vus dans Sentinel :
  *   - `new URL('../../node_modules/p5/lib/p5.min.js', import.meta.url)`
@@ -379,6 +450,15 @@ function collectRuntimeAssetReferences(sf: SourceFile): Set<string> {
   // Pattern B : 'node_modules', '<pkg>' (path.join style)
   const reJoin = /['"`]node_modules['"`]\s*,\s*['"`](@[a-z0-9._-]+\/[a-z0-9._-]+|[a-z0-9._-]+)['"`]/gi
   while ((m = reJoin.exec(text)) !== null) {
+    found.add(m[1]!)
+  }
+  // Pattern C : `npx <pkgname>` shell-out (CLI tools qui appellent un autre
+  // binaire). Le pkg est listé en `dependencies` mais jamais importé. Sans
+  // ce pattern, le detector flag `declared-unused` à tort (cf. adr-toolkit
+  // qui shell-out `npx @liby-tools/codegraph` dans ses hooks/init).
+  // Capture aussi `pnpm dlx` et `yarn dlx` (équivalents npm).
+  const reShellOut = /\b(?:npx|pnpm dlx|yarn dlx)\s+(@[a-z0-9._-]+\/[a-z0-9._-]+|[a-z0-9._-]+)\b/gi
+  while ((m = reShellOut.exec(text)) !== null) {
     found.add(m[1]!)
   }
   return found
