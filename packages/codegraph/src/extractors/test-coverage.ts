@@ -218,6 +218,8 @@ function candidateSourceFromTest(testFile: string): string[] {
  * codegraph), donc leurs imports n'apparaissent pas dans `edges`. Pour
  * couvrir ce cas, on fait un scan regex secondaire sur les test files.
  */
+type CoverageMap = Map<string, Map<string, Set<'naming' | 'import'>>>
+
 export async function analyzeTestCoverage(
   rootDir: string,
   sourceFiles: string[],
@@ -225,52 +227,70 @@ export async function analyzeTestCoverage(
 ): Promise<TestCoverageReport> {
   const sourceSet = new Set(sourceFiles)
   const testFiles = await discoverTestFiles(rootDir)
-  const testSet = new Set(testFiles)
+  const coverage: CoverageMap = new Map()
 
-  // Map: source → Set<{ test, method }>
-  const coverage = new Map<string, Map<string, Set<'naming' | 'import'>>>()
+  applyNamingMatches(testFiles, sourceSet, coverage)
+  applyEdgesMatches(edges, new Set(testFiles), sourceSet, coverage)
+  await applyTestImportRegexMatches(rootDir, testFiles, sourceSet, coverage)
+  await applyTransitiveReexportCoverage(rootDir, coverage, sourceSet)
 
-  // Method 1 : naming convention
+  return buildReport(sourceFiles, coverage)
+}
+
+/** Method 1 : naming convention (foo.test.ts → foo.ts). */
+function applyNamingMatches(
+  testFiles: string[],
+  sourceSet: Set<string>,
+  coverage: CoverageMap,
+): void {
   for (const test of testFiles) {
-    const candidates = candidateSourceFromTest(test)
-    for (const candidate of candidates) {
-      if (sourceSet.has(candidate)) {
-        if (!coverage.has(candidate)) coverage.set(candidate, new Map())
-        if (!coverage.get(candidate)!.has(test)) coverage.get(candidate)!.set(test, new Set())
-        coverage.get(candidate)!.get(test)!.add('naming')
-        break  // first match wins for naming
-      }
+    for (const candidate of candidateSourceFromTest(test)) {
+      if (!sourceSet.has(candidate)) continue
+      addCoverage(coverage, candidate, test, 'naming')
+      break  // first match wins for naming
     }
   }
+}
 
-  // Method 2a : imports déjà calculés dans le graph principal (cas où
-  // les tests sont dans `files`).
+/** Method 2a : imports déjà calculés dans le graph (tests dans `files`). */
+function applyEdgesMatches(
+  edges: ReadonlyArray<{ from: string; to: string; type: string }>,
+  testSet: Set<string>,
+  sourceSet: Set<string>,
+  coverage: CoverageMap,
+): void {
   for (const e of edges) {
     if (e.type !== 'import') continue
     if (!testSet.has(e.from)) continue
     if (!sourceSet.has(e.to)) continue
-    if (!coverage.has(e.to)) coverage.set(e.to, new Map())
-    if (!coverage.get(e.to)!.has(e.from)) coverage.get(e.to)!.set(e.from, new Set())
-    coverage.get(e.to)!.get(e.from)!.add('import')
+    addCoverage(coverage, e.to, e.from, 'import')
   }
+}
 
-  // Method 2b : scan regex secondaire sur les fichiers tests qui ne sont
-  // pas dans `files` (cas le plus courant). Résout les imports relatifs
-  // vers les sources.
-  //
-  // Note : on doit matcher `import type { ... }` aussi — un test contract
-  // qui n'importe que des types depuis un fichier compte comme couvrant
-  // ce fichier (cf. core-types-contract.test.ts qui lock le schema de
-  // core/types.ts). Sans le `(?:type\s+)?`, ces tests étaient invisibles.
+/**
+ * Method 2b : scan regex secondaire sur les fichiers tests qui ne sont pas
+ * dans `files` (cas le plus courant). Résout les imports relatifs vers les
+ * sources.
+ *
+ * Note : on doit matcher `import type { ... }` aussi — un test contract qui
+ * n'importe que des types depuis un fichier compte comme couvrant ce fichier
+ * (cf. core-types-contract.test.ts qui lock le schema de core/types.ts).
+ * Sans le `(?:type\s+)?`, ces tests étaient invisibles.
+ *
+ * Read N test files en parallèle (I/O fs indépendantes), parse régex séquentiel
+ * (Map mutation single-thread). Sur 100+ tests, ~80% wall-clock vs sériel.
+ */
+async function applyTestImportRegexMatches(
+  rootDir: string,
+  testFiles: string[],
+  sourceSet: Set<string>,
+  coverage: CoverageMap,
+): Promise<void> {
   const importRegex = /import\s+(?:(?:type\s+)?(?:\{[^}]*\}|\w+|\*\s+as\s+\w+)\s+from\s+)?['"]([^'"]+)['"]/g
-  // Read N test files en parallèle (I/O fs indépendantes), parse régex
-  // séquentiellement (Map mutation single-thread). Sur un repo avec 100+
-  // tests, ça gain ~80% wall-clock vs sériel.
   const testContents = await Promise.all(
     testFiles.map(async (test) => {
       try {
-        const content = await fs.readFile(path.join(rootDir, test), 'utf-8')
-        return { test, content }
+        return { test, content: await fs.readFile(path.join(rootDir, test), 'utf-8') }
       } catch {
         return null
       }
@@ -278,66 +298,78 @@ export async function analyzeTestCoverage(
   )
   for (const entry of testContents) {
     if (!entry) continue
-    const { test, content } = entry
-    // Local regex pour éviter le state lastIndex partagé entre itérations
-    // (sinon races subtiles si on parallélisait davantage).
-    const localRe = new RegExp(importRegex.source, importRegex.flags)
-    let m: RegExpExecArray | null
-    while ((m = localRe.exec(content)) !== null) {
-      const spec = m[1]
-      if (!spec.startsWith('.')) continue  // skip bare/alias
-      const resolved = resolveRelative(test, spec, sourceSet)
-      if (!resolved) continue
-      if (!coverage.has(resolved)) coverage.set(resolved, new Map())
-      if (!coverage.get(resolved)!.has(test)) coverage.get(resolved)!.set(test, new Set())
-      coverage.get(resolved)!.get(test)!.add('import')
-    }
+    extractImportsFromTest(entry.test, entry.content, importRegex, sourceSet, coverage)
   }
+}
 
-  // Method 3 : transitive via re-exports.
-  //
-  // Quand un test importe un barrel (ex: `salsa/src/index.ts`) qui
-  // re-exporte des symbols depuis `database.ts`, le test couvre
-  // transitivement `database.ts`. Sans ce raffinement, les fichiers
-  // load-bearing accédés uniquement via barrels apparaissaient comme
-  // untested → faux positif systémique sur tous les packages avec une
-  // entry point en barrel.
-  //
-  // Heuristique : pour chaque file (le barrel) qui est déjà attribué
-  // comme couvert par un test, on regarde ses propres imports (edges
-  // sortantes) et on les marque aussi couverts par ce test. Limité à
-  // 1 niveau de re-export pour rester déterministe et borné.
-  await applyTransitiveReexportCoverage(rootDir, coverage, sourceSet)
-
-  // Build report
-  const entries: TestCoverageEntry[] = []
-  for (const sourceFile of sourceFiles) {
-    const tests = coverage.get(sourceFile)
-    if (!tests || tests.size === 0) {
-      entries.push({ sourceFile, testFiles: [], matchedBy: [] })
-      continue
-    }
-    const testList = [...tests.keys()].sort()
-    const methods = new Set<'naming' | 'import'>()
-    for (const m of tests.values()) for (const x of m) methods.add(x)
-    entries.push({
-      sourceFile,
-      testFiles: testList,
-      matchedBy: [...methods],
-    })
+/** Parse les imports d'un test file, résout les chemins relatifs, attribue. */
+function extractImportsFromTest(
+  test: string,
+  content: string,
+  importRegex: RegExp,
+  sourceSet: Set<string>,
+  coverage: CoverageMap,
+): void {
+  // Local regex pour éviter le state lastIndex partagé entre itérations
+  // (sinon races subtiles si on parallélisait davantage).
+  const localRe = new RegExp(importRegex.source, importRegex.flags)
+  let m: RegExpExecArray | null
+  while ((m = localRe.exec(content)) !== null) {
+    const spec = m[1]
+    if (!spec.startsWith('.')) continue  // skip bare/alias
+    const resolved = resolveRelative(test, spec, sourceSet)
+    if (!resolved) continue
+    addCoverage(coverage, resolved, test, 'import')
   }
+}
+
+/** Setter idempotent : ajoute une match (source, test, method) dans la map. */
+function addCoverage(
+  coverage: CoverageMap,
+  source: string,
+  test: string,
+  method: 'naming' | 'import',
+): void {
+  if (!coverage.has(source)) coverage.set(source, new Map())
+  const inner = coverage.get(source)!
+  if (!inner.has(test)) inner.set(test, new Set())
+  inner.get(test)!.add(method)
+}
+
+function buildReport(
+  sourceFiles: string[],
+  coverage: CoverageMap,
+): TestCoverageReport {
+  const entries: TestCoverageEntry[] = sourceFiles.map((sourceFile) =>
+    buildEntry(sourceFile, coverage.get(sourceFile)),
+  )
   entries.sort((a, b) => a.sourceFile < b.sourceFile ? -1 : 1)
 
   const totalSourceFiles = entries.length
-  const coveredFiles = entries.filter(e => e.testFiles.length > 0).length
+  const coveredFiles = entries.filter((e) => e.testFiles.length > 0).length
   const uncoveredFiles = totalSourceFiles - coveredFiles
   const coverageRatio = totalSourceFiles === 0 ? 1 : coveredFiles / totalSourceFiles
-
   return {
     entries,
     totalSourceFiles,
     coveredFiles,
     uncoveredFiles,
     coverageRatio: parseFloat(coverageRatio.toFixed(3)),
+  }
+}
+
+function buildEntry(
+  sourceFile: string,
+  tests: Map<string, Set<'naming' | 'import'>> | undefined,
+): TestCoverageEntry {
+  if (!tests || tests.size === 0) {
+    return { sourceFile, testFiles: [], matchedBy: [] }
+  }
+  const methods = new Set<'naming' | 'import'>()
+  for (const m of tests.values()) for (const x of m) methods.add(x)
+  return {
+    sourceFile,
+    testFiles: [...tests.keys()].sort(),
+    matchedBy: [...methods],
   }
 }
