@@ -218,47 +218,100 @@ export function scanImportsInSourceFile(
   allFiles: string[],
 ): DetectedLink[] {
   const links: DetectedLink[] = []
+  scanStaticImports(sourceFile, fromPath, project, rootDir, allFiles, links)
+  scanDynamicImports(sourceFile, fromPath, project, rootDir, links)
+  scanReExports(sourceFile, fromPath, project, rootDir, links)
+  return links
+}
 
+// ─── Static imports : import ... from '...' ────────────────────────────────
+
+function scanStaticImports(
+  sourceFile: SourceFile,
+  fromPath: string,
+  project: Project,
+  rootDir: string,
+  allFiles: string[],
+  links: DetectedLink[],
+): void {
   for (const imp of sourceFile.getImportDeclarations()) {
     const specifier = imp.getModuleSpecifierValue()
-    if (!specifier.startsWith('.') && !specifier.startsWith('@/') && !specifier.startsWith('~/')) {
-      const resolved = imp.getModuleSpecifierSourceFile()
-      if (resolved) {
-        const rel = relativizeAbs(resolved.getFilePath(), rootDir)
-        if (rel && !rel.includes('node_modules')) {
-          links.push({
-            from: fromPath, to: rel, type: 'import',
-            label: specifier, resolved: true,
-            line: imp.getStartLineNumber(),
-          })
-        }
-      }
+    if (isExternalModule(specifier)) {
+      maybePushExternalImport(imp, fromPath, rootDir, specifier, links)
       continue
     }
-
-    let toPath: string | null = null
-    const resolvedSf = imp.getModuleSpecifierSourceFile()
-    if (resolvedSf) toPath = relativizeAbs(resolvedSf.getFilePath(), rootDir)
-
-    if (!toPath && (specifier.startsWith('@/') || specifier.startsWith('~/'))) {
-      toPath = resolveAliasStandalone(specifier, fromPath, allFiles)
-    }
-    if (!toPath && specifier.startsWith('.')) {
-      toPath = resolveRelativeStandalone(specifier, sourceFile.getFilePath(), rootDir, project)
-    }
+    const toPath = resolveLocalImport(imp, specifier, sourceFile, project, rootDir, allFiles, fromPath)
     if (!toPath || toPath.includes('node_modules')) continue
-
     links.push({
       from: fromPath, to: toPath, type: 'import',
       label: specifier, resolved: true,
       line: imp.getStartLineNumber(),
     })
   }
+}
 
-  // Dynamic imports : import('...')
+function isExternalModule(specifier: string): boolean {
+  return !specifier.startsWith('.') && !specifier.startsWith('@/') && !specifier.startsWith('~/')
+}
+
+/**
+ * Pour un import external (npm package), on émet le link UNIQUEMENT si la
+ * source file résolue est dans rootDir et n'est PAS dans node_modules. Sert
+ * aux monorepos workspace où `@liby-tools/foo` résout vers packages/foo/src.
+ */
+function maybePushExternalImport(
+  imp: import('ts-morph').ImportDeclaration,
+  fromPath: string,
+  rootDir: string,
+  specifier: string,
+  links: DetectedLink[],
+): void {
+  const resolved = imp.getModuleSpecifierSourceFile()
+  if (!resolved) return
+  const rel = relativizeAbs(resolved.getFilePath(), rootDir)
+  if (!rel || rel.includes('node_modules')) return
+  links.push({
+    from: fromPath, to: rel, type: 'import',
+    label: specifier, resolved: true,
+    line: imp.getStartLineNumber(),
+  })
+}
+
+/** Résout un import local : ts-morph natif → alias `@/`/`~/` → relative. */
+function resolveLocalImport(
+  imp: import('ts-morph').ImportDeclaration,
+  specifier: string,
+  sourceFile: SourceFile,
+  project: Project,
+  rootDir: string,
+  allFiles: string[],
+  fromPath: string,
+): string | null {
+  const resolvedSf = imp.getModuleSpecifierSourceFile()
+  if (resolvedSf) {
+    const rel = relativizeAbs(resolvedSf.getFilePath(), rootDir)
+    if (rel) return rel
+  }
+  if (specifier.startsWith('@/') || specifier.startsWith('~/')) {
+    return resolveAliasStandalone(specifier, fromPath, allFiles)
+  }
+  if (specifier.startsWith('.')) {
+    return resolveRelativeStandalone(specifier, sourceFile.getFilePath(), rootDir, project)
+  }
+  return null
+}
+
+// ─── Dynamic imports : import('...') ────────────────────────────────────────
+
+function scanDynamicImports(
+  sourceFile: SourceFile,
+  fromPath: string,
+  project: Project,
+  rootDir: string,
+  links: DetectedLink[],
+): void {
   for (const callExpr of sourceFile.getDescendantsOfKind(SyntaxKind.CallExpression)) {
-    const expr = callExpr.getExpression()
-    if (expr.getText() !== 'import') continue
+    if (callExpr.getExpression().getText() !== 'import') continue
     const args = callExpr.getArguments()
     if (args.length === 0) continue
     const spec = args[0].getText().replace(/['"]/g, '')
@@ -273,17 +326,21 @@ export function scanImportsInSourceFile(
       meta: { dynamic: true },
     })
   }
+}
 
-  // Re-exports : `export ... from '...'`
+// ─── Re-exports : `export ... from '...'` ───────────────────────────────────
+
+function scanReExports(
+  sourceFile: SourceFile,
+  fromPath: string,
+  project: Project,
+  rootDir: string,
+  links: DetectedLink[],
+): void {
   for (const exp of sourceFile.getExportDeclarations()) {
     const moduleSpecifier = exp.getModuleSpecifierValue()
     if (!moduleSpecifier) continue
-    let toPath: string | null = null
-    const resolvedSource = exp.getModuleSpecifierSourceFile()
-    if (resolvedSource) toPath = relativizeAbs(resolvedSource.getFilePath(), rootDir)
-    if (!toPath && moduleSpecifier.startsWith('.')) {
-      toPath = resolveRelativeStandalone(moduleSpecifier, sourceFile.getFilePath(), rootDir, project)
-    }
+    const toPath = resolveReExportPath(exp, moduleSpecifier, sourceFile, project, rootDir)
     if (!toPath || toPath.includes('node_modules')) continue
     links.push({
       from: fromPath, to: toPath, type: 'import',
@@ -292,8 +349,24 @@ export function scanImportsInSourceFile(
       line: exp.getStartLineNumber(),
     })
   }
+}
 
-  return links
+function resolveReExportPath(
+  exp: import('ts-morph').ExportDeclaration,
+  moduleSpecifier: string,
+  sourceFile: SourceFile,
+  project: Project,
+  rootDir: string,
+): string | null {
+  const resolvedSource = exp.getModuleSpecifierSourceFile()
+  if (resolvedSource) {
+    const rel = relativizeAbs(resolvedSource.getFilePath(), rootDir)
+    if (rel) return rel
+  }
+  if (moduleSpecifier.startsWith('.')) {
+    return resolveRelativeStandalone(moduleSpecifier, sourceFile.getFilePath(), rootDir, project)
+  }
+  return null
 }
 
 function relativizeAbs(absPath: string, rootDir: string): string | null {
