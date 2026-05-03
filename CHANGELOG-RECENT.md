@@ -5,11 +5,11 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T18:40:02Z
+Last update : 2026-05-03T19:01:49Z
 
 ## By type
 
-### `feat` (12)
+### `feat` (11)
 
 - **af41582** feat(toolkit): symbolic simplification facts + 5 composite rules cross-discipline — 2026-05-03
 - **2f84a70** feat(toolkit): Niveau 5 effect-analysis + roadmap defers Niveaux 6/7 — 2026-05-03
@@ -22,7 +22,6 @@ Last update : 2026-05-03T18:40:02Z
 - **e9a2b44** feat(runtime-graph): Phase γ — 4 mathematical disciplines runtime + composite rules — 2026-05-03
 - **cd9a769** feat(runtime-graph): Phase β — replay-tests + chaos + Express + MongoDB + config-driven — 2026-05-03
 - **e65ea40** feat(runtime-graph): Phase α — runtime observability framework with datalog query language — 2026-05-03
-- **bbfa9d6** feat(toolkit): SQL ALTER TABLE tracking + CrossDisciplineDetector POC — 2026-05-01
 
 
 ### `fix` (9)
@@ -47,8 +46,12 @@ Last update : 2026-05-03T18:40:02Z
 - **afd0965** perf(toolkit): self-discovered Salsa optimizations — warm runtime −40% — 2026-05-03
 
 
-### `refactor` (15)
+### `refactor` (17)
 
+- **64b3dcd** refactor(toolkit): split exportFacts batch 5 — eliminate ALL bombs in facts/index.ts (CrossDiscipline + Tier234) — 2026-05-03
+- **fe16098** refactor(toolkit): split exportFacts batch 4 — eliminate 3 helper-bombs (Cycle, Security, Package) — 2026-05-03
+- **cbc6a6b** refactor(toolkit): split exportFacts batch 3 — exportFacts cyclo 84→4 (sous le seuil) — 2026-05-03
+- **5888c3e** refactor(toolkit): split exportFacts batch 2 — extract graph metrics + listeners (cyclomatic 102→84) — 2026-05-03
 - **f8e2fdd** refactor(toolkit): split exportFacts en 5 emit helpers (cyclomatic 142→102) — 2026-05-03
 - **7c6668c** refactor(toolkit): kill LONG-FN-BY-PARAMS (5→0) + fix CHAOS-AMPLIFIER FP (6→3) — 2026-05-03
 - **96048d7** refactor(toolkit): extract NCD duplicates → ast-helpers + drivers/_common (NCD: 16→12) — 2026-05-03
@@ -62,8 +65,6 @@ Last update : 2026-05-03T18:40:02Z
 - **5f8d691** refactor(toolkit): split god-files + fix REDOS detector + tests hubs — 2026-05-03
 - **c484f1f** refactor(codegraph): runDeterministicDetectors 279→108 LOC + git-fixture determinism — 2026-05-03
 - **6eb35b2** refactor(toolkit): HotAllocation requires ModuleCentrality>200 (FP reduction) — 2026-05-02
-- **40b2842** refactor(toolkit): SQL DROP/skip-rollbacks + disable noisy composite rules — 2026-05-02
-- **51d7e5f** refactor(toolkit): sql-naming exemptions + ADD/RENAME ordering + edge-case patterns — 2026-05-01
 
 
 ### `chore` (4)
@@ -82,13 +83,12 @@ Last update : 2026-05-03T18:40:02Z
 - **095661e** docs(validation): run #1 — Hono framework (186 files, 3.5s, 0 crash, 0 hallucination) — 2026-05-03
 
 
-### `test` (1)
-
-- **0c9d608** test(toolkit): contract tests pour CrossDisciplineDetector POC — 2026-05-01
-
-
 ## Full history
 
+- **64b3dcd** refactor(toolkit): split exportFacts batch 5 — eliminate ALL bombs in facts/index.ts (CrossDiscipline + Tier234) — 2026-05-03
+- **fe16098** refactor(toolkit): split exportFacts batch 4 — eliminate 3 helper-bombs (Cycle, Security, Package) — 2026-05-03
+- **cbc6a6b** refactor(toolkit): split exportFacts batch 3 — exportFacts cyclo 84→4 (sous le seuil) — 2026-05-03
+- **5888c3e** refactor(toolkit): split exportFacts batch 2 — extract graph metrics + listeners (cyclomatic 102→84) — 2026-05-03
 - **f8e2fdd** refactor(toolkit): split exportFacts en 5 emit helpers (cyclomatic 142→102) — 2026-05-03
 - **7c6668c** refactor(toolkit): kill LONG-FN-BY-PARAMS (5→0) + fix CHAOS-AMPLIFIER FP (6→3) — 2026-05-03
 - **96048d7** refactor(toolkit): extract NCD duplicates → ast-helpers + drivers/_common (NCD: 16→12) — 2026-05-03
@@ -135,7 +135,3 @@ Last update : 2026-05-03T18:40:02Z
 - **e65ea40** feat(runtime-graph): Phase α — runtime observability framework with datalog query language — 2026-05-03
 - **8c49ff7** fix(analyzer): factsOnly mode must populate TestedFile — 2026-05-03
 - **6eb35b2** refactor(toolkit): HotAllocation requires ModuleCentrality>200 (FP reduction) — 2026-05-02
-- **40b2842** refactor(toolkit): SQL DROP/skip-rollbacks + disable noisy composite rules — 2026-05-02
-- **51d7e5f** refactor(toolkit): sql-naming exemptions + ADD/RENAME ordering + edge-case patterns — 2026-05-01
-- **0c9d608** test(toolkit): contract tests pour CrossDisciplineDetector POC — 2026-05-01
-- **bbfa9d6** feat(toolkit): SQL ALTER TABLE tracking + CrossDisciplineDetector POC — 2026-05-01

@@ -15,6 +15,11 @@
 
 .decl CochangeWithoutCotestGrandfathered(fileA: symbol, fileB: symbol)
 
+// Filter to TS source files only — File(FB) n'est emit que pour les
+// .ts/.tsx du snapshot. Sans ce filter, la rule fire sur les .md /
+// .dl / .test.ts qui co-évoluent normalement avec leur source mais
+// ne sont pas testables (markdown auto-genere, schema datalog, test
+// file lui-meme). On exclut aussi les fixtures (test-fixture tag).
 Violation("COMPOSITE-COCHANGE-WITHOUT-COTEST", FB, 0,
   "co-change frequent avec un fichier teste, mais celui-ci ne l'est pas — test gap cache") :-
     CoChange(FA, FB, N, J),
@@ -22,4 +27,6 @@ Violation("COMPOSITE-COCHANGE-WITHOUT-COTEST", FB, 0,
     J >= 30,
     TestedFile(FA),
     !TestedFile(FB),
+    File(FB),
+    !FileTag(FB, "test-fixture"),
     !CochangeWithoutCotestGrandfathered(FA, FB).
