@@ -570,6 +570,8 @@ async function callViaSdk(args: {
 
 // ─── Orchestrateur ──────────────────────────────────────────────────────────
 
+type Mode = 'cli' | 'sdk'
+
 export async function bootstrapAdrs(opts: BootstrapOptions): Promise<BootstrapResult> {
   const { config } = opts
   const candidates = (opts.candidates ?? []).slice(0, opts.maxCandidates ?? 10)
@@ -577,122 +579,187 @@ export async function bootstrapAdrs(opts: BootstrapOptions): Promise<BootstrapRe
     return { drafts: [], skipped: [], errors: [] }
   }
 
-  // Choix du mode
-  const requestedMode = opts.agentMode ?? 'auto'
   const cliAvailable = await isClaudeCliAvailable()
   const apiKey = opts.apiKey ?? process.env.ANTHROPIC_API_KEY
-  let mode: 'cli' | 'sdk'
-  if (requestedMode === 'cli') {
-    if (!cliAvailable) throw new Error('Claude CLI demandé mais introuvable dans PATH')
-    mode = 'cli'
-  } else if (requestedMode === 'sdk') {
-    if (!apiKey) throw new Error('Mode SDK demandé mais ANTHROPIC_API_KEY absent')
-    mode = 'sdk'
-  } else {
-    if (cliAvailable) mode = 'cli'
-    else if (apiKey) mode = 'sdk'
-    else throw new Error('Ni Claude CLI ni ANTHROPIC_API_KEY disponibles. Install Claude Code (https://claude.com/claude-code) ou set ANTHROPIC_API_KEY.')
-  }
+  const mode = resolveMode(opts.agentMode ?? 'auto', cliAvailable, apiKey)
 
   const sdkClient = mode === 'sdk' ? new Anthropic({ apiKey: apiKey! }) : null
   const model = opts.model ?? (mode === 'cli' ? 'sonnet' : 'claude-sonnet-4-5')
 
-  const drafts: AdrDraft[] = []
-  const skipped: BootstrapResult['skipped'] = []
-  const errors: BootstrapResult['errors'] = []
+  const result: BootstrapResult = { drafts: [], skipped: [], errors: [] }
 
   for (const candidate of candidates) {
-    try {
-      let fileContent: string
-      try {
-        // await-ok: per-candidate read dans loop séquentielle LLM (cf. ci-dessous), mêmes contraintes
-        fileContent = await readFile(candidate.filePath, 'utf-8')
-      } catch (e) {
-        errors.push({ candidate, error: `Cannot read file: ${(e as Error).message}` })
-        continue
-      }
-
-      let userPrompt: string | null = null
-      if (candidate.kind === 'singleton') {
-        userPrompt = SINGLETON_PROMPT_TEMPLATE({
-          filePath: candidate.relativePath,
-          fileContent,
-          evidence: candidate.evidence,
-          modulePrefix: deriveModulePrefix(candidate.relativePath, config.srcDirs),
-        }) + (mode === 'cli' ? CLI_SCHEMA_HINT : '')
-      } else if (candidate.kind === 'fsm') {
-        const fsm = candidate as FsmCandidate
-        userPrompt = FSM_PROMPT_TEMPLATE({
-          filePath: candidate.relativePath,
-          fileContent,
-          evidence: candidate.evidence,
-          modulePrefix: deriveModulePrefix(candidate.relativePath, config.srcDirs),
-          fsmName: fsm.fsmName,
-          values: fsm.values,
-          writeSites: fsm.writeSites,
-        }) + (mode === 'cli' ? CLI_SCHEMA_HINT : '')
-      }
-
-      if (!userPrompt) {
-        skipped.push({ candidate, reason: `Pattern ${candidate.kind} not yet supported` })
-        continue
-      }
-
-      // LLM call séquentiel par candidate — rate-limit Anthropic + cohérence par draft.
-      // Extrait dans une promise pour marker await-ok sur 1 site (sinon 2 sites
-      // dans le ternaire ci-dessous, chacun ayant besoin de son marker).
-      // await-ok: LLM call séquentiel par candidate — rate-limit + cohérence
-      const draftPayload = await (mode === 'cli'
-        ? callViaClaudeCli({ systemPrompt: CLI_SYSTEM_PROMPT, userPrompt, model })
-        : callViaSdk({
-            client: sdkClient!,
-            systemPrompt: 'Tu es un assistant d\'extraction d\'ADR.',
-            userPrompt,
-            model,
-          }))
-
-      const draft: AdrDraft = {
-        verdict: draftPayload.verdict ?? 'skip',
-        reason: draftPayload.reason,
-        title: draftPayload.title,
-        rule: draftPayload.rule,
-        why: draftPayload.why,
-        asserts: draftPayload.asserts,
-        anchors: draftPayload.anchors ?? [candidate.relativePath],
-        pattern: candidate.kind,
-        primaryAnchor: candidate.relativePath,
-      }
-      draft.confidence = calculateConfidence(draft)
-
-      if (draft.verdict === 'skip') {
-        skipped.push({ candidate, reason: draft.reason ?? 'agent skip' })
-        continue
-      }
-
-      // Validation pré-apply : les asserts ts-morph doivent résoudre contre
-      // le code RÉEL. Sinon le pre-commit suivant pèterait silencieusement.
-      // await-ok: validation séquentielle par draft (ts-morph project setup partagé)
-      const validation = await validateDraftAsserts(draft, config)
-      if (!validation.valid) {
-        const failedSymbols = new Set(validation.failedAsserts.map(f => f.split(':')[0]?.trim()))
-        const validAsserts = (draft.asserts ?? []).filter(a => !failedSymbols.has(a.symbol))
-        const removedCount = (draft.asserts?.length ?? 0) - validAsserts.length
-        draft.asserts = validAsserts.length > 0 ? validAsserts : undefined
-        // Annote sans forcer "low" : si le Why est solide, on garde la
-        // confiance d'origine (Why solide vaut plus que asserts cassés).
-        // Le user voit `validationNotes` dans la revue et peut éditer.
-        draft.validationNotes = `${removedCount} assert(s) retirés (résolution échouée): ${validation.failedAsserts.slice(0, 3).join('; ')}`
-        // Si tous les asserts sont retirés, dégrade d'un cran (mais pas plus)
-        if (validAsserts.length === 0 && draft.confidence === 'high') {
-          draft.confidence = 'medium'
-        }
-      }
-
-      drafts.push(draft)
-    } catch (e) {
-      errors.push({ candidate, error: (e as Error).message })
-    }
+    // await-ok: chaque candidate est traité séquentiellement (rate-limit LLM + cohérence draft)
+    await processCandidate(candidate, mode, sdkClient, model, config, result)
   }
 
-  return { drafts, skipped, errors }
+  return result
+}
+
+/**
+ * Choisit le mode CLI / SDK selon disponibilité + override user. Throw si
+ * aucun mode utilisable dans la config résolue.
+ */
+function resolveMode(
+  requested: 'cli' | 'sdk' | 'auto',
+  cliAvailable: boolean,
+  apiKey: string | undefined,
+): Mode {
+  if (requested === 'cli') {
+    if (!cliAvailable) throw new Error('Claude CLI demandé mais introuvable dans PATH')
+    return 'cli'
+  }
+  if (requested === 'sdk') {
+    if (!apiKey) throw new Error('Mode SDK demandé mais ANTHROPIC_API_KEY absent')
+    return 'sdk'
+  }
+  if (cliAvailable) return 'cli'
+  if (apiKey) return 'sdk'
+  throw new Error(
+    'Ni Claude CLI ni ANTHROPIC_API_KEY disponibles. Install Claude Code (https://claude.com/claude-code) ou set ANTHROPIC_API_KEY.',
+  )
+}
+
+/**
+ * Traite une candidate : read file → build prompt → call LLM → build draft
+ * → validate asserts → push dans result. Toute erreur est capturée dans
+ * result.errors plutôt que de faire péter le batch entier.
+ */
+async function processCandidate(
+  candidate: PatternCandidate,
+  mode: Mode,
+  sdkClient: Anthropic | null,
+  model: string,
+  config: AdrToolkitConfig,
+  result: BootstrapResult,
+): Promise<void> {
+  try {
+    // await-ok: per-candidate read dans loop séquentielle LLM (cf. caller)
+    let fileContent: string
+    try {
+      fileContent = await readFile(candidate.filePath, 'utf-8')
+    } catch (e) {
+      result.errors.push({ candidate, error: `Cannot read file: ${(e as Error).message}` })
+      return
+    }
+
+    const userPrompt = buildUserPrompt(candidate, fileContent, mode, config)
+    if (!userPrompt) {
+      result.skipped.push({ candidate, reason: `Pattern ${candidate.kind} not yet supported` })
+      return
+    }
+
+    // await-ok: LLM call séquentiel par candidate — rate-limit + cohérence
+    const draftPayload = await callLLM(mode, sdkClient, userPrompt, model)
+    const draft = assembleDraft(draftPayload, candidate)
+    if (draft.verdict === 'skip') {
+      result.skipped.push({ candidate, reason: draft.reason ?? 'agent skip' })
+      return
+    }
+
+    // await-ok: validation séquentielle par draft (ts-morph project setup partagé)
+    await applyAssertValidation(draft, config)
+    result.drafts.push(draft)
+  } catch (e) {
+    result.errors.push({ candidate, error: (e as Error).message })
+  }
+}
+
+/**
+ * Construit le user prompt pour la kind de la candidate. Renvoie null si
+ * le pattern n'est pas encore supporté (caller skip).
+ */
+function buildUserPrompt(
+  candidate: PatternCandidate,
+  fileContent: string,
+  mode: Mode,
+  config: AdrToolkitConfig,
+): string | null {
+  const cliHint = mode === 'cli' ? CLI_SCHEMA_HINT : ''
+  if (candidate.kind === 'singleton') {
+    return SINGLETON_PROMPT_TEMPLATE({
+      filePath: candidate.relativePath,
+      fileContent,
+      evidence: candidate.evidence,
+      modulePrefix: deriveModulePrefix(candidate.relativePath, config.srcDirs),
+    }) + cliHint
+  }
+  if (candidate.kind === 'fsm') {
+    const fsm = candidate as FsmCandidate
+    return FSM_PROMPT_TEMPLATE({
+      filePath: candidate.relativePath,
+      fileContent,
+      evidence: candidate.evidence,
+      modulePrefix: deriveModulePrefix(candidate.relativePath, config.srcDirs),
+      fsmName: fsm.fsmName,
+      values: fsm.values,
+      writeSites: fsm.writeSites,
+    }) + cliHint
+  }
+  return null
+}
+
+/** Dispatch CLI vs SDK pour le call LLM. */
+function callLLM(
+  mode: Mode,
+  sdkClient: Anthropic | null,
+  userPrompt: string,
+  model: string,
+): ReturnType<typeof callViaClaudeCli> {
+  if (mode === 'cli') return callViaClaudeCli({ systemPrompt: CLI_SYSTEM_PROMPT, userPrompt, model })
+  return callViaSdk({
+    client: sdkClient!,
+    systemPrompt: 'Tu es un assistant d\'extraction d\'ADR.',
+    userPrompt,
+    model,
+  })
+}
+
+function assembleDraft(
+  draftPayload: Awaited<ReturnType<typeof callViaClaudeCli>>,
+  candidate: PatternCandidate,
+): AdrDraft {
+  const draft: AdrDraft = {
+    verdict: draftPayload.verdict ?? 'skip',
+    reason: draftPayload.reason,
+    title: draftPayload.title,
+    rule: draftPayload.rule,
+    why: draftPayload.why,
+    asserts: draftPayload.asserts,
+    anchors: draftPayload.anchors ?? [candidate.relativePath],
+    pattern: candidate.kind,
+    primaryAnchor: candidate.relativePath,
+  }
+  draft.confidence = calculateConfidence(draft)
+  return draft
+}
+
+/**
+ * Validation pré-apply : les asserts ts-morph doivent résoudre contre le
+ * code RÉEL. Sinon le pre-commit suivant pèterait silencieusement.
+ *
+ * Mutation du draft :
+ *   - retire les asserts qui ont échoué (par symbole)
+ *   - annote validationNotes
+ *   - dégrade confidence d'un cran si tous les asserts sont retirés
+ */
+async function applyAssertValidation(
+  draft: AdrDraft,
+  config: AdrToolkitConfig,
+): Promise<void> {
+  const validation = await validateDraftAsserts(draft, config)
+  if (validation.valid) return
+  const failedSymbols = new Set(
+    validation.failedAsserts.map((f) => f.split(':')[0]?.trim()),
+  )
+  const validAsserts = (draft.asserts ?? []).filter((a) => !failedSymbols.has(a.symbol))
+  const removedCount = (draft.asserts?.length ?? 0) - validAsserts.length
+  draft.asserts = validAsserts.length > 0 ? validAsserts : undefined
+  // Annote sans forcer "low" : si le Why est solide, on garde la confiance
+  // d'origine (Why solide vaut plus que asserts cassés). Le user voit
+  // `validationNotes` dans la revue et peut éditer.
+  draft.validationNotes = `${removedCount} assert(s) retirés (résolution échouée): ${validation.failedAsserts.slice(0, 3).join('; ')}`
+  if (validAsserts.length === 0 && draft.confidence === 'high') {
+    draft.confidence = 'medium'
+  }
 }

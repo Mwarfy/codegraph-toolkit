@@ -5,7 +5,7 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T22:45:26Z
+Last update : 2026-05-03T22:47:14Z
 
 ## By type
 
@@ -19,6 +19,7 @@ Last update : 2026-05-03T22:45:26Z
 
 ### `refactor` (46)
 
+- **1d0518d** refactor(codegraph): split extractTensions (cyclo 34→10, cog 52→7) — tensions.ts bomb-free — 2026-05-04
 - **8ae0127** refactor(codegraph): split computeCommunityDetection (cyclo 36→7, cog 43→6) — community-detection.ts bomb-free — 2026-05-04
 - **e02af8d** refactor(codegraph): split computeComponentMetrics (cyclo 36→4, cog 44→0) — component-metrics.ts bomb-free — 2026-05-04
 - **13162d1** refactor(codegraph): split extractTaintedVarsFileBundle (cyclo 37→6, cog 62→7) — tainted-vars.ts bomb-free — 2026-05-04
@@ -38,11 +39,11 @@ Last update : 2026-05-03T22:45:26Z
 - **d534d97** refactor(toolkit): split constant-expressions (cyclo 35+23→under) — constant-expressions.ts ALL bombs cleared — 2026-05-03
 - **f4ee98f** refactor(toolkit): split typed-calls (cyclo 18+16→under) — typed-calls.ts ALL bombs cleared — 2026-05-03
 - **ac2b550** refactor(toolkit): split symbol-refs (cyclo 20+18→under) — symbol-refs.ts ALL bombs cleared — 2026-05-03
-- **c677082** refactor(toolkit): split compression-similarity (cyclo 18+16→under) — compression-similarity.ts ALL bombs cleared — 2026-05-03
 
 
 ## Full history
 
+- **1d0518d** refactor(codegraph): split extractTensions (cyclo 34→10, cog 52→7) — tensions.ts bomb-free — 2026-05-04
 - **8ae0127** refactor(codegraph): split computeCommunityDetection (cyclo 36→7, cog 43→6) — community-detection.ts bomb-free — 2026-05-04
 - **e02af8d** refactor(codegraph): split computeComponentMetrics (cyclo 36→4, cog 44→0) — component-metrics.ts bomb-free — 2026-05-04
 - **13162d1** refactor(codegraph): split extractTaintedVarsFileBundle (cyclo 37→6, cog 62→7) — tainted-vars.ts bomb-free — 2026-05-04
@@ -92,4 +93,3 @@ Last update : 2026-05-03T22:45:26Z
 - **4b6165c** refactor(toolkit): split buildFlow (cyclo 19→4) — 4 helpers BFS-extracted — 2026-05-03
 - **a5ac751** refactor(toolkit): split buildTestFilesIndex (cyclo 17→1) — 5 helpers + ImportIndices struct — 2026-05-03
 - **62de53a** refactor(toolkit): split analyzeScope (cyclo 17→3) — extract per-kind handlers — 2026-05-03
-- **6cfd2fe** refactor(toolkit): split analyzePackageDeps (cyclo 17→4) — 3 helpers — 2026-05-03
