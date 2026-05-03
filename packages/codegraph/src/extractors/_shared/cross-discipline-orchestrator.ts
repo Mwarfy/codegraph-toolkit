@@ -36,6 +36,7 @@ import { computeInformationBottleneck, type InformationBottleneck } from '../inf
 import { computeCommunityDetection, type ImportCommunity, type ModularityScore } from '../community-detection.js'
 import { computeFactStability, type FactKindStability } from '../fact-stability.js'
 import { analyzeCompressionSimilarity, type NormalizedCompressionDistance } from '../compression-similarity.js'
+import { allCompressionSimilarity as incAllCompressionSimilarity } from '../../incremental/compression-similarity.js'
 import { computeGrangerCausality, type GrangerCausality } from '../granger-causality.js'
 
 export interface CrossDisciplineResults {
@@ -61,6 +62,8 @@ export interface CrossDisciplineContext {
   snapshot: GraphSnapshot
   coChangePairs: CoChangePair[] | undefined
   timing: { detectors: Record<string, number> }
+  /** Si true, utilise les Salsa wrappers pour les détecteurs Salsa-isés. */
+  incremental?: boolean
 }
 
 /**
@@ -71,6 +74,7 @@ export async function runCrossDisciplineDetectors(
   ctx: CrossDisciplineContext,
 ): Promise<CrossDisciplineResults> {
   const { rootDir, files, sharedProject, snapshot, coChangePairs, timing } = ctx
+  const incremental = ctx.incremental ?? false
   const results: CrossDisciplineResults = {}
 
   // ─── Cross-discipline metrics (Cycle 2bis) ────────────────────────
@@ -222,9 +226,13 @@ export async function runCrossDisciplineDetectors(
   }
 
   // ─── NCD Kolmogorov compression similarity — 10e discipline ──────────
+  // Salsa-iso : per-file snippets cached on fileContent (NCD pairwise reste
+  // hors-cache car cross-file). Cold path identique au legacy.
   const tNCD = performance.now()
   try {
-    results.compressionDistances = await analyzeCompressionSimilarity(rootDir, files, sharedProject)
+    results.compressionDistances = incremental
+      ? incAllCompressionSimilarity.get('all')
+      : await analyzeCompressionSimilarity(rootDir, files, sharedProject)
     timing.detectors['compression-similarity'] = performance.now() - tNCD
   } catch (err) {
     timing.detectors['compression-similarity'] = performance.now() - tNCD

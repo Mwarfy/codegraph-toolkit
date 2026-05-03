@@ -88,6 +88,7 @@
 - `packages/codegraph/src/incremental/co-change.ts` → ADR-007
 - `packages/codegraph/src/incremental/code-quality-patterns.ts` → ADR-007
 - `packages/codegraph/src/incremental/complexity.ts` → ADR-007
+- `packages/codegraph/src/incremental/compression-similarity.ts` → ADR-007
 - `packages/codegraph/src/incremental/constant-expressions.ts` → ADR-007
 - `packages/codegraph/src/incremental/cycles.ts` → ADR-007
 - `packages/codegraph/src/incremental/data-flows.ts` → ADR-007
@@ -200,6 +201,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+c24fb16 refactor(toolkit): tame AWAIT-IN-LOOP batch 6 — 33→0, AWAIT-IN-LOOP éliminé
 2b4ebc0 refactor(toolkit): tame AWAIT-IN-LOOP batch 3+4+5 — detectors + extractors (58→33)
 9a86461 refactor(toolkit): tame AWAIT-IN-LOOP batch 2 — _shared, regenerate-anchors, drivers (70→58)
 5933423 refactor(toolkit): tame AWAIT-IN-LOOP — parallelize hot paths + mark scaffold (105→70)
@@ -211,7 +213,6 @@ c613ac7 refactor(toolkit): split analyzer.ts:runDeterministicDetectors en 5 phas
 7151cfd perf(toolkit): Salsa-isolate 3 hot detectors (co-change, drift, const-expr)
 f2f93bc chore(brief): regen CLAUDE-CONTEXT + CHANGELOG post-refactor (553→534)
 5f8d691 refactor(toolkit): split god-files + fix REDOS detector + tests hubs
-ee89730 docs(validation): self-analysis run #2 — toolkit voit 553 violations sur lui-même
 ```
 
 ## Comment contribuer à ce brief

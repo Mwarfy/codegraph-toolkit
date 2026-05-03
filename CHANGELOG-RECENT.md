@@ -5,11 +5,11 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T17:28:11Z
+Last update : 2026-05-03T17:42:05Z
 
 ## By type
 
-### `feat` (14)
+### `feat` (13)
 
 - **af41582** feat(toolkit): symbolic simplification facts + 5 composite rules cross-discipline — 2026-05-03
 - **2f84a70** feat(toolkit): Niveau 5 effect-analysis + roadmap defers Niveaux 6/7 — 2026-05-03
@@ -24,7 +24,6 @@ Last update : 2026-05-03T17:28:11Z
 - **e65ea40** feat(runtime-graph): Phase α — runtime observability framework with datalog query language — 2026-05-03
 - **bbfa9d6** feat(toolkit): SQL ALTER TABLE tracking + CrossDisciplineDetector POC — 2026-05-01
 - **dc48f25** feat(toolkit): 4 nouvelles disciplines mathématiques (8e→11e) — 2026-05-01
-- **691337e** feat(toolkit): 8e discipline Newman-Girvan + 4 méta-composites cross-disciplines — 2026-05-01
 
 
 ### `fix` (9)
@@ -47,8 +46,9 @@ Last update : 2026-05-03T17:28:11Z
 - **afd0965** perf(toolkit): self-discovered Salsa optimizations — warm runtime −40% — 2026-05-03
 
 
-### `refactor` (15)
+### `refactor` (16)
 
+- **c24fb16** refactor(toolkit): tame AWAIT-IN-LOOP batch 6 — 33→0, AWAIT-IN-LOOP éliminé — 2026-05-03
 - **2b4ebc0** refactor(toolkit): tame AWAIT-IN-LOOP batch 3+4+5 — detectors + extractors (58→33) — 2026-05-03
 - **9a86461** refactor(toolkit): tame AWAIT-IN-LOOP batch 2 — _shared, regenerate-anchors, drivers (70→58) — 2026-05-03
 - **5933423** refactor(toolkit): tame AWAIT-IN-LOOP — parallelize hot paths + mark scaffold (105→70) — 2026-05-03
@@ -89,6 +89,7 @@ Last update : 2026-05-03T17:28:11Z
 
 ## Full history
 
+- **c24fb16** refactor(toolkit): tame AWAIT-IN-LOOP batch 6 — 33→0, AWAIT-IN-LOOP éliminé — 2026-05-03
 - **2b4ebc0** refactor(toolkit): tame AWAIT-IN-LOOP batch 3+4+5 — detectors + extractors (58→33) — 2026-05-03
 - **9a86461** refactor(toolkit): tame AWAIT-IN-LOOP batch 2 — _shared, regenerate-anchors, drivers (70→58) — 2026-05-03
 - **5933423** refactor(toolkit): tame AWAIT-IN-LOOP — parallelize hot paths + mark scaffold (105→70) — 2026-05-03
@@ -138,4 +139,3 @@ Last update : 2026-05-03T17:28:11Z
 - **8eb80b8** refactor(invariants): raffiner composite-async-sink-with-swallow — 2026-05-01
 - **81dd087** refactor(toolkit): extract NCD-detected duplications + analyzer.ts cross-discipline — 2026-05-01
 - **dc48f25** feat(toolkit): 4 nouvelles disciplines mathématiques (8e→11e) — 2026-05-01
-- **691337e** feat(toolkit): 8e discipline Newman-Girvan + 4 méta-composites cross-disciplines — 2026-05-01

@@ -54,6 +54,7 @@ DB via `new SalsaDatabase()` LOCAL au test, jamais exporté.
 - `packages/codegraph/src/incremental/co-change.ts`
 - `packages/codegraph/src/incremental/code-quality-patterns.ts`
 - `packages/codegraph/src/incremental/complexity.ts`
+- `packages/codegraph/src/incremental/compression-similarity.ts`
 - `packages/codegraph/src/incremental/constant-expressions.ts`
 - `packages/codegraph/src/incremental/cycles.ts`
 - `packages/codegraph/src/incremental/data-flows.ts`

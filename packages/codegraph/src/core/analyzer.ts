@@ -687,6 +687,7 @@ async function runDeterministicDetectors(
     files, sharedProject, snapshot,
     coChangePairs: phase1.coChangePairs,
     timing,
+    incremental: ctx.incremental,
   })
   const phase4 = await runPhase4SecurityAndQuality(ctx)
   const phase5 = await runPhase5SqlAndResource(ctx)
