@@ -259,99 +259,99 @@ function renderHeader(s: GraphSnapshot): string {
   return lines.join('\n')
 }
 
+function statsLineHeader(stats: GraphSnapshot['stats']): string {
+  return `- Files: **${stats.totalFiles}** • Edges: **${stats.totalEdges}** • ` +
+    `Orphans: ${stats.orphanCount} • Health: **${Math.round(stats.healthScore * 100)}%**`
+}
+
+function statsLineDataflows(df: GraphSnapshot['dataFlows']): string | null {
+  if (!df) return null
+  const byKind: Record<string, number> = {}
+  for (const f of df) byKind[f.entry.kind] = (byKind[f.entry.kind] ?? 0) + 1
+  const summary = Object.entries(byKind)
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .map(([k, n]) => `${k}=${n}`)
+    .join(', ')
+  return `- Data flows: **${df.length}** (${summary})`
+}
+
+function statsLinePackageDeps(pd: GraphSnapshot['packageDeps']): string | null {
+  if (!pd) return null
+  const c = { missing: 0, unused: 0, dev: 0 }
+  for (const i of pd) {
+    if (i.kind === 'missing') c.missing++
+    else if (i.kind === 'declared-unused') c.unused++
+    else if (i.kind === 'devOnly') c.dev++
+  }
+  return `- Deps: **${c.missing}** missing · **${c.unused}** declared-unused · **${c.dev}** devOnly`
+}
+
+function statsLineTaint(tv: GraphSnapshot['taintViolations']): string | null {
+  if (!tv) return null
+  const bySev = { critical: 0, high: 0, medium: 0, low: 0 }
+  for (const v of tv) bySev[v.severity]++
+  return `- Taint violations: **${tv.length}** ` +
+    `(crit ${bySev.critical} · high ${bySev.high} · med ${bySev.medium} · low ${bySev.low})`
+}
+
+function statsLinesModuleMetrics(mm: GraphSnapshot['moduleMetrics']): string[] {
+  if (!mm || mm.length === 0) return []
+  const lines: string[] = []
+  // Module-level metrics — afficher les 5 hubs (PageRank) et 5 god-modules
+  // (Henry-Kafura) pour orienter un reviewer vers les points architecturaux
+  // critiques sans lui faire parcourir toutes les fiches.
+  const topPr = mm.slice(0, 5)  // déjà trié par PageRank desc côté extracteur
+  lines.push('', '**Top hubs** (PageRank, import subgraph) :')
+  for (const m of topPr) {
+    lines.push(`  - \`${m.file}\` — PR=${m.pageRank.toFixed(3)} · in=${m.fanIn} · out=${m.fanOut}`)
+  }
+  const topHk = [...mm].sort((a, b) => b.henryKafura - a.henryKafura).slice(0, 5).filter((m) => m.henryKafura > 0)
+  if (topHk.length > 0) {
+    lines.push('', '**God-module candidates** (Henry-Kafura `(in×out)²×loc`) :')
+    for (const m of topHk) {
+      lines.push(`  - \`${m.file}\` — HK=${m.henryKafura.toLocaleString('en-US')} (in=${m.fanIn} × out=${m.fanOut}, loc=${m.loc})`)
+    }
+  }
+  return lines
+}
+
 function renderStats(s: GraphSnapshot): string {
-  const lines: string[] = ['## 0. Stats', '']
-  const stats = s.stats
-  lines.push(
-    `- Files: **${stats.totalFiles}** • Edges: **${stats.totalEdges}** • ` +
-      `Orphans: ${stats.orphanCount} • Health: **${Math.round(stats.healthScore * 100)}%**`,
-  )
-  const tc = s.typedCalls
-  if (tc) {
-    lines.push(`- Typed signatures: **${tc.signatures.length}** • Call edges: **${tc.callEdges.length}**`)
+  const lines: string[] = ['## 0. Stats', '', statsLineHeader(s.stats)]
+
+  if (s.typedCalls) {
+    lines.push(`- Typed signatures: **${s.typedCalls.signatures.length}** • Call edges: **${s.typedCalls.callEdges.length}**`)
   }
-  const cy = s.cycles
-  if (cy) {
-    const nonGated = cy.filter((c) => !c.gated).length
-    lines.push(`- Cycles: **${cy.length}** (non-gated: ${nonGated}, gated: ${cy.length - nonGated})`)
+  if (s.cycles) {
+    const nonGated = s.cycles.filter((c) => !c.gated).length
+    lines.push(`- Cycles: **${s.cycles.length}** (non-gated: ${nonGated}, gated: ${s.cycles.length - nonGated})`)
   }
-  const tp = s.truthPoints
-  if (tp) {
-    const withMirrors = tp.filter((p) => p.mirrors.length > 0).length
-    lines.push(`- Truth points: **${tp.length}** (with mirrors: ${withMirrors})`)
+  if (s.truthPoints) {
+    const withMirrors = s.truthPoints.filter((p) => p.mirrors.length > 0).length
+    lines.push(`- Truth points: **${s.truthPoints.length}** (with mirrors: ${withMirrors})`)
   }
-  const df = s.dataFlows
-  if (df) {
-    const byKind: Record<string, number> = {}
-    for (const f of df) byKind[f.entry.kind] = (byKind[f.entry.kind] ?? 0) + 1
-    const summary = Object.entries(byKind)
-      .sort(([a], [b]) => (a < b ? -1 : 1))
-      .map(([k, n]) => `${k}=${n}`)
-      .join(', ')
-    lines.push(`- Data flows: **${df.length}** (${summary})`)
-  }
-  const sm = s.stateMachines
-  if (sm) {
-    const withOrphans = sm.filter((m) => m.orphanStates.length > 0).length
-    lines.push(`- State machines: **${sm.length}** (with orphan states: ${withOrphans})`)
+  const dfLine = statsLineDataflows(s.dataFlows)
+  if (dfLine) lines.push(dfLine)
+  if (s.stateMachines) {
+    const withOrphans = s.stateMachines.filter((m) => m.orphanStates.length > 0).length
+    lines.push(`- State machines: **${s.stateMachines.length}** (with orphan states: ${withOrphans})`)
   }
 
   // Phase 3.8 : deps / barrels / taint / DSM sur la stats-line pour qu'un
   // reviewer qui ne scroll pas en bas voit déjà le verdict de ces signaux.
-  const pd = s.packageDeps
-  if (pd) {
-    const c = { missing: 0, unused: 0, dev: 0 }
-    for (const i of pd) {
-      if (i.kind === 'missing') c.missing++
-      else if (i.kind === 'declared-unused') c.unused++
-      else if (i.kind === 'devOnly') c.dev++
-    }
-    lines.push(
-      `- Deps: **${c.missing}** missing · **${c.unused}** declared-unused · **${c.dev}** devOnly`,
-    )
+  const pdLine = statsLinePackageDeps(s.packageDeps)
+  if (pdLine) lines.push(pdLine)
+  if (s.barrels && s.barrels.length > 0) {
+    const low = s.barrels.filter((b) => b.lowValue).length
+    lines.push(`- Barrels: **${s.barrels.length}** total · **${low}** low-value (< 2 consumers)`)
   }
-  const br = s.barrels
-  if (br && br.length > 0) {
-    const low = br.filter((b) => b.lowValue).length
-    lines.push(`- Barrels: **${br.length}** total · **${low}** low-value (< 2 consumers)`)
-  }
-  const tv = s.taintViolations
-  if (tv) {
-    const bySev = { critical: 0, high: 0, medium: 0, low: 0 }
-    for (const v of tv) bySev[v.severity]++
-    lines.push(
-      `- Taint violations: **${tv.length}** ` +
-      `(crit ${bySev.critical} · high ${bySev.high} · med ${bySev.medium} · low ${bySev.low})`,
-    )
-  }
-  const dsm = s.dsm
-  if (dsm) {
-    const sccCount = dsm.levels.filter((l) => l.length >= 2).length
-    lines.push(
-      `- DSM: **${dsm.order.length}** containers · **${dsm.backEdges.length}** back-edges · **${sccCount}** SCC(s) of size ≥ 2`,
-    )
+  const tvLine = statsLineTaint(s.taintViolations)
+  if (tvLine) lines.push(tvLine)
+  if (s.dsm) {
+    const sccCount = s.dsm.levels.filter((l) => l.length >= 2).length
+    lines.push(`- DSM: **${s.dsm.order.length}** containers · **${s.dsm.backEdges.length}** back-edges · **${sccCount}** SCC(s) of size ≥ 2`)
   }
 
-  // Module-level metrics — afficher les 5 hubs (PageRank) et 5 god-modules
-  // (Henry-Kafura) pour orienter un reviewer vers les points architecturaux
-  // critiques sans lui faire parcourir toutes les fiches.
-  const mm = s.moduleMetrics
-  if (mm && mm.length > 0) {
-    const topPr = mm.slice(0, 5)  // déjà trié par PageRank desc côté extracteur
-    lines.push('')
-    lines.push('**Top hubs** (PageRank, import subgraph) :')
-    for (const m of topPr) {
-      lines.push(`  - \`${m.file}\` — PR=${m.pageRank.toFixed(3)} · in=${m.fanIn} · out=${m.fanOut}`)
-    }
-    const topHk = [...mm].sort((a, b) => b.henryKafura - a.henryKafura).slice(0, 5).filter((m) => m.henryKafura > 0)
-    if (topHk.length > 0) {
-      lines.push('')
-      lines.push('**God-module candidates** (Henry-Kafura `(in×out)²×loc`) :')
-      for (const m of topHk) {
-        lines.push(`  - \`${m.file}\` — HK=${m.henryKafura.toLocaleString('en-US')} (in=${m.fanIn} × out=${m.fanOut}, loc=${m.loc})`)
-      }
-    }
-  }
+  lines.push(...statsLinesModuleMetrics(s.moduleMetrics))
   return lines.join('\n')
 }
 

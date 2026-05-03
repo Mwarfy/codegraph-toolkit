@@ -175,9 +175,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/audit-listener.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/scheduler.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/b.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
@@ -199,6 +199,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+9609b7d refactor(toolkit): split renderIndex (cyclo 28→3) — 3 helpers + bucket pattern factor
 a0add06 refactor(toolkit): split renderModuleFiche (cyclo 32→4) — 5 helpers section-by-section
 020e949 refactor(toolkit): split renderModules (cyclo 35→12) — 4 helpers index builders
 df1ee8c refactor(toolkit): split renderEventFlows (cyclo 25→5, cog 63→4) — 5 helpers extraits
@@ -210,7 +211,6 @@ e19790b fix(toolkit): cochange-without-cotest filter to TS source — 5 FPs elim
 64b3dcd refactor(toolkit): split exportFacts batch 5 — eliminate ALL bombs in facts/index.ts (CrossDiscipline + Tier234)
 fe16098 refactor(toolkit): split exportFacts batch 4 — eliminate 3 helper-bombs (Cycle, Security, Package)
 cbc6a6b refactor(toolkit): split exportFacts batch 3 — exportFacts cyclo 84→4 (sous le seuil)
-5888c3e refactor(toolkit): split exportFacts batch 2 — extract graph metrics + listeners (cyclomatic 102→84)
 ```
 
 ## Comment contribuer à ce brief

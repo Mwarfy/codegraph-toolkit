@@ -5,7 +5,7 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T19:30:12Z
+Last update : 2026-05-03T19:32:01Z
 
 ## By type
 
@@ -21,7 +21,7 @@ Last update : 2026-05-03T19:30:12Z
 - **5c78f3a** feat(runtime-graph): Phase γ.2a — Granger causality runtime + time-series infra — 2026-05-03
 
 
-### `fix` (10)
+### `fix` (9)
 
 - **50eb1f8** fix(toolkit): articulation-point rule — exclure package entry points (FP systemique) — 2026-05-03
 - **8844d31** fix(toolkit): FSM-ORPHAN 3→0 — fixture skip + Attribute API + satisfies unwrap — 2026-05-03
@@ -32,7 +32,6 @@ Last update : 2026-05-03T19:30:12Z
 - **70afbdc** fix(toolkit): clean 93 violations (534→441, −17.4%) sans bypass — 2026-05-03
 - **866eb25** fix(toolkit): bugs #1 #2 #3 #4 trouvés via test externe Hono — 2026-05-03
 - **0146402** fix(toolkit): close P0+P1+P2+P3 — review credibility gap part 2 — 2026-05-03
-- **81b8fb9** fix(toolkit): self-detected defects via codegraph + runtime-graph — 2026-05-03
 
 
 ### `perf` (5)
@@ -44,8 +43,9 @@ Last update : 2026-05-03T19:30:12Z
 - **afd0965** perf(toolkit): self-discovered Salsa optimizations — warm runtime −40% — 2026-05-03
 
 
-### `refactor` (19)
+### `refactor` (20)
 
+- **9609b7d** refactor(toolkit): split renderIndex (cyclo 28→3) — 3 helpers + bucket pattern factor — 2026-05-03
 - **a0add06** refactor(toolkit): split renderModuleFiche (cyclo 32→4) — 5 helpers section-by-section — 2026-05-03
 - **020e949** refactor(toolkit): split renderModules (cyclo 35→12) — 4 helpers index builders — 2026-05-03
 - **df1ee8c** refactor(toolkit): split renderEventFlows (cyclo 25→5, cog 63→4) — 5 helpers extraits — 2026-05-03
@@ -85,6 +85,7 @@ Last update : 2026-05-03T19:30:12Z
 
 ## Full history
 
+- **9609b7d** refactor(toolkit): split renderIndex (cyclo 28→3) — 3 helpers + bucket pattern factor — 2026-05-03
 - **a0add06** refactor(toolkit): split renderModuleFiche (cyclo 32→4) — 5 helpers section-by-section — 2026-05-03
 - **020e949** refactor(toolkit): split renderModules (cyclo 35→12) — 4 helpers index builders — 2026-05-03
 - **df1ee8c** refactor(toolkit): split renderEventFlows (cyclo 25→5, cog 63→4) — 5 helpers extraits — 2026-05-03
@@ -134,4 +135,3 @@ Last update : 2026-05-03T19:30:12Z
 - **79c4fed** feat(runtime-graph): Phase γ.2c — TDA Persistent Homology dim-0 — 2026-05-03
 - **fc1c79d** feat(runtime-graph): Phase γ.2b — true time-series Lyapunov 1D — 2026-05-03
 - **5c78f3a** feat(runtime-graph): Phase γ.2a — Granger causality runtime + time-series infra — 2026-05-03
-- **81b8fb9** fix(toolkit): self-detected defects via codegraph + runtime-graph — 2026-05-03
