@@ -5,7 +5,7 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T20:48:25Z
+Last update : 2026-05-03T20:50:12Z
 
 ## By type
 
@@ -20,6 +20,7 @@ Last update : 2026-05-03T20:48:25Z
 
 ### `refactor` (45)
 
+- **321cd83** refactor(toolkit): split classifyExportsFromBundles (cyclo 25→3) — unused-exports.ts ALL bombs cleared — 2026-05-03
 - **dd61398** refactor(toolkit): split extractUnusedExportsFileBundle (cyclo 36→3) — 6 helpers per-pass — 2026-05-03
 - **86cff0b** refactor(toolkit): split analyzeSqlSchema (cyclo 38→3) + dedupe SQL comparators to _shared/sql-helpers — 2026-05-03
 - **8988d09** refactor(toolkit): split parseColumnProperty (cyclo 18→3) — drizzle-schema.ts ALL bombs cleared — 2026-05-03
@@ -39,11 +40,11 @@ Last update : 2026-05-03T20:48:25Z
 - **47e3476** refactor(toolkit): split scanHttpOutboundSinks (cyclo 21→under) — 2 helpers — 2026-05-03
 - **9efbf60** refactor(toolkit): split scanSinks (cyclo 18→under) — 4 per-kind sink helpers — 2026-05-03
 - **2e2a8e8** refactor(toolkit): split prebuildSharedProjectIncremental (cyclo 16→3) — 3 helpers + reuse findTsConfigPath — 2026-05-03
-- **673129e** refactor(toolkit): split resolveTsConfigAndSharedProject (cyclo 16→4) — 3 helpers — 2026-05-03
 
 
 ## Full history
 
+- **321cd83** refactor(toolkit): split classifyExportsFromBundles (cyclo 25→3) — unused-exports.ts ALL bombs cleared — 2026-05-03
 - **dd61398** refactor(toolkit): split extractUnusedExportsFileBundle (cyclo 36→3) — 6 helpers per-pass — 2026-05-03
 - **86cff0b** refactor(toolkit): split analyzeSqlSchema (cyclo 38→3) + dedupe SQL comparators to _shared/sql-helpers — 2026-05-03
 - **8988d09** refactor(toolkit): split parseColumnProperty (cyclo 18→3) — drizzle-schema.ts ALL bombs cleared — 2026-05-03
@@ -93,4 +94,3 @@ Last update : 2026-05-03T20:48:25Z
 - **5888c3e** refactor(toolkit): split exportFacts batch 2 — extract graph metrics + listeners (cyclomatic 102→84) — 2026-05-03
 - **f8e2fdd** refactor(toolkit): split exportFacts en 5 emit helpers (cyclomatic 142→102) — 2026-05-03
 - **7c6668c** refactor(toolkit): kill LONG-FN-BY-PARAMS (5→0) + fix CHAOS-AMPLIFIER FP (6→3) — 2026-05-03
-- **96048d7** refactor(toolkit): extract NCD duplicates → ast-helpers + drivers/_common (NCD: 16→12) — 2026-05-03

@@ -44,6 +44,92 @@ export interface CyclesOptions {
 const DEFAULT_EDGE_TYPES: EdgeType[] = ['import', 'event', 'queue', 'dynamic-load']
 const DEFAULT_GATE_NAMES = ['isAllowed', 'canExecute', 'peerReview', 'checkTrust', 'guardrail*']
 
+interface CycleGraph {
+  adj: Map<string, Set<string>>
+  edgeIndex: Map<string, GraphEdge[]>
+}
+
+/**
+ * Multi-edges possibles (meme from→to via event + import) : on les garde
+ * tous pour restituer les labels dans le cycle, mais pour la SCC on
+ * deduplique au niveau des paires (from, to).
+ */
+function buildCycleGraph(
+  allEdges: GraphEdge[],
+  edgeTypes: Set<string>,
+  fileSet: Set<string>,
+): CycleGraph {
+  const adj = new Map<string, Set<string>>()
+  const edgeIndex = new Map<string, GraphEdge[]>()
+  for (const e of allEdges) {
+    if (!edgeTypes.has(e.type)) continue
+    if (!fileSet.has(e.from) || !fileSet.has(e.to)) continue
+    if (e.from === e.to) continue  // self-loops → pas un cycle systeme
+    if (!adj.has(e.from)) adj.set(e.from, new Set())
+    adj.get(e.from)!.add(e.to)
+    const key = `${e.from}→${e.to}`
+    if (!edgeIndex.has(key)) edgeIndex.set(key, [])
+    edgeIndex.get(key)!.push(e)
+  }
+  return { adj, edgeIndex }
+}
+
+function buildCycleEdges(path: string[], edgeIndex: Map<string, GraphEdge[]>): CycleEdge[] {
+  const edges: CycleEdge[] = []
+  for (let i = 0; i < path.length - 1; i++) {
+    const candidates = edgeIndex.get(`${path[i]}→${path[i + 1]}`) ?? []
+    const chosen = pickRepresentativeEdge(candidates)
+    if (chosen) {
+      edges.push({
+        from: chosen.from,
+        to: chosen.to,
+        type: chosen.type,
+        ...(chosen.label ? { label: chosen.label } : {}),
+      })
+    }
+  }
+  return edges
+}
+
+function buildCycleFromScc(
+  scc: string[],
+  graph: CycleGraph,
+  rootDir: string,
+  project: Project,
+  gateNames: string[],
+): Cycle | null {
+  const sccSet = new Set(scc)
+  const start = [...scc].sort()[0]
+  const path = findCycleInScc(start, graph.adj, sccSet)
+  if (!path) return null  // SCC size >= 2 ⇒ cycle exists, theoretically unreachable
+
+  const edges = buildCycleEdges(path, graph.edgeIndex)
+  const gates = detectGates([...new Set(path)], rootDir, project, gateNames)
+
+  return {
+    id: hashCycleId(scc),
+    nodes: path,
+    edges,
+    gated: gates.length > 0,
+    gates,
+    size: path.length - 1,  // exclut la repetition du noeud de depart
+    sccSize: scc.length,
+  }
+}
+
+/**
+ * Tri deterministe : non-gated d'abord (risque plus eleve), puis par
+ * taille croissante (les petits cycles sont plus actionnables), puis
+ * par id pour stabilite.
+ */
+function sortCyclesByPriority(cycles: Cycle[]): void {
+  cycles.sort((a, b) => {
+    if (a.gated !== b.gated) return a.gated ? 1 : -1
+    if (a.sccSize !== b.sccSize) return a.sccSize - b.sccSize
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+  })
+}
+
 export async function analyzeCycles(
   rootDir: string,
   files: string[],
@@ -55,93 +141,17 @@ export async function analyzeCycles(
   const gateNames = options.gateNames ?? DEFAULT_GATE_NAMES
   const fileSet = new Set(files)
 
-  // ─── 1. Build adjacency list ────────────────────────────────────────
-
-  // Multi-edges possibles (même from→to via event + import) — on les garde
-  // tous pour restituer les labels dans le cycle, mais pour la SCC on
-  // déduplique au niveau des paires (from, to) pour éviter de biaiser la
-  // traversée.
-
-  const adj = new Map<string, Set<string>>()  // from → set of to
-  const edgeIndex = new Map<string, GraphEdge[]>()  // "from→to" → edges
-
-  for (const e of allEdges) {
-    if (!edgeTypes.has(e.type)) continue
-    if (!fileSet.has(e.from) || !fileSet.has(e.to)) continue
-    if (e.from === e.to) continue  // self-loops → pas un cycle système
-
-    if (!adj.has(e.from)) adj.set(e.from, new Set())
-    adj.get(e.from)!.add(e.to)
-
-    const key = `${e.from}→${e.to}`
-    if (!edgeIndex.has(key)) edgeIndex.set(key, [])
-    edgeIndex.get(key)!.push(e)
-  }
-
-  // ─── 2. Tarjan SCC ──────────────────────────────────────────────────
-
-  const sccs = tarjanScc(adj)
-
-  // ─── 3. Cycles from SCCs ────────────────────────────────────────────
+  const graph = buildCycleGraph(allEdges, edgeTypes, fileSet)
+  const sccs = tarjanScc(graph.adj)
 
   const cycles: Cycle[] = []
-
   for (const scc of sccs) {
     if (scc.length < 2) continue
-
-    // Départ stable : plus petit id (ordre lex).
-    const sccSet = new Set(scc)
-    const start = [...scc].sort()[0]
-    const path = findCycleInScc(start, adj, sccSet)
-    if (!path) continue  // theoretically unreachable (SCC size >= 2 ⇒ cycle exists)
-
-    // Edges du path : pour chaque segment path[i] → path[i+1], prendre
-    // l'edge préféré (on privilégie les types "intéressants" d'abord).
-    const edges: CycleEdge[] = []
-    for (let i = 0; i < path.length - 1; i++) {
-      const from = path[i]
-      const to = path[i + 1]
-      const candidates = edgeIndex.get(`${from}→${to}`) ?? []
-      const chosen = pickRepresentativeEdge(candidates)
-      if (chosen) {
-        edges.push({
-          from: chosen.from,
-          to: chosen.to,
-          type: chosen.type,
-          ...(chosen.label ? { label: chosen.label } : {}),
-        })
-      }
-    }
-
-    // Gates : scan AST des fichiers du path.
-    const gates = detectGates(
-      [...new Set(path)],  // dédup : le premier et dernier sont identiques
-      rootDir,
-      project,
-      gateNames,
-    )
-
-    const id = hashCycleId(scc)
-    cycles.push({
-      id,
-      nodes: path,
-      edges,
-      gated: gates.length > 0,
-      gates,
-      size: path.length - 1,  // on exclut la répétition du nœud de départ
-      sccSize: scc.length,
-    })
+    const cycle = buildCycleFromScc(scc, graph, rootDir, project, gateNames)
+    if (cycle) cycles.push(cycle)
   }
 
-  // Tri déterministe : non-gated d'abord (risque plus élevé, plus important
-  // à voir tôt dans MAP.md), puis par taille croissante (les petits cycles
-  // sont plus actionnables), puis par id pour stabilité.
-  cycles.sort((a, b) => {
-    if (a.gated !== b.gated) return a.gated ? 1 : -1
-    if (a.sccSize !== b.sccSize) return a.sccSize - b.sccSize
-    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
-  })
-
+  sortCyclesByPriority(cycles)
   return cycles
 }
 
@@ -152,93 +162,113 @@ export async function analyzeCycles(
  * classique avec pile d'exploration explicite pour éviter l'overflow de
  * récursion sur projets larges.
  */
-function tarjanScc(adj: Map<string, Set<string>>): string[][] {
+interface TarjanFrame {
+  v: string
+  successors: string[]
+  nextIdx: number
+}
+
+interface TarjanState {
+  adj: Map<string, Set<string>>
+  index: Map<string, number>
+  lowlink: Map<string, number>
+  onStack: Set<string>
+  stack: string[]
+  sccs: string[][]
+  counter: number
+}
+
+function collectTarjanNodes(adj: Map<string, Set<string>>): string[] {
   const nodes: string[] = []
-  const seenNodes = new Set<string>()
+  const seen = new Set<string>()
   for (const [from, tos] of adj) {
-    if (!seenNodes.has(from)) { nodes.push(from); seenNodes.add(from) }
+    if (!seen.has(from)) { nodes.push(from); seen.add(from) }
     for (const to of tos) {
-      if (!seenNodes.has(to)) { nodes.push(to); seenNodes.add(to) }
+      if (!seen.has(to)) { nodes.push(to); seen.add(to) }
     }
   }
-  nodes.sort()  // ordre déterministe
+  nodes.sort()  // ordre deterministe
+  return nodes
+}
 
-  const index = new Map<string, number>()
-  const lowlink = new Map<string, number>()
-  const onStack = new Set<string>()
-  const stack: string[] = []
-  const sccs: string[][] = []
-  let counter = 0
+function pushTarjanNode(state: TarjanState, v: string): TarjanFrame {
+  state.index.set(v, state.counter)
+  state.lowlink.set(v, state.counter)
+  state.counter++
+  state.stack.push(v)
+  state.onStack.add(v)
+  const successors = state.adj.has(v) ? [...state.adj.get(v)!].sort() : []
+  return { v, successors, nextIdx: 0 }
+}
 
-  // Frame : { v, iter: iterator over successors, pendingW?: string }
-  // On simule la récursion : quand on rencontre un successeur w non-indexé,
-  // on push une frame pour w et on garde track du successeur en cours.
-  interface Frame {
-    v: string
-    successors: string[]
-    nextIdx: number
+/**
+ * Successeur w de la frame en cours : si non-indexe → push child frame.
+ * Si on-stack → update lowlink (back-edge to ancestor).
+ */
+function processTarjanSuccessor(state: TarjanState, frame: TarjanFrame, w: string, callStack: TarjanFrame[]): void {
+  if (!state.index.has(w)) {
+    callStack.push(pushTarjanNode(state, w))
+    return
+  }
+  if (state.onStack.has(w)) {
+    const current = state.lowlink.get(frame.v)!
+    const wIdx = state.index.get(w)!
+    if (wIdx < current) state.lowlink.set(frame.v, wIdx)
+  }
+}
+
+/**
+ * Pop scc si v est root (lowlink == index), puis pop frame + propage
+ * lowlink au parent.
+ */
+function popTarjanFrame(state: TarjanState, v: string, callStack: TarjanFrame[]): void {
+  if (state.lowlink.get(v) === state.index.get(v)) {
+    const scc: string[] = []
+    let w: string
+    do {
+      w = state.stack.pop()!
+      state.onStack.delete(w)
+      scc.push(w)
+    } while (w !== v)
+    state.sccs.push(scc.sort())
+  }
+  callStack.pop()
+  if (callStack.length > 0) {
+    const parent = callStack[callStack.length - 1]
+    const pLow = state.lowlink.get(parent.v)!
+    const vLow = state.lowlink.get(v)!
+    if (vLow < pLow) state.lowlink.set(parent.v, vLow)
+  }
+}
+
+function tarjanScc(adj: Map<string, Set<string>>): string[][] {
+  const state: TarjanState = {
+    adj,
+    index: new Map(),
+    lowlink: new Map(),
+    onStack: new Set(),
+    stack: [],
+    sccs: [],
+    counter: 0,
   }
 
-  for (const start of nodes) {
-    if (index.has(start)) continue
-
-    const callStack: Frame[] = []
-    // init start
-    index.set(start, counter)
-    lowlink.set(start, counter)
-    counter++
-    stack.push(start)
-    onStack.add(start)
-    const initSuccessors = adj.has(start) ? [...adj.get(start)!].sort() : []
-    callStack.push({ v: start, successors: initSuccessors, nextIdx: 0 })
+  for (const start of collectTarjanNodes(adj)) {
+    if (state.index.has(start)) continue
+    const callStack: TarjanFrame[] = [pushTarjanNode(state, start)]
 
     while (callStack.length > 0) {
       const frame = callStack[callStack.length - 1]
-      const v = frame.v
-
       if (frame.nextIdx < frame.successors.length) {
         const w = frame.successors[frame.nextIdx]
         frame.nextIdx++
-
-        if (!index.has(w)) {
-          index.set(w, counter)
-          lowlink.set(w, counter)
-          counter++
-          stack.push(w)
-          onStack.add(w)
-          const wSuccessors = adj.has(w) ? [...adj.get(w)!].sort() : []
-          callStack.push({ v: w, successors: wSuccessors, nextIdx: 0 })
-        } else if (onStack.has(w)) {
-          const current = lowlink.get(v)!
-          const wIdx = index.get(w)!
-          if (wIdx < current) lowlink.set(v, wIdx)
-        }
+        processTarjanSuccessor(state, frame, w, callStack)
       } else {
-        // Tous les successeurs de v traités → check root
-        if (lowlink.get(v) === index.get(v)) {
-          const scc: string[] = []
-          let w: string
-          do {
-            w = stack.pop()!
-            onStack.delete(w)
-            scc.push(w)
-          } while (w !== v)
-          sccs.push(scc.sort())  // tri stable à l'intérieur
-        }
-        callStack.pop()
-
-        // Propager lowlink au parent si existant
-        if (callStack.length > 0) {
-          const parent = callStack[callStack.length - 1]
-          const pLow = lowlink.get(parent.v)!
-          const vLow = lowlink.get(v)!
-          if (vLow < pLow) lowlink.set(parent.v, vLow)
-        }
+        popTarjanFrame(state, frame.v, callStack)
       }
     }
   }
 
-  return sccs
+  return state.sccs
 }
 
 // ─── Cycle path extraction ──────────────────────────────────────────────────
