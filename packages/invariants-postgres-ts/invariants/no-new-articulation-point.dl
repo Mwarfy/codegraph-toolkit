@@ -22,7 +22,12 @@
 
 .decl ArticulationPointGrandfathered(file: symbol)
 
+// Exclut les package entry points (index.ts, main, bin, exports) :
+// par design, le entry point est l'unique route d'import du package
+// donc CUT-VERTEX OBLIGATOIRE. Bloquer un nouveau index.ts = bloquer
+// la creation de nouveaux packages. Faux positif systemique.
 Violation("NO-NEW-ARTICULATION-POINT", File, 0,
   "fichier devenu cut-vertex du graphe d'imports — sa suppression deconnecterait des packs entiers") :-
     ArticulationPoint(File, _),
+    !IsPackageEntryPoint(File),
     !ArticulationPointGrandfathered(File).

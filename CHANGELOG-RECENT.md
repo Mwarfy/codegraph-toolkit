@@ -5,7 +5,7 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T19:13:57Z
+Last update : 2026-05-03T19:21:14Z
 
 ## By type
 
@@ -25,6 +25,7 @@ Last update : 2026-05-03T19:13:57Z
 
 ### `fix` (11)
 
+- **8844d31** fix(toolkit): FSM-ORPHAN 3→0 — fixture skip + Attribute API + satisfies unwrap — 2026-05-03
 - **1b532d0** fix(toolkit): grandfather 3 cross-package loadConfig pairs (FP shape-match) — 2026-05-03
 - **686fb09** fix(toolkit): quick-win violations — 4 fixes (1 floating-promise FP, 1 return-then-else, 2 deprecated FPs) — 2026-05-03
 - **e19790b** fix(toolkit): cochange-without-cotest filter to TS source — 5 FPs eliminated — 2026-05-03
@@ -35,7 +36,6 @@ Last update : 2026-05-03T19:13:57Z
 - **81b8fb9** fix(toolkit): self-detected defects via codegraph + runtime-graph — 2026-05-03
 - **e73e85d** fix(codegraph): break direct cycle sql-helpers ↔ sql-schema via type extraction — 2026-05-03
 - **f642620** fix(runtime-graph): CLI rulesDir resolution via __dirname (no package.json export) — 2026-05-03
-- **ca252d2** fix(runtime-graph): retire grandfathers + refine rules + self-probe E2E validated — 2026-05-03
 
 
 ### `perf` (5)
@@ -85,6 +85,7 @@ Last update : 2026-05-03T19:13:57Z
 
 ## Full history
 
+- **8844d31** fix(toolkit): FSM-ORPHAN 3→0 — fixture skip + Attribute API + satisfies unwrap — 2026-05-03
 - **1b532d0** fix(toolkit): grandfather 3 cross-package loadConfig pairs (FP shape-match) — 2026-05-03
 - **686fb09** fix(toolkit): quick-win violations — 4 fixes (1 floating-promise FP, 1 return-then-else, 2 deprecated FPs) — 2026-05-03
 - **e19790b** fix(toolkit): cochange-without-cotest filter to TS source — 5 FPs eliminated — 2026-05-03
@@ -134,4 +135,3 @@ Last update : 2026-05-03T19:13:57Z
 - **e9a2b44** feat(runtime-graph): Phase γ — 4 mathematical disciplines runtime + composite rules — 2026-05-03
 - **f642620** fix(runtime-graph): CLI rulesDir resolution via __dirname (no package.json export) — 2026-05-03
 - **cd9a769** feat(runtime-graph): Phase β — replay-tests + chaos + Express + MongoDB + config-driven — 2026-05-03
-- **ca252d2** fix(runtime-graph): retire grandfathers + refine rules + self-probe E2E validated — 2026-05-03
