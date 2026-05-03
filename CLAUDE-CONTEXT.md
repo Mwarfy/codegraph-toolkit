@@ -175,9 +175,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/audit-listener.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/scheduler.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/b.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
@@ -199,6 +199,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+d176584 refactor(toolkit): split renderLevel1/2/3 — synopsis/builder.ts ALL bombs cleared
 8f1792b refactor(toolkit): split buildComponents (cyclo 24→under) — 5 helpers (groupByComp, edgeDeg, topFiles, tags, adrs)
 275466c refactor(toolkit): split buildSynopsis (cyclo 75→5, cog 130→4) — 9 helpers + ctx struct
 e4019fb refactor(toolkit): builder.ts ALL bombs cleared — split TruthPoints + PackageDeps + TaintViolations
@@ -210,7 +211,6 @@ a0add06 refactor(toolkit): split renderModuleFiche (cyclo 32→4) — 5 helpers 
 df1ee8c refactor(toolkit): split renderEventFlows (cyclo 25→5, cog 63→4) — 5 helpers extraits
 50eb1f8 fix(toolkit): articulation-point rule — exclure package entry points (FP systemique)
 8844d31 fix(toolkit): FSM-ORPHAN 3→0 — fixture skip + Attribute API + satisfies unwrap
-1b532d0 fix(toolkit): grandfather 3 cross-package loadConfig pairs (FP shape-match)
 ```
 
 ## Comment contribuer à ce brief

@@ -107,6 +107,38 @@ const HTTP_OUTBOUND_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 
 
 // ─── Public API ─────────────────────────────────────────────────────────────
 
+interface NormalizedDataFlowOptions {
+  maxDepth: number
+  downstreamDepth: number
+  queryFns: Set<string>
+  emitFns: Set<string>
+  listenFns: Set<string>
+  httpRespFns: Set<string>
+  bullmqFns: Set<string>
+  mcpFragment: string
+  intervalFns: Set<string>
+  bullmqWorkerCtors: Set<string>
+  httpOutboundFns: Set<string>
+  httpOutboundClients: Set<string>
+}
+
+function normalizeDataFlowOptions(options: DataFlowsOptions): NormalizedDataFlowOptions {
+  return {
+    maxDepth: options.maxDepth ?? DEFAULT_MAX_DEPTH,
+    downstreamDepth: options.downstreamDepth ?? DEFAULT_DOWNSTREAM_DEPTH,
+    queryFns: new Set(options.queryFnNames ?? DEFAULT_QUERY_FNS),
+    emitFns: new Set(options.emitFnNames ?? DEFAULT_EMIT_FNS),
+    listenFns: new Set(options.listenFnNames ?? DEFAULT_LISTEN_FNS),
+    httpRespFns: new Set(options.httpResponseFnNames ?? DEFAULT_HTTP_RESP_FNS),
+    bullmqFns: new Set(options.bullmqEnqueueFnNames ?? DEFAULT_BULLMQ_FNS),
+    mcpFragment: options.mcpToolsPathFragment ?? DEFAULT_MCP_FRAGMENT,
+    intervalFns: new Set(options.intervalFnNames ?? DEFAULT_INTERVAL_FNS),
+    bullmqWorkerCtors: new Set(options.bullmqWorkerCtors ?? DEFAULT_BULLMQ_WORKER_CTORS),
+    httpOutboundFns: new Set(options.httpOutboundFnNames ?? DEFAULT_HTTP_OUTBOUND_FNS),
+    httpOutboundClients: new Set(options.httpOutboundClients ?? DEFAULT_HTTP_OUTBOUND_CLIENTS),
+  }
+}
+
 export async function analyzeDataFlows(
   rootDir: string,
   files: string[],
@@ -115,53 +147,31 @@ export async function analyzeDataFlows(
   _allEdges: GraphEdge[],
   options: DataFlowsOptions = {},
 ): Promise<DataFlow[]> {
-  const maxDepth = options.maxDepth ?? DEFAULT_MAX_DEPTH
-  const downstreamDepth = options.downstreamDepth ?? DEFAULT_DOWNSTREAM_DEPTH
-  const queryFns = new Set(options.queryFnNames ?? DEFAULT_QUERY_FNS)
-  const emitFns = new Set(options.emitFnNames ?? DEFAULT_EMIT_FNS)
-  const listenFns = new Set(options.listenFnNames ?? DEFAULT_LISTEN_FNS)
-  const httpRespFns = new Set(options.httpResponseFnNames ?? DEFAULT_HTTP_RESP_FNS)
-  const bullmqFns = new Set(options.bullmqEnqueueFnNames ?? DEFAULT_BULLMQ_FNS)
-  const mcpFragment = options.mcpToolsPathFragment ?? DEFAULT_MCP_FRAGMENT
-  const intervalFns = new Set(options.intervalFnNames ?? DEFAULT_INTERVAL_FNS)
-  const bullmqWorkerCtors = new Set(options.bullmqWorkerCtors ?? DEFAULT_BULLMQ_WORKER_CTORS)
-  const httpOutboundFns = new Set(options.httpOutboundFnNames ?? DEFAULT_HTTP_OUTBOUND_FNS)
-  const httpOutboundClients = new Set(options.httpOutboundClients ?? DEFAULT_HTTP_OUTBOUND_CLIENTS)
+  const opts = normalizeDataFlowOptions(options)
   const fileSet = new Set(files)
 
-  // Index : signature "file:symbol" → TypedSignature, pour lookup O(1) dans BFS.
-  const sigIndex = new Map<string, TypedSignature>()
-  for (const s of typedCalls.signatures) {
-    sigIndex.set(`${s.file}:${s.exportName}`, s)
-  }
-
-  // Index : edges sortants par from.
-  const edgesByFrom = new Map<string, typeof typedCalls.callEdges>()
-  for (const e of typedCalls.callEdges) {
-    if (!edgesByFrom.has(e.from)) edgesByFrom.set(e.from, [])
-    edgesByFrom.get(e.from)!.push(e)
-  }
-
-  // ─── Per-file extraction (Salsa-isable) ─────────────────────────────
   const fileBundles = new Map<string, DataFlowFileBundle>()
   for (const sf of project.getSourceFiles()) {
     const relPath = relativize(sf.getFilePath(), rootDir)
     if (!relPath || !fileSet.has(relPath)) continue
     fileBundles.set(relPath, extractDataFlowsFileBundle(sf, relPath, {
-      queryFns,
-      emitFns,
-      listenFns,
-      httpRespFns,
-      bullmqFns,
-      mcpFragment,
-      intervalFns,
-      bullmqWorkerCtors,
-      httpOutboundFns,
-      httpOutboundClients,
+      queryFns: opts.queryFns,
+      emitFns: opts.emitFns,
+      listenFns: opts.listenFns,
+      httpRespFns: opts.httpRespFns,
+      bullmqFns: opts.bullmqFns,
+      mcpFragment: opts.mcpFragment,
+      intervalFns: opts.intervalFns,
+      bullmqWorkerCtors: opts.bullmqWorkerCtors,
+      httpOutboundFns: opts.httpOutboundFns,
+      httpOutboundClients: opts.httpOutboundClients,
     }))
   }
 
-  return buildDataFlowsFromBundles(fileBundles, typedCalls, { maxDepth, downstreamDepth })
+  return buildDataFlowsFromBundles(fileBundles, typedCalls, {
+    maxDepth: opts.maxDepth,
+    downstreamDepth: opts.downstreamDepth,
+  })
 }
 
 /**
@@ -169,24 +179,33 @@ export async function analyzeDataFlows(
  * extraits) + typedCalls global, exécute Pass 3 (BFS) + Pass 4
  * (downstream) + tri. Réutilisé côté Salsa après caching des bundles.
  */
-export function buildDataFlowsFromBundles(
-  fileBundles: Map<string, DataFlowFileBundle>,
-  typedCalls: TypedCalls,
-  opts: { maxDepth: number; downstreamDepth: number },
-): DataFlow[] {
-  const { maxDepth, downstreamDepth } = opts
-
+/**
+ * Index lookup `file:symbol` → TypedSignature et map des edges
+ * sortants par `from`. Utilises dans le BFS pour resolution O(1).
+ */
+function buildTypedCallIndex(typedCalls: TypedCalls): {
+  sigIndex: Map<string, TypedSignature>
+  edgesByFrom: Map<string, typeof typedCalls.callEdges>
+} {
   const sigIndex = new Map<string, TypedSignature>()
   for (const s of typedCalls.signatures) {
     sigIndex.set(`${s.file}:${s.exportName}`, s)
   }
-
   const edgesByFrom = new Map<string, typeof typedCalls.callEdges>()
   for (const e of typedCalls.callEdges) {
     if (!edgesByFrom.has(e.from)) edgesByFrom.set(e.from, [])
     edgesByFrom.get(e.from)!.push(e)
   }
+  return { sigIndex, edgesByFrom }
+}
 
+interface AggregatedBundles {
+  sinksByContainer: Map<string, DataFlowSink[]>
+  entries: DataFlowEntry[]
+  inlineListenerSinks: Map<string, DataFlowSink[]>
+}
+
+function aggregateBundles(fileBundles: Map<string, DataFlowFileBundle>): AggregatedBundles {
   const sinksByContainer = new Map<string, DataFlowSink[]>()
   const entries: DataFlowEntry[] = []
   const inlineListenerSinks = new Map<string, DataFlowSink[]>()
@@ -201,7 +220,10 @@ export function buildDataFlowsFromBundles(
       inlineListenerSinks.get(container)!.push(...sinks)
     }
   }
+  return { sinksByContainer, entries, inlineListenerSinks }
+}
 
+function indexListenersByEvent(entries: DataFlowEntry[]): Map<string, DataFlowEntry[]> {
   const listenersByEvent = new Map<string, DataFlowEntry[]>()
   for (const e of entries) {
     if (e.kind !== 'event-listener') continue
@@ -209,12 +231,40 @@ export function buildDataFlowsFromBundles(
     if (!listenersByEvent.has(eventName)) listenersByEvent.set(eventName, [])
     listenersByEvent.get(eventName)!.push(e)
   }
+  return listenersByEvent
+}
 
-  const flows: DataFlow[] = []
-  for (const entry of entries) {
-    const flow = buildFlow(entry, sigIndex, edgesByFrom, sinksByContainer, inlineListenerSinks, maxDepth)
-    flows.push(flow)
-  }
+const FLOW_KIND_ORDER: Record<DataFlowEntryKind, number> = {
+  'http-route': 0,
+  'mcp-tool': 1,
+  'event-listener': 2,
+  'bullmq-job': 3,
+  'cron': 4,
+  'interval': 5,
+}
+
+function sortFlows(flows: DataFlow[]): void {
+  flows.sort((a, b) => {
+    const ka = FLOW_KIND_ORDER[a.entry.kind]
+    const kb = FLOW_KIND_ORDER[b.entry.kind]
+    if (ka !== kb) return ka - kb
+    return a.entry.id < b.entry.id ? -1 : a.entry.id > b.entry.id ? 1 : 0
+  })
+}
+
+export function buildDataFlowsFromBundles(
+  fileBundles: Map<string, DataFlowFileBundle>,
+  typedCalls: TypedCalls,
+  opts: { maxDepth: number; downstreamDepth: number },
+): DataFlow[] {
+  const { maxDepth, downstreamDepth } = opts
+  const { sigIndex, edgesByFrom } = buildTypedCallIndex(typedCalls)
+  const { sinksByContainer, entries, inlineListenerSinks } = aggregateBundles(fileBundles)
+  const listenersByEvent = indexListenersByEvent(entries)
+
+  const flows: DataFlow[] = entries.map(entry =>
+    buildFlow(entry, sigIndex, edgesByFrom, sinksByContainer, inlineListenerSinks, maxDepth),
+  )
 
   if (downstreamDepth > 0) {
     for (const flow of flows) {
@@ -222,21 +272,7 @@ export function buildDataFlowsFromBundles(
     }
   }
 
-  const kindOrder: Record<DataFlowEntryKind, number> = {
-    'http-route': 0,
-    'mcp-tool': 1,
-    'event-listener': 2,
-    'bullmq-job': 3,
-    'cron': 4,
-    'interval': 5,
-  }
-  flows.sort((a, b) => {
-    const ka = kindOrder[a.entry.kind]
-    const kb = kindOrder[b.entry.kind]
-    if (ka !== kb) return ka - kb
-    return a.entry.id < b.entry.id ? -1 : a.entry.id > b.entry.id ? 1 : 0
-  })
-
+  sortFlows(flows)
   return flows
 }
 
