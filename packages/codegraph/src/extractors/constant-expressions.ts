@@ -66,73 +66,73 @@ export interface ConstantExpressionsFileBundle {
 
 const TEST_FILE_RE = /(\.test\.tsx?|\.spec\.tsx?|(^|\/)tests?\/|(^|\/)__tests__\/|(^|\/)fixtures?\/)/
 
-export function extractConstantExpressionsFileBundle(
+type IsExempt = (line: number) => boolean
+
+function emitConstantConditionFinding(
+  cond: Node,
+  line: number,
+  relPath: string,
+  ctx: 'if' | 'ternary',
+  findings: ConstantExpressionFinding[],
+): void {
+  const verdict = classifyConstantBoolean(cond)
+  if (verdict === 'always-true') {
+    findings.push({
+      kind: 'tautology-condition',
+      file: relPath, line,
+      message: ctx === 'if'
+        ? 'if condition always true — else branch unreachable'
+        : 'ternary condition always true — only "then" branch reachable',
+      exprRepr: truncate(cond.getText()),
+    })
+  } else if (verdict === 'always-false') {
+    findings.push({
+      kind: 'contradiction-condition',
+      file: relPath, line,
+      message: ctx === 'if'
+        ? 'if condition always false — then branch unreachable'
+        : 'ternary condition always false — only "else" branch reachable',
+      exprRepr: truncate(cond.getText()),
+    })
+  }
+}
+
+function detectTautologyContradictions(
   sf: SourceFile,
   relPath: string,
-): ConstantExpressionsFileBundle {
-  if (TEST_FILE_RE.test(relPath)) return { findings: [] }
-  const findings: ConstantExpressionFinding[] = []
-  const isExempt = makeIsExemptForMarker(sf, 'const-expr-ok')
-
-  // ─── Pattern 1 + 2 : tautology / contradiction in conditions ────
+  isExempt: IsExempt,
+  findings: ConstantExpressionFinding[],
+): void {
   for (const ifNode of sf.getDescendantsOfKind(SyntaxKind.IfStatement)) {
-    const cond = ifNode.getExpression()
     const line = ifNode.getStartLineNumber()
     if (isExempt(line)) continue
-    const verdict = classifyConstantBoolean(cond)
-    if (verdict === 'always-true') {
-      findings.push({
-        kind: 'tautology-condition',
-        file: relPath, line,
-        message: 'if condition always true — else branch unreachable',
-        exprRepr: truncate(cond.getText()),
-      })
-    } else if (verdict === 'always-false') {
-      findings.push({
-        kind: 'contradiction-condition',
-        file: relPath, line,
-        message: 'if condition always false — then branch unreachable',
-        exprRepr: truncate(cond.getText()),
-      })
-    }
+    emitConstantConditionFinding(ifNode.getExpression(), line, relPath, 'if', findings)
   }
-
-  // Ternaries with constant condition.
   for (const tern of sf.getDescendantsOfKind(SyntaxKind.ConditionalExpression)) {
-    const cond = tern.getCondition()
     const line = tern.getStartLineNumber()
     if (isExempt(line)) continue
-    const verdict = classifyConstantBoolean(cond)
-    if (verdict === 'always-true') {
-      findings.push({
-        kind: 'tautology-condition', file: relPath, line,
-        message: 'ternary condition always true — only "then" branch reachable',
-        exprRepr: truncate(cond.getText()),
-      })
-    } else if (verdict === 'always-false') {
-      findings.push({
-        kind: 'contradiction-condition', file: relPath, line,
-        message: 'ternary condition always false — only "else" branch reachable',
-        exprRepr: truncate(cond.getText()),
-      })
-    }
+    emitConstantConditionFinding(tern.getCondition(), line, relPath, 'ternary', findings)
   }
+}
 
-  // ─── Pattern 3 : gratuitous boolean comparison ───────────────────
-  // x === true, x === false, x !== true, x !== false
+const EQ_NEQ_OPS = new Set([
+  SyntaxKind.EqualsEqualsEqualsToken,
+  SyntaxKind.ExclamationEqualsEqualsToken,
+  SyntaxKind.EqualsEqualsToken,
+  SyntaxKind.ExclamationEqualsToken,
+])
+
+function detectGratuitousBoolComparisons(
+  sf: SourceFile,
+  relPath: string,
+  isExempt: IsExempt,
+  findings: ConstantExpressionFinding[],
+): void {
   for (const bin of sf.getDescendantsOfKind(SyntaxKind.BinaryExpression)) {
-    const op = bin.getOperatorToken().getKind()
-    if (
-      op !== SyntaxKind.EqualsEqualsEqualsToken &&
-      op !== SyntaxKind.ExclamationEqualsEqualsToken &&
-      op !== SyntaxKind.EqualsEqualsToken &&
-      op !== SyntaxKind.ExclamationEqualsToken
-    ) continue
-    const left = bin.getLeft()
-    const right = bin.getRight()
+    if (!EQ_NEQ_OPS.has(bin.getOperatorToken().getKind())) continue
     const line = bin.getStartLineNumber()
     if (isExempt(line)) continue
-    if (isBoolLiteral(left) || isBoolLiteral(right)) {
+    if (isBoolLiteral(bin.getLeft()) || isBoolLiteral(bin.getRight())) {
       findings.push({
         kind: 'gratuitous-bool-comparison',
         file: relPath, line,
@@ -141,8 +141,25 @@ export function extractConstantExpressionsFileBundle(
       })
     }
   }
+}
 
-  // ─── Pattern 4 : double negation outside of bool cast context ────
+/**
+ * Heuristique : !! est utile si conversion explicite en boolean (return,
+ * cast as boolean, init de const). Skip ces contextes — sinon gratuit.
+ */
+function isDoubleNegationContextOk(parent: Node | undefined): boolean {
+  if (!parent) return false
+  return Node.isReturnStatement(parent)
+    || Node.isAsExpression(parent)
+    || Node.isVariableDeclaration(parent)
+}
+
+function detectDoubleNegations(
+  sf: SourceFile,
+  relPath: string,
+  isExempt: IsExempt,
+  findings: ConstantExpressionFinding[],
+): void {
   for (const prefix of sf.getDescendantsOfKind(SyntaxKind.PrefixUnaryExpression)) {
     if (prefix.getOperatorToken() !== SyntaxKind.ExclamationToken) continue
     const inner = prefix.getOperand()
@@ -150,15 +167,7 @@ export function extractConstantExpressionsFileBundle(
     if (inner.getOperatorToken() !== SyntaxKind.ExclamationToken) continue
     const line = prefix.getStartLineNumber()
     if (isExempt(line)) continue
-    // Heuristique : !! est utile si on convertit explicitement en boolean
-    // pour un return, un cast as boolean, ou un cast Boolean(). Sinon
-    // gratuit dans un contexte déjà-boolean.
-    const parent = prefix.getParent()
-    if (parent && (
-      Node.isReturnStatement(parent) ||
-      Node.isAsExpression(parent) ||
-      Node.isVariableDeclaration(parent)  // const x: boolean = !!y — let user decide
-    )) continue
+    if (isDoubleNegationContextOk(prefix.getParent())) continue
     findings.push({
       kind: 'double-negation',
       file: relPath, line,
@@ -166,21 +175,23 @@ export function extractConstantExpressionsFileBundle(
       exprRepr: truncate(prefix.getText()),
     })
   }
+}
 
-  // ─── Pattern 5 : literal-fold-opportunity ────────────────────────
-  // Limite à literal + literal pour éviter false positives sur const x = 60 * 1000.
-  // Les humains préfèrent souvent garder `60 * 60 * 1000` lisible.
-  // → Ne reporte QUE les patterns clairement bizarres : `'a' + 'b'`, `1 + 2`,
-  // `0 + n` (no-op).
+/**
+ * Pattern literal-fold-opportunity : limite a `0 + X` / `X + 0` (no-op).
+ * Pas de signal sur `60 * 60 * 1000` qu'humain garde lisible volontairement.
+ */
+function detectLiteralFoldOpportunities(
+  sf: SourceFile,
+  relPath: string,
+  isExempt: IsExempt,
+  findings: ConstantExpressionFinding[],
+): void {
   for (const bin of sf.getDescendantsOfKind(SyntaxKind.BinaryExpression)) {
-    const op = bin.getOperatorToken().getKind()
-    if (op !== SyntaxKind.PlusToken) continue
-    const left = bin.getLeft()
-    const right = bin.getRight()
+    if (bin.getOperatorToken().getKind() !== SyntaxKind.PlusToken) continue
     const line = bin.getStartLineNumber()
     if (isExempt(line)) continue
-    // 0 + X / X + 0
-    if (isZeroLiteral(left) || isZeroLiteral(right)) {
+    if (isZeroLiteral(bin.getLeft()) || isZeroLiteral(bin.getRight())) {
       findings.push({
         kind: 'literal-fold-opportunity', file: relPath, line,
         message: 'addition with 0 — no-op, can simplify',
@@ -188,6 +199,20 @@ export function extractConstantExpressionsFileBundle(
       })
     }
   }
+}
+
+export function extractConstantExpressionsFileBundle(
+  sf: SourceFile,
+  relPath: string,
+): ConstantExpressionsFileBundle {
+  if (TEST_FILE_RE.test(relPath)) return { findings: [] }
+  const findings: ConstantExpressionFinding[] = []
+  const isExempt = makeIsExemptForMarker(sf, 'const-expr-ok')
+
+  detectTautologyContradictions(sf, relPath, isExempt, findings)
+  detectGratuitousBoolComparisons(sf, relPath, isExempt, findings)
+  detectDoubleNegations(sf, relPath, isExempt, findings)
+  detectLiteralFoldOpportunities(sf, relPath, isExempt, findings)
 
   // Determinism : tri lex (file, line, kind)
   findings.sort((a, b) =>
@@ -200,45 +225,51 @@ export function extractConstantExpressionsFileBundle(
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
-function classifyConstantBoolean(node: Node): 'always-true' | 'always-false' | 'unknown' {
-  // Direct true/false literal
+type BoolVerdict = 'always-true' | 'always-false' | 'unknown'
+
+function classifyLiteralBoolean(node: Node): BoolVerdict {
   if (node.getKind() === SyntaxKind.TrueKeyword) return 'always-true'
   if (node.getKind() === SyntaxKind.FalseKeyword) return 'always-false'
-
-  // Numeric/string literal in boolean context : truthy/falsy known
   if (Node.isNumericLiteral(node)) {
-    const value = parseFloat(node.getText())
-    return value === 0 ? 'always-false' : 'always-true'
+    return parseFloat(node.getText()) === 0 ? 'always-false' : 'always-true'
   }
   if (Node.isStringLiteral(node) || Node.isNoSubstitutionTemplateLiteral(node)) {
     return node.getLiteralText().length === 0 ? 'always-false' : 'always-true'
   }
+  return 'unknown'
+}
 
-  // Logical expressions : recursive
-  if (Node.isBinaryExpression(node)) {
-    const op = node.getOperatorToken().getKind()
-    if (op === SyntaxKind.AmpersandAmpersandToken) {
-      const l = classifyConstantBoolean(node.getLeft())
-      const r = classifyConstantBoolean(node.getRight())
-      if (l === 'always-false' || r === 'always-false') return 'always-false'
-      if (l === 'always-true' && r === 'always-true') return 'always-true'
-    } else if (op === SyntaxKind.BarBarToken) {
-      const l = classifyConstantBoolean(node.getLeft())
-      const r = classifyConstantBoolean(node.getRight())
-      if (l === 'always-true' || r === 'always-true') return 'always-true'
-      if (l === 'always-false' && r === 'always-false') return 'always-false'
-    }
+function classifyAndOr(node: import('ts-morph').BinaryExpression): BoolVerdict {
+  const op = node.getOperatorToken().getKind()
+  if (op !== SyntaxKind.AmpersandAmpersandToken && op !== SyntaxKind.BarBarToken) {
+    return 'unknown'
   }
-
-  // Negation
-  if (Node.isPrefixUnaryExpression(node)) {
-    if (node.getOperatorToken() === SyntaxKind.ExclamationToken) {
-      const inner = classifyConstantBoolean(node.getOperand())
-      if (inner === 'always-true') return 'always-false'
-      if (inner === 'always-false') return 'always-true'
-    }
+  const l = classifyConstantBoolean(node.getLeft())
+  const r = classifyConstantBoolean(node.getRight())
+  if (op === SyntaxKind.AmpersandAmpersandToken) {
+    if (l === 'always-false' || r === 'always-false') return 'always-false'
+    if (l === 'always-true' && r === 'always-true') return 'always-true'
+    return 'unknown'
   }
+  // Bar Bar (||)
+  if (l === 'always-true' || r === 'always-true') return 'always-true'
+  if (l === 'always-false' && r === 'always-false') return 'always-false'
+  return 'unknown'
+}
 
+function classifyNegation(node: import('ts-morph').PrefixUnaryExpression): BoolVerdict {
+  if (node.getOperatorToken() !== SyntaxKind.ExclamationToken) return 'unknown'
+  const inner = classifyConstantBoolean(node.getOperand())
+  if (inner === 'always-true') return 'always-false'
+  if (inner === 'always-false') return 'always-true'
+  return 'unknown'
+}
+
+function classifyConstantBoolean(node: Node): BoolVerdict {
+  const lit = classifyLiteralBoolean(node)
+  if (lit !== 'unknown') return lit
+  if (Node.isBinaryExpression(node)) return classifyAndOr(node)
+  if (Node.isPrefixUnaryExpression(node)) return classifyNegation(node)
   return 'unknown'
 }
 
