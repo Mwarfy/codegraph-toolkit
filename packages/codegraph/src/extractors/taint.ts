@@ -341,12 +341,48 @@ function extractAccessChain(node: Node): string[] | null {
  *   - Call dont au moins un arg est tainted (propagation conservatrice —
  *     un helper custom doit être déclaré sanitizer pour éviter)
  */
+function taintFromAccessChain(node: Node, tainted: Map<string, TaintInfo>): TaintInfo | null {
+  const chain = extractAccessChain(node)
+  if (chain && chain.length > 0) {
+    return tainted.get(chain[0]!) ?? null
+  }
+  return null
+}
+
+/**
+ * Call : taint propage si AU MOINS un argument est tainted (conservatif —
+ * un sanitizer custom doit etre declare pour rompre la propagation).
+ */
+function taintFromCall(node: Node, tainted: Map<string, TaintInfo>, sources: TaintRule[]): TaintInfo | null {
+  const args = (node as any).getArguments?.() as Node[] | undefined
+  if (!args) return null
+  for (const a of args) {
+    const t = getTaintFromExpression(a, tainted, sources)
+    if (t) return t
+  }
+  return null
+}
+
+/**
+ * Template literal `${expr}` : tainted si une expression embeddee l'est.
+ */
+function taintFromTemplate(node: Node, tainted: Map<string, TaintInfo>, sources: TaintRule[]): TaintInfo | null {
+  const spans = (node as any).getTemplateSpans?.() as Node[] | undefined
+  if (!spans) return null
+  for (const span of spans) {
+    const expr = (span as any).getExpression?.()
+    if (!expr) continue
+    const t = getTaintFromExpression(expr, tainted, sources)
+    if (t) return t
+  }
+  return null
+}
+
 function getTaintFromExpression(
   node: Node,
   tainted: Map<string, TaintInfo>,
   sources: TaintRule[],
 ): TaintInfo | null {
-  // Source directe
   const src = matchAsSource(node, sources)
   if (src) {
     return {
@@ -357,47 +393,18 @@ function getTaintFromExpression(
   }
 
   const k = node.getKind()
-
-  // Identifier : tainted ?
   if (k === SyntaxKind.Identifier) {
-    const name = node.getText()
-    return tainted.get(name) ?? null
+    return tainted.get(node.getText()) ?? null
   }
-
-  // PropertyAccess / ElementAccess : chain root ?
   if (k === SyntaxKind.PropertyAccessExpression || k === SyntaxKind.ElementAccessExpression) {
-    const chain = extractAccessChain(node)
-    if (chain && chain.length > 0) {
-      return tainted.get(chain[0]!) ?? null
-    }
-    return null
+    return taintFromAccessChain(node, tainted)
   }
-
-  // Call : propagation à travers l'appel.
   if (k === SyntaxKind.CallExpression) {
-    const args = (node as any).getArguments?.() as Node[] | undefined
-    if (!args) return null
-    for (const a of args) {
-      const t = getTaintFromExpression(a, tainted, sources)
-      if (t) return t
-    }
-    return null
+    return taintFromCall(node, tainted, sources)
   }
-
-  // Template literals avec expressions : si une expression embeddée est tainted.
   if (k === SyntaxKind.TemplateExpression) {
-    const spans = (node as any).getTemplateSpans?.() as Node[] | undefined
-    if (spans) {
-      for (const span of spans) {
-        const expr = (span as any).getExpression?.()
-        if (expr) {
-          const t = getTaintFromExpression(expr, tainted, sources)
-          if (t) return t
-        }
-      }
-    }
+    return taintFromTemplate(node, tainted, sources)
   }
-
   return null
 }
 
@@ -408,33 +415,45 @@ function truncate(s: string, n: number): string {
   return clean.length > n ? clean.slice(0, n - 1) + '…' : clean
 }
 
-function buildLineToSymbol(sf: any): Map<number, string> {
-  const map = new Map<number, string>()
+function fillRangeIfAbsent(map: Map<number, string>, start: number, end: number, name: string): void {
+  for (let l = start; l <= end; l++) {
+    if (!map.has(l)) map.set(l, name)
+  }
+}
+
+function indexFunctionsForLines(sf: any, map: Map<number, string>): void {
   for (const fd of sf.getFunctions()) {
     const name = fd.getName()
     if (!name) continue
-    const s = fd.getStartLineNumber()
-    const e = fd.getEndLineNumber()
-    for (let l = s; l <= e; l++) if (!map.has(l)) map.set(l, name)
+    fillRangeIfAbsent(map, fd.getStartLineNumber(), fd.getEndLineNumber(), name)
   }
+}
+
+function indexClassMethodsForLines(sf: any, map: Map<number, string>): void {
   for (const cd of sf.getClasses()) {
     const cname = cd.getName() ?? '<anonymous>'
     for (const m of cd.getMethods()) {
-      const s = m.getStartLineNumber()
-      const e = m.getEndLineNumber()
-      for (let l = s; l <= e; l++) if (!map.has(l)) map.set(l, `${cname}.${m.getName()}`)
+      fillRangeIfAbsent(map, m.getStartLineNumber(), m.getEndLineNumber(), `${cname}.${m.getName()}`)
     }
   }
+}
+
+function indexFunctionVarsForLines(sf: any, map: Map<number, string>): void {
   for (const vs of sf.getVariableStatements()) {
     for (const vd of vs.getDeclarations()) {
       const init = vd.getInitializer()
       if (!init) continue
       const k = init.getKind()
       if (k !== SyntaxKind.ArrowFunction && k !== SyntaxKind.FunctionExpression) continue
-      const s = vd.getStartLineNumber()
-      const e = vd.getEndLineNumber()
-      for (let l = s; l <= e; l++) if (!map.has(l)) map.set(l, vd.getName())
+      fillRangeIfAbsent(map, vd.getStartLineNumber(), vd.getEndLineNumber(), vd.getName())
     }
   }
+}
+
+function buildLineToSymbol(sf: any): Map<number, string> {
+  const map = new Map<number, string>()
+  indexFunctionsForLines(sf, map)
+  indexClassMethodsForLines(sf, map)
+  indexFunctionVarsForLines(sf, map)
   return map
 }
