@@ -824,33 +824,29 @@ function renderDsmSection(s: GraphSnapshot): string {
 
 // ─── Section 5 : Modules ────────────────────────────────────────────────────
 
-function renderModules(s: GraphSnapshot, opts: Required<MapBuilderOptions>): string {
-  // In-degree par fichier (edges dont `to` = fichier).
-  const inDegree = new Map<string, number>()
-  for (const e of s.edges) {
-    inDegree.set(e.to, (inDegree.get(e.to) ?? 0) + 1)
-  }
+interface ModuleIndices {
+  byFromEvent: Map<string, GraphEdge[]>
+  byToEvent: Map<string, GraphEdge[]>
+  byFromDb: Map<string, GraphEdge[]>
+  byToDb: Map<string, GraphEdge[]>
+  sigsByFile: Map<string, TypedSignature[]>
+  callsOutByFile: Map<string, TypedCallEdge[]>
+  cyclesByFile: Map<string, Cycle[]>
+  tpByFile: Map<string, Array<{ role: 'writer' | 'reader' | 'canonical' | 'mirror'; tp: TruthPoint }>>
+  smByFile: Map<string, StateMachine[]>
+}
 
-  const fileNodes = s.nodes.filter((n) => n.type === 'file')
-  const isEntryPoint = (id: string) => {
-    const n = fileNodes.find((x) => x.id === id)
-    return n?.status === 'entry-point'
-  }
-
-  const selected = fileNodes
-    .filter((n) => (inDegree.get(n.id) ?? 0) >= opts.minIndegree || isEntryPoint(n.id))
-    .map((n) => n.id)
-    .sort()
-    .slice(0, opts.maxModulesInFiches)
-
-  if (selected.length === 0) return ''
-
-  // Index edges par fichier (pour émet/écoute/reads/writes).
+function buildEventDbIndices(edges: GraphEdge[]): {
+  byFromEvent: Map<string, GraphEdge[]>
+  byToEvent: Map<string, GraphEdge[]>
+  byFromDb: Map<string, GraphEdge[]>
+  byToDb: Map<string, GraphEdge[]>
+} {
   const byFromEvent = new Map<string, GraphEdge[]>()
   const byToEvent = new Map<string, GraphEdge[]>()
   const byFromDb = new Map<string, GraphEdge[]>()
   const byToDb = new Map<string, GraphEdge[]>()
-  for (const e of s.edges) {
+  for (const e of edges) {
     if (e.type === 'event') {
       push(byFromEvent, e.from, e)
       push(byToEvent, e.to, e)
@@ -859,26 +855,36 @@ function renderModules(s: GraphSnapshot, opts: Required<MapBuilderOptions>): str
       push(byToDb, e.to, e)
     }
   }
+  return { byFromEvent, byToEvent, byFromDb, byToDb }
+}
 
+function buildTypedCallIndices(s: GraphSnapshot): {
+  sigsByFile: Map<string, TypedSignature[]>
+  callsOutByFile: Map<string, TypedCallEdge[]>
+} {
   const sigsByFile = new Map<string, TypedSignature[]>()
-  if (s.typedCalls) {
-    for (const sig of s.typedCalls.signatures) push(sigsByFile, sig.file, sig)
-  }
   const callsOutByFile = new Map<string, TypedCallEdge[]>()
   if (s.typedCalls) {
+    for (const sig of s.typedCalls.signatures) push(sigsByFile, sig.file, sig)
     for (const e of s.typedCalls.callEdges) {
       const [fromFile] = e.from.split(':')
       if (fromFile) push(callsOutByFile, fromFile, e)
     }
   }
+  return { sigsByFile, callsOutByFile }
+}
 
+function buildSemanticIndices(s: GraphSnapshot): {
+  cyclesByFile: Map<string, Cycle[]>
+  tpByFile: Map<string, Array<{ role: 'writer' | 'reader' | 'canonical' | 'mirror'; tp: TruthPoint }>>
+  smByFile: Map<string, StateMachine[]>
+} {
   const cyclesByFile = new Map<string, Cycle[]>()
   if (s.cycles) {
     for (const c of s.cycles) {
       for (const n of new Set(c.nodes)) push(cyclesByFile, n, c)
     }
   }
-
   const tpByFile = new Map<string, Array<{ role: 'writer' | 'reader' | 'canonical' | 'mirror'; tp: TruthPoint }>>()
   if (s.truthPoints) {
     for (const tp of s.truthPoints) {
@@ -887,13 +893,41 @@ function renderModules(s: GraphSnapshot, opts: Required<MapBuilderOptions>): str
       for (const m of tp.mirrors) push(tpByFile, m.file, { role: 'mirror', tp })
     }
   }
-
   const smByFile = new Map<string, StateMachine[]>()
   if (s.stateMachines) {
     for (const m of s.stateMachines) {
       const files = new Set(m.transitions.map((t) => t.file))
       for (const f of files) push(smByFile, f, m)
     }
+  }
+  return { cyclesByFile, tpByFile, smByFile }
+}
+
+function selectFilesForFiches(s: GraphSnapshot, opts: Required<MapBuilderOptions>): string[] {
+  const inDegree = new Map<string, number>()
+  for (const e of s.edges) {
+    inDegree.set(e.to, (inDegree.get(e.to) ?? 0) + 1)
+  }
+  const fileNodes = s.nodes.filter((n) => n.type === 'file')
+  const isEntryPoint = (id: string): boolean => {
+    const n = fileNodes.find((x) => x.id === id)
+    return n?.status === 'entry-point'
+  }
+  return fileNodes
+    .filter((n) => (inDegree.get(n.id) ?? 0) >= opts.minIndegree || isEntryPoint(n.id))
+    .map((n) => n.id)
+    .sort()
+    .slice(0, opts.maxModulesInFiches)
+}
+
+function renderModules(s: GraphSnapshot, opts: Required<MapBuilderOptions>): string {
+  const selected = selectFilesForFiches(s, opts)
+  if (selected.length === 0) return ''
+
+  const indices: ModuleIndices = {
+    ...buildEventDbIndices(s.edges),
+    ...buildTypedCallIndices(s),
+    ...buildSemanticIndices(s),
   }
 
   const lines: string[] = ['## 5. Modules', '']
@@ -903,15 +937,15 @@ function renderModules(s: GraphSnapshot, opts: Required<MapBuilderOptions>): str
   for (const file of selected) {
     lines.push(renderModuleFiche({
       file,
-      sigs: sigsByFile.get(file) ?? [],
-      callsOut: callsOutByFile.get(file) ?? [],
-      listens: byToEvent.get(file) ?? [],
-      emits: byFromEvent.get(file) ?? [],
-      reads: byToDb.get(file) ?? [],
-      writes: byFromDb.get(file) ?? [],
-      cycles: cyclesByFile.get(file) ?? [],
-      tpRoles: tpByFile.get(file) ?? [],
-      sms: smByFile.get(file) ?? [],
+      sigs: indices.sigsByFile.get(file) ?? [],
+      callsOut: indices.callsOutByFile.get(file) ?? [],
+      listens: indices.byToEvent.get(file) ?? [],
+      emits: indices.byFromEvent.get(file) ?? [],
+      reads: indices.byToDb.get(file) ?? [],
+      writes: indices.byFromDb.get(file) ?? [],
+      cycles: indices.cyclesByFile.get(file) ?? [],
+      tpRoles: indices.tpByFile.get(file) ?? [],
+      sms: indices.smByFile.get(file) ?? [],
       opts,
     }))
   }
