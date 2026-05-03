@@ -5,11 +5,11 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T15:29:28Z
+Last update : 2026-05-03T15:44:07Z
 
 ## By type
 
-### `feat` (19)
+### `feat` (18)
 
 - **af41582** feat(toolkit): symbolic simplification facts + 5 composite rules cross-discipline — 2026-05-03
 - **2f84a70** feat(toolkit): Niveau 5 effect-analysis + roadmap defers Niveaux 6/7 — 2026-05-03
@@ -29,7 +29,6 @@ Last update : 2026-05-03T15:29:28Z
 - **87f2ac1** feat(toolkit): Information Bottleneck (Tishby 1999) — 7e cross-discipline — 2026-05-01
 - **9ee3547** feat(toolkit): min-cut/max-flow — coût objectif de séparation packages — 2026-05-01
 - **4cb7ffa** feat(toolkit): TDA + Lyapunov — cycles structurels + chaos detection — 2026-05-01
-- **375d5a2** feat(toolkit): cross-discipline rules — Fiedler λ₂ + Shannon entropy + Hamming dup — 2026-05-01
 
 
 ### `fix` (7)
@@ -50,8 +49,9 @@ Last update : 2026-05-03T15:29:28Z
 - **afd0965** perf(toolkit): self-discovered Salsa optimizations — warm runtime −40% — 2026-05-03
 
 
-### `refactor` (9)
+### `refactor` (10)
 
+- **c613ac7** refactor(toolkit): split analyzer.ts:runDeterministicDetectors en 5 phases — 2026-05-03
 - **5f8d691** refactor(toolkit): split god-files + fix REDOS detector + tests hubs — 2026-05-03
 - **c484f1f** refactor(codegraph): runDeterministicDetectors 279→108 LOC + git-fixture determinism — 2026-05-03
 - **6eb35b2** refactor(toolkit): HotAllocation requires ModuleCentrality>200 (FP reduction) — 2026-05-02
@@ -89,6 +89,7 @@ Last update : 2026-05-03T15:29:28Z
 
 ## Full history
 
+- **c613ac7** refactor(toolkit): split analyzer.ts:runDeterministicDetectors en 5 phases — 2026-05-03
 - **7151cfd** perf(toolkit): Salsa-isolate 3 hot detectors (co-change, drift, const-expr) — 2026-05-03
 - **f2f93bc** chore(brief): regen CLAUDE-CONTEXT + CHANGELOG post-refactor (553→534) — 2026-05-03
 - **5f8d691** refactor(toolkit): split god-files + fix REDOS detector + tests hubs — 2026-05-03
@@ -138,4 +139,3 @@ Last update : 2026-05-03T15:29:28Z
 - **3ecfa05** docs: cross-discipline metrics — synthese 6 disciplines portees — 2026-05-01
 - **9ee3547** feat(toolkit): min-cut/max-flow — coût objectif de séparation packages — 2026-05-01
 - **4cb7ffa** feat(toolkit): TDA + Lyapunov — cycles structurels + chaos detection — 2026-05-01
-- **375d5a2** feat(toolkit): cross-discipline rules — Fiedler λ₂ + Shannon entropy + Hamming dup — 2026-05-01

@@ -42,6 +42,10 @@
 - `packages/adr-toolkit/src/config.ts` → ADR-002
 - `packages/codegraph-mcp/src/snapshot-loader.ts` → ADR-008
 - `packages/codegraph/src/check/types.ts` → ADR-006
+- `packages/codegraph/src/cli/_shared.ts` → ADR-005
+- `packages/codegraph/src/cli/commands/analyze.ts` → ADR-005
+- `packages/codegraph/src/cli/commands/datalog-check.ts` → ADR-005
+- `packages/codegraph/src/cli/commands/diff.ts` → ADR-005
 - `packages/codegraph/src/core/analyzer.ts` → ADR-008
 - `packages/codegraph/src/core/detector-registry.ts` → ADR-008
 - `packages/codegraph/src/core/detectors/barrels-detector.ts` → ADR-008
@@ -138,9 +142,9 @@
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
 - `packages/codegraph/src/core/types.ts` (in: 75) · gov by ADR-006
-- `packages/codegraph/src/incremental/queries.ts` (in: 29) · gov by ADR-007
-- `packages/codegraph/src/incremental/database.ts` (in: 27) · gov by ADR-007
-- `packages/salsa/dist/index.d.ts` (in: 26)
+- `packages/codegraph/src/incremental/queries.ts` (in: 30) · gov by ADR-007
+- `packages/codegraph/src/incremental/database.ts` (in: 28) · gov by ADR-007
+- `packages/salsa/dist/index.d.ts` (in: 27)
 - `packages/codegraph/src/core/detector-registry.ts` (in: 18) · gov by ADR-008
 - `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 16) · gov by ADR-012
 - `packages/runtime-graph/src/core/types.ts` (in: 13) · gov by ADR-009
@@ -150,7 +154,7 @@
 
 Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `// ADR-NNN`** dans le code. Intentionnel ? Sinon poser un marqueur ou créer un ADR :
 
-- **26** `packages/salsa/dist/index.d.ts` _(top-hub)_
+- **27** `packages/salsa/dist/index.d.ts` _(top-hub)_
 
 ## Tensions actives — invitations à explorer
 
@@ -193,6 +197,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+c613ac7 refactor(toolkit): split analyzer.ts:runDeterministicDetectors en 5 phases
 7151cfd perf(toolkit): Salsa-isolate 3 hot detectors (co-change, drift, const-expr)
 f2f93bc chore(brief): regen CLAUDE-CONTEXT + CHANGELOG post-refactor (553→534)
 5f8d691 refactor(toolkit): split god-files + fix REDOS detector + tests hubs
@@ -204,7 +209,6 @@ a191d61 docs(validation): full-chain run #1 — 4 bugs trouvés sur Hono
 095661e docs(validation): run #1 — Hono framework (186 files, 3.5s, 0 crash, 0 hallucination)
 2067d1f chore(release): v0.3.0 consolidation — npm-publishable core, experimental gated
 2f84a70 feat(toolkit): Niveau 5 effect-analysis + roadmap defers Niveaux 6/7
-0146402 fix(toolkit): close P0+P1+P2+P3 — review credibility gap part 2
 ```
 
 ## Comment contribuer à ce brief
