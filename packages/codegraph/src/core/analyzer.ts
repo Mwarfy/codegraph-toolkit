@@ -483,17 +483,7 @@ async function runBaseDetectorsAndBuildGraph(
  *
  * En mode legacy : crée un Project frais à chaque appel.
  */
-async function resolveTsConfigAndSharedProject(
-  config: CodeGraphConfig,
-  files: string[],
-  opts: { incremental: boolean; preBuiltSharedProject: ReturnType<typeof createSharedProject> | null },
-): Promise<{
-  tsConfigPath: string | undefined
-  sharedProject: ReturnType<typeof createSharedProject>
-}> {
-  const { incremental, preBuiltSharedProject } = opts
-  // Find tsconfig for alias resolution.
-  let tsConfigPath: string | undefined
+async function findTsConfigPath(config: CodeGraphConfig): Promise<string | undefined> {
   const tsConfigCandidates: string[] = []
   if (config.tsconfigPath) {
     tsConfigCandidates.push(
@@ -505,53 +495,69 @@ async function resolveTsConfigAndSharedProject(
   tsConfigCandidates.push(path.join(config.rootDir, 'tsconfig.json'))
   for (const candidate of tsConfigCandidates) {
     try {
-      // await-ok: probe avec break sur première match, séquentiel requis
+      // await-ok: probe avec break sur premiere match, sequentiel requis
       await fs.access(candidate)
-      tsConfigPath = candidate
-      break
+      return candidate
     } catch { /* probe: try next tsconfig location */ }
   }
+  return undefined
+}
+
+async function feedActiveManifestsInput(rootDir: string, files: string[]): Promise<void> {
+  const allManifests = await discoverPackageManifests(rootDir)
+  if (allManifests.length === 0) {
+    incSetInputIfChanged(incPackageManifests, 'all', [])
+    return
+  }
+  allManifests.sort((a, b) => b.dir.length - a.dir.length)
+  const scopeFileCount = new Map<string, number>()
+  for (const m of allManifests) scopeFileCount.set(m.abs, 0)
+  for (const rel of files) {
+    const abs = path.join(rootDir, rel)
+    const m = findClosestPackageManifest(abs, allManifests)
+    if (m) scopeFileCount.set(m.abs, (scopeFileCount.get(m.abs) ?? 0) + 1)
+  }
+  const activeManifests = allManifests.filter((m) => (scopeFileCount.get(m.abs) ?? 0) > 0)
+  incSetInputIfChanged(incPackageManifests, 'all', activeManifests)
+}
+
+async function feedSqlDefaultsInput(rootDir: string): Promise<void> {
+  const sqlDefaultsBuffer: StateMachineWriteSignal[] = []
+  try {
+    const sqlFiles = await discoverSqlFilesForIncremental(rootDir, ['**/*.sql'])
+    // Lit en parallele (I/O independantes), scan/push sequentiel apres.
+    const sqlContents = await Promise.all(
+      sqlFiles.map(async (sqlFile) => {
+        try {
+          const content = await fs.readFile(path.join(rootDir, sqlFile), 'utf-8')
+          return { sqlFile, content }
+        } catch { return null /* race delete, permissions — skip */ }
+      }),
+    )
+    for (const entry of sqlContents) {
+      if (!entry) continue
+      scanSqlColumnDefaultsForIncremental(entry.content, entry.sqlFile, sqlDefaultsBuffer)
+    }
+  } catch { /* aucun SQL file dans ce projet — sqlDefaultsBuffer reste vide */ }
+  incSetInputIfChanged(incSqlDefaults, 'all', sqlDefaultsBuffer)
+}
+
+async function resolveTsConfigAndSharedProject(
+  config: CodeGraphConfig,
+  files: string[],
+  opts: { incremental: boolean; preBuiltSharedProject: ReturnType<typeof createSharedProject> | null },
+): Promise<{
+  tsConfigPath: string | undefined
+  sharedProject: ReturnType<typeof createSharedProject>
+}> {
+  const { incremental, preBuiltSharedProject } = opts
+  const tsConfigPath = await findTsConfigPath(config)
 
   let sharedProject: ReturnType<typeof createSharedProject>
   if (incremental) {
     sharedProject = preBuiltSharedProject!
-
-    // Active manifests pour package-deps incremental (filter scope-empty).
-    const allManifests = await discoverPackageManifests(config.rootDir)
-    if (allManifests.length > 0) {
-      allManifests.sort((a, b) => b.dir.length - a.dir.length)
-      const scopeFileCount = new Map<string, number>()
-      for (const m of allManifests) scopeFileCount.set(m.abs, 0)
-      for (const rel of files) {
-        const abs = path.join(config.rootDir, rel)
-        const m = findClosestPackageManifest(abs, allManifests)
-        if (m) scopeFileCount.set(m.abs, (scopeFileCount.get(m.abs) ?? 0) + 1)
-      }
-      const activeManifests = allManifests.filter((m) => (scopeFileCount.get(m.abs) ?? 0) > 0)
-      incSetInputIfChanged(incPackageManifests, 'all', activeManifests)
-    } else {
-      incSetInputIfChanged(incPackageManifests, 'all', [])
-    }
-
-    // SQL defaults pour state-machines (async file reads → input Salsa).
-    const sqlDefaultsBuffer: StateMachineWriteSignal[] = []
-    try {
-      const sqlFiles = await discoverSqlFilesForIncremental(config.rootDir, ['**/*.sql'])
-      // Lit en parallèle (I/O indépendantes), scan/push séquentiel après.
-      const sqlContents = await Promise.all(
-        sqlFiles.map(async (sqlFile) => {
-          try {
-            const content = await fs.readFile(path.join(config.rootDir, sqlFile), 'utf-8')
-            return { sqlFile, content }
-          } catch { return null /* race delete, permissions — skip */ }
-        }),
-      )
-      for (const entry of sqlContents) {
-        if (!entry) continue
-        scanSqlColumnDefaultsForIncremental(entry.content, entry.sqlFile, sqlDefaultsBuffer)
-      }
-    } catch { /* aucun SQL file dans ce projet — sqlDefaultsBuffer reste vide */ }
-    incSetInputIfChanged(incSqlDefaults, 'all', sqlDefaultsBuffer)
+    await feedActiveManifestsInput(config.rootDir, files)
+    await feedSqlDefaultsInput(config.rootDir)
   } else {
     sharedProject = createSharedProject(config.rootDir, files, tsConfigPath)
   }
