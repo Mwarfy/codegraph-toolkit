@@ -1,3 +1,4 @@
+// ADR-007
 /**
  * Incremental oauth-scope-literals — wrap Salsa autour du regex scan.
  *

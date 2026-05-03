@@ -1,3 +1,4 @@
+// ADR-007
 /**
  * Incremental cycles — Tarjan SCC global + détection de gates per-fichier.
  *

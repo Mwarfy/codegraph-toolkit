@@ -1,3 +1,4 @@
+// ADR-008
 /**
  * Detector Registry — pattern visiteur pour découper analyze() (god-file).
  *

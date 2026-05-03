@@ -16,6 +16,7 @@ import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
 import { minimatch } from 'minimatch'
 import { CodeGraph } from './graph.js'
+import { discoverFiles } from './file-discovery.js'
 import type {
   CodeGraphConfig,
   DetectorContext,
@@ -1090,50 +1091,6 @@ async function runPostSnapshotMetrics(
 }
 
 // ─── File Discovery ─────────────────────────────────────────────────────
-
-export async function discoverFiles(
-  rootDir: string,
-  include: string[],
-  exclude: string[]
-): Promise<string[]> {
-  const allFiles: string[] = []
-  await walkDir(rootDir, rootDir, allFiles)
-
-  return allFiles.filter(file => {
-    const matches = include.some(pattern => minimatch(file, pattern))
-    const excluded = exclude.some(pattern => minimatch(file, pattern))
-    return matches && !excluded
-  })
-}
-
-async function walkDir(
-  dir: string,
-  rootDir: string,
-  result: string[]
-): Promise<void> {
-  // Skip known heavy directories early (before even reading entries)
-  const dirName = path.basename(dir)
-  const skipDirs = new Set([
-    'node_modules', '.git', 'dist', 'build', '.next',
-    'coverage', '.turbo', '.cache', 'docker-data',
-  ])
-
-  if (skipDirs.has(dirName) && dir !== rootDir) return
-
-  let entries
-  try {
-    entries = await fs.readdir(dir, { withFileTypes: true })
-  } catch {
-    return
-  }
-
-  for (const entry of entries) {
-    const fullPath = path.join(dir, entry.name)
-    if (entry.isDirectory()) {
-      await walkDir(fullPath, rootDir, result)
-    } else if (entry.isFile()) {
-      const relativePath = path.relative(rootDir, fullPath).replace(/\\/g, '/')
-      result.push(relativePath)
-    }
-  }
-}
+// Extrait dans `core/file-discovery.ts` (refactor god-file 2026-05).
+// Re-export pour préserver l'API publique.
+export { discoverFiles } from './file-discovery.js'

@@ -1,3 +1,4 @@
+// ADR-008
 /**
  * SqlSchemaDetector — Phase 2 enrichissement.
  *

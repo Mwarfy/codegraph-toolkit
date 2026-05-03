@@ -9,7 +9,7 @@ asserts:
 # ADR-001: Synopsis builder = pur, zéro LLM
 
 **Date:** 2026-04-29
-**Status:** Proposed
+**Status:** Accepted
 
 ## Rule
 

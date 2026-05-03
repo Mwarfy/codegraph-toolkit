@@ -1,3 +1,4 @@
+// ADR-008
 /**
  * TruthPointsDetector — section 5f de analyze() migrée.
  *

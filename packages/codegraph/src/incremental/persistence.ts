@@ -1,3 +1,4 @@
+// ADR-007
 /**
  * Persistence disque pour le cache Salsa (Sprint 7 + delta saves Sprint 8).
  *

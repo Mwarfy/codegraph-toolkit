@@ -1,3 +1,4 @@
+// ADR-008
 /**
  * StateMachinesDetector — section 5h de analyze() migrée.
  *

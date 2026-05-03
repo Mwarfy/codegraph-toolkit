@@ -11,7 +11,7 @@ asserts:
 # ADR-003: Détecteurs généralistes par défaut, project-specific opt-in
 
 **Date:** 2026-04-29
-**Status:** Proposed
+**Status:** Accepted
 
 ## Rule
 

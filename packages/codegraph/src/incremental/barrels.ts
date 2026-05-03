@@ -1,3 +1,4 @@
+// ADR-007
 /**
  * Incremental barrels — wrap Salsa autour de la détection per-file +
  * comptage consumers cross-file.

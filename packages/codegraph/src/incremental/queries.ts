@@ -1,3 +1,4 @@
+// ADR-007
 /**
  * Incremental queries — inputs et helpers de contexte partagés entre
  * détecteurs Salsa-isés.

@@ -1,3 +1,4 @@
+// ADR-007
 /**
  * Incremental taint — pure per-file (taint analysis est intra-scope,
  * pas cross-file). Cache via fileContent. Les rules sont passées en

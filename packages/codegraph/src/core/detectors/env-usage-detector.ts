@@ -1,3 +1,4 @@
+// ADR-008
 /**
  * EnvUsageDetector — section 5i de analyze() migrée.
  *

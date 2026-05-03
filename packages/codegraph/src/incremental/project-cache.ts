@@ -1,3 +1,4 @@
+// ADR-007
 /**
  * Project ts-morph cache (Sprint 5.2) — réutilise le Project entre
  * appels successifs d'`analyze()` dans le même process.

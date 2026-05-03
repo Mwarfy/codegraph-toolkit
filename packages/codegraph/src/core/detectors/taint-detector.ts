@@ -1,3 +1,4 @@
+// ADR-008
 /**
  * TaintDetector — section 5l de analyze() migrée.
  *

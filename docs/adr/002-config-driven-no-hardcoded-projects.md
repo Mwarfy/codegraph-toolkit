@@ -9,7 +9,7 @@ asserts:
 # ADR-002: Config-driven obligatoire — pas de hardcoded projet dans le code des packages
 
 **Date:** 2026-04-29
-**Status:** Proposed
+**Status:** Accepted
 
 ## Rule
 

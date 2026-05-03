@@ -1,3 +1,4 @@
+// ADR-008
 /**
  * SymbolRefsDetector — section 5c de analyze() migrée.
  *

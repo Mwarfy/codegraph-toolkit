@@ -1,3 +1,4 @@
+// ADR-007
 /**
  * Incremental truth-points — wrap Salsa autour du bundle per-file +
  * agrégation cross-file qui dépend des graph edges.

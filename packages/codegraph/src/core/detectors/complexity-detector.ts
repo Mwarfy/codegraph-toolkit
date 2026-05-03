@@ -1,3 +1,4 @@
+// ADR-008
 /**
  * ComplexityDetector — section 5b de analyze() migrée.
  *

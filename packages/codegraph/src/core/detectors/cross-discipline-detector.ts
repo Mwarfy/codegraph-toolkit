@@ -1,3 +1,4 @@
+// ADR-008
 /**
  * CrossDisciplineDetector — wrap l'orchestrator des 11 disciplines
  * mathématiques en une Detector class compatible registry pattern.

@@ -1,3 +1,4 @@
+// ADR-008
 /**
  * OauthScopeLiteralsDetector — premier détecteur migré au pattern
  * Detector/Registry (Phase A du refactor analyzer.ts).

@@ -1,3 +1,4 @@
+// ADR-007
 /**
  * `codegraph watch` mode (Sprint 9 — Phase 2).
  *

@@ -1,3 +1,4 @@
+// ADR-007
 /**
  * Incremental env-usage — wrap Salsa autour du scan AST `process.env.X`.
  *

@@ -1,3 +1,4 @@
+// ADR-007
 /**
  * Incremental symbol-refs — bundle per-file + agrégat trivial.
  *

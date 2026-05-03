@@ -1,3 +1,4 @@
+// ADR-008
 /**
  * DrizzleSchemaDetector — Phase 3 enrichissement (multi-projet).
  *

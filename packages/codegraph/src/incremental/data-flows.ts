@@ -1,3 +1,4 @@
+// ADR-007
 /**
  * Incremental data-flows — bundle per-file (sinks + entries +
  * inlineListenerSinks) + builder pure global.

@@ -1,3 +1,4 @@
+// ADR-007
 /**
  * Incremental typed-calls — bundle per-file (signatures + raw call edges)
  * agrégé via aggregateTypedCalls qui filtre par knownExports global.

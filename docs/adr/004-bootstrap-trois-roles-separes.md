@@ -11,7 +11,7 @@ asserts:
 # ADR-004: Bootstrap = 3 rôles séparés (codegraph détecte / LLM rédige / humain valide)
 
 **Date:** 2026-04-29
-**Status:** Proposed
+**Status:** Accepted
 
 ## Rule
 

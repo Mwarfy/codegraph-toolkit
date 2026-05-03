@@ -1,3 +1,4 @@
+// ADR-007
 /**
  * Incremental state-machines — wrap Salsa autour du bundle per-file
  * + agrégation cross-file.

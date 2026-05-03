@@ -1,3 +1,4 @@
+// ADR-007
 /**
  * Incremental package-deps — wrap Salsa autour du scan AST + regex
  * runtime-asset.

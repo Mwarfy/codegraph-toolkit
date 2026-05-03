@@ -15,6 +15,24 @@ C'est tout. Le toolkit détecte ta stack (Express/Hono/Next, raw SQL/Drizzle, mo
 
 ---
 
+## Packages
+
+Le toolkit est un monorepo de **7 packages** publiés sous le namespace `@liby-tools` :
+
+| Package | Version | Rôle |
+|---|---|---|
+| [`@liby-tools/codegraph`](packages/codegraph/) | `0.2.0` | Static analyzer + 50+ extracteurs + synopsis builder déterministe |
+| [`@liby-tools/adr-toolkit`](packages/adr-toolkit/) | `0.3.0` | ADR governance (anchors, asserts ts-morph, boot brief, hooks) |
+| [`@liby-tools/codegraph-mcp`](packages/codegraph-mcp/) | `0.2.0` | MCP server — 14 tools queryables depuis Claude Code (LSP-complement) |
+| [`@liby-tools/datalog`](packages/datalog/) | `0.2.0` | Pure-TS Datalog interpreter — zero binary, multi-dir loader |
+| [`@liby-tools/invariants-postgres-ts`](packages/invariants-postgres-ts/) | `0.1.0` | 91 rules Datalog packagées (mono + composites + CWE + cross-discipline) |
+| [`@liby-tools/salsa`](packages/salsa/) | `0.2.0` | Salsa-style incremental computation runtime |
+| [`@liby-tools/runtime-graph`](packages/runtime-graph/) | `0.1.0-alpha.4` | Runtime observability framework — OTel attach + 6 disciplines mathématiques runtime + composites cross-static×runtime |
+
+**Tu n'as pas besoin de tout installer.** Le quickstart en haut de page installe les 5 packages "production" (codegraph + adr-toolkit + mcp + datalog + invariants). `salsa` est une dépendance interne (pulled transitively). `runtime-graph` est le package **expérimental OSS** qui vient en plus pour l'observabilité runtime — install-le séparément si tu veux capturer le call graph effectif via OTel.
+
+---
+
 ## Pourquoi ça existe
 
 Sans infra partagée, chaque projet TS recommence de zéro la cartographie + la gouvernance docs↔code. L'agent IA dérive ("où est géré le trust ?"), les invariants implicites se perdent ("on avait dit pas de cycles d'import gated"), le projet meurt après 3 mois.
@@ -351,6 +369,10 @@ codegraph memory delete <id>
 codegraph memory prune                         # dur-delete les obsolètes
 codegraph memory export                        # JSON dump pour backup
 codegraph memory where                         # path du store
+
+# Runtime observability (alpha — package @liby-tools/runtime-graph)
+liby-runtime-graph run [--duration N] [--driver synthetic|replay-tests|chaos]
+liby-runtime-graph check [--rules-dir DIR] [--facts-dir DIR]
 ```
 
 ---
@@ -637,8 +659,22 @@ Pour le détail : [`CHANGELOG.md`](CHANGELOG.md).
 - [`packages/invariants-postgres-ts/README.md`](packages/invariants-postgres-ts/README.md) — 91 rules Datalog packagées
 - [`packages/datalog/README.md`](packages/datalog/README.md) — runtime Datalog interne (multi-dir loader)
 - [`packages/salsa/README.md`](packages/salsa/README.md) — incremental computation
+- [`packages/runtime-graph/README.md`](packages/runtime-graph/README.md) — runtime observability framework (OTel + 6 disciplines runtime)
 - [`docs/CROSS-DISCIPLINE-METRICS.md`](docs/CROSS-DISCIPLINE-METRICS.md) — 7 disciplines mathématiques portées
 - [`docs/REFACTOR-ANALYZER-PLAN.md`](docs/REFACTOR-ANALYZER-PLAN.md) — détail du refactor 3-phases (god-file → registry)
 - [`docs/ENRICHMENT-5-AXES-PLAN.md`](docs/ENRICHMENT-5-AXES-PLAN.md) — plan des 5 axes Phase 1
 - [`docs/PHASE-2-SQL-DETECTOR-PLAN.md`](docs/PHASE-2-SQL-DETECTOR-PLAN.md) — design du SQL detector
+
+---
+
+## Portabilité agents IA
+
+Le toolkit a été pensé d'abord pour Claude Code, mais le cœur est agent-agnostique :
+
+- **Mental map** : `BOOT-BRIEF.md` + `MAP.md` + `synopsis-level{1,2,3}.md` sont du markdown standard, lisibles par n'importe quel agent (Cursor, Aider, Cline, Copilot CLI, GPT-via-shell).
+- **MCP server** : protocole standard, fonctionne avec tout client MCP. Les 14 outils sont exposés via JSON-RPC.
+- **Datalog facts + rules** : `.facts` et `.dl` lisibles partout, runner pure-TS sans dépendance Claude.
+- **Hooks** : les fichiers `.claude/settings.json` sont spécifiques Claude Code. Pour Cursor/Aider/Cline, les hooks équivalents sont au niveau git (`pre-commit`, `post-commit`) — installés automatiquement par `adr-toolkit install-hooks`.
+
+Cf. [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md) pour le portage à un agent non-Claude.
 - [`docs/PHASE-5-COMPOSITE-BACKLOG.md`](docs/PHASE-5-COMPOSITE-BACKLOG.md) — 52 candidats Tiers 14-18

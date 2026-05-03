@@ -1,3 +1,4 @@
+// ADR-007
 /**
  * Incremental Salsa database — singleton partagé pour le pipeline d'analyse.
  *

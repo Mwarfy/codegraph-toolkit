@@ -1,3 +1,4 @@
+// ADR-007
 /**
  * Incremental complexity — pure per-file (aucune dépendance cross-file).
  *

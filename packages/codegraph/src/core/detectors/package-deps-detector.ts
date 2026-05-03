@@ -1,3 +1,4 @@
+// ADR-008
 /**
  * PackageDepsDetector — section 5j de analyze() migrée.
  *

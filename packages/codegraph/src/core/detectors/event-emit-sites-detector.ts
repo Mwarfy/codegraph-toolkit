@@ -1,3 +1,4 @@
+// ADR-008
 /**
  * EventEmitSitesDetector — section 5k-bis de analyze() migrée.
  *

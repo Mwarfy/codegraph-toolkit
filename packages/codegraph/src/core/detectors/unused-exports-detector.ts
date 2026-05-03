@@ -1,3 +1,4 @@
+// ADR-008
 /**
  * UnusedExportsDetector — section 5 (exports) de analyze() migrée.
  *

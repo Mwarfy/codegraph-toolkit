@@ -1,3 +1,4 @@
+// ADR-007
 /**
  * Incremental ts-imports — bundle per-file (DetectedLink[]) + agrégat
  * trivial concat.

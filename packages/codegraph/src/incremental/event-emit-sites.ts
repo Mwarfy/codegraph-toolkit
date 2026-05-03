@@ -1,3 +1,4 @@
+// ADR-007
 /**
  * Incremental event-emit-sites — wrap Salsa autour du scan AST des
  * `emit({ type: ... })`.

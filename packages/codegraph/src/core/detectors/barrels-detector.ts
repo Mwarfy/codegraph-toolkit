@@ -1,3 +1,4 @@
+// ADR-008
 /**
  * BarrelsDetector — section 5k de analyze() migrée.
  *

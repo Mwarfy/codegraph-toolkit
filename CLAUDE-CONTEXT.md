@@ -20,6 +20,12 @@
   → [`Pattern détecteurs codegraph — bundle per-file + agrégat pure`](docs/adr/005-detector-pattern-bundle-per-file.md)
 - **ADR-006** — `packages/codegraph/src/core/types.ts` est importé par 57+ fichiers > (top hub absolu du toolkit). Tout type exporté depuis ce fichier est > un contrat avec : > - Les détecteurs (extractors/) qui produisent ces structures > - Les consumers (synopsis/, facts/, diff/, check/) qui les lisent > - Le snapshot.json sérialisé sur disque (consommé par Sentinel, > codegraph-mcp, hooks bash, possibles consumers externes) > > RÈGLE : pas de breaking change sans deprecation explicite. On ajoute > des champs optionnels, on ne supprime ni ne modifie la sémantique > d'un champ existant.
   → [``core/types.ts` est le contract canonique — modifications conservatrices uniquement`](docs/adr/006-core-types-canonical-contract.md)
+- **ADR-007** — `incremental/queries.ts` et `incremental/database.ts` sont les **points > d'entrée canoniques** pour toute computation incrémentale Salsa. Ne JAMAIS > instancier `new SalsaDatabase()` ailleurs (cassérait le caching). Toujours > consommer la `sharedDb` exportée + déclarer les inputs via les `input()` de > `queries.ts`. Les `derived()` consument fileContent / projectFiles, pas le > filesystem direct.
+  → [`Salsa incremental — fileContent + sharedDb sont contrats canoniques`](docs/adr/007-salsa-incremental-contracts.md)
+- **ADR-008** — Tout nouveau détecteur (`extends BaseDetector`) DOIT être enregistré dans > `core/detector-registry.ts` via `createDetectors()`. Pas de détecteur > instancié ailleurs (analyzer.ts ne fait QUE consommer le registry). La > propriété `projectSpecific: true` exclut le détecteur de la liste par > défaut — opt-in explicite via config.
+  → [`detector-registry est le SEUL point d'enregistrement de détecteurs`](docs/adr/008-detector-registry-canonical.md)
+- **ADR-009** — `packages/runtime-graph/src/core/types.ts` est le contract entre 4 > couches : (1) capture (OTel attach), (2) aggregator (spans → facts), > (3) exporter (facts → TSV/datalog), (4) datalog rules. Modifications > conservatrices uniquement — ajout de champs optionnels OK, suppression > ou changement de sémantique = breaking. Aligned with ADR-006 pour > `codegraph/core/types.ts`.
+  → [`runtime-graph/core/types.ts = contrat canonique runtime`](docs/adr/009-runtime-graph-types-contract.md)
 
 ## Fichiers gouvernés par un ADR (lookup pré-calculé)
 
@@ -27,11 +33,52 @@
 - `packages/adr-toolkit/src/bootstrap-writer.ts` → ADR-004
 - `packages/adr-toolkit/src/bootstrap.ts` → ADR-004
 - `packages/adr-toolkit/src/config.ts` → ADR-002
+- `packages/codegraph/src/core/detector-registry.ts` → ADR-008
+- `packages/codegraph/src/core/detectors/barrels-detector.ts` → ADR-008
+- `packages/codegraph/src/core/detectors/complexity-detector.ts` → ADR-008
+- `packages/codegraph/src/core/detectors/cross-discipline-detector.ts` → ADR-008
+- `packages/codegraph/src/core/detectors/cycles-detector.ts` → ADR-008
+- `packages/codegraph/src/core/detectors/data-flows-detector.ts` → ADR-008
+- `packages/codegraph/src/core/detectors/drizzle-schema-detector.ts` → ADR-008
+- `packages/codegraph/src/core/detectors/env-usage-detector.ts` → ADR-008
+- `packages/codegraph/src/core/detectors/event-emit-sites-detector.ts` → ADR-008
+- `packages/codegraph/src/core/detectors/oauth-scope-literals-detector.ts` → ADR-008
+- `packages/codegraph/src/core/detectors/package-deps-detector.ts` → ADR-008
+- `packages/codegraph/src/core/detectors/sql-schema-detector.ts` → ADR-008
+- `packages/codegraph/src/core/detectors/state-machines-detector.ts` → ADR-008
+- `packages/codegraph/src/core/detectors/symbol-refs-detector.ts` → ADR-008
+- `packages/codegraph/src/core/detectors/taint-detector.ts` → ADR-008
+- `packages/codegraph/src/core/detectors/truth-points-detector.ts` → ADR-008
+- `packages/codegraph/src/core/detectors/typed-calls-detector.ts` → ADR-008
+- `packages/codegraph/src/core/detectors/unused-exports-detector.ts` → ADR-008
+- `packages/codegraph/src/core/file-discovery.ts` → ADR-008
 - `packages/codegraph/src/core/types.ts` → ADR-006
 - `packages/codegraph/src/detectors/block-loader.ts` → ADR-003
 - `packages/codegraph/src/detectors/index.ts` → ADR-003
+- `packages/codegraph/src/incremental/barrels.ts` → ADR-007
+- `packages/codegraph/src/incremental/complexity.ts` → ADR-007
+- `packages/codegraph/src/incremental/cycles.ts` → ADR-007
+- `packages/codegraph/src/incremental/data-flows.ts` → ADR-007
+- `packages/codegraph/src/incremental/database.ts` → ADR-007
+- `packages/codegraph/src/incremental/env-usage.ts` → ADR-007
+- `packages/codegraph/src/incremental/event-emit-sites.ts` → ADR-007
+- `packages/codegraph/src/incremental/metrics.ts` → ADR-007
+- `packages/codegraph/src/incremental/oauth-scope-literals.ts` → ADR-007
+- `packages/codegraph/src/incremental/package-deps.ts` → ADR-007
+- `packages/codegraph/src/incremental/persistence.ts` → ADR-007
+- `packages/codegraph/src/incremental/project-cache.ts` → ADR-007
+- `packages/codegraph/src/incremental/queries.ts` → ADR-007
+- `packages/codegraph/src/incremental/state-machines.ts` → ADR-007
+- `packages/codegraph/src/incremental/symbol-refs.ts` → ADR-007
+- `packages/codegraph/src/incremental/taint.ts` → ADR-007
+- `packages/codegraph/src/incremental/truth-points.ts` → ADR-007
+- `packages/codegraph/src/incremental/ts-imports.ts` → ADR-007
+- `packages/codegraph/src/incremental/typed-calls.ts` → ADR-007
+- `packages/codegraph/src/incremental/unused-exports.ts` → ADR-007
+- `packages/codegraph/src/incremental/watcher.ts` → ADR-007
 - `packages/codegraph/src/synopsis/builder.ts` → ADR-001
 - `packages/codegraph/src/synopsis/tensions.ts` → ADR-001
+- `packages/runtime-graph/src/core/types.ts` → ADR-009
 
 > **Dogfooding** : ce repo gouverne sa propre architecture via le toolkit qu'il publie. Les 4 ADRs ci-dessus encadrent les invariants critiques (zéro LLM dans synopsis, config-driven, séparation détecteurs, 3 rôles bootstrap).
 
@@ -100,6 +147,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+03ef857 chore(runtime-graph): OSS launch prep — alpha.4 publish-ready
 79c4fed feat(runtime-graph): Phase γ.2c — TDA Persistent Homology dim-0
 fc1c79d feat(runtime-graph): Phase γ.2b — true time-series Lyapunov 1D
 5c78f3a feat(runtime-graph): Phase γ.2a — Granger causality runtime + time-series infra
@@ -111,7 +159,6 @@ cd9a769 feat(runtime-graph): Phase β — replay-tests + chaos + Express + Mongo
 ca252d2 fix(runtime-graph): retire grandfathers + refine rules + self-probe E2E validated
 e65ea40 feat(runtime-graph): Phase α — runtime observability framework with datalog query language
 8c49ff7 fix(analyzer): factsOnly mode must populate TestedFile
-6eb35b2 refactor(toolkit): HotAllocation requires ModuleCentrality>200 (FP reduction)
 ```
 
 ## Comment contribuer à ce brief

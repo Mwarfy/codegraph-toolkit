@@ -1,3 +1,4 @@
+// ADR-007
 /**
  * Incremental unused-exports — bundle per-file + agrégat global pure.
  *

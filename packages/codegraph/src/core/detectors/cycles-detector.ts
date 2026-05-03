@@ -1,3 +1,4 @@
+// ADR-008
 /**
  * CyclesDetector — section 5e de analyze() migrée.
  *
