@@ -199,6 +199,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+50eb1f8 fix(toolkit): articulation-point rule — exclure package entry points (FP systemique)
 8844d31 fix(toolkit): FSM-ORPHAN 3→0 — fixture skip + Attribute API + satisfies unwrap
 1b532d0 fix(toolkit): grandfather 3 cross-package loadConfig pairs (FP shape-match)
 686fb09 fix(toolkit): quick-win violations — 4 fixes (1 floating-promise FP, 1 return-then-else, 2 deprecated FPs)
@@ -210,7 +211,6 @@ cbc6a6b refactor(toolkit): split exportFacts batch 3 — exportFacts cyclo 84→
 f8e2fdd refactor(toolkit): split exportFacts en 5 emit helpers (cyclomatic 142→102)
 7c6668c refactor(toolkit): kill LONG-FN-BY-PARAMS (5→0) + fix CHAOS-AMPLIFIER FP (6→3)
 96048d7 refactor(toolkit): extract NCD duplicates → ast-helpers + drivers/_common (NCD: 16→12)
-dcf47d4 perf(toolkit): split stat-from-read en prebuild + layered allDeprecatedUsage
 ```
 
 ## Comment contribuer à ce brief

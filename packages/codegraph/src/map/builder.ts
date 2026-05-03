@@ -123,12 +123,13 @@ function renderConcernsIndex(
 
 // ─── Section 2.5 : Event flow narratives ────────────────────────────────────
 
-function renderEventFlows(s: GraphSnapshot, maxFlows: number): string {
-  // Collect events : edges with type='event'. Label = event name.
-  const eventEdges = s.edges.filter(e => e.type === 'event' && e.label)
-  if (eventEdges.length === 0) return ''
+interface EventChain { events: string[]; files: string[]; score: number }
+interface EventCtx {
+  byEvent: Map<string, { emitters: Set<string>; listeners: Set<string> }>
+  fileEmits: Map<string, Set<string>>
+}
 
-  // Build emitters/listeners per event name
+function buildEventCtx(eventEdges: GraphEdge[]): EventCtx {
   const byEvent = new Map<string, { emitters: Set<string>; listeners: Set<string> }>()
   for (const e of eventEdges) {
     const name = e.label!
@@ -137,8 +138,6 @@ function renderEventFlows(s: GraphSnapshot, maxFlows: number): string {
     entry.emitters.add(e.from)
     entry.listeners.add(e.to)
   }
-
-  // Build listener → emits map : for each file, what events does it emit?
   const fileEmits = new Map<string, Set<string>>()
   for (const [name, ev] of byEvent) {
     for (const emitter of ev.emitters) {
@@ -146,55 +145,60 @@ function renderEventFlows(s: GraphSnapshot, maxFlows: number): string {
       fileEmits.get(emitter)!.add(name)
     }
   }
+  return { byEvent, fileEmits }
+}
 
-  // Compute chains : from each event, trace listeners 2-3 hops deep
-  // Chain entry : { events: [eventName], files: [file0, file1, ...] }
-  interface Chain { events: string[]; files: string[]; score: number }
-  const chains: Chain[] = []
+function tracePathFromEmitter(
+  startEvent: string,
+  emitter: string,
+  ctx: EventCtx,
+): EventChain | null {
+  const { byEvent, fileEmits } = ctx
+  const seen = new Set<string>([emitter])
+  const pathFiles: string[] = [emitter]
+  const pathEvents: string[] = [startEvent]
+  let current = startEvent
+  let depth = 0
+  while (depth < 3) {
+    const ev = byEvent.get(current)
+    if (!ev) break
+    let nextFile: string | null = null
+    let nextEvent: string | null = null
+    for (const listener of ev.listeners) {
+      if (seen.has(listener)) continue
+      const emitted = fileEmits.get(listener)
+      if (!emitted) continue
+      for (const cand of emitted) {
+        if (!pathEvents.includes(cand)) { nextFile = listener; nextEvent = cand; break }
+      }
+      if (nextFile) break
+    }
+    if (!nextFile || !nextEvent) break
+    seen.add(nextFile)
+    pathFiles.push(nextFile)
+    pathEvents.push(nextEvent)
+    current = nextEvent
+    depth++
+  }
+  if (pathEvents.length < 2) return null
+  return { events: pathEvents, files: pathFiles, score: pathEvents.length }
+}
 
-  for (const [startEvent, startEv] of byEvent) {
+function traceAllChains(ctx: EventCtx): EventChain[] {
+  const chains: EventChain[] = []
+  for (const [startEvent, startEv] of ctx.byEvent) {
     for (const emitter of startEv.emitters) {
-      // Trace forward up to 3 hops
-      const seen = new Set<string>([emitter])
-      const pathFiles: string[] = [emitter]
-      const pathEvents: string[] = [startEvent]
-      let current = startEvent
-      let depth = 0
-      while (depth < 3) {
-        const ev = byEvent.get(current)
-        if (!ev) break
-        // Pick first listener that hasn't been seen and emits something
-        let nextFile: string | null = null
-        let nextEvent: string | null = null
-        for (const listener of ev.listeners) {
-          if (seen.has(listener)) continue
-          const emitted = fileEmits.get(listener)
-          if (!emitted) continue
-          // Pick an event that's not already in pathEvents
-          for (const cand of emitted) {
-            if (!pathEvents.includes(cand)) { nextFile = listener; nextEvent = cand; break }
-          }
-          if (nextFile) break
-        }
-        if (!nextFile || !nextEvent) break
-        seen.add(nextFile)
-        pathFiles.push(nextFile)
-        pathEvents.push(nextEvent)
-        current = nextEvent
-        depth++
-      }
-      // Only record chains of 2+ hops
-      if (pathEvents.length >= 2) {
-        chains.push({
-          events: pathEvents,
-          files: pathFiles,
-          score: pathEvents.length,
-        })
-      }
+      const chain = tracePathFromEmitter(startEvent, emitter, ctx)
+      if (chain) chains.push(chain)
     }
   }
+  return chains
+}
 
-  // Dedup chains by event sequence
+function dedupAndRankChains(chains: EventChain[], maxFlows: number): {
+  top: EventChain[]
+  totalUnique: number
+} {
   const seen = new Set<string>()
   const uniqueChains = chains.filter(c => {
     const key = c.events.join('|')
@@ -202,9 +206,25 @@ function renderEventFlows(s: GraphSnapshot, maxFlows: number): string {
     seen.add(key)
     return true
   })
-
   uniqueChains.sort((a, b) => b.score - a.score || a.events[0].localeCompare(b.events[0]))
-  const top = uniqueChains.slice(0, maxFlows)
+  return { top: uniqueChains.slice(0, maxFlows), totalUnique: uniqueChains.length }
+}
+
+function formatChainArrow(chain: EventChain): string {
+  return chain.events.map((ev, i) => {
+    const file = chain.files[i]
+    const shortFile = file.split('/').slice(-2).join('/').replace(/\.ts$/, '')
+    return `\`${ev}\` _(${shortFile})_`
+  }).join(' → ')
+}
+
+function renderEventFlows(s: GraphSnapshot, maxFlows: number): string {
+  const eventEdges = s.edges.filter(e => e.type === 'event' && e.label)
+  if (eventEdges.length === 0) return ''
+
+  const ctx = buildEventCtx(eventEdges)
+  const chains = traceAllChains(ctx)
+  const { top, totalUnique } = dedupAndRankChains(chains, maxFlows)
 
   const lines: string[] = ['## 2.5. Event flow chains', '']
   lines.push(
@@ -219,16 +239,11 @@ function renderEventFlows(s: GraphSnapshot, maxFlows: number): string {
   }
 
   for (const chain of top) {
-    const arrows = chain.events.map((ev, i) => {
-      const file = chain.files[i]
-      const shortFile = file.split('/').slice(-2).join('/').replace(/\.ts$/, '')
-      return `\`${ev}\` _(${shortFile})_`
-    }).join(' → ')
-    lines.push(`- ${arrows}`)
+    lines.push(`- ${formatChainArrow(chain)}`)
   }
 
   lines.push('')
-  lines.push(`_Total : ${uniqueChains.length} chaînes uniques détectées, top ${top.length} affichées._`)
+  lines.push(`_Total : ${totalUnique} chaînes uniques détectées, top ${top.length} affichées._`)
   return lines.join('\n')
 }
 

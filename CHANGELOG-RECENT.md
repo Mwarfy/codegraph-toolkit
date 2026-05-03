@@ -5,11 +5,11 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T19:21:14Z
+Last update : 2026-05-03T19:23:10Z
 
 ## By type
 
-### `feat` (10)
+### `feat` (9)
 
 - **af41582** feat(toolkit): symbolic simplification facts + 5 composite rules cross-discipline — 2026-05-03
 - **2f84a70** feat(toolkit): Niveau 5 effect-analysis + roadmap defers Niveaux 6/7 — 2026-05-03
@@ -20,11 +20,11 @@ Last update : 2026-05-03T19:21:14Z
 - **fc1c79d** feat(runtime-graph): Phase γ.2b — true time-series Lyapunov 1D — 2026-05-03
 - **5c78f3a** feat(runtime-graph): Phase γ.2a — Granger causality runtime + time-series infra — 2026-05-03
 - **e9a2b44** feat(runtime-graph): Phase γ — 4 mathematical disciplines runtime + composite rules — 2026-05-03
-- **cd9a769** feat(runtime-graph): Phase β — replay-tests + chaos + Express + MongoDB + config-driven — 2026-05-03
 
 
-### `fix` (11)
+### `fix` (12)
 
+- **50eb1f8** fix(toolkit): articulation-point rule — exclure package entry points (FP systemique) — 2026-05-03
 - **8844d31** fix(toolkit): FSM-ORPHAN 3→0 — fixture skip + Attribute API + satisfies unwrap — 2026-05-03
 - **1b532d0** fix(toolkit): grandfather 3 cross-package loadConfig pairs (FP shape-match) — 2026-05-03
 - **686fb09** fix(toolkit): quick-win violations — 4 fixes (1 floating-promise FP, 1 return-then-else, 2 deprecated FPs) — 2026-05-03
@@ -85,6 +85,7 @@ Last update : 2026-05-03T19:21:14Z
 
 ## Full history
 
+- **50eb1f8** fix(toolkit): articulation-point rule — exclure package entry points (FP systemique) — 2026-05-03
 - **8844d31** fix(toolkit): FSM-ORPHAN 3→0 — fixture skip + Attribute API + satisfies unwrap — 2026-05-03
 - **1b532d0** fix(toolkit): grandfather 3 cross-package loadConfig pairs (FP shape-match) — 2026-05-03
 - **686fb09** fix(toolkit): quick-win violations — 4 fixes (1 floating-promise FP, 1 return-then-else, 2 deprecated FPs) — 2026-05-03
@@ -134,4 +135,3 @@ Last update : 2026-05-03T19:21:14Z
 - **e73e85d** fix(codegraph): break direct cycle sql-helpers ↔ sql-schema via type extraction — 2026-05-03
 - **e9a2b44** feat(runtime-graph): Phase γ — 4 mathematical disciplines runtime + composite rules — 2026-05-03
 - **f642620** fix(runtime-graph): CLI rulesDir resolution via __dirname (no package.json export) — 2026-05-03
-- **cd9a769** feat(runtime-graph): Phase β — replay-tests + chaos + Express + MongoDB + config-driven — 2026-05-03
