@@ -374,6 +374,53 @@ interface ScanSinksArgs {
   out: Map<string, DataFlowSink[]>
 }
 
+interface SinkCallCtx {
+  callArgs: any[]
+  file: string
+  line: number
+  containerKey: string
+  out: Map<string, DataFlowSink[]>
+}
+
+function trySinkDbWrite(ctx: SinkCallCtx): void {
+  const sql = extractLiteralString(ctx.callArgs[0])
+  if (!sql) return
+  const table = extractWriteTable(sql)
+  if (!table) return
+  push(ctx.out, ctx.containerKey, {
+    kind: 'db-write', target: table, file: ctx.file, line: ctx.line, container: ctx.containerKey,
+  })
+}
+
+function trySinkEventEmit(ctx: SinkCallCtx): void {
+  const eventName = extractLiteralString(ctx.callArgs[0])
+  if (!eventName) return
+  push(ctx.out, ctx.containerKey, {
+    kind: 'event-emit', target: eventName, file: ctx.file, line: ctx.line, container: ctx.containerKey,
+  })
+}
+
+function trySinkHttpResponse(ctx: SinkCallCtx): void {
+  push(ctx.out, ctx.containerKey, {
+    kind: 'http-response', target: '', file: ctx.file, line: ctx.line, container: ctx.containerKey,
+  })
+}
+
+/**
+ * `queue.add('job-name', payload)` — heuristic restriction au left-hand
+ * contenant "queue" pour eviter capturer tout `.add(...)` du monde.
+ */
+function trySinkBullmqEnqueue(expr: any, ctx: SinkCallCtx): void {
+  if (expr.getKind() !== SyntaxKind.PropertyAccessExpression) return
+  const left = expr.getExpression?.()?.getText?.()?.toLowerCase() ?? ''
+  if (!left.includes('queue')) return
+  const jobName = extractLiteralString(ctx.callArgs[0])
+  if (!jobName) return
+  push(ctx.out, ctx.containerKey, {
+    kind: 'bullmq-enqueue', target: jobName, file: ctx.file, line: ctx.line, container: ctx.containerKey,
+  })
+}
+
 function scanSinks(args: ScanSinksArgs): void {
   const { sf, file, ranges, queryFns, emitFns, httpRespFns, bullmqFns, out } = args
   sf.forEachDescendant((node) => {
@@ -389,75 +436,15 @@ function scanSinks(args: ScanSinksArgs): void {
     const container = findContainerAtLine(ranges, line)
     if (!container) return  // sink hors fonction, ignoré
     const containerKey = `${file}:${container}`
-    const args = call.getArguments?.() ?? []
-
-    // db-write : query/execute/sql avec un literal contenant INSERT/UPDATE/DELETE.
-    if (queryFns.has(method)) {
-      const sql = extractLiteralString(args[0])
-      if (sql) {
-        const table = extractWriteTable(sql)
-        if (table) {
-          push(out, containerKey, {
-            kind: 'db-write',
-            target: table,
-            file,
-            line,
-            container: containerKey,
-          })
-        }
-      }
-      return
+    const ctx: SinkCallCtx = {
+      callArgs: call.getArguments?.() ?? [],
+      file, line, containerKey, out,
     }
 
-    // event-emit : callee = 'emit' (ou method 'emit' sur property access).
-    if (emitFns.has(method)) {
-      const eventName = extractLiteralString(args[0])
-      if (eventName) {
-        push(out, containerKey, {
-          kind: 'event-emit',
-          target: eventName,
-          file,
-          line,
-          container: containerKey,
-        })
-      }
-      return
-    }
-
-    // http-response : json/send/end. Pas de target spécifique.
-    if (httpRespFns.has(method)) {
-      push(out, containerKey, {
-        kind: 'http-response',
-        target: '',
-        file,
-        line,
-        container: containerKey,
-      })
-      return
-    }
-
-    // bullmq-enqueue : `queue.add('job-name', payload)`.
-    if (bullmqFns.has(method)) {
-      // On restreint à `add` sur property access pour éviter de capturer
-      // tout `.add(...)` du monde. Heuristique : left side contient "queue" ou
-      // "Queue" dans le nom.
-      if (expr.getKind() === SyntaxKind.PropertyAccessExpression) {
-        const left = (expr as any).getExpression?.()?.getText?.()?.toLowerCase() ?? ''
-        if (!left.includes('queue')) return
-      } else {
-        return
-      }
-      const jobName = extractLiteralString(args[0])
-      if (jobName) {
-        push(out, containerKey, {
-          kind: 'bullmq-enqueue',
-          target: jobName,
-          file,
-          line,
-          container: containerKey,
-        })
-      }
-    }
+    if (queryFns.has(method)) trySinkDbWrite(ctx)
+    else if (emitFns.has(method)) trySinkEventEmit(ctx)
+    else if (httpRespFns.has(method)) trySinkHttpResponse(ctx)
+    else if (bullmqFns.has(method)) trySinkBullmqEnqueue(expr, ctx)
   })
 }
 
