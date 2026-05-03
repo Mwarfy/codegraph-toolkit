@@ -5,11 +5,11 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T13:39:33Z
+Last update : 2026-05-03T14:07:11Z
 
 ## By type
 
-### `feat` (27)
+### `feat` (24)
 
 - **2f84a70** feat(toolkit): Niveau 5 effect-analysis + roadmap defers Niveaux 6/7 — 2026-05-03
 - **0485ce4** feat(toolkit): self-optim Niveau 2A + Niveau 4 — math cost predict + auto-synth Salsa — 2026-05-03
@@ -62,15 +62,18 @@ Last update : 2026-05-03T13:39:33Z
 - **1cc41ea** refactor(facts): extract 3 emit helpers + fix File/FileTag regression — 2026-05-01
 
 
-### `chore` (3)
+### `chore` (4)
 
+- **2067d1f** chore(release): v0.3.0 consolidation — npm-publishable core, experimental gated — 2026-05-03
 - **173915c** chore(toolkit): self-discipline pass — close credibility gap from external review — 2026-05-03
 - **03ef857** chore(runtime-graph): OSS launch prep — alpha.4 publish-ready — 2026-05-03
 - **18a37a7** chore(toolkit): retire 3 exports dead code (UnusedExport.facts) — 2026-05-01
 
 
-### `docs` (2)
+### `docs` (4)
 
+- **a191d61** docs(validation): full-chain run #1 — 4 bugs trouvés sur Hono — 2026-05-03
+- **095661e** docs(validation): run #1 — Hono framework (186 files, 3.5s, 0 crash, 0 hallucination) — 2026-05-03
 - **c003043** docs: update READMEs for v0.5.0 — 91 rules, multi-dir, 7 cross-discipline — 2026-05-01
 - **3ecfa05** docs: cross-discipline metrics — synthese 6 disciplines portees — 2026-05-01
 
@@ -82,6 +85,9 @@ Last update : 2026-05-03T13:39:33Z
 
 ## Full history
 
+- **a191d61** docs(validation): full-chain run #1 — 4 bugs trouvés sur Hono — 2026-05-03
+- **095661e** docs(validation): run #1 — Hono framework (186 files, 3.5s, 0 crash, 0 hallucination) — 2026-05-03
+- **2067d1f** chore(release): v0.3.0 consolidation — npm-publishable core, experimental gated — 2026-05-03
 - **2f84a70** feat(toolkit): Niveau 5 effect-analysis + roadmap defers Niveaux 6/7 — 2026-05-03
 - **0146402** fix(toolkit): close P0+P1+P2+P3 — review credibility gap part 2 — 2026-05-03
 - **0485ce4** feat(toolkit): self-optim Niveau 2A + Niveau 4 — math cost predict + auto-synth Salsa — 2026-05-03
@@ -129,6 +135,3 @@ Last update : 2026-05-03T13:39:33Z
 - **9a62387** feat(invariants): Tier 18 — event-payload-cross-block-taint + closure backlog — 2026-05-01
 - **fa4032f** feat(invariants): Tier 17 — 11 nouvelles rules library + grandfathers — 2026-05-01
 - **c3b4e3c** feat(codegraph): Tier 17 — 13 nouveaux facts emis + 2 nouveaux extractors — 2026-05-01
-- **50a01d9** feat(invariants): Tier 16 — 7 nouvelles rules library — 2026-05-01
-- **4418c90** feat(codegraph): Tier 16 extractors — crypto-algo + security-patterns + 2 sink kinds — 2026-05-01
-- **10f4bf9** feat(invariants): Tier 15 — 21 nouvelles rules library + PHASE-5 backlog — 2026-05-01

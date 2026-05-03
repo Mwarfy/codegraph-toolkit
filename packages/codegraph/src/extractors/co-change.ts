@@ -107,18 +107,35 @@ export async function analyzeCoChange(
 
   for (const files of commits) {
     if (files.length > maxFilesPerCommit) continue // skip lint/rename massifs
-    const filtered = knownFiles
-      ? files.filter((f) => knownFiles.has(f))
-      : files
-    if (filtered.length < 2) {
-      // Toujours compter le file individuel pour le total.
-      for (const f of filtered) fileCommitCount.set(f, (fileCommitCount.get(f) ?? 0) + 1)
+    // KNOWNFILES SEMANTICS (fix bug #1) :
+    // Avant : filter Strict — un commit ne contribue que si CHAQUE fichier
+    // appartient à knownFiles. Casse les projets où les tests vivent dans
+    // une extension non-incluse dans le glob (Hono : src/foo/foo.test.tsx
+    // co-changent avec src/foo/foo.ts mais .tsx sont exclus du `src/**/*.ts`).
+    //
+    // Après : on garde TOUS les fichiers du commit, mais on n'émet une PAIR
+    // que si AU MOINS UN des 2 côtés est dans knownFiles. Permet de capturer
+    // les paires test↔source légitimes sans flooder avec des paires
+    // README↔CHANGELOG entièrement hors projet.
+    const sorted = [...new Set(files)].sort()
+    if (sorted.length < 2) {
+      for (const f of sorted) {
+        if (!knownFiles || knownFiles.has(f)) {
+          fileCommitCount.set(f, (fileCommitCount.get(f) ?? 0) + 1)
+        }
+      }
       continue
     }
-    const sorted = [...new Set(filtered)].sort()
-    for (const f of sorted) fileCommitCount.set(f, (fileCommitCount.get(f) ?? 0) + 1)
+    // Compte le commit pour chaque fichier (utile au denominator Jaccard).
+    for (const f of sorted) {
+      if (!knownFiles || knownFiles.has(f)) {
+        fileCommitCount.set(f, (fileCommitCount.get(f) ?? 0) + 1)
+      }
+    }
     for (let i = 0; i < sorted.length; i++) {
       for (let j = i + 1; j < sorted.length; j++) {
+        // Pair acceptée si knownFiles est absent OU si au moins UN côté est tracké.
+        if (knownFiles && !knownFiles.has(sorted[i]) && !knownFiles.has(sorted[j])) continue
         const key = sorted[i] + '\x00' + sorted[j]
         pairCount.set(key, (pairCount.get(key) ?? 0) + 1)
       }

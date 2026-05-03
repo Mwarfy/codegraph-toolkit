@@ -18,6 +18,8 @@
 
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
+import { spawn, type ChildProcess } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import type { Driver, DriverRunOptions, DriverRunResult } from '../core/types.js'
 
 interface SyntheticConfig {
@@ -31,6 +33,29 @@ interface SyntheticConfig {
   excludeMethods?: string[]
   /** Routes glob à exclure (ex: '/admin/*'). Default: [] */
   excludePaths?: string[]
+  /**
+   * SPAWN MODE (bug #3 fix) : si défini, le driver démarre l'app
+   * lui-même (avec OTel auto-bootstrap pré-attaché), attend qu'elle
+   * soit prête, exerce les routes, puis kill cleanly.
+   *
+   * Avant ce mode : l'utilisateur devait manuellement lancer son app
+   * avec NODE_OPTIONS=--require ... auto-bootstrap.js avant d'exécuter
+   * le driver. Fragile et pas reproductible.
+   */
+  spawn?: {
+    /** Command to run (ex: 'node', 'npx', 'bun'). */
+    cmd: string
+    /** Args (ex: ['app.js'], ['tsx', 'server.ts']). */
+    args: string[]
+    /** cwd pour le spawn. Default: projectRoot. */
+    cwd?: string
+    /** Timeout pour que l'app soit ready (port open). Default: 30s. */
+    readyTimeoutMs?: number
+    /** Path du auto-bootstrap.js (injecté via NODE_OPTIONS). */
+    bootstrapPath?: string
+    /** Env vars supplémentaires pour le spawn. */
+    env?: Record<string, string>
+  }
 }
 
 interface EntryPointRow {
@@ -51,7 +76,44 @@ export const syntheticDriver: Driver = {
 
     const warnings: string[] = []
 
-    // Lire EntryPoint.facts
+    // ─── SPAWN MODE (bug #3 fix) — driver démarre l'app lui-même ────────
+    let spawned: ChildProcess | null = null
+    if (config.spawn) {
+      try {
+        spawned = await spawnAppWithBootstrap(config.spawn, baseUrl, opts.projectRoot)
+      } catch (err) {
+        warnings.push(`spawn failed: ${err instanceof Error ? err.message : String(err)}`)
+        return { actionsCount: 0, warnings }
+      }
+    }
+
+    try {
+      const result = await runSyntheticRequests(
+        baseUrl, staticFactsDir, requestDelayMs,
+        excludeMethods, excludePaths, opts.durationMs, warnings,
+      )
+      return result
+    } finally {
+      // Toujours kill le spawn — sinon l'app fuit entre les runs.
+      if (spawned) {
+        spawned.kill('SIGTERM')
+        // Wait briefly for graceful exit, then SIGKILL
+        await sleep(500)
+        if (!spawned.killed) spawned.kill('SIGKILL')
+      }
+    }
+  },
+}
+
+async function runSyntheticRequests(
+  baseUrl: string,
+  staticFactsDir: string,
+  requestDelayMs: number,
+  excludeMethods: Set<string>,
+  excludePaths: string[],
+  durationMs: number,
+  warnings: string[],
+): Promise<DriverRunResult> {
     const entryPoints = await readEntryPoints(staticFactsDir)
     if (entryPoints.length === 0) {
       warnings.push(`No EntryPoint facts found in ${staticFactsDir}. Run \`npx codegraph analyze\` first.`)
@@ -73,7 +135,7 @@ export const syntheticDriver: Driver = {
 
     // Loop : issue request per route. Respect durationMs as a hard timeout.
     const startTime = Date.now()
-    const deadline = startTime + opts.durationMs
+    const deadline = startTime + durationMs
     let actionsCount = 0
 
     for (const route of httpRoutes) {
@@ -94,10 +156,63 @@ export const syntheticDriver: Driver = {
     }
 
     return { actionsCount, warnings }
-  },
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
+
+/**
+ * Spawn l'app avec OTel auto-bootstrap pré-attaché via NODE_OPTIONS.
+ * Attend que le baseUrl répond avant de retourner. Fix bug #3.
+ */
+async function spawnAppWithBootstrap(
+  spawnCfg: NonNullable<SyntheticConfig['spawn']>,
+  baseUrl: string,
+  projectRoot: string,
+): Promise<ChildProcess> {
+  // Path du auto-bootstrap.js : par défaut, on suppose que runtime-graph
+  // est installé comme dep et résolvable. Sinon utilisateur passe un path.
+  let bootstrapPath = spawnCfg.bootstrapPath
+  if (!bootstrapPath) {
+    // Resolve depuis ce module → ../capture/auto-bootstrap.js
+    const __filename = fileURLToPath(import.meta.url)
+    bootstrapPath = path.resolve(path.dirname(__filename), '../capture/auto-bootstrap.js')
+  }
+
+  const env = {
+    ...process.env,
+    NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --require ${bootstrapPath}`.trim(),
+    LIBY_RUNTIME_PROJECT_ROOT: projectRoot,
+    ...spawnCfg.env,
+  }
+
+  const child = spawn(spawnCfg.cmd, spawnCfg.args, {
+    cwd: spawnCfg.cwd ?? projectRoot,
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+
+  // Wait for app to be ready : poll baseUrl until 200 or timeout.
+  const readyTimeout = spawnCfg.readyTimeoutMs ?? 30_000
+  const deadline = Date.now() + readyTimeout
+  while (Date.now() < deadline) {
+    if (child.exitCode !== null) {
+      throw new Error(`spawned process exited early with code ${child.exitCode}`)
+    }
+    try {
+      const res = await fetch(baseUrl, {
+        method: 'GET',
+        signal: AbortSignal.timeout(2000),
+      })
+      // Any HTTP response (even 404) means the server is alive.
+      if (res.status >= 0) return child
+    } catch {
+      // ECONNREFUSED / timeout — keep polling
+    }
+    await sleep(250)
+  }
+  child.kill('SIGKILL')
+  throw new Error(`spawned app did not become ready at ${baseUrl} within ${readyTimeout}ms`)
+}
 
 async function readEntryPoints(factsDir: string): Promise<EntryPointRow[]> {
   const file = path.join(factsDir, 'EntryPoint.facts')

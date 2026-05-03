@@ -33,6 +33,11 @@ program
   .option('-p, --proofs <rel...>', 'Relations to record proofs for (e.g. -p Violation)')
   .option('--json', 'Output as JSON instead of canonical text')
   .option('--exit-on-output', 'Exit with code 1 if any .output relation has tuples')
+  .option(
+    '--allow-recursion',
+    'Allow recursive rules (default: false). Required for rules using ' +
+      'transitive closures like FkReachable, FileReach, TaintedParam.',
+  )
   .action(async (rulesDir: string, opts) => {
     const proofs: string[] = opts.proofs ?? []
     try {
@@ -40,6 +45,7 @@ program
         rulesDir, factsDir: opts.facts,
       }
       if (proofs.length > 0) opt.recordProofsFor = proofs
+      if (opts.allowRecursion) opt.allowRecursion = true
       const { result } = await runFromDirs(opt)
 
       if (opts.json) {

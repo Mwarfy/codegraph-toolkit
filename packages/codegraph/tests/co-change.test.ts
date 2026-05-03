@@ -76,12 +76,18 @@ describe('co-change extractor', () => {
     for (const p of pairs) expect(p.jaccard).toBeGreaterThanOrEqual(0.5)
   })
 
-  it('knownFiles filters out-of-project files', async () => {
+  it('knownFiles filters out-of-project pairs (OR semantics — at least one known)', async () => {
+    // SEMANTIC CHANGE (bug #1 fix) : avant, la pair n'était émise que si les
+    // 2 côtés étaient dans knownFiles (strict AND). Cassait les paires
+    // test↔source sur projets où les tests sont exclus du glob (Hono : *.test.tsx).
+    // Maintenant : pair émise si AU MOINS UN côté est known. Permet de garder
+    // les paires test→source légitimes tout en filtrant les paires
+    // entièrement hors-projet (README↔CHANGELOG).
     const knownFiles = new Set(['a.ts', 'b.ts'])
     const pairs = await analyzeCoChange(repo, { minCount: 1, knownFiles })
     for (const p of pairs) {
-      expect(knownFiles.has(p.from)).toBe(true)
-      expect(knownFiles.has(p.to)).toBe(true)
+      const atLeastOneKnown = knownFiles.has(p.from) || knownFiles.has(p.to)
+      expect(atLeastOneKnown, `pair ${p.from} ↔ ${p.to} has no known side`).toBe(true)
     }
   })
 
