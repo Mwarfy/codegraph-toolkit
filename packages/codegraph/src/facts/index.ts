@@ -234,94 +234,8 @@ export async function exportFacts(
   }
   relations.push(isPackageEntryPointRel)
 
-  // ─── ModuleCentrality (Top-5 graph theory uplift) ───────────────────
-  // PageRank normalise [0, 1000] (×1000 pour rester en int Datalog).
-  // Distinque hubs structurels (importes par d'autres hubs) vs hubs
-  // accidentels (importes par feuilles). Brin/Page 1998.
-  // henryKafura idem ×1 (deja int, mais on cap a 1e9 pour eviter overflow).
-  const moduleCentralityRel: RelationDef = {
-    name: 'ModuleCentrality',
-    decl: '(file:symbol, pageRank:number, henryKafura:number)',
-    rows: [],
-  }
-  for (const m of snapshot.moduleMetrics ?? []) {
-    const pr = Math.round(m.pageRank * 1000)
-    const hk = Math.min(m.henryKafura, 1_000_000_000)
-    moduleCentralityRel.rows.push([sym(m.file), num(pr), num(hk)])
-  }
-  relations.push(moduleCentralityRel)
-
-  // ─── Fsm facts (Tier 17) ────────────────────────────────────────────
-  // States declared per FSM concept + orphans. Detection deja faite par
-  // state-machines extractor.
-  const fsmStateDeclaredRel: RelationDef = {
-    name: 'FsmStateDeclared',
-    decl: '(concept:symbol, state:symbol)',
-    rows: [],
-  }
-  const fsmStateOrphanRel: RelationDef = {
-    name: 'FsmStateOrphan',
-    decl: '(concept:symbol, state:symbol, confidence:symbol)',
-    rows: [],
-  }
-  for (const sm of snapshot.stateMachines ?? []) {
-    for (const st of sm.states ?? []) {
-      fsmStateDeclaredRel.rows.push([sym(sm.concept), sym(st)])
-    }
-    for (const st of sm.orphanStates ?? []) {
-      fsmStateOrphanRel.rows.push([
-        sym(sm.concept), sym(st), sym(sm.detectionConfidence),
-      ])
-    }
-  }
-  relations.push(fsmStateDeclaredRel, fsmStateOrphanRel)
-
-  // ─── BackEdge (Tier 17) ─────────────────────────────────────────────
-  // Edges DSM qui inversent l'ordre architectural attendu (kernel ←
-  // blocks). Source : snapshot.dsm.backEdges (Tarjan-based).
-  const backEdgeRel: RelationDef = {
-    name: 'BackEdge',
-    decl: '(fromGroup:symbol, toGroup:symbol)',
-    rows: [],
-  }
-  for (const be of snapshot.dsm?.backEdges ?? []) {
-    backEdgeRel.rows.push([sym(be.from), sym(be.to)])
-  }
-  relations.push(backEdgeRel)
-
-  // ─── EventListener (Tier 17) — symetrique de Emits* ──────────────
-  // Source : extractors/event-listener-sites.ts.
-  const listenerLitRel: RelationDef = {
-    name: 'ListensLiteral',
-    decl: '(file:symbol, line:number, eventName:symbol)',
-    rows: [],
-  }
-  const listenerConstRel: RelationDef = {
-    name: 'ListensConstRef',
-    decl: '(file:symbol, line:number, namespace:symbol, member:symbol)',
-    rows: [],
-  }
-  const listenerDynRel: RelationDef = {
-    name: 'ListensDynamic',
-    decl: '(file:symbol, line:number)',
-    rows: [],
-  }
-  for (const ls of snapshot.eventListenerSites ?? []) {
-    if (ls.kind === 'literal' && ls.literalValue !== undefined) {
-      listenerLitRel.rows.push([sym(ls.file), num(ls.line), sym(ls.literalValue)])
-    } else if (ls.kind === 'eventConstRef' && ls.refExpression) {
-      const parts = ls.refExpression.split('.')
-      const ns = parts[0] ?? ''
-      const member = parts.slice(1).join('.') || ''
-      listenerConstRel.rows.push([
-        sym(ls.file), num(ls.line), sym(ns), sym(member),
-      ])
-    } else {
-      listenerDynRel.rows.push([sym(ls.file), num(ls.line)])
-    }
-  }
-  relations.push(listenerLitRel, listenerConstRel, listenerDynRel)
-
+  emitGraphMetricFacts(snapshot, relations)
+  emitListenerFacts(snapshot, relations)
   emitCodeQualityAndComplexityFacts(snapshot, relations)
   emitCrossDisciplineFacts(snapshot, relations)
 
@@ -920,6 +834,95 @@ function emitTaintFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void
     }
   }
   relations.push(taintedArgumentToCallRel, functionParamRel)
+}
+
+/**
+ * Graph metrics + FSM + DSM back-edges (Tier 17 / Top-5 graph theory).
+ * - ModuleCentrality : PageRank + Henry-Kafura par fichier (Brin/Page 1998).
+ * - FsmStateDeclared/Orphan : etats declares + orphans par concept FSM.
+ * - BackEdge : edges DSM qui inversent l'ordre architectural attendu.
+ */
+function emitGraphMetricFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
+  const moduleCentralityRel: RelationDef = {
+    name: 'ModuleCentrality',
+    decl: '(file:symbol, pageRank:number, henryKafura:number)',
+    rows: [],
+  }
+  for (const m of snapshot.moduleMetrics ?? []) {
+    const pr = Math.round(m.pageRank * 1000)
+    const hk = Math.min(m.henryKafura, 1_000_000_000)
+    moduleCentralityRel.rows.push([sym(m.file), num(pr), num(hk)])
+  }
+  relations.push(moduleCentralityRel)
+
+  const fsmStateDeclaredRel: RelationDef = {
+    name: 'FsmStateDeclared',
+    decl: '(concept:symbol, state:symbol)',
+    rows: [],
+  }
+  const fsmStateOrphanRel: RelationDef = {
+    name: 'FsmStateOrphan',
+    decl: '(concept:symbol, state:symbol, confidence:symbol)',
+    rows: [],
+  }
+  for (const sm of snapshot.stateMachines ?? []) {
+    for (const st of sm.states ?? []) {
+      fsmStateDeclaredRel.rows.push([sym(sm.concept), sym(st)])
+    }
+    for (const st of sm.orphanStates ?? []) {
+      fsmStateOrphanRel.rows.push([
+        sym(sm.concept), sym(st), sym(sm.detectionConfidence),
+      ])
+    }
+  }
+  relations.push(fsmStateDeclaredRel, fsmStateOrphanRel)
+
+  const backEdgeRel: RelationDef = {
+    name: 'BackEdge',
+    decl: '(fromGroup:symbol, toGroup:symbol)',
+    rows: [],
+  }
+  for (const be of snapshot.dsm?.backEdges ?? []) {
+    backEdgeRel.rows.push([sym(be.from), sym(be.to)])
+  }
+  relations.push(backEdgeRel)
+}
+
+/**
+ * EventListener (Tier 17) — symetrique de Emits* (ListensLiteral,
+ * ListensConstRef, ListensDynamic). Source : extractors/event-listener-sites.ts.
+ */
+function emitListenerFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
+  const listenerLitRel: RelationDef = {
+    name: 'ListensLiteral',
+    decl: '(file:symbol, line:number, eventName:symbol)',
+    rows: [],
+  }
+  const listenerConstRel: RelationDef = {
+    name: 'ListensConstRef',
+    decl: '(file:symbol, line:number, namespace:symbol, member:symbol)',
+    rows: [],
+  }
+  const listenerDynRel: RelationDef = {
+    name: 'ListensDynamic',
+    decl: '(file:symbol, line:number)',
+    rows: [],
+  }
+  for (const ls of snapshot.eventListenerSites ?? []) {
+    if (ls.kind === 'literal' && ls.literalValue !== undefined) {
+      listenerLitRel.rows.push([sym(ls.file), num(ls.line), sym(ls.literalValue)])
+    } else if (ls.kind === 'eventConstRef' && ls.refExpression) {
+      const parts = ls.refExpression.split('.')
+      const ns = parts[0] ?? ''
+      const member = parts.slice(1).join('.') || ''
+      listenerConstRel.rows.push([
+        sym(ls.file), num(ls.line), sym(ns), sym(member),
+      ])
+    } else {
+      listenerDynRel.rows.push([sym(ls.file), num(ls.line)])
+    }
+  }
+  relations.push(listenerLitRel, listenerConstRel, listenerDynRel)
 }
 
 /**

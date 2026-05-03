@@ -5,7 +5,7 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T18:29:53Z
+Last update : 2026-05-03T18:40:02Z
 
 ## By type
 
@@ -49,6 +49,7 @@ Last update : 2026-05-03T18:29:53Z
 
 ### `refactor` (15)
 
+- **f8e2fdd** refactor(toolkit): split exportFacts en 5 emit helpers (cyclomatic 142→102) — 2026-05-03
 - **7c6668c** refactor(toolkit): kill LONG-FN-BY-PARAMS (5→0) + fix CHAOS-AMPLIFIER FP (6→3) — 2026-05-03
 - **96048d7** refactor(toolkit): extract NCD duplicates → ast-helpers + drivers/_common (NCD: 16→12) — 2026-05-03
 - **c24fb16** refactor(toolkit): tame AWAIT-IN-LOOP batch 6 — 33→0, AWAIT-IN-LOOP éliminé — 2026-05-03
@@ -63,7 +64,6 @@ Last update : 2026-05-03T18:29:53Z
 - **6eb35b2** refactor(toolkit): HotAllocation requires ModuleCentrality>200 (FP reduction) — 2026-05-02
 - **40b2842** refactor(toolkit): SQL DROP/skip-rollbacks + disable noisy composite rules — 2026-05-02
 - **51d7e5f** refactor(toolkit): sql-naming exemptions + ADD/RENAME ordering + edge-case patterns — 2026-05-01
-- **7362f13** refactor(invariants): raffiner composite-orphan-file (Next.js framework-routed) — 2026-05-01
 
 
 ### `chore` (4)
@@ -89,6 +89,7 @@ Last update : 2026-05-03T18:29:53Z
 
 ## Full history
 
+- **f8e2fdd** refactor(toolkit): split exportFacts en 5 emit helpers (cyclomatic 142→102) — 2026-05-03
 - **7c6668c** refactor(toolkit): kill LONG-FN-BY-PARAMS (5→0) + fix CHAOS-AMPLIFIER FP (6→3) — 2026-05-03
 - **96048d7** refactor(toolkit): extract NCD duplicates → ast-helpers + drivers/_common (NCD: 16→12) — 2026-05-03
 - **dcf47d4** perf(toolkit): split stat-from-read en prebuild + layered allDeprecatedUsage — 2026-05-03
@@ -138,4 +139,3 @@ Last update : 2026-05-03T18:29:53Z
 - **51d7e5f** refactor(toolkit): sql-naming exemptions + ADD/RENAME ordering + edge-case patterns — 2026-05-01
 - **0c9d608** test(toolkit): contract tests pour CrossDisciplineDetector POC — 2026-05-01
 - **bbfa9d6** feat(toolkit): SQL ALTER TABLE tracking + CrossDisciplineDetector POC — 2026-05-01
-- **7362f13** refactor(invariants): raffiner composite-orphan-file (Next.js framework-routed) — 2026-05-01
