@@ -63,6 +63,10 @@ const TEST_FILE_RE = /(\.test\.tsx?|\.spec\.tsx?|(^|\/)tests?\/|(^|\/)fixtures?\
  *     (provenant du SET global passé en argument, pas seulement de ce
  *     fichier — la deprecation est cross-fichier)
  */
+type JsDocLike = ReadonlyArray<{
+  getTags(): ReadonlyArray<{ getTagName(): string; getCommentText(): string | undefined }>
+}>
+
 export function extractDeprecatedUsageFileBundle(
   sf: SourceFile,
   relPath: string,
@@ -71,71 +75,123 @@ export function extractDeprecatedUsageFileBundle(
   const declarations: DeprecatedDeclaration[] = []
   const sites: DeprecatedUsageSite[] = []
 
-  // ─── Pass 1 : detect declarations with @deprecated ────────────────
-  const collectDecl = (
-    name: string,
-    line: number,
-    jsDocs: ReadonlyArray<{ getTags(): ReadonlyArray<{ getTagName(): string; getCommentText(): string | undefined }> }>,
-  ): void => {
-    for (const doc of jsDocs) {
-      for (const tag of doc.getTags()) {
-        if (tag.getTagName() === 'deprecated') {
-          const reason = (tag.getCommentText() ?? '').trim().split('\n')[0].slice(0, 120)
-          declarations.push({ name, file: relPath, line, reason })
-          return
-        }
-      }
-    }
-  }
+  collectDeprecatedDeclarations(sf, relPath, declarations)
 
+  if (TEST_FILE_RE.test(relPath)) return { declarations, sites }
+  collectDeprecatedCallSites(sf, relPath, globalDeprecatedNames, sites)
+
+  return { declarations, sites }
+}
+
+// ─── Pass 1: declarations with @deprecated ─────────────────────────────────
+
+function collectDeprecatedDeclarations(
+  sf: SourceFile,
+  relPath: string,
+  declarations: DeprecatedDeclaration[],
+): void {
   for (const fn of sf.getFunctions()) {
     const name = fn.getName()
     if (!name) continue
-    collectDecl(name, fn.getStartLineNumber(), fn.getJsDocs())
+    pushDeclIfDeprecated(name, fn.getStartLineNumber(), fn.getJsDocs(), relPath, declarations)
   }
   for (const cls of sf.getClasses()) {
     const className = cls.getName() ?? '(anonymous)'
-    collectDecl(className, cls.getStartLineNumber(), cls.getJsDocs())
+    pushDeclIfDeprecated(className, cls.getStartLineNumber(), cls.getJsDocs(), relPath, declarations)
     for (const method of cls.getMethods()) {
-      collectDecl(`${className}.${method.getName()}`, method.getStartLineNumber(), method.getJsDocs())
+      pushDeclIfDeprecated(
+        `${className}.${method.getName()}`,
+        method.getStartLineNumber(),
+        method.getJsDocs(),
+        relPath,
+        declarations,
+      )
     }
   }
   for (const v of sf.getVariableDeclarations()) {
-    const name = v.getName()
-    // Pour const/let/var : JSDoc est sur le VariableStatement parent.
     const stmt = v.getFirstAncestorByKind(SyntaxKind.VariableStatement)
     if (!stmt) continue
-    collectDecl(name, v.getStartLineNumber(), (stmt as any).getJsDocs?.() ?? [])
+    // const/let/var : JSDoc est sur le VariableStatement parent.
+    pushDeclIfDeprecated(
+      v.getName(),
+      v.getStartLineNumber(),
+      (stmt as any).getJsDocs?.() ?? [],
+      relPath,
+      declarations,
+    )
   }
+}
 
-  // ─── Pass 2 : detect call-sites matching globalDeprecatedNames ────
-  if (TEST_FILE_RE.test(relPath)) return { declarations, sites }
+function pushDeclIfDeprecated(
+  name: string,
+  line: number,
+  jsDocs: JsDocLike,
+  relPath: string,
+  declarations: DeprecatedDeclaration[],
+): void {
+  for (const doc of jsDocs) {
+    for (const tag of doc.getTags()) {
+      if (tag.getTagName() === 'deprecated') {
+        const reason = (tag.getCommentText() ?? '').trim().split('\n')[0].slice(0, 120)
+        declarations.push({ name, file: relPath, line, reason })
+        return
+      }
+    }
+  }
+}
 
+// ─── Pass 2: call-sites matching globalDeprecatedNames ─────────────────────
+
+function collectDeprecatedCallSites(
+  sf: SourceFile,
+  relPath: string,
+  globalDeprecatedNames: Set<string>,
+  sites: DeprecatedUsageSite[],
+): void {
   const isExempt = makeIsExemptForMarker(sf, 'deprecated-ok')
-
-  const checkCall = (calleeText: string | null, line: number, containingSymbol: string): void => {
-    if (!calleeText) return
-    if (!globalDeprecatedNames.has(calleeText)) return
-    if (isExempt(line)) return
-    sites.push({ file: relPath, line, callee: calleeText, containingSymbol })
-  }
-
   for (const call of sf.getDescendantsOfKind(SyntaxKind.CallExpression)) {
-    const callee = call.getExpression()
-    let name: string | null = null
-    if (Node.isIdentifier(callee)) name = callee.getText()
-    else if (Node.isPropertyAccessExpression(callee)) name = callee.getName()
-    checkCall(name, call.getStartLineNumber(), findContainingSymbol(call))
+    pushSiteIfDeprecated(
+      readCalleeName(call.getExpression()),
+      call.getStartLineNumber(),
+      findContainingSymbol(call),
+      relPath,
+      globalDeprecatedNames,
+      isExempt,
+      sites,
+    )
   }
   for (const newExpr of sf.getDescendantsOfKind(SyntaxKind.NewExpression)) {
-    const callee = newExpr.getExpression()
-    let name: string | null = null
-    if (Node.isIdentifier(callee)) name = callee.getText()
-    else if (Node.isPropertyAccessExpression(callee)) name = callee.getName()
-    checkCall(name, newExpr.getStartLineNumber(), findContainingSymbol(newExpr))
+    pushSiteIfDeprecated(
+      readCalleeName(newExpr.getExpression()),
+      newExpr.getStartLineNumber(),
+      findContainingSymbol(newExpr),
+      relPath,
+      globalDeprecatedNames,
+      isExempt,
+      sites,
+    )
   }
+}
 
-  return { declarations, sites }
+function pushSiteIfDeprecated(
+  calleeText: string | null,
+  line: number,
+  containingSymbol: string,
+  relPath: string,
+  globalDeprecatedNames: Set<string>,
+  isExempt: (line: number) => boolean,
+  sites: DeprecatedUsageSite[],
+): void {
+  if (!calleeText) return
+  if (!globalDeprecatedNames.has(calleeText)) return
+  if (isExempt(line)) return
+  sites.push({ file: relPath, line, callee: calleeText, containingSymbol })
+}
+
+function readCalleeName(callee: Node): string | null {
+  if (Node.isIdentifier(callee)) return callee.getText()
+  if (Node.isPropertyAccessExpression(callee)) return callee.getName()
+  return null
 }
 
 /**
