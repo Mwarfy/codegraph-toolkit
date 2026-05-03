@@ -5,11 +5,11 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T15:19:18Z
+Last update : 2026-05-03T15:29:28Z
 
 ## By type
 
-### `feat` (20)
+### `feat` (19)
 
 - **af41582** feat(toolkit): symbolic simplification facts + 5 composite rules cross-discipline — 2026-05-03
 - **2f84a70** feat(toolkit): Niveau 5 effect-analysis + roadmap defers Niveaux 6/7 — 2026-05-03
@@ -30,7 +30,6 @@ Last update : 2026-05-03T15:19:18Z
 - **9ee3547** feat(toolkit): min-cut/max-flow — coût objectif de séparation packages — 2026-05-01
 - **4cb7ffa** feat(toolkit): TDA + Lyapunov — cycles structurels + chaos detection — 2026-05-01
 - **375d5a2** feat(toolkit): cross-discipline rules — Fiedler λ₂ + Shannon entropy + Hamming dup — 2026-05-01
-- **bc4fce3** feat(invariants): 2 rules auto-decouvertes via pattern mining — 2026-05-01
 
 
 ### `fix` (7)
@@ -44,8 +43,9 @@ Last update : 2026-05-03T15:19:18Z
 - **8c49ff7** fix(analyzer): factsOnly mode must populate TestedFile — 2026-05-03
 
 
-### `perf` (2)
+### `perf` (3)
 
+- **7151cfd** perf(toolkit): Salsa-isolate 3 hot detectors (co-change, drift, const-expr) — 2026-05-03
 - **ce4e6e8** perf(toolkit): deprecated-usage Salsa-isolation + math regression gate — 2026-05-03
 - **afd0965** perf(toolkit): self-discovered Salsa optimizations — warm runtime −40% — 2026-05-03
 
@@ -89,6 +89,7 @@ Last update : 2026-05-03T15:19:18Z
 
 ## Full history
 
+- **7151cfd** perf(toolkit): Salsa-isolate 3 hot detectors (co-change, drift, const-expr) — 2026-05-03
 - **f2f93bc** chore(brief): regen CLAUDE-CONTEXT + CHANGELOG post-refactor (553→534) — 2026-05-03
 - **5f8d691** refactor(toolkit): split god-files + fix REDOS detector + tests hubs — 2026-05-03
 - **ee89730** docs(validation): self-analysis run #2 — toolkit voit 553 violations sur lui-même — 2026-05-03
@@ -138,4 +139,3 @@ Last update : 2026-05-03T15:19:18Z
 - **9ee3547** feat(toolkit): min-cut/max-flow — coût objectif de séparation packages — 2026-05-01
 - **4cb7ffa** feat(toolkit): TDA + Lyapunov — cycles structurels + chaos detection — 2026-05-01
 - **375d5a2** feat(toolkit): cross-discipline rules — Fiedler λ₂ + Shannon entropy + Hamming dup — 2026-05-01
-- **bc4fce3** feat(invariants): 2 rules auto-decouvertes via pattern mining — 2026-05-01

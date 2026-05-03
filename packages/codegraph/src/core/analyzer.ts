@@ -114,6 +114,7 @@ import { allSecurityPatterns as incAllSecurityPatterns } from '../incremental/se
 import { allDeadCode as incAllDeadCode } from '../incremental/dead-code.js'
 import { allDeprecatedUsage as incAllDeprecatedUsage } from '../incremental/deprecated-usage.js'
 import { allConstantExpressions as incAllConstantExpressions } from '../incremental/constant-expressions.js'
+import { allHardcodedSecrets as incAllHardcodedSecrets } from '../incremental/hardcoded-secrets.js'
 import { allDriftPatternsAst as incAllDriftPatternsAst } from '../incremental/drift-patterns.js'
 import {
   allCoChangePairs as incAllCoChangePairs,
@@ -625,6 +626,20 @@ async function prebuildSharedProjectIncremental(
  * Préserve la sémantique exacte du legacy : ordre d'invocation, gestion
  * d'erreur (log mais pas throw), assignation conditionnelle (`if (x)`).
  */
+/**
+ * Contexte partagé passé à chaque phase. Évite de propager 7 paramètres
+ * répétés au call-site de chaque détecteur.
+ */
+interface DetectorPhaseContext {
+  config: CodeGraphConfig
+  files: string[]
+  readFile: (relativePath: string) => Promise<string>
+  sharedProject: ReturnType<typeof createSharedProject>
+  snapshot: GraphSnapshot
+  timing: AnalyzeResult['timing']
+  incremental: boolean
+}
+
 async function runDeterministicDetectors(
   config: CodeGraphConfig,
   files: string[],
@@ -634,7 +649,53 @@ async function runDeterministicDetectors(
   timing: AnalyzeResult['timing'],
   incremental: boolean = false,
 ): Promise<void> {
-  // Phase 1 : détecteurs indépendants (pas de cross-deps).
+  const ctx: DetectorPhaseContext = {
+    config, files, readFile, sharedProject, snapshot, timing, incremental,
+  }
+
+  const phase1 = await runPhase1IndependentDetectors(ctx)
+  const phase2 = await runPhase2Phase1Dependent(ctx, phase1.todos)
+  // Phase 3 — cross-discipline orchestrator : 11 disciplines mathématiques
+  // (extrait dans extractors/_shared/cross-discipline-orchestrator.ts).
+  const _crossDisciplineDetector = new CrossDisciplineDetector()
+  void _crossDisciplineDetector  // marker : pattern POC valid
+  const cross = await runCrossDisciplineDetectors({
+    rootDir: config.rootDir,
+    files, sharedProject, snapshot,
+    coChangePairs: phase1.coChangePairs,
+    timing,
+  })
+  const phase4 = await runPhase4SecurityAndQuality(ctx)
+  const phase5 = await runPhase5SqlAndResource(ctx)
+  const phase6 = await runPhase6TaintChain(ctx)
+
+  // Patch snapshot avec tous les results (assignation conditionnelle).
+  assignIfDefined(snapshot, {
+    ...phase1, ...phase2, ...phase4, ...phase5, ...phase6,
+    spectralMetrics: cross.spectralMetrics,
+    symbolEntropy: cross.symbolEntropy,
+    signatureDuplicates: cross.signatureDuplicates,
+    persistentCycles: cross.persistentCycles,
+    lyapunovMetrics: cross.lyapunovMetrics,
+    packageMinCuts: cross.packageMinCuts,
+    informationBottlenecks: cross.informationBottlenecks,
+    importCommunities: cross.importCommunities,
+    modularityScore: cross.modularityScore,
+    factStabilities: cross.factStabilities,
+    bayesianCoChanges: cross.bayesianCoChanges,
+    compressionDistances: cross.compressionDistances,
+    grangerCausalities: cross.grangerCausalities,
+  })
+}
+
+/**
+ * Phase 1 — détecteurs indépendants sans dep sur le snapshot finalisé ou
+ * d'autres détecteurs. Tournent en premier ; leurs résultats alimentent
+ * Phase 2 + cross-discipline.
+ */
+async function runPhase1IndependentDetectors(ctx: DetectorPhaseContext) {
+  const { config, files, readFile, sharedProject, snapshot, timing, incremental } = ctx
+
   const todos = await runDetectorTimed(timing, 'todos',
     () => analyzeTodos(config.rootDir, files, readFile))
   const longFunctions = await runDetectorTimed(timing, 'long-functions',
@@ -649,7 +710,7 @@ async function runDeterministicDetectors(
         .filter((n) => n.type === 'file').map((n) => n.id).sort()
       if (incremental) {
         // Salsa-iso : keying sur (gitHead, knownFiles). Cache hit warm
-        // tant que HEAD n'a pas bougé et les fichiers connus sont stables.
+        // tant que HEAD n'a pas bougé et knownFiles est stable.
         incSetInputIfChanged(incCoChangeGitHead, 'all', getGitHead(config.rootDir))
         incSetInputIfChanged(incCoChangeKnownFiles, 'all', knownFilesArr)
         return Promise.resolve(incAllCoChangePairs.get('all'))
@@ -657,14 +718,25 @@ async function runDeterministicDetectors(
       return analyzeCoChange(config.rootDir, { knownFiles: new Set(knownFilesArr) })
     })
 
-  // Phase 2 : détecteurs avec dep sur Phase 1.
-  // drift-patterns dépend de todos (pattern 3) — run après.
+  return { todos, longFunctions, magicNumbers, testCoverage, coChangePairs }
+}
+
+/**
+ * Phase 2 — détecteurs dépendants de Phase 1 (drift-patterns dépend de
+ * todos pour Pattern 3 todo-no-owner).
+ */
+async function runPhase2Phase1Dependent(
+  ctx: DetectorPhaseContext,
+  todos: TodoMarker[] | undefined,
+) {
+  const { config, files, sharedProject, timing, incremental } = ctx
+
   const driftSignals = await runDetectorTimed(timing, 'drift-patterns',
     () => {
       if (incremental) {
         // Salsa cache UNIQUEMENT les patterns 1+2+4+5 (per-file AST).
-        // Pattern 3 (todo-no-owner) dépend de snapshot.todos (extracteur
-        // séparé) — on l'ajoute hors-cache puis on re-trie globalement.
+        // Pattern 3 (todo-no-owner) dépend de snapshot.todos — on l'ajoute
+        // hors-cache puis on re-trie globalement.
         const astSignals = incAllDriftPatternsAst.get('all')
         const todoSignals = (todos ?? [])
           .map(todoToDriftSignal)
@@ -698,27 +770,31 @@ async function runDeterministicDetectors(
   const functionComplexity = await runDetectorTimed(timing, 'function-complexity',
     () => analyzeFunctionComplexity(config.rootDir, files, sharedProject))
 
-  // Phase 3 : cross-discipline orchestrator — 11 disciplines mathématiques.
-  // Extrait dans `extractors/_shared/cross-discipline-orchestrator.ts` +
-  // wrappé en CrossDisciplineDetector class. L'orchestrator retourne
-  // directement (pas via DetectorRegistry car celui-ci tourne pre-snapshot).
-  const _crossDisciplineDetector = new CrossDisciplineDetector()
-  void _crossDisciplineDetector  // marker : pattern POC valid
-  const cross = await runCrossDisciplineDetectors({
-    rootDir: config.rootDir,
-    files, sharedProject, snapshot, coChangePairs, timing,
-  })
+  return {
+    driftSignals, evalCalls, cryptoCalls, securityPatterns, eventListenerSites,
+    codeQualityPatterns, functionComplexity,
+  }
+}
 
-  // Phase 4 : security + quality detectors indépendants.
+/**
+ * Phase 4 — security + quality detectors indépendants. Inclut
+ * articulation-points (graph metric sur snapshot finalisé) et
+ * constant-expressions (simplification symbolique).
+ */
+async function runPhase4SecurityAndQuality(ctx: DetectorPhaseContext) {
+  const { config, files, sharedProject, snapshot, timing, incremental } = ctx
+
   const hardcodedSecrets = await runDetectorTimed(timing, 'hardcoded-secrets',
-    () => analyzeHardcodedSecrets(config.rootDir, files, sharedProject))
+    () => incremental
+      ? Promise.resolve(incAllHardcodedSecrets.get('all'))
+      : analyzeHardcodedSecrets(config.rootDir, files, sharedProject))
   const booleanParams = await runDetectorTimed(timing, 'boolean-params',
     () => analyzeBooleanParams(config.rootDir, files, sharedProject))
   const deadCode = await runDetectorTimed(timing, 'dead-code',
     () => incremental
       ? Promise.resolve(incAllDeadCode.get('all'))
       : analyzeDeadCode(config.rootDir, files, sharedProject))
-  // floating-promises : dep sur snapshot.typedCalls (déjà patché Phase 5).
+  // floating-promises : dep sur snapshot.typedCalls (Phase 5 graph build).
   const floatingPromises = await runDetectorTimed(timing, 'floating-promises',
     () => analyzeFloatingPromises(config.rootDir, files, sharedProject, snapshot.typedCalls))
   const deprecatedUsage = await runDetectorTimed(timing, 'deprecated-usage',
@@ -727,19 +803,29 @@ async function runDeterministicDetectors(
       : analyzeDeprecatedUsage(config.rootDir, files, sharedProject))
   const articulationPoints = await runDetectorTimed(timing, 'articulation-points',
     () => analyzeArticulationPoints(snapshot))
-
-  // Constant expressions — patterns simplification symbolique (tautology,
-  // contradiction, gratuitous bool comparison). Cf. extractor.
+  // Constant expressions — patterns simplification symbolique.
   const constantExpressions = await runDetectorTimed(timing, 'constant-expressions',
     () => incremental
       ? Promise.resolve(incAllConstantExpressions.get('all'))
       : analyzeConstantExpressionsBatch(config.rootDir, files, sharedProject))
-
   // ESLint ingester — read .codegraph/eslint.json if user provided it.
   const eslintViolations = await runDetectorTimed(timing, 'eslint-import',
     () => importEslintViolations(config.rootDir))
 
-  // Phase 5 : SQL detectors (gated sur snapshot.sqlSchema).
+  return {
+    hardcodedSecrets, booleanParams, deadCode, floatingPromises, deprecatedUsage,
+    articulationPoints, constantExpressions, eslintViolations,
+  }
+}
+
+/**
+ * Phase 5 — SQL detectors gated sur snapshot.sqlSchema + resource-balance.
+ * Si pas de schema SQL détecté, sql-naming/migration-order retournent
+ * undefined → snapshot fields restent non-set.
+ */
+async function runPhase5SqlAndResource(ctx: DetectorPhaseContext) {
+  const { config, files, sharedProject, snapshot, timing } = ctx
+
   const sqlNamingViolations = await runDetectorTimed(timing, 'sql-naming',
     async () => snapshot.sqlSchema ? findSqlNamingViolations(snapshot.sqlSchema) : undefined)
   const sqlMigrationOrderViolations = await runDetectorTimed(timing, 'sql-migration-order',
@@ -747,7 +833,17 @@ async function runDeterministicDetectors(
   const resourceImbalances = await runDetectorTimed(timing, 'resource-balance',
     () => analyzeResourceBalance(config.rootDir, files, sharedProject))
 
-  // Phase 6 : taint analysis chain.
+  return { sqlNamingViolations, sqlMigrationOrderViolations, resourceImbalances }
+}
+
+/**
+ * Phase 6 — chaîne taint analysis : sinks → sanitizers → tainted-vars
+ * → arguments. Détecteurs indépendants dans l'exécution (pas de dep
+ * runtime), mais les rules Datalog en aval consomment les 4 facts.
+ */
+async function runPhase6TaintChain(ctx: DetectorPhaseContext) {
+  const { config, files, sharedProject, timing } = ctx
+
   const taintSinks = await runDetectorTimed(timing, 'taint-sinks',
     () => analyzeTaintSinks(config.rootDir, files, sharedProject))
   const sanitizerCalls = await runDetectorTimed(timing, 'sanitizers',
@@ -757,30 +853,7 @@ async function runDeterministicDetectors(
   const argumentsFacts = await runDetectorTimed(timing, 'arguments',
     () => analyzeArguments(config.rootDir, files, sharedProject))
 
-  // Patch snapshot avec tous les results (assignation conditionnelle —
-  // si un détecteur a failed, son champ reste non-set).
-  assignIfDefined(snapshot, {
-    todos, longFunctions, magicNumbers, testCoverage, coChangePairs,
-    driftSignals, evalCalls, cryptoCalls, securityPatterns, eventListenerSites,
-    codeQualityPatterns, functionComplexity,
-    spectralMetrics: cross.spectralMetrics,
-    symbolEntropy: cross.symbolEntropy,
-    signatureDuplicates: cross.signatureDuplicates,
-    persistentCycles: cross.persistentCycles,
-    lyapunovMetrics: cross.lyapunovMetrics,
-    packageMinCuts: cross.packageMinCuts,
-    informationBottlenecks: cross.informationBottlenecks,
-    importCommunities: cross.importCommunities,
-    modularityScore: cross.modularityScore,
-    factStabilities: cross.factStabilities,
-    bayesianCoChanges: cross.bayesianCoChanges,
-    compressionDistances: cross.compressionDistances,
-    grangerCausalities: cross.grangerCausalities,
-    hardcodedSecrets, booleanParams, deadCode, floatingPromises, deprecatedUsage,
-    articulationPoints, sqlNamingViolations, sqlMigrationOrderViolations,
-    resourceImbalances, taintSinks, sanitizerCalls, taintedVars, argumentsFacts,
-    constantExpressions, eslintViolations,
-  })
+  return { taintSinks, sanitizerCalls, taintedVars, argumentsFacts }
 }
 
 /**

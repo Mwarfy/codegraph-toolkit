@@ -63,6 +63,7 @@ DB via `new SalsaDatabase()` LOCAL au test, jamais exporté.
 - `packages/codegraph/src/incremental/drift-patterns.ts`
 - `packages/codegraph/src/incremental/env-usage.ts`
 - `packages/codegraph/src/incremental/event-emit-sites.ts`
+- `packages/codegraph/src/incremental/hardcoded-secrets.ts`
 - `packages/codegraph/src/incremental/metrics.ts`
 - `packages/codegraph/src/incremental/oauth-scope-literals.ts`
 - `packages/codegraph/src/incremental/package-deps.ts`

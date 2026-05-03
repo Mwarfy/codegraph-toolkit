@@ -92,6 +92,7 @@
 - `packages/codegraph/src/incremental/drift-patterns.ts` → ADR-007
 - `packages/codegraph/src/incremental/env-usage.ts` → ADR-007
 - `packages/codegraph/src/incremental/event-emit-sites.ts` → ADR-007
+- `packages/codegraph/src/incremental/hardcoded-secrets.ts` → ADR-007
 - `packages/codegraph/src/incremental/metrics.ts` → ADR-007
 - `packages/codegraph/src/incremental/oauth-scope-literals.ts` → ADR-007
 - `packages/codegraph/src/incremental/package-deps.ts` → ADR-007
@@ -137,9 +138,9 @@
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
 - `packages/codegraph/src/core/types.ts` (in: 75) · gov by ADR-006
-- `packages/codegraph/src/incremental/queries.ts` (in: 26) · gov by ADR-007
-- `packages/codegraph/src/incremental/database.ts` (in: 24) · gov by ADR-007
-- `packages/salsa/dist/index.d.ts` (in: 23)
+- `packages/codegraph/src/incremental/queries.ts` (in: 29) · gov by ADR-007
+- `packages/codegraph/src/incremental/database.ts` (in: 27) · gov by ADR-007
+- `packages/salsa/dist/index.d.ts` (in: 26)
 - `packages/codegraph/src/core/detector-registry.ts` (in: 18) · gov by ADR-008
 - `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 16) · gov by ADR-012
 - `packages/runtime-graph/src/core/types.ts` (in: 13) · gov by ADR-009
@@ -149,7 +150,7 @@
 
 Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `// ADR-NNN`** dans le code. Intentionnel ? Sinon poser un marqueur ou créer un ADR :
 
-- **23** `packages/salsa/dist/index.d.ts` _(top-hub)_
+- **26** `packages/salsa/dist/index.d.ts` _(top-hub)_
 
 ## Tensions actives — invitations à explorer
 
@@ -192,6 +193,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+7151cfd perf(toolkit): Salsa-isolate 3 hot detectors (co-change, drift, const-expr)
 f2f93bc chore(brief): regen CLAUDE-CONTEXT + CHANGELOG post-refactor (553→534)
 5f8d691 refactor(toolkit): split god-files + fix REDOS detector + tests hubs
 ee89730 docs(validation): self-analysis run #2 — toolkit voit 553 violations sur lui-même
@@ -203,7 +205,6 @@ a191d61 docs(validation): full-chain run #1 — 4 bugs trouvés sur Hono
 2067d1f chore(release): v0.3.0 consolidation — npm-publishable core, experimental gated
 2f84a70 feat(toolkit): Niveau 5 effect-analysis + roadmap defers Niveaux 6/7
 0146402 fix(toolkit): close P0+P1+P2+P3 — review credibility gap part 2
-0485ce4 feat(toolkit): self-optim Niveau 2A + Niveau 4 — math cost predict + auto-synth Salsa
 ```
 
 ## Comment contribuer à ce brief
