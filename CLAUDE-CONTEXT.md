@@ -208,6 +208,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+de0af83 refactor(codegraph): split extractBooleanParamsFileBundle (cyclo 19→4, cog 19→4) — boolean-params.ts cleared
 1898604 refactor(codegraph-mcp): split codegraphDrift (cyclo 19→5, cog 28→1) — drift.ts cleared
 ca65576 refactor(runtime-graph): split mergeFactsDirs (cyclo 18→2, cog 45→1) — cli.ts mergeFactsDirs cleared
 47c470a refactor(codegraph): split HttpRouteDetector.detect (cyclo 20→1, cog 29→0) — http-routes.ts cleared
@@ -219,7 +220,6 @@ fcb7141 refactor(codegraph): split findReachablePaths (cyclo 21→3, cog 34→1)
 0047e61 refactor(codegraph): split validateStore (cyclo 22→4, cog 27→3) — store.ts cleared
 a73b0b8 refactor(codegraph-mcp): split codegraphTruthPointFor (cyclo 22→4, cog 26→1) — truth-point.ts cleared
 9e41eaa refactor(codegraph): split loadConfig (cyclo 21→4, cog 38→3) — _shared.ts cleared
-65c2c5c refactor(codegraph): split mergeSqlSchemaResults (cyclo 21→1, cog 42→0) — drizzle-schema-detector.ts cleared
 ```
 
 ## Comment contribuer à ce brief

@@ -159,13 +159,25 @@ export interface NewmanGirvanRuntimeFact {
 }
 
 export function newmanGirvanRuntime(snap: RuntimeSnapshot): NewmanGirvanRuntimeFact {
-  // Build symbol → file map
+  const { symbolFile, edges } = buildSymbolGraph(snap)
+
+  const m = edges.length
+  if (m === 0) return { globalQ: 0, filesByModularity: [] }
+
+  const degree = computeSymbolDegrees(edges)
+  const { fileEdgeCount, fileDegree } = computeFileLevelStats(edges, degree, symbolFile)
+  return computeModularity(symbolFile, fileEdgeCount, fileDegree, m)
+}
+
+/** Build symbol → file map + edges (undirected pour Newman-Girvan). */
+function buildSymbolGraph(snap: RuntimeSnapshot): {
+  symbolFile: Map<string, string>
+  edges: Array<[string, string]>
+} {
   const symbolFile = new Map<string, string>()
   for (const s of snap.symbolsTouched) {
     symbolFile.set(`${s.file}::${s.fn}`, s.file)
   }
-
-  // Build adjacency from call edges (treat as undirected for community)
   const edges: Array<[string, string]> = []
   for (const e of snap.callEdges) {
     const a = `${e.fromFile}::${e.fromFn}`
@@ -174,24 +186,31 @@ export function newmanGirvanRuntime(snap: RuntimeSnapshot): NewmanGirvanRuntimeF
     if (!symbolFile.has(b)) symbolFile.set(b, e.toFile)
     edges.push([a, b])
   }
+  return { symbolFile, edges }
+}
 
-  const m = edges.length
-  if (m === 0) return { globalQ: 0, filesByModularity: [] }
-
-  // Compute degrees
+function computeSymbolDegrees(edges: Array<[string, string]>): Map<string, number> {
   const degree = new Map<string, number>()
   for (const [a, b] of edges) {
     degree.set(a, (degree.get(a) ?? 0) + 1)
     degree.set(b, (degree.get(b) ?? 0) + 1)
   }
+  return degree
+}
 
-  // Q = (1/2m) Σ_ij [A_ij - k_i*k_j/(2m)] δ(c_i, c_j)
-  // Pour edges réels (A_ij = 1) : contribute 1 - k_i*k_j/(2m) si même community
-  // Pour non-edges (A_ij = 0) : contribute -k_i*k_j/(2m) si même community
-  // Mais énumérer non-edges = O(N²). On utilise la formule simplifiée :
-  //   Q = Σ_c [ (l_c / m) - (d_c / 2m)² ]
-  // où l_c = edges intra-community, d_c = somme des degrees intra-community.
-
+/**
+ * Q = (1/2m) Σ_ij [A_ij - k_i*k_j/(2m)] δ(c_i, c_j)
+ * Pour edges réels (A_ij = 1) : contribute 1 - k_i*k_j/(2m) si même community.
+ * Pour non-edges : -k_i*k_j/(2m) si même community. Énumérer non-edges = O(N²).
+ *
+ * Formule simplifiée : Q = Σ_c [ (l_c / m) - (d_c / 2m)² ]
+ * où l_c = edges intra-community, d_c = somme des degrees intra-community.
+ */
+function computeFileLevelStats(
+  edges: Array<[string, string]>,
+  degree: Map<string, number>,
+  symbolFile: Map<string, string>,
+): { fileEdgeCount: Map<string, number>; fileDegree: Map<string, number> } {
   const fileEdgeCount = new Map<string, number>()
   const fileDegree = new Map<string, number>()
 
@@ -206,30 +225,39 @@ export function newmanGirvanRuntime(snap: RuntimeSnapshot): NewmanGirvanRuntimeF
     const file = symbolFile.get(sym)!
     fileDegree.set(file, (fileDegree.get(file) ?? 0) + deg)
   }
+  return { fileEdgeCount, fileDegree }
+}
 
+function computeModularity(
+  symbolFile: Map<string, string>,
+  fileEdgeCount: Map<string, number>,
+  fileDegree: Map<string, number>,
+  m: number,
+): NewmanGirvanRuntimeFact {
   const twoM = 2 * m
   let Q = 0
   const filesByModularity: NewmanGirvanRuntimeFact['filesByModularity'] = []
 
-  // Group files
+  const fileSymbols = groupSymbolsByFile(symbolFile)
+  for (const [file, syms] of fileSymbols) {
+    const lc = fileEdgeCount.get(file) ?? 0
+    const dc = fileDegree.get(file) ?? 0
+    const fileQ = lc / m - Math.pow(dc / twoM, 2)
+    Q += fileQ
+    filesByModularity.push({ file, q: fileQ, symbolsCount: syms.size })
+  }
+
+  filesByModularity.sort((a, b) => b.q - a.q || a.file.localeCompare(b.file))
+  return { globalQ: Q, filesByModularity }
+}
+
+function groupSymbolsByFile(symbolFile: Map<string, string>): Map<string, Set<string>> {
   const fileSymbols = new Map<string, Set<string>>()
   for (const [sym, file] of symbolFile) {
     if (!fileSymbols.has(file)) fileSymbols.set(file, new Set())
     fileSymbols.get(file)!.add(sym)
   }
-
-  for (const [file, syms] of fileSymbols) {
-    const lc = fileEdgeCount.get(file) ?? 0
-    const dc = fileDegree.get(file) ?? 0
-    const fileQ = (lc / m) - Math.pow(dc / twoM, 2)
-    Q += fileQ
-    filesByModularity.push({ file, q: fileQ, symbolsCount: syms.size })
-  }
-
-  // Sort for determinism (high-Q first)
-  filesByModularity.sort((a, b) => b.q - a.q || a.file.localeCompare(b.file))
-
-  return { globalQ: Q, filesByModularity }
+  return fileSymbols
 }
 
 // ─── 4. LYAPUNOV EXPONENT (latency stability) ───────────────────────────
