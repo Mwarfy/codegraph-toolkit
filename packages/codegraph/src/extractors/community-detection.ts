@@ -94,44 +94,75 @@ export interface ModularityScore {
  *   - communities : par fichier, sa community + flag misplaced
  *   - score : modularity globale + stats
  */
+type CommunityResult = { communities: ImportCommunity[]; score: ModularityScore }
+
+/** Fresh empty (factory, pas const aliasé) — évite mutation par les callers. */
+function emptyResult(): CommunityResult {
+  return {
+    communities: [],
+    score: { globalModularityX1000: 0, communityCount: 0, misplacedCount: 0 },
+  }
+}
+
 export function computeCommunityDetection(
   nodes: GraphNode[],
   edges: GraphEdge[],
-): { communities: ImportCommunity[]; score: ModularityScore } {
-  if (nodes.length < 4 || edges.length < 3) {
-    return {
-      communities: [],
-      score: { globalModularityX1000: 0, communityCount: 0, misplacedCount: 0 },
-    }
-  }
+): CommunityResult {
+  if (nodes.length < 4 || edges.length < 3) return emptyResult()
 
-  // Filtre les fichiers de build (dist/*.d.ts, *.js.map, etc.) qui
-  // peuvent traîner dans le snapshot mais ne sont pas du code source
-  // actionnable. Sinon ils pollue les misplaced detections.
-  const isSourceFile = (file: string): boolean => {
-    if (file.includes('/dist/')) return false
-    if (file.includes('/build/')) return false
-    if (file.endsWith('.d.ts')) return false
-    if (file.endsWith('.js.map') || file.endsWith('.d.ts.map')) return false
-    return true
-  }
   const filteredNodes = nodes.filter((n) => isSourceFile(n.id))
   const filteredEdges = edges.filter((e) => isSourceFile(e.from) && isSourceFile(e.to))
-  if (filteredNodes.length < 4 || filteredEdges.length < 3) {
-    return {
-      communities: [],
-      score: { globalModularityX1000: 0, communityCount: 0, misplacedCount: 0 },
-    }
+  if (filteredNodes.length < 4 || filteredEdges.length < 3) return emptyResult()
+
+  const g = buildLouvainGraph(filteredNodes, filteredEdges)
+  if (g.size === 0) return emptyResult()
+
+  // Seed fixe (42) pour déterminisme — évite les partitions volatiles.
+  const rngOpts = { rng: deterministicRng(42), randomWalk: false }
+  const partition = louvain(g, rngOpts)
+  const modularity = louvain.detailed(g, rngOpts).modularity
+
+  const dominantPackageOf = findDominantPackages(partition)
+  const { communities, misplacedCount } = emitCommunities(partition, dominantPackageOf)
+
+  return {
+    communities,
+    score: {
+      globalModularityX1000: Math.round(modularity * 1000),
+      communityCount: new Set(Object.values(partition)).size,
+      misplacedCount,
+    },
   }
+}
 
-  const g = new (Graph as unknown as new (opts: { type: string; allowSelfLoops: boolean }) => {
-    hasNode: (id: string) => boolean
-    addNode: (id: string) => void
-    hasEdge: (a: string, b: string) => boolean
-    addEdge: (a: string, b: string) => void
-    size: number
-  })({ type: 'undirected', allowSelfLoops: false })
+/**
+ * Filtre les fichiers de build (dist/*.d.ts, *.js.map, etc.) qui
+ * peuvent traîner dans le snapshot mais ne sont pas du code source
+ * actionnable. Sinon ils polluent les misplaced detections.
+ */
+function isSourceFile(file: string): boolean {
+  if (file.includes('/dist/')) return false
+  if (file.includes('/build/')) return false
+  if (file.endsWith('.d.ts')) return false
+  if (file.endsWith('.js.map') || file.endsWith('.d.ts.map')) return false
+  return true
+}
 
+interface UndirectedGraph {
+  hasNode: (id: string) => boolean
+  addNode: (id: string) => void
+  hasEdge: (a: string, b: string) => boolean
+  addEdge: (a: string, b: string) => void
+  size: number
+}
+
+type GraphCtor = new (opts: { type: string; allowSelfLoops: boolean }) => UndirectedGraph
+
+function buildLouvainGraph(
+  filteredNodes: GraphNode[],
+  filteredEdges: GraphEdge[],
+): UndirectedGraph {
+  const g = new (Graph as unknown as GraphCtor)({ type: 'undirected', allowSelfLoops: false })
   for (const n of filteredNodes) {
     if (!g.hasNode(n.id)) g.addNode(n.id)
   }
@@ -141,59 +172,60 @@ export function computeCommunityDetection(
     if (g.hasEdge(e.from, e.to) || g.hasEdge(e.to, e.from)) continue
     g.addEdge(e.from, e.to)
   }
+  return g
+}
 
-  if (g.size === 0) {
-    return {
-      communities: [],
-      score: { globalModularityX1000: 0, communityCount: 0, misplacedCount: 0 },
-    }
-  }
+/**
+ * Heuristique : packages/<X>/src/... → "packages/<X>" ; apps/<X>/... → "apps/<X>" ;
+ * sentinel-core | sentinel-web → top-level direct ; sinon 2 premiers segments.
+ */
+function physicalPackageOf(file: string): string {
+  const parts = file.split(path.sep).filter(Boolean)
+  if (parts[0] === 'packages' && parts.length > 1) return `packages/${parts[1]}`
+  if (parts[0] === 'apps' && parts.length > 1) return `apps/${parts[1]}`
+  if (parts[0] === 'sentinel-core' || parts[0] === 'sentinel-web') return parts[0]
+  return parts.slice(0, 2).join('/')
+}
 
-  // Louvain : retourne un mapping nodeId → communityId.
-  // Seed fixe (42) pour déterminisme — évite les partitions volatiles.
-  const rngOpts = { rng: deterministicRng(42), randomWalk: false }
-  const partition = louvain(g, rngOpts)
-  const modularity = louvain.detailed(g, rngOpts).modularity
-
-  // Détecte le package physique majoritaire de chaque community
-  const physicalPackageOf = (file: string): string => {
-    const parts = file.split(path.sep).filter(Boolean)
-    // Heuristique : packages/<X>/src/... → "packages/<X>"
-    // packages/<X>/src ou apps/<X>/... → "<top>/<sub>"
-    if (parts[0] === 'packages' && parts.length > 1) return `packages/${parts[1]}`
-    if (parts[0] === 'apps' && parts.length > 1) return `apps/${parts[1]}`
-    if (parts[0] === 'sentinel-core' || parts[0] === 'sentinel-web') return parts[0]
-    // Fallback : 2 premiers segments
-    return parts.slice(0, 2).join('/')
-  }
-
-  const communityToPackage: Map<number, Map<string, number>> = new Map()
+/** Pour chaque community, retourne le package physique majoritaire. */
+function findDominantPackages(partition: Record<string, number>): Map<number, string> {
+  const communityToPackage = new Map<number, Map<string, number>>()
   for (const file of Object.keys(partition)) {
-    const cid = partition[file] as number
+    const cid = partition[file]
     const pkg = physicalPackageOf(file)
     if (!communityToPackage.has(cid)) communityToPackage.set(cid, new Map())
     const pkgCount = communityToPackage.get(cid)!
     pkgCount.set(pkg, (pkgCount.get(pkg) ?? 0) + 1)
   }
 
-  // Pour chaque community, le package majoritaire
-  const dominantPackageOf: Map<number, string> = new Map()
+  const dominantPackageOf = new Map<number, string>()
   for (const [cid, pkgCount] of communityToPackage) {
-    let maxPkg = ''
-    let maxN = 0
-    for (const [pkg, n] of pkgCount) {
-      if (n > maxN) {
-        maxN = n
-        maxPkg = pkg
-      }
-    }
-    dominantPackageOf.set(cid, maxPkg)
+    dominantPackageOf.set(cid, argmaxKey(pkgCount))
   }
+  return dominantPackageOf
+}
 
+/** Retourne la clé associée à la valeur max du Map. Empty Map → ''. */
+function argmaxKey(map: Map<string, number>): string {
+  let maxKey = ''
+  let maxN = 0
+  for (const [k, n] of map) {
+    if (n > maxN) {
+      maxN = n
+      maxKey = k
+    }
+  }
+  return maxKey
+}
+
+function emitCommunities(
+  partition: Record<string, number>,
+  dominantPackageOf: Map<number, string>,
+): { communities: ImportCommunity[]; misplacedCount: number } {
   const communities: ImportCommunity[] = []
   let misplacedCount = 0
   for (const file of Object.keys(partition).sort()) {
-    const cid = partition[file] as number
+    const cid = partition[file]
     const physicalPkg = physicalPackageOf(file)
     const dominantPkg = dominantPackageOf.get(cid) ?? ''
     const misplaced: 0 | 1 = physicalPkg !== dominantPkg ? 1 : 0
@@ -205,12 +237,5 @@ export function computeCommunityDetection(
       misplaced,
     })
   }
-
-  const communityCount = new Set(Object.values(partition)).size
-  const globalModularityX1000 = Math.round(modularity * 1000)
-
-  return {
-    communities,
-    score: { globalModularityX1000, communityCount, misplacedCount },
-  }
+  return { communities, misplacedCount }
 }
