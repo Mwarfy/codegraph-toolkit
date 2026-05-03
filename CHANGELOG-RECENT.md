@@ -5,11 +5,11 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T14:07:11Z
+Last update : 2026-05-03T14:16:41Z
 
 ## By type
 
-### `feat` (24)
+### `feat` (23)
 
 - **2f84a70** feat(toolkit): Niveau 5 effect-analysis + roadmap defers Niveaux 6/7 — 2026-05-03
 - **0485ce4** feat(toolkit): self-optim Niveau 2A + Niveau 4 — math cost predict + auto-synth Salsa — 2026-05-03
@@ -33,8 +33,9 @@ Last update : 2026-05-03T14:07:11Z
 - **c3750da** feat(toolkit): Top-5 graph theory uplift — PageRank + complexity + perf + SCC — 2026-05-01
 
 
-### `fix` (6)
+### `fix` (7)
 
+- **866eb25** fix(toolkit): bugs #1 #2 #3 #4 trouvés via test externe Hono — 2026-05-03
 - **0146402** fix(toolkit): close P0+P1+P2+P3 — review credibility gap part 2 — 2026-05-03
 - **81b8fb9** fix(toolkit): self-detected defects via codegraph + runtime-graph — 2026-05-03
 - **e73e85d** fix(codegraph): break direct cycle sql-helpers ↔ sql-schema via type extraction — 2026-05-03
@@ -85,6 +86,7 @@ Last update : 2026-05-03T14:07:11Z
 
 ## Full history
 
+- **866eb25** fix(toolkit): bugs #1 #2 #3 #4 trouvés via test externe Hono — 2026-05-03
 - **a191d61** docs(validation): full-chain run #1 — 4 bugs trouvés sur Hono — 2026-05-03
 - **095661e** docs(validation): run #1 — Hono framework (186 files, 3.5s, 0 crash, 0 hallucination) — 2026-05-03
 - **2067d1f** chore(release): v0.3.0 consolidation — npm-publishable core, experimental gated — 2026-05-03
@@ -134,4 +136,3 @@ Last update : 2026-05-03T14:07:11Z
 - **f35acd1** feat(toolkit): self-audit — 5 quick-wins + 2 meta-fix + dogfood gate — 2026-05-01
 - **9a62387** feat(invariants): Tier 18 — event-payload-cross-block-taint + closure backlog — 2026-05-01
 - **fa4032f** feat(invariants): Tier 17 — 11 nouvelles rules library + grandfathers — 2026-05-01
-- **c3b4e3c** feat(codegraph): Tier 17 — 13 nouveaux facts emis + 2 nouveaux extractors — 2026-05-01

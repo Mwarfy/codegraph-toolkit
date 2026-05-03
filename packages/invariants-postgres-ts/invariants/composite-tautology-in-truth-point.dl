@@ -1,0 +1,22 @@
+// COMPOSITE-TAUTOLOGY-IN-TRUTH-POINT.
+//
+// Pourquoi : une tautologie ou contradiction dans une condition (`if (true)`,
+// `cond || true`, etc.) au sein d'un fichier qui WRITE un truth-point
+// business critique (table DB, concept SSOT) = bug haute confiance. La
+// branche unreachable peut masquer un bug de cohérence des données.
+//
+// Différence vs ESLint `no-constant-condition` : ESLint signale TOUTES les
+// tautologies. Cette rule signale UNIQUEMENT celles dans un truth-point
+// writer = signal-to-noise infiniment plus haut.
+//
+// Reuse : ConstantExpression (ce commit) + TruthPointWriter (existant).
+
+Violation("COMPOSITE-TAUTOLOGY-IN-TRUTH-POINT", F, L,
+  "tautologie dans truth-point writer — branche unreachable peut masquer bug data") :-
+  ConstantExpression("tautology-condition", F, L, _),
+  TruthPointWriter(_, F).
+
+Violation("COMPOSITE-TAUTOLOGY-IN-TRUTH-POINT", F, L,
+  "contradiction dans truth-point writer — branche unreachable peut masquer bug data") :-
+  ConstantExpression("contradiction-condition", F, L, _),
+  TruthPointWriter(_, F).

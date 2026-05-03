@@ -793,6 +793,38 @@ export interface GraphSnapshot {
   }>
 
   /**
+   * Constant expressions — patterns de simplification symbolique
+   * (tautology, contradiction, gratuitous bool comparison, etc.).
+   * Cf. extractors/constant-expressions.ts.
+   */
+  constantExpressions?: Array<{
+    kind:
+      | 'tautology-condition'
+      | 'contradiction-condition'
+      | 'gratuitous-bool-comparison'
+      | 'double-negation'
+      | 'literal-fold-opportunity'
+    file: string
+    line: number
+    message: string
+    exprRepr: string
+  }>
+
+  /**
+   * ESLint violations imported from `<rootDir>/.codegraph/eslint.json`
+   * (l'utilisateur run ESLint séparément + dump JSON).
+   * Cf. extractors/eslint-import.ts.
+   */
+  eslintViolations?: Array<{
+    file: string
+    line: number
+    column: number
+    ruleId: string
+    severity: number
+    message: string
+  }>
+
+  /**
    * SQL naming convention violations (Codd-era / Postgres best
    * practices) + audit columns (Tier 6).
    * Cf. extractors/sql-naming.ts (Phase 4 Tier 5 + Tier 6).

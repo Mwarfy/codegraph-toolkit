@@ -1,0 +1,23 @@
+// COMPOSITE-DEAD-BRANCH-IN-HUB.
+//
+// Pourquoi : une condition tautologique/contradictoire dans un fichier
+// hub (importé par ≥ 5 autres) implique que la branche unreachable est
+// chargée par tous ses consumers. Si elle masque un bug, l'impact se
+// propage. Priorité haute.
+//
+// Différence vs ESLint `no-constant-condition` standalone : on filtre
+// par fan-in du module pour réduire le bruit.
+//
+// Reuse : ConstantExpression + ModuleFanIn.
+
+Violation("COMPOSITE-DEAD-BRANCH-IN-HUB", F, L,
+  "tautologie dans hub (≥5 importeurs) — impact propagé") :-
+  ConstantExpression("tautology-condition", F, L, _),
+  ModuleFanIn(F, N),
+  N >= 5.
+
+Violation("COMPOSITE-DEAD-BRANCH-IN-HUB", F, L,
+  "contradiction dans hub (≥5 importeurs) — impact propagé") :-
+  ConstantExpression("contradiction-condition", F, L, _),
+  ModuleFanIn(F, N),
+  N >= 5.

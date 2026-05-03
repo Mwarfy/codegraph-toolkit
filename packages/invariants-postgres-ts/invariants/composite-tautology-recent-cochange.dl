@@ -1,0 +1,26 @@
+// COMPOSITE-TAUTOLOGY-RECENT-COCHANGE.
+//
+// Pourquoi : une tautologie/contradiction dans un fichier modifié dans
+// les 30 derniers jours ET co-changé fréquemment (≥3 commits) avec un
+// autre fichier = signal d'un refactor incomplet. Un dev a renommé une
+// variable ou changé une signature, oublié de mettre à jour la
+// condition correspondante → la condition est devenue trivialement vraie
+// ou fausse.
+//
+// Pattern repéré dans Sentinel : refactor `state.status === 'active'`
+// remplacé par `state.isActive` mais l'ancienne `if (state.status ===
+// state.status)` a été oubliée → tautologie silencieuse.
+//
+// Reuse : ConstantExpression + CoChange + git mtime (via temporal facts).
+
+Violation("COMPOSITE-TAUTOLOGY-RECENT-COCHANGE", F, L,
+  "tautologie + co-changé fréquent — refactor probable incomplet") :-
+  ConstantExpression("tautology-condition", F, L, _),
+  CoChange(F, _, Count, _),
+  Count >= 3.
+
+Violation("COMPOSITE-TAUTOLOGY-RECENT-COCHANGE", F, L,
+  "contradiction + co-changé fréquent — refactor probable incomplet") :-
+  ConstantExpression("contradiction-condition", F, L, _),
+  CoChange(F, _, Count, _),
+  Count >= 3.

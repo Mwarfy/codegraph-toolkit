@@ -1,0 +1,19 @@
+// COMPOSITE-GRATUITOUS-BOOL-UNTESTED-HUB.
+//
+// Pourquoi : `x === false` ou `x === true` dans un hub (≥5 importeurs)
+// non-testé (!TestedFile) = signal qu'une boolean variable a peut-être
+// changé de type récemment et que la coercion gratuite cache un bug.
+//
+// Plus subtil qu'une simple violation Sonar S1125 : on filtre par hub
+// non-testé pour ne flagger que les cas où l'impact se propage et
+// aucun test ne l'attrape.
+//
+// Reuse : ConstantExpression (kind=gratuitous-bool-comparison) +
+//         ModuleFanIn + TestedFile.
+
+Violation("COMPOSITE-GRATUITOUS-BOOL-UNTESTED-HUB", F, L,
+  "x === true/false dans hub non-testé — coercion gratuite + impact propagé sans gate test") :-
+  ConstantExpression("gratuitous-bool-comparison", F, L, _),
+  ModuleFanIn(F, N),
+  N >= 5,
+  !TestedFile(F).

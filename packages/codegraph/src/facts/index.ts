@@ -1080,6 +1080,28 @@ function emitTier234Facts(snapshot: GraphSnapshot, relations: RelationDef[]): vo
     articulationPointRel.rows.push([sym(ap.file), num(ap.severity)])
   }
   relations.push(articulationPointRel)
+
+  // Constant expressions (tautology / contradiction / gratuitous bool / etc.)
+  const constantExprRel: RelationDef = {
+    name: 'ConstantExpression',
+    decl: '(kind:symbol, file:symbol, line:number, exprRepr:symbol)',
+    rows: [],
+  }
+  for (const ce of snapshot.constantExpressions ?? []) {
+    constantExprRel.rows.push([sym(ce.kind), sym(ce.file), num(ce.line), sym(ce.exprRepr)])
+  }
+  relations.push(constantExprRel)
+
+  // ESLint violations imported from .codegraph/eslint.json (if present).
+  const eslintRel: RelationDef = {
+    name: 'EslintViolation',
+    decl: '(file:symbol, line:number, ruleId:symbol, severity:number)',
+    rows: [],
+  }
+  for (const ev of snapshot.eslintViolations ?? []) {
+    eslintRel.rows.push([sym(ev.file), num(ev.line), sym(ev.ruleId), num(ev.severity)])
+  }
+  relations.push(eslintRel)
 }
 
 /**

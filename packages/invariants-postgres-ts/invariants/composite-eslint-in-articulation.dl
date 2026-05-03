@@ -1,0 +1,17 @@
+// COMPOSITE-ESLINT-IN-ARTICULATION.
+//
+// Pourquoi : une violation ESLint **error-severity** (severity = 2) dans
+// un articulation point (= fichier dont la suppression déconnecte le
+// graphe) = signal-to-noise élevé. ESLint signale 1000 violations par
+// projet ; on filtre celles qui touchent les fichiers structurellement
+// critiques.
+//
+// Différence vs ESLint standalone : ESLint ne sait pas qu'un fichier
+// est articulation point. Le toolkit oui.
+//
+// Reuse : EslintViolation (ce commit) + ArticulationPoint (Tier 5).
+
+Violation("COMPOSITE-ESLINT-IN-ARTICULATION", F, L,
+  "violation ESLint error-severity dans articulation point — bug structurel haute priorité") :-
+  EslintViolation(F, L, _, 2),
+  ArticulationPoint(F, _).

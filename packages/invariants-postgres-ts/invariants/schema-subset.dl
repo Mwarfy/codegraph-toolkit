@@ -90,6 +90,8 @@
 .decl SymbolCallEdge(fromFile: symbol, fromSymbol: symbol, toFile: symbol, toSymbol: symbol, line: number)
 .decl SymbolSignature(file: symbol, name: symbol, kind: symbol, line: number)
 .decl EntryPoint(file: symbol, kind: symbol, id: symbol)
+.decl ConstantExpression(kind: symbol, file: symbol, line: number, exprRepr: symbol)
+.decl EslintViolation(file: symbol, line: number, ruleId: symbol, severity: number)
 
 .input File
 .input FileTag
@@ -172,6 +174,8 @@
 .input SymbolCallEdge
 .input SymbolSignature
 .input EntryPoint
+.input ConstantExpression
+.input EslintViolation
 
 // La relation cible commune : tous les fichiers ADR écrivent ici.
 // 4 colonnes :

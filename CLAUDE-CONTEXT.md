@@ -72,6 +72,8 @@
 - `packages/codegraph/src/extractors/_shared/sql-helpers.ts` → ADR-012
 - `packages/codegraph/src/extractors/_shared/sql-types.ts` → ADR-012
 - `packages/codegraph/src/extractors/co-change.ts` → ADR-005
+- `packages/codegraph/src/extractors/constant-expressions.ts` → ADR-005
+- `packages/codegraph/src/extractors/eslint-import.ts` → ADR-005
 - `packages/codegraph/src/extractors/package-deps.ts` → ADR-005
 - `packages/codegraph/src/extractors/sql-schema.ts` → ADR-005
 - `packages/codegraph/src/extractors/state-machines.ts` → ADR-005
@@ -186,6 +188,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+866eb25 fix(toolkit): bugs #1 #2 #3 #4 trouvés via test externe Hono
 a191d61 docs(validation): full-chain run #1 — 4 bugs trouvés sur Hono
 095661e docs(validation): run #1 — Hono framework (186 files, 3.5s, 0 crash, 0 hallucination)
 2067d1f chore(release): v0.3.0 consolidation — npm-publishable core, experimental gated
@@ -197,7 +200,6 @@ ce4e6e8 perf(toolkit): deprecated-usage Salsa-isolation + math regression gate
 afd0965 perf(toolkit): self-discovered Salsa optimizations — warm runtime −40%
 67c5581 feat(toolkit): mathematical self-governance — 100% load-bearing files governed
 c484f1f refactor(codegraph): runDeterministicDetectors 279→108 LOC + git-fixture determinism
-173915c chore(toolkit): self-discipline pass — close credibility gap from external review
 ```
 
 ## Comment contribuer à ce brief

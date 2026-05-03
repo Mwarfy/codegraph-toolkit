@@ -70,6 +70,8 @@ import { analyzeDeadCode, type DeadCodeFinding } from '../extractors/dead-code.j
 import { analyzeFloatingPromises, type FloatingPromiseSite } from '../extractors/floating-promises.js'
 import { analyzeDeprecatedUsage, type DeprecatedDeclaration, type DeprecatedUsageSite } from '../extractors/deprecated-usage.js'
 import { analyzeArticulationPoints, type ArticulationPoint } from '../extractors/articulation-points.js'
+import { extractConstantExpressionsFileBundle, type ConstantExpressionFinding } from '../extractors/constant-expressions.js'
+import { importEslintViolations, type EslintViolation } from '../extractors/eslint-import.js'
 import { findSqlNamingViolations, type SqlNamingViolation } from '../extractors/sql-naming.js'
 import { findMigrationOrderViolations, type MigrationOrderViolation } from '../extractors/sql-migration-order.js'
 import { analyzeResourceBalance, type ResourceImbalance } from '../extractors/resource-balance.js'
@@ -675,6 +677,15 @@ async function runDeterministicDetectors(
   const articulationPoints = await runDetectorTimed(timing, 'articulation-points',
     () => analyzeArticulationPoints(snapshot))
 
+  // Constant expressions — patterns simplification symbolique (tautology,
+  // contradiction, gratuitous bool comparison). Cf. extractor.
+  const constantExpressions = await runDetectorTimed(timing, 'constant-expressions',
+    () => analyzeConstantExpressionsBatch(config.rootDir, files, sharedProject))
+
+  // ESLint ingester — read .codegraph/eslint.json if user provided it.
+  const eslintViolations = await runDetectorTimed(timing, 'eslint-import',
+    () => importEslintViolations(config.rootDir))
+
   // Phase 5 : SQL detectors (gated sur snapshot.sqlSchema).
   const sqlNamingViolations = await runDetectorTimed(timing, 'sql-naming',
     async () => snapshot.sqlSchema ? findSqlNamingViolations(snapshot.sqlSchema) : undefined)
@@ -715,7 +726,35 @@ async function runDeterministicDetectors(
     hardcodedSecrets, booleanParams, deadCode, floatingPromises, deprecatedUsage,
     articulationPoints, sqlNamingViolations, sqlMigrationOrderViolations,
     resourceImbalances, taintSinks, sanitizerCalls, taintedVars, argumentsFacts,
+    constantExpressions, eslintViolations,
   })
+}
+
+/**
+ * Wrapper batch pour `extractConstantExpressionsFileBundle` per-file.
+ * Pattern ADR-005 : per-file extractor + batch aggregator.
+ */
+async function analyzeConstantExpressionsBatch(
+  rootDir: string,
+  files: string[],
+  project: ReturnType<typeof createSharedProject>,
+): Promise<ConstantExpressionFinding[]> {
+  const fileSet = new Set(files)
+  const out: ConstantExpressionFinding[] = []
+  for (const sf of project.getSourceFiles()) {
+    const absPath = sf.getFilePath() as string
+    const relPath = path.relative(rootDir, absPath).replace(/\\/g, '/')
+    if (!fileSet.has(relPath)) continue
+    const bundle = extractConstantExpressionsFileBundle(sf, relPath)
+    out.push(...bundle.findings)
+  }
+  // Determinism (already sorted per-file, but resort globally)
+  out.sort((a, b) =>
+    a.file !== b.file ? (a.file < b.file ? -1 : 1) :
+    a.line !== b.line ? a.line - b.line :
+    a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0,
+  )
+  return out
 }
 
 /**

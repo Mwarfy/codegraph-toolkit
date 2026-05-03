@@ -1,0 +1,15 @@
+// COMPOSITE-ESLINT-IN-UNTESTED-CYCLE.
+//
+// Pourquoi : une violation ESLint dans un fichier qui :
+//   1. participe à un cycle d'imports (CycleNode)
+//   2. n'a pas de tests directs (!TestedFile)
+// = bug haute confiance. Le cycle masque les symptômes (chaque fichier
+// du cycle peut blâmer l'autre), l'absence de tests les laisse passer.
+//
+// Reuse : EslintViolation + CycleNode + TestedFile.
+
+Violation("COMPOSITE-ESLINT-IN-UNTESTED-CYCLE", F, L,
+  "violation ESLint dans cycle d'imports + non-testé — symptôme dilué + pas de gate") :-
+  EslintViolation(F, L, _, _),
+  CycleNode(F, _, _),
+  !TestedFile(F).
