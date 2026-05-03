@@ -208,6 +208,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+89be66f refactor(codegraph): split extractArgumentsFileBundle (cyclo 33→3, cog 53→2) — arguments.ts bomb-free
 c922d70 refactor(runtime-graph): split tdaPersistence (cyclo 33→5, cog 63→4) — tda-persistence.ts bomb-free
 a4bd164 refactor(adr-toolkit): split bootstrapAdrs (cyclo 34→10, cog 50→4) — bootstrap.ts bomb-free
 1d0518d refactor(codegraph): split extractTensions (cyclo 34→10, cog 52→7) — tensions.ts bomb-free
@@ -219,7 +220,6 @@ e02af8d refactor(codegraph): split computeComponentMetrics (cyclo 36→4, cog 44
 5cd34f2 refactor(codegraph): split computeGrangerCausality (cyclo 42→8, cog 53→2) — granger-causality.ts bomb-free
 3340d64 refactor(datalog): split stratify (cyclo 42→2, cog 67→0) — stratify.ts bomb-free
 ead1516 refactor(toolkit): split extractDriftPatternsFileBundle (cyclo 45→3) — drift-patterns.ts ALL bombs cleared
-101b1b5 perf(toolkit): Salsa-iso boolean-params — 35ms → 0ms warm
 ```
 
 ## Comment contribuer à ce brief
