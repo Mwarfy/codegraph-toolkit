@@ -60,6 +60,7 @@ Ne plus faire :
 
 <!-- AUTO-GÉNÉRÉ depuis les marqueurs ADR-NNN du code source. Voir @liby-tools/adr-toolkit. NE PAS éditer à la main. -->
 
+- `packages/codegraph/src/facts/index.ts`
 - `packages/datalog/src/canonical.ts`
 - `packages/datalog/src/facts-loader.ts`
 - `packages/datalog/src/parser.ts`

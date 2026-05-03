@@ -250,7 +250,7 @@ export async function initProject(
   await writeCodegraphConfig(rootDir, layout, stack, result)
   await writeAdrTemplates(rootDir, result)
   await writeGitHooks(rootDir, result)
-  await setGitHooksPath(rootDir, layout.hasGit, result)
+  await setGitHooksPath(rootDir, layout, result)
 
   if (opts.withInvariants) {
     await wireInvariantsPackage(rootDir, opts.withInvariants, result)
@@ -391,10 +391,10 @@ async function writeGitHooks(rootDir: string, result: InitResult): Promise<void>
 
 async function setGitHooksPath(
   rootDir: string,
-  hasGit: boolean,
+  layout: DetectedLayout,
   result: InitResult,
 ): Promise<void> {
-  if (!hasGit) {
+  if (!layout.hasGit) {
     result.warnings.push('Pas de .git/ — set core.hooksPath manuellement après git init')
     return
   }

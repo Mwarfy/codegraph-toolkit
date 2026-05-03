@@ -5,11 +5,11 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T15:44:07Z
+Last update : 2026-05-03T15:56:37Z
 
 ## By type
 
-### `feat` (18)
+### `feat` (17)
 
 - **af41582** feat(toolkit): symbolic simplification facts + 5 composite rules cross-discipline — 2026-05-03
 - **2f84a70** feat(toolkit): Niveau 5 effect-analysis + roadmap defers Niveaux 6/7 — 2026-05-03
@@ -28,7 +28,6 @@ Last update : 2026-05-03T15:44:07Z
 - **443e072** feat(datalog): runFromDirs accepte rulesDir array (multi-dir loader) — 2026-05-01
 - **87f2ac1** feat(toolkit): Information Bottleneck (Tishby 1999) — 7e cross-discipline — 2026-05-01
 - **9ee3547** feat(toolkit): min-cut/max-flow — coût objectif de séparation packages — 2026-05-01
-- **4cb7ffa** feat(toolkit): TDA + Lyapunov — cycles structurels + chaos detection — 2026-05-01
 
 
 ### `fix` (7)
@@ -49,8 +48,9 @@ Last update : 2026-05-03T15:44:07Z
 - **afd0965** perf(toolkit): self-discovered Salsa optimizations — warm runtime −40% — 2026-05-03
 
 
-### `refactor` (10)
+### `refactor` (11)
 
+- **b0f2c9a** refactor(toolkit): split cli/index.ts god-file (2190→1520 LOC, −30%) — 2026-05-03
 - **c613ac7** refactor(toolkit): split analyzer.ts:runDeterministicDetectors en 5 phases — 2026-05-03
 - **5f8d691** refactor(toolkit): split god-files + fix REDOS detector + tests hubs — 2026-05-03
 - **c484f1f** refactor(codegraph): runDeterministicDetectors 279→108 LOC + git-fixture determinism — 2026-05-03
@@ -89,6 +89,7 @@ Last update : 2026-05-03T15:44:07Z
 
 ## Full history
 
+- **b0f2c9a** refactor(toolkit): split cli/index.ts god-file (2190→1520 LOC, −30%) — 2026-05-03
 - **c613ac7** refactor(toolkit): split analyzer.ts:runDeterministicDetectors en 5 phases — 2026-05-03
 - **7151cfd** perf(toolkit): Salsa-isolate 3 hot detectors (co-change, drift, const-expr) — 2026-05-03
 - **f2f93bc** chore(brief): regen CLAUDE-CONTEXT + CHANGELOG post-refactor (553→534) — 2026-05-03
@@ -138,4 +139,3 @@ Last update : 2026-05-03T15:44:07Z
 - **87f2ac1** feat(toolkit): Information Bottleneck (Tishby 1999) — 7e cross-discipline — 2026-05-01
 - **3ecfa05** docs: cross-discipline metrics — synthese 6 disciplines portees — 2026-05-01
 - **9ee3547** feat(toolkit): min-cut/max-flow — coût objectif de séparation packages — 2026-05-01
-- **4cb7ffa** feat(toolkit): TDA + Lyapunov — cycles structurels + chaos detection — 2026-05-01

@@ -125,7 +125,7 @@ function extractName(node: Node): string {
     try {
       const name = (node as any).getName()
       if (name) return name
-    } catch {}
+    } catch { /* node has getName but throws on access (anonymous symbol) — fallback below */ }
   }
 
   const parent = node.getParent()

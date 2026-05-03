@@ -83,6 +83,7 @@
 - `packages/codegraph/src/extractors/sql-schema.ts` → ADR-005
 - `packages/codegraph/src/extractors/state-machines.ts` → ADR-005
 - `packages/codegraph/src/extractors/unused-exports.ts` → ADR-005
+- `packages/codegraph/src/facts/index.ts` → ADR-010
 - `packages/codegraph/src/incremental/barrels.ts` → ADR-007
 - `packages/codegraph/src/incremental/co-change.ts` → ADR-007
 - `packages/codegraph/src/incremental/code-quality-patterns.ts` → ADR-007
@@ -95,7 +96,9 @@
 - `packages/codegraph/src/incremental/deprecated-usage.ts` → ADR-007
 - `packages/codegraph/src/incremental/drift-patterns.ts` → ADR-007
 - `packages/codegraph/src/incremental/env-usage.ts` → ADR-007
+- `packages/codegraph/src/incremental/eval-calls.ts` → ADR-007
 - `packages/codegraph/src/incremental/event-emit-sites.ts` → ADR-007
+- `packages/codegraph/src/incremental/function-complexity.ts` → ADR-007
 - `packages/codegraph/src/incremental/hardcoded-secrets.ts` → ADR-007
 - `packages/codegraph/src/incremental/metrics.ts` → ADR-007
 - `packages/codegraph/src/incremental/oauth-scope-literals.ts` → ADR-007
@@ -141,10 +144,10 @@
 
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
-- `packages/codegraph/src/core/types.ts` (in: 75) · gov by ADR-006
-- `packages/codegraph/src/incremental/queries.ts` (in: 30) · gov by ADR-007
-- `packages/codegraph/src/incremental/database.ts` (in: 28) · gov by ADR-007
-- `packages/salsa/dist/index.d.ts` (in: 27)
+- `packages/codegraph/src/core/types.ts` (in: 77) · gov by ADR-006
+- `packages/codegraph/src/incremental/queries.ts` (in: 32) · gov by ADR-007
+- `packages/codegraph/src/incremental/database.ts` (in: 30) · gov by ADR-007
+- `packages/salsa/dist/index.d.ts` (in: 29)
 - `packages/codegraph/src/core/detector-registry.ts` (in: 18) · gov by ADR-008
 - `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 16) · gov by ADR-012
 - `packages/runtime-graph/src/core/types.ts` (in: 13) · gov by ADR-009
@@ -154,7 +157,7 @@
 
 Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `// ADR-NNN`** dans le code. Intentionnel ? Sinon poser un marqueur ou créer un ADR :
 
-- **27** `packages/salsa/dist/index.d.ts` _(top-hub)_
+- **29** `packages/salsa/dist/index.d.ts` _(top-hub)_
 
 ## Tensions actives — invitations à explorer
 
@@ -167,11 +170,11 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/adr-toolkit/tests/fixtures/sample-project/src/services/state-service.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/src/cli/commands/_template.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/b.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/c.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **FSM-ORPHAN** `ApprovalStatus#expired` — état déclaré mais jamais écrit dans le code  
   _→ supprimer l'état OU ajouter la transition manquante_
@@ -197,6 +200,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+b0f2c9a refactor(toolkit): split cli/index.ts god-file (2190→1520 LOC, −30%)
 c613ac7 refactor(toolkit): split analyzer.ts:runDeterministicDetectors en 5 phases
 7151cfd perf(toolkit): Salsa-isolate 3 hot detectors (co-change, drift, const-expr)
 f2f93bc chore(brief): regen CLAUDE-CONTEXT + CHANGELOG post-refactor (553→534)
@@ -208,7 +212,6 @@ af41582 feat(toolkit): symbolic simplification facts + 5 composite rules cross-d
 a191d61 docs(validation): full-chain run #1 — 4 bugs trouvés sur Hono
 095661e docs(validation): run #1 — Hono framework (186 files, 3.5s, 0 crash, 0 hallucination)
 2067d1f chore(release): v0.3.0 consolidation — npm-publishable core, experimental gated
-2f84a70 feat(toolkit): Niveau 5 effect-analysis + roadmap defers Niveaux 6/7
 ```
 
 ## Comment contribuer à ce brief

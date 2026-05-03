@@ -1,3 +1,4 @@
+// ADR-010
 /**
  * Datalog Fact Exporter
  *
@@ -41,6 +42,7 @@
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
 import type { GraphSnapshot } from '../core/types.js'
+import { discoverManifests } from '../extractors/package-deps.js'
 
 export interface ExportFactsOptions {
   /** Dossier cible. Sera créé. Les fichiers existants seront écrasés. */
@@ -104,11 +106,18 @@ export async function exportFacts(
     rows: [],
   }
 
+  // Pattern files de fixtures synthétiques — non-importés par construction
+  // (sinon ils ne sont plus isolés). Couvert par FileTag("test-fixture")
+  // pour permettre aux rules (orphan-file, copy-paste-fork) de les exclure.
+  const FIXTURE_PATH_RE = /(^|\/)tests?\/fixtures?\/|(^|\/)__fixtures__\//
   for (const n of snapshot.nodes) {
     if (n.type !== 'file') continue
     fileRel.rows.push([sym(n.id)])
     for (const t of n.tags ?? []) {
       tagRel.rows.push([sym(n.id), sym(t)])
+    }
+    if (FIXTURE_PATH_RE.test(n.id)) {
+      tagRel.rows.push([sym(n.id), sym('test-fixture')])
     }
     for (const ex of n.exports ?? []) {
       // Garde tous les exports avec confidence non-vide, la rule filtre.
@@ -172,24 +181,28 @@ export async function exportFacts(
   relations.push(packageDepIssueRel)
 
   // ─── IsPackageEntryPoint (Tier 17 self-audit) ────────────────────────
-  // Resout les `main`/`bin`/`exports` de chaque package.json detecte vers
+  // Resout les `main`/`bin`/`exports` de CHAQUE package.json decouvert vers
   // les paths source TS correspondants. Sert a whitelister les entry
   // points npm dans les rules composite-barrel-low-value et
   // composite-orphan-file (faux positifs systemiques sinon).
+  //
+  // Utilise `discoverManifests` (full fs scan) plutot que `snapshot.packageDeps`
+  // qui n'inclut QUE les packages avec issues — cassait le whitelist sur
+  // les packages sans dette (codegraph, codegraph-mcp, datalog, salsa…).
   const isPackageEntryPointRel: RelationDef = {
     name: 'IsPackageEntryPoint',
     decl: '(file:symbol)',
     rows: [],
   }
-  const seenPjs = new Set<string>()
-  for (const d of snapshot.packageDeps ?? []) {
-    if (seenPjs.has(d.packageJson)) continue
-    seenPjs.add(d.packageJson)
+  const allManifests = await discoverManifests(snapshot.rootDir)
+  for (const m of allManifests) {
     try {
-      const pjPath = path.resolve(snapshot.rootDir, d.packageJson)
-      const pjRaw = await fs.readFile(pjPath, 'utf8')
+      const pjRaw = await fs.readFile(m.abs, 'utf8')
       const pj = JSON.parse(pjRaw)
-      const pjDir = path.dirname(d.packageJson)
+      // m.rel pointe vers le package.json relatif au rootDir — on prend
+      // son dirname pour préfixer les paths candidats. m.dir est absolu
+      // (cf. PackageManifest interface), pas utilisable ici.
+      const pjDir = path.dirname(m.rel)
       const candidates: string[] = []
       const collect = (val: unknown): void => {
         if (typeof val === 'string') candidates.push(val)

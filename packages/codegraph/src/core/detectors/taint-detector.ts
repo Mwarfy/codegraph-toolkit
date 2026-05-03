@@ -27,7 +27,7 @@ async function findTaintRules(rootDir: string): Promise<string | null> {
     path.join(rootDir, 'codegraph', 'taint-rules.json'),
   ]
   for (const c of candidates) {
-    try { await fs.access(c); return c } catch {}
+    try { await fs.access(c); return c } catch { /* probe: try next taint-rules.json location */ }
   }
   return null
 }

@@ -115,6 +115,8 @@ import { allDeadCode as incAllDeadCode } from '../incremental/dead-code.js'
 import { allDeprecatedUsage as incAllDeprecatedUsage } from '../incremental/deprecated-usage.js'
 import { allConstantExpressions as incAllConstantExpressions } from '../incremental/constant-expressions.js'
 import { allHardcodedSecrets as incAllHardcodedSecrets } from '../incremental/hardcoded-secrets.js'
+import { allFunctionComplexity as incAllFunctionComplexity } from '../incremental/function-complexity.js'
+import { allEvalCalls as incAllEvalCalls } from '../incremental/eval-calls.js'
 import { allDriftPatternsAst as incAllDriftPatternsAst } from '../incremental/drift-patterns.js'
 import {
   allCoChangePairs as incAllCoChangePairs,
@@ -297,13 +299,13 @@ export async function analyze(
   // ─── 4. Run base detectors + build graph ───────────────────────────
 
   const graph = await runBaseDetectorsAndBuildGraph(
-    config, files, fileCache, ctx, incremental, timing,
+    config, files, fileCache, ctx, { incremental }, timing,
   )
 
   // ─── 5. tsconfig resolution + shared Project + Salsa async inputs ──
 
   const { tsConfigPath, sharedProject } = await resolveTsConfigAndSharedProject(
-    config, files, incremental, preBuiltSharedProject,
+    config, files, { incremental, preBuiltSharedProject },
   )
 
   // ─── 5. Detectors via Registry (Phase B refactor terminé) ──────────
@@ -348,7 +350,7 @@ export async function analyze(
 
   // ─── 6b. New deterministic detectors (Sprint 12) ───────────────────
   if (!factsOnly) {
-    await runDeterministicDetectors(config, files, readFile, sharedProject, snapshot, timing, incremental)
+    await runDeterministicDetectors(config, files, readFile, sharedProject, snapshot, timing, { incremental })
   } else {
     // ─── factsOnly always-run subset ─────────────────────────────────
     // test-coverage est cheap (import-based mapping) ET load-bearing
@@ -408,9 +410,10 @@ async function runBaseDetectorsAndBuildGraph(
   files: string[],
   fileCache: Map<string, string>,
   ctx: DetectorContext,
-  incremental: boolean,
+  opts: { incremental: boolean },
   timing: AnalyzeResult['timing'],
 ): Promise<CodeGraph> {
+  const { incremental } = opts
   const detectors = createDetectors(config.detectors)
   const allLinks: DetectedLink[] = []
 
@@ -480,12 +483,12 @@ async function runBaseDetectorsAndBuildGraph(
 async function resolveTsConfigAndSharedProject(
   config: CodeGraphConfig,
   files: string[],
-  incremental: boolean,
-  preBuiltSharedProject: ReturnType<typeof createSharedProject> | null,
+  opts: { incremental: boolean; preBuiltSharedProject: ReturnType<typeof createSharedProject> | null },
 ): Promise<{
   tsConfigPath: string | undefined
   sharedProject: ReturnType<typeof createSharedProject>
 }> {
+  const { incremental, preBuiltSharedProject } = opts
   // Find tsconfig for alias resolution.
   let tsConfigPath: string | undefined
   const tsConfigCandidates: string[] = []
@@ -502,7 +505,7 @@ async function resolveTsConfigAndSharedProject(
       await fs.access(candidate)
       tsConfigPath = candidate
       break
-    } catch {}
+    } catch { /* probe: try next tsconfig location */ }
   }
 
   let sharedProject: ReturnType<typeof createSharedProject>
@@ -534,9 +537,9 @@ async function resolveTsConfigAndSharedProject(
         try {
           const content = await fs.readFile(path.join(config.rootDir, sqlFile), 'utf-8')
           scanSqlColumnDefaultsForIncremental(content, sqlFile, sqlDefaultsBuffer)
-        } catch {}
+        } catch { /* skip ce SQL file (race delete, permissions) — buffer reste partiel */ }
       }
-    } catch {}
+    } catch { /* aucun SQL file dans ce projet — sqlDefaultsBuffer reste vide */ }
     incSetInputIfChanged(incSqlDefaults, 'all', sqlDefaultsBuffer)
   } else {
     sharedProject = createSharedProject(config.rootDir, files, tsConfigPath)
@@ -573,7 +576,7 @@ async function prebuildSharedProjectIncremental(
   }
   earlyCandidates.push(path.join(config.rootDir, 'tsconfig.json'))
   for (const candidate of earlyCandidates) {
-    try { await fs.access(candidate); earlyTsConfigPath = candidate; break } catch {}
+    try { await fs.access(candidate); earlyTsConfigPath = candidate; break } catch { /* probe: try next tsconfig location */ }
   }
 
   // Capture previous mtimes for Project cache reuse
@@ -596,7 +599,7 @@ async function prebuildSharedProjectIncremental(
     try {
       const stat = await fs.stat(absPath)
       mtime = stat.mtimeMs
-    } catch {}
+    } catch { /* file disappeared (race delete) — leave mtime undefined, downstream re-reads */ }
     const cachedMtime = incGetCachedMtime(f)
     const cellExists = incFileContent.has(f)
     if (mtime !== undefined && cachedMtime === mtime && cellExists) continue
@@ -647,8 +650,9 @@ async function runDeterministicDetectors(
   sharedProject: ReturnType<typeof createSharedProject>,
   snapshot: GraphSnapshot,
   timing: AnalyzeResult['timing'],
-  incremental: boolean = false,
+  opts: { incremental?: boolean } = {},
 ): Promise<void> {
+  const incremental = opts.incremental ?? false
   const ctx: DetectorPhaseContext = {
     config, files, readFile, sharedProject, snapshot, timing, incremental,
   }
@@ -752,7 +756,9 @@ async function runPhase2Phase1Dependent(
       return analyzeDriftPatterns(config.rootDir, files, sharedProject, todos)
     })
   const evalCalls = await runDetectorTimed(timing, 'eval-calls',
-    () => analyzeEvalCalls(config.rootDir, files, sharedProject))
+    () => incremental
+      ? Promise.resolve(incAllEvalCalls.get('all'))
+      : analyzeEvalCalls(config.rootDir, files, sharedProject))
   const cryptoCalls = await runDetectorTimed(timing, 'crypto-algo',
     () => analyzeCryptoCalls(config.rootDir, files, sharedProject))
   // Self-optim discovery : Salsa-isolation post-λ_lyap analysis.
@@ -768,7 +774,9 @@ async function runPhase2Phase1Dependent(
       ? Promise.resolve(incAllCodeQualityPatterns.get('all'))
       : analyzeCodeQualityPatterns(config.rootDir, files, sharedProject))
   const functionComplexity = await runDetectorTimed(timing, 'function-complexity',
-    () => analyzeFunctionComplexity(config.rootDir, files, sharedProject))
+    () => incremental
+      ? Promise.resolve(incAllFunctionComplexity.get('all'))
+      : analyzeFunctionComplexity(config.rootDir, files, sharedProject))
 
   return {
     driftSignals, evalCalls, cryptoCalls, securityPatterns, eventListenerSites,

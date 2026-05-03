@@ -167,7 +167,7 @@ export async function savePersistedCache(
   db: Database = sharedDb,
 ): Promise<void> {
   const dir = deltaDir(rootDir)
-  try { await fs.mkdir(dir, { recursive: true }) } catch {}
+  try { await fs.mkdir(dir, { recursive: true }) } catch { /* dir existe déjà ou parent non-writable — writeFullSnapshot va lever clairement */ }
 
   const baselineExists = await fileExists(cachePath(rootDir))
   const existingDeltas = await listDeltas(rootDir)
@@ -185,7 +185,7 @@ export async function savePersistedCache(
     await writeFullSnapshot(rootDir, mtimes, db)
     // Cleanup deltas — full snapshot englobe tout.
     for (const df of existingDeltas) {
-      try { await fs.unlink(df) } catch {}
+      try { await fs.unlink(df) } catch { /* delta file disparu (concurrent run) — déjà au but */ }
     }
     db.markPersisted()
     return

@@ -29,6 +29,12 @@ IsEntryPoint(F) :- EntryPoint(F, _, _).
 .decl IsFrameworkRouted(file: symbol)
 IsFrameworkRouted(F) :- FileTag(F, "page").
 
+// Fixtures de tests = inputs synthetiques NON-importes par construction
+// (cf. emit-side facts/index.ts qui tag tests/fixtures/* + __fixtures__/*).
+// Sinon orphan-file flag les ~30 fixtures d'extracteurs comme dead code.
+.decl IsTestFixture(file: symbol)
+IsTestFixture(F) :- FileTag(F, "test-fixture").
+
 Violation("COMPOSITE-ORPHAN-FILE", F, 0,
   "fichier ni importe ni entrypoint — dead code ou oubli d'export") :-
     File(F),
@@ -36,4 +42,5 @@ Violation("COMPOSITE-ORPHAN-FILE", F, 0,
     !IsEntryPoint(F),
     !IsPackageEntryPoint(F),
     !IsFrameworkRouted(F),
+    !IsTestFixture(F),
     !OrphanFileGrandfathered(F).

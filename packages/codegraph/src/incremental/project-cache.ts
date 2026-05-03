@@ -80,7 +80,7 @@ export async function getOrBuildSharedProject(
     const absPath = path.join(rootDir, f)
     try {
       project.addSourceFileAtPath(absPath)
-    } catch {}
+    } catch { /* TS parse fail (syntax error, race delete) — file restera hors-Project, downstream tolerant */ }
   }
 
   // Files removed : removeSourceFile
@@ -111,7 +111,7 @@ export async function getOrBuildSharedProject(
 
     const sf = project.getSourceFile(absPath)
     if (!sf) {
-      try { project.addSourceFileAtPath(absPath) } catch {}
+      try { project.addSourceFileAtPath(absPath) } catch { /* parse fail — laisse fileSet incohérent volontairement, prochain run rebuild */ }
       continue
     }
     let content = fileCache.get(f)

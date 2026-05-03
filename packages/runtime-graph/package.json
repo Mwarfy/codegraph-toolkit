@@ -8,6 +8,7 @@
   "exports": {
     ".": "./dist/index.js",
     "./capture": "./dist/capture/index.js",
+    "./capture/auto-bootstrap": "./dist/capture/auto-bootstrap.js",
     "./drivers": "./dist/drivers/index.js",
     "./facts": "./dist/facts/index.js",
     "./rules": "./dist/rules/index.js"

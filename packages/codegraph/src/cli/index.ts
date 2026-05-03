@@ -278,7 +278,7 @@ program
         path.join(config.rootDir, 'codegraph', 'arch-rules.json'),
       ]
       for (const p of candidates) {
-        try { await fs.access(p); rulesPath = p; break } catch {}
+        try { await fs.access(p); rulesPath = p; break } catch { /* probe: try next candidate */ }
       }
     }
     if (!rulesPath) {
@@ -558,7 +558,7 @@ async function scanTestsImportingAffected(
           if (minimatch(rel, testsGlob)) candidates.push(rel)
         }
       }
-    } catch {}
+    } catch { /* dir unreadable (permissions, race) — skip ce sous-arbre */ }
   }
   await walk(cwd)
 
@@ -1488,7 +1488,7 @@ program
 
           await fs.writeFile(path.join(webDir, 'snapshot.json'), JSON.stringify(snapshot, null, 2))
           // Clear diff when loading a fresh snapshot
-          try { await fs.unlink(path.join(webDir, 'diff.json')) } catch {}
+          try { await fs.unlink(path.join(webDir, 'diff.json')) } catch { /* no diff.json to clear — fine */ }
 
           jsonResponse(res, { snapshot })
           return

@@ -250,7 +250,7 @@ export interface ParseOptions {
 export function parse(src: string, options: ParseOptions = {}): Program {
   const tokens = new Lexer(src, options.source).tokenize()
   const p = new Parser(tokens, options.source)
-  return p.program(options.skipReferenceCheck ?? false)
+  return p.program({ skipReferenceCheck: options.skipReferenceCheck ?? false })
 }
 
 /**
@@ -305,7 +305,8 @@ class Parser {
     throw new DatalogError(code, msg, pos, this.source)
   }
 
-  program(skipReferenceCheck: boolean): Program {
+  program(opts: { skipReferenceCheck: boolean }): Program {
+    const { skipReferenceCheck } = opts
     const decls = new Map<string, RelationDecl>()
     const rules: Rule[] = []
     const inlineFacts: Atom[] = []

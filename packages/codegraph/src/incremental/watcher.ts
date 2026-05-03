@@ -117,7 +117,7 @@ export class CodeGraphWatcher {
             this.scheduleRecompute(rel)
           })
           this.watchers.push(watcher)
-        } catch {}
+        } catch { /* ENOENT/EACCES sur ce sous-dossier — skip, autres watchers continuent */ }
       }
     }
   }
@@ -128,7 +128,7 @@ export class CodeGraphWatcher {
     if (this.pendingTimer) clearTimeout(this.pendingTimer)
     if (this.persistTimer) clearInterval(this.persistTimer)
     for (const w of this.watchers) {
-      try { w.close() } catch {}
+      try { w.close() } catch { /* watcher déjà fermé (race avec fs error event) — idempotent */ }
     }
     this.watchers = []
     this.pendingChanges.clear()
@@ -173,7 +173,7 @@ export class CodeGraphWatcher {
     for (const f of changedFiles) {
       const abs = path.join(this.config.rootDir, f)
       let exists = false
-      try { await fs.access(abs); exists = true } catch {}
+      try { await fs.access(abs); exists = true } catch { /* probe : file deleted → exists reste false, branch removal ci-dessous */ }
       const idx = this.files.indexOf(f)
       if (exists && idx === -1) this.files.push(f)
       else if (!exists && idx !== -1) this.files.splice(idx, 1)

@@ -64,12 +64,12 @@ export async function runDiffCommand(
     await fs.writeFile(path.join(webDir, 'snapshot.json'), JSON.stringify(after, null, 2))
     await fs.writeFile(path.join(webDir, 'diff.json'), JSON.stringify(diff, null, 2))
     console.log(chalk.green(`  ✓ diff.json written for viewer`))
-    printDiffSummary(diff, opts.report)
+    printDiffSummary(diff, { extended: opts.report })
     console.log(chalk.cyan(`  Run: codegraph serve  →  open viewer with diff overlay\n`))
     return
   }
 
-  printDiffSummary(diff, opts.report)
+  printDiffSummary(diff, { extended: opts.report })
 }
 
 /**
@@ -127,7 +127,8 @@ async function resolveDiffSnapshots(
   return { before, after }
 }
 
-function printDiffSummary(diff: SnapshotDiff, extended?: boolean): void {
+function printDiffSummary(diff: SnapshotDiff, opts: { extended?: boolean } = {}): void {
+  const { extended } = opts
   console.log(chalk.bold('\n  CodeGraph Diff\n'))
   console.log(`  ${chalk.dim('from')} ${diff.fromCommit || '?'}  ${chalk.dim('→')}  ${diff.toCommit || '?'}`)
   console.log()

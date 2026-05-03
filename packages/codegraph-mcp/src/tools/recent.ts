@@ -54,7 +54,7 @@ export function codegraphRecent(args: RecentArgs): { content: string } {
       `git log --diff-filter=A --pretty=format:"%ar" --reverse -- "${relPath}" | head -1`,
       { cwd: repoRoot, timeout: 1000, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] },
     ).toString().trim()
-  } catch {}
+  } catch { /* git unavailable or no first commit — leave firstCommitDate '' */ }
 
   const lines: string[] = []
   lines.push(`📅 git activity for ${relPath} (last ${weeks} weeks):`)
