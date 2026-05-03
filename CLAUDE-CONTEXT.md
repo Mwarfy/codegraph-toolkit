@@ -175,9 +175,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/env-usage/config.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/audit-listener.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/b.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **FSM-ORPHAN** `ApprovalStatus#expired` — état déclaré mais jamais écrit dans le code  
   _→ supprimer l'état OU ajouter la transition manquante_
@@ -203,6 +203,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+5888c3e refactor(toolkit): split exportFacts batch 2 — extract graph metrics + listeners (cyclomatic 102→84)
 f8e2fdd refactor(toolkit): split exportFacts en 5 emit helpers (cyclomatic 142→102)
 7c6668c refactor(toolkit): kill LONG-FN-BY-PARAMS (5→0) + fix CHAOS-AMPLIFIER FP (6→3)
 96048d7 refactor(toolkit): extract NCD duplicates → ast-helpers + drivers/_common (NCD: 16→12)
@@ -214,7 +215,6 @@ c24fb16 refactor(toolkit): tame AWAIT-IN-LOOP batch 6 — 33→0, AWAIT-IN-LOOP 
 5933423 refactor(toolkit): tame AWAIT-IN-LOOP — parallelize hot paths + mark scaffold (105→70)
 fbebea4 refactor(toolkit): extract makeIsExempt helper (NCD: 25→16, total 434→422)
 25fc296 fix(toolkit): kill META-CRITICAL (7→0) + 2 bugs détecteur + 6 tests
-70afbdc fix(toolkit): clean 93 violations (534→441, −17.4%) sans bypass
 ```
 
 ## Comment contribuer à ce brief

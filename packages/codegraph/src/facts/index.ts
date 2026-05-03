@@ -71,503 +71,20 @@ export async function exportFacts(
 ): Promise<ExportFactsResult> {
   const relations: RelationDef[] = []
 
-  // ─── File / FileTag ───────────────────────────────────────────────────
-  const fileRel: RelationDef = {
-    name: 'File',
-    decl: '(file:symbol)',
-    rows: [],
-  }
-  const tagRel: RelationDef = {
-    name: 'FileTag',
-    decl: '(file:symbol, tag:symbol)',
-    rows: [],
-  }
-  // ─── UnusedExport (Tier 17) ──────────────────────────────────────────
-  // Symbols exportes avec confidence "safe-to-remove" — candidats dead
-  // code. Source : node.exports[] (calcule par unused-exports detector).
-  const unusedExportRel: RelationDef = {
-    name: 'UnusedExport',
-    decl: '(file:symbol, name:symbol, line:number, kind:symbol, confidence:symbol)',
-    rows: [],
-  }
-  // ─── LongFunction (Tier 17) ──────────────────────────────────────────
-  // Calcule par long-functions detector, deja en snapshot.longFunctions.
-  const longFunctionRel: RelationDef = {
-    name: 'LongFunction',
-    decl: '(file:symbol, name:symbol, line:number, locCount:number)',
-    rows: [],
-  }
-  // ─── MagicNumber (Tier 17) ──────────────────────────────────────────
-  // Litteraux numeriques hardcoded suspects (timeouts/thresholds/ratios).
-  // value en symbol pour preserver les forms decimales/grandes (1e9, etc.).
-  const magicNumberRel: RelationDef = {
-    name: 'MagicNumber',
-    decl: '(file:symbol, line:number, value:symbol, context:symbol, category:symbol)',
-    rows: [],
-  }
-
-  // Pattern files de fixtures synthétiques — non-importés par construction
-  // (sinon ils ne sont plus isolés). Couvert par FileTag("test-fixture")
-  // pour permettre aux rules (orphan-file, copy-paste-fork) de les exclure.
-  const FIXTURE_PATH_RE = /(^|\/)tests?\/fixtures?\/|(^|\/)__fixtures__\//
-  for (const n of snapshot.nodes) {
-    if (n.type !== 'file') continue
-    fileRel.rows.push([sym(n.id)])
-    for (const t of n.tags ?? []) {
-      tagRel.rows.push([sym(n.id), sym(t)])
-    }
-    if (FIXTURE_PATH_RE.test(n.id)) {
-      tagRel.rows.push([sym(n.id), sym('test-fixture')])
-    }
-    for (const ex of n.exports ?? []) {
-      // Garde tous les exports avec confidence non-vide, la rule filtre.
-      if (!ex.confidence) continue
-      unusedExportRel.rows.push([
-        sym(n.id), sym(ex.name), num(ex.line),
-        sym(ex.kind), sym(ex.confidence),
-      ])
-    }
-  }
-  for (const lf of snapshot.longFunctions ?? []) {
-    longFunctionRel.rows.push([
-      sym(lf.file), sym(lf.name), num(lf.line), num(lf.loc),
-    ])
-  }
-  for (const mn of snapshot.magicNumbers ?? []) {
-    magicNumberRel.rows.push([
-      sym(mn.file), num(mn.line), sym(mn.value),
-      sym(mn.context || '_'), sym(mn.category),
-    ])
-  }
-  // Bug fix : fileRel + tagRel etaient peuples mais jamais pushes
-  // depuis Tier 17 (regression mid-Phase-5). Detecte via self-audit
-  // byte-comparison. Tests datalog ne casseraient pas (anti-joins
-  // matchent silencieusement personne) mais les rules ImportedFile +
-  // IsEntryPoint silencieusement degradent leur precision.
-  relations.push(fileRel, tagRel, unusedExportRel, longFunctionRel, magicNumberRel)
-
-  // ─── Barrel (Tier 17) ──────────────────────────────────────────────
-  // Files barrel (100% re-exports). lowValue=true ssi peu de consumers.
-  const barrelRel: RelationDef = {
-    name: 'Barrel',
-    decl: '(file:symbol, reExportCount:number, consumerCount:number, lowValue:symbol)',
-    rows: [],
-  }
-  for (const b of snapshot.barrels ?? []) {
-    barrelRel.rows.push([
-      sym(b.file),
-      num(b.reExportCount),
-      num(b.consumerCount),
-      sym(b.lowValue ? 'true' : 'false'),
-    ])
-  }
-  relations.push(barrelRel)
-
-  // ─── PackageDepIssue (Tier 17) ──────────────────────────────────────
-  // Issues sur dependencies package.json (declared-unused, missing, etc.).
-  const packageDepIssueRel: RelationDef = {
-    name: 'PackageDepIssue',
-    decl: '(packageName:symbol, packageJson:symbol, kind:symbol, declaredIn:symbol)',
-    rows: [],
-  }
-  for (const d of snapshot.packageDeps ?? []) {
-    packageDepIssueRel.rows.push([
-      sym(d.packageName),
-      sym(d.packageJson),
-      sym(d.kind),
-      sym(d.declaredIn ?? '_'),
-    ])
-  }
-  relations.push(packageDepIssueRel)
-
-  // ─── IsPackageEntryPoint (Tier 17 self-audit) ────────────────────────
-  // Resout les `main`/`bin`/`exports` de CHAQUE package.json decouvert vers
-  // les paths source TS correspondants. Sert a whitelister les entry
-  // points npm dans les rules composite-barrel-low-value et
-  // composite-orphan-file (faux positifs systemiques sinon).
-  //
-  // Utilise `discoverManifests` (full fs scan) plutot que `snapshot.packageDeps`
-  // qui n'inclut QUE les packages avec issues — cassait le whitelist sur
-  // les packages sans dette (codegraph, codegraph-mcp, datalog, salsa…).
-  const isPackageEntryPointRel: RelationDef = {
-    name: 'IsPackageEntryPoint',
-    decl: '(file:symbol)',
-    rows: [],
-  }
-  const allManifests = await discoverManifests(snapshot.rootDir)
-  // Lit N package.json en parallèle (I/O fs indépendantes), parse séquentiel.
-  const manifestPjs = await Promise.all(
-    allManifests.map(async (m) => {
-      try {
-        return { m, raw: await fs.readFile(m.abs, 'utf8') }
-      } catch { return null /* skip silently — best effort */ }
-    }),
-  )
-  for (const entry of manifestPjs) {
-    if (!entry) continue
-    const { m, raw } = entry
-    try {
-      const pj = JSON.parse(raw)
-      // m.rel pointe vers le package.json relatif au rootDir — on prend
-      // son dirname pour préfixer les paths candidats. m.dir est absolu
-      // (cf. PackageManifest interface), pas utilisable ici.
-      const pjDir = path.dirname(m.rel)
-      const candidates: string[] = []
-      const collect = (val: unknown): void => {
-        if (typeof val === 'string') candidates.push(val)
-        else if (val && typeof val === 'object') {
-          for (const v of Object.values(val)) collect(v)
-        }
-      }
-      collect(pj.main)
-      collect(pj.bin)
-      collect(pj.exports)
-      for (const c of candidates) {
-        // dist/foo.js → src/foo.ts (heuristique standard)
-        const srcGuess = c.replace(/^\.?\/?dist\//, 'src/').replace(/\.js$/, '.ts')
-        const fullPath = path.join(pjDir, srcGuess).replace(/\\/g, '/')
-        isPackageEntryPointRel.rows.push([sym(fullPath)])
-      }
-    } catch {
-      // pjson parse error — skip silently (fact emit best effort)
-    }
-  }
-  relations.push(isPackageEntryPointRel)
-
+  emitFileMetadataFacts(snapshot, relations)
+  await emitPackageStructureFacts(snapshot, relations)
   emitGraphMetricFacts(snapshot, relations)
   emitListenerFacts(snapshot, relations)
   emitCodeQualityAndComplexityFacts(snapshot, relations)
   emitCrossDisciplineFacts(snapshot, relations)
 
-  // ─── Imports / ImportEdge ─────────────────────────────────────────────
-  // `Imports` est binaire (pratique pour la jointure transitive) ;
-  // `ImportEdge` ajoute la ligne pour les règles qui veulent localiser le
-  // call site exact.
-  const importsRel: RelationDef = {
-    name: 'Imports',
-    decl: '(from:symbol, to:symbol)',
-    rows: [],
-  }
-  const importEdgeRel: RelationDef = {
-    name: 'ImportEdge',
-    decl: '(from:symbol, to:symbol, line:number)',
-    rows: [],
-  }
-  const importSeen = new Set<string>()
-  for (const e of snapshot.edges) {
-    if (e.type !== 'import') continue
-    const key = e.from + '\x00' + e.to
-    if (!importSeen.has(key)) {
-      importsRel.rows.push([sym(e.from), sym(e.to)])
-      importSeen.add(key)
-    }
-    importEdgeRel.rows.push([sym(e.from), sym(e.to), num(e.line ?? 0)])
-  }
-  relations.push(importsRel, importEdgeRel)
-
-  // ─── EmitsLiteral / EmitsConstRef / EmitsDynamic ──────────────────────
-  const emitsLiteralRel: RelationDef = {
-    name: 'EmitsLiteral',
-    decl: '(file:symbol, line:number, eventName:symbol)',
-    rows: [],
-  }
-  const emitsConstRefRel: RelationDef = {
-    name: 'EmitsConstRef',
-    decl: '(file:symbol, line:number, namespace:symbol, member:symbol)',
-    rows: [],
-  }
-  const emitsDynamicRel: RelationDef = {
-    name: 'EmitsDynamic',
-    decl: '(file:symbol, line:number)',
-    rows: [],
-  }
-  for (const s of snapshot.eventEmitSites ?? []) {
-    if (s.kind === 'literal' && s.literalValue !== undefined) {
-      emitsLiteralRel.rows.push([sym(s.file), num(s.line), sym(s.literalValue)])
-    } else if (s.kind === 'eventConstRef' && s.refExpression) {
-      const split = splitRef(s.refExpression)
-      if (split) {
-        emitsConstRefRel.rows.push([sym(s.file), num(s.line), sym(split.ns), sym(split.member)])
-      } else {
-        emitsDynamicRel.rows.push([sym(s.file), num(s.line)])
-      }
-    } else {
-      emitsDynamicRel.rows.push([sym(s.file), num(s.line)])
-    }
-  }
-  relations.push(emitsLiteralRel, emitsConstRefRel, emitsDynamicRel)
-
-  // ─── EnvRead ──────────────────────────────────────────────────────────
-  const envReadRel: RelationDef = {
-    name: 'EnvRead',
-    decl: '(file:symbol, line:number, varName:symbol, hasDefault:symbol)',
-    rows: [],
-  }
-  // EnvReadWrapped — uniquement les sites où process.env.X est passé
-  // directement comme arg d'un call (parseInt, Number, envInt, …). Le 4e
-  // arg est le nom du callee. Sert à ADR-019.
-  const envReadWrappedRel: RelationDef = {
-    name: 'EnvReadWrapped',
-    decl: '(file:symbol, line:number, varName:symbol, wrappedIn:symbol)',
-    rows: [],
-  }
-  for (const u of snapshot.envUsage ?? []) {
-    for (const r of u.readers) {
-      envReadRel.rows.push([
-        sym(r.file),
-        num(r.line),
-        sym(u.name),
-        sym(r.hasDefault ? 'true' : 'false'),
-      ])
-      if (r.wrappedIn) {
-        envReadWrappedRel.rows.push([
-          sym(r.file),
-          num(r.line),
-          sym(u.name),
-          sym(r.wrappedIn),
-        ])
-      }
-    }
-  }
-  relations.push(envReadRel, envReadWrappedRel)
-
-  // ─── OauthScopeLiteral ────────────────────────────────────────────────
-  const oauthScopeRel: RelationDef = {
-    name: 'OauthScopeLiteral',
-    decl: '(file:symbol, line:number, scope:symbol)',
-    rows: [],
-  }
-  for (const s of snapshot.oauthScopeLiterals ?? []) {
-    oauthScopeRel.rows.push([sym(s.file), num(s.line), sym(s.scope)])
-  }
-  relations.push(oauthScopeRel)
-
-  // ─── ModuleFanIn ──────────────────────────────────────────────────────
-  const fanInRel: RelationDef = {
-    name: 'ModuleFanIn',
-    decl: '(file:symbol, count:number)',
-    rows: [],
-  }
-  for (const m of snapshot.moduleMetrics ?? []) {
-    fanInRel.rows.push([sym(m.file), num(m.fanIn)])
-  }
-  relations.push(fanInRel)
+  emitImportAndEmitsFacts(snapshot, relations)
+  emitConfigSiteFacts(snapshot, relations)
 
   emitSqlFacts(snapshot, relations)
 
-  // ─── CycleNode ────────────────────────────────────────────────────────
-  // Pour chaque cycle détecté (Tarjan SCC sur graphe combiné import + event +
-  // queue + dynamic-load), émet un tuple par fichier participant. Le champ
-  // `gated` indique si le cycle est gated par un gate explicite (ex
-  // `if (env.X)` autour de l'import dynamique) — un cycle gated reste un
-  // cycle au sens topo mais est intentionnel donc PAS à bloquer.
-  // Source: ADR-022 ratchet pattern, axe 5 enrichissement post-Phase-C.
-  const cycleNodeRel: RelationDef = {
-    name: 'CycleNode',
-    decl: '(file:symbol, cycleId:symbol, gated:symbol)',
-    rows: [],
-  }
-  const cycleNodeSeen = new Set<string>()
-  for (const c of snapshot.cycles ?? []) {
-    const gatedSym = c.gated ? 'true' : 'false'
-    for (const file of c.nodes) {
-      // dedupe : un fichier peut apparaître plusieurs fois dans un cycle
-      // listé en path (premier == dernier). On émet un tuple unique
-      // par (file, cycleId).
-      const key = file + '\x00' + c.id
-      if (cycleNodeSeen.has(key)) continue
-      cycleNodeSeen.add(key)
-      cycleNodeRel.rows.push([sym(file), sym(c.id), gatedSym])
-    }
-  }
-  relations.push(cycleNodeRel)
-
-  // ─── CycleSize (Top-5 SCC hierarchy) ─────────────────────────────────
-  // Distingue cycles benins (size==sccSize) vs cycles niches (size < sccSize,
-  // le path affiche est extrait d'une SCC plus large = signal pathologique).
-  // Tarjan SCC depth via comparaison size vs sccSize.
-  const cycleSizeRel: RelationDef = {
-    name: 'CycleSize',
-    decl: '(cycleId:symbol, size:number, sccSize:number)',
-    rows: [],
-  }
-  for (const c of snapshot.cycles ?? []) {
-    cycleSizeRel.rows.push([sym(c.id), num(c.size), num(c.sccSize)])
-  }
-  relations.push(cycleSizeRel)
-
-  // ─── SymbolCallEdge / SymbolSignature ────────────────────────────────
-  // Phase 4 axe 2 : path queries CFG-level via Datalog. Émet les call edges
-  // typés et les signatures pour permettre des rules taint-analysis lite
-  // (auth-before-write, validate-before-db, etc.) sans coder un détecteur
-  // dédié.
-  // Source : snapshot.typedCalls (callEdges + signatures).
-  const symbolCallEdgeRel: RelationDef = {
-    name: 'SymbolCallEdge',
-    decl: '(fromFile:symbol, fromSymbol:symbol, toFile:symbol, toSymbol:symbol, line:number)',
-    rows: [],
-  }
-  const symbolSignatureRel: RelationDef = {
-    name: 'SymbolSignature',
-    decl: '(file:symbol, name:symbol, kind:symbol, line:number)',
-    rows: [],
-  }
-  if (snapshot.typedCalls) {
-    for (const sig of snapshot.typedCalls.signatures) {
-      symbolSignatureRel.rows.push([
-        sym(sig.file),
-        sym(sig.exportName),
-        sym(sig.kind),
-        num(sig.line),
-      ])
-    }
-    for (const edge of snapshot.typedCalls.callEdges) {
-      // `from` / `to` sont au format "file:symbolName". Le séparateur est
-      // le DERNIER `:` (les noms TS d'export ne contiennent pas `:`).
-      const fromSplit = splitFileSymbol(edge.from)
-      const toSplit = splitFileSymbol(edge.to)
-      if (!fromSplit || !toSplit) continue   // edge dégradé — skip
-      symbolCallEdgeRel.rows.push([
-        sym(fromSplit.file),
-        sym(fromSplit.symbol),
-        sym(toSplit.file),
-        sym(toSplit.symbol),
-        num(edge.line),
-      ])
-    }
-  }
-  relations.push(symbolCallEdgeRel, symbolSignatureRel)
-
-  // ─── EntryPoint ──────────────────────────────────────────────────────
-  // Source : snapshot.dataFlows[].entry. Dédupe par (file, kind, id) car
-  // un handler peut apparaître plusieurs fois (downstream chains).
-  const entryPointRel: RelationDef = {
-    name: 'EntryPoint',
-    decl: '(file:symbol, kind:symbol, id:symbol)',
-    rows: [],
-  }
-  const entryPointSeen = new Set<string>()
-  const collectEntries = (flows: Array<{ entry: { kind: string; id: string; file: string }; downstream?: any[] }>): void => {
-    for (const f of flows) {
-      const key = f.entry.file + '\x00' + f.entry.kind + '\x00' + f.entry.id
-      if (!entryPointSeen.has(key)) {
-        entryPointSeen.add(key)
-        entryPointRel.rows.push([
-          sym(f.entry.file),
-          sym(f.entry.kind),
-          sym(f.entry.id),
-        ])
-      }
-      if (f.downstream && f.downstream.length > 0) collectEntries(f.downstream)
-    }
-  }
-  if (snapshot.dataFlows) {
-    collectEntries(snapshot.dataFlows as any)
-  }
-  relations.push(entryPointRel)
-
-  // ─── EvalCall ────────────────────────────────────────────────────────
-  // Phase 4 Tier 1 : `eval(...)` et `new Function(...)` — vecteurs RCE
-  // classiques. Source : extractors/eval-calls.ts.
-  const evalCallRel: RelationDef = {
-    name: 'EvalCall',
-    decl: '(file:symbol, line:number, kind:symbol, containingSymbol:symbol)',
-    rows: [],
-  }
-  for (const ec of snapshot.evalCalls ?? []) {
-    evalCallRel.rows.push([
-      sym(ec.file),
-      num(ec.line),
-      sym(ec.kind),
-      sym(ec.containingSymbol),
-    ])
-  }
-  relations.push(evalCallRel)
-
-  // ─── CryptoCall (Tier 16) ──────────────────────────────────────────
-  // Crypto API calls avec algo extrait. Permet rule cwe-327 algo-aware.
-  // Source : extractors/crypto-algo.ts.
-  const cryptoCallRel: RelationDef = {
-    name: 'CryptoCall',
-    decl: '(file:symbol, line:number, fn:symbol, algo:symbol, containingSymbol:symbol)',
-    rows: [],
-  }
-  for (const cc of snapshot.cryptoCalls ?? []) {
-    cryptoCallRel.rows.push([
-      sym(cc.file),
-      num(cc.line),
-      sym(cc.fn),
-      sym(cc.algo || '_'),
-      sym(cc.containingSymbol),
-    ])
-  }
-  relations.push(cryptoCallRel)
-
-  // ─── Security patterns (Tier 16) — 4 facts en bundle ─────────────────
-  // Source : extractors/security-patterns.ts.
-  const secretRefRel: RelationDef = {
-    name: 'SecretVarRef',
-    decl: '(file:symbol, line:number, varName:symbol, kind:symbol, callee:symbol, containingSymbol:symbol)',
-    rows: [],
-  }
-  const corsConfigRel: RelationDef = {
-    name: 'CorsConfig',
-    decl: '(file:symbol, line:number, originKind:symbol, containingSymbol:symbol)',
-    rows: [],
-  }
-  const tlsUnsafeRel: RelationDef = {
-    name: 'TlsConfigUnsafe',
-    decl: '(file:symbol, line:number, key:symbol, containingSymbol:symbol)',
-    rows: [],
-  }
-  const weakRandomRel: RelationDef = {
-    name: 'WeakRandomCall',
-    decl: '(file:symbol, line:number, varName:symbol, secretKind:symbol, containingSymbol:symbol)',
-    rows: [],
-  }
-  const sp = snapshot.securityPatterns
-  if (sp) {
-    for (const r of sp.secretRefs) {
-      secretRefRel.rows.push([
-        sym(r.file), num(r.line), sym(r.varName), sym(r.kind),
-        sym(r.callee), sym(r.containingSymbol),
-      ])
-    }
-    for (const r of sp.corsConfigs) {
-      corsConfigRel.rows.push([
-        sym(r.file), num(r.line), sym(r.originKind), sym(r.containingSymbol),
-      ])
-    }
-    for (const r of sp.tlsUnsafe) {
-      tlsUnsafeRel.rows.push([
-        sym(r.file), num(r.line), sym(r.key), sym(r.containingSymbol),
-      ])
-    }
-    for (const r of sp.weakRandoms) {
-      weakRandomRel.rows.push([
-        sym(r.file), num(r.line), sym(r.varName || '_'),
-        sym(r.secretKind || '_'), sym(r.containingSymbol),
-      ])
-    }
-  }
-  relations.push(secretRefRel, corsConfigRel, tlsUnsafeRel, weakRandomRel)
-
-  // ─── HardcodedSecret (Tier 2) ────────────────────────────────────────
-  const hardcodedSecretRel: RelationDef = {
-    name: 'HardcodedSecret',
-    decl: '(file:symbol, line:number, context:symbol, trigger:symbol, entropy:number)',
-    rows: [],
-  }
-  for (const s of snapshot.hardcodedSecrets ?? []) {
-    hardcodedSecretRel.rows.push([
-      sym(s.file),
-      num(s.line),
-      sym(s.context || '_'),
-      sym(s.trigger),
-      num(Math.round(s.entropy * 100)),  // entropy * 100 pour rester en int
-    ])
-  }
-  relations.push(hardcodedSecretRel)
+  emitCycleAndCallEdgeFacts(snapshot, relations)
+  emitSecurityAndSecretFacts(snapshot, relations)
 
   emitTier234Facts(snapshot, relations)
   emitSqlViolationFacts(snapshot, relations)
@@ -892,6 +409,463 @@ function emitGraphMetricFacts(snapshot: GraphSnapshot, relations: RelationDef[])
  * EventListener (Tier 17) — symetrique de Emits* (ListensLiteral,
  * ListensConstRef, ListensDynamic). Source : extractors/event-listener-sites.ts.
  */
+/**
+ * File metadata facts (Tier 17) — File, FileTag (incl. test-fixture
+ * synthetique), UnusedExport, LongFunction, MagicNumber.
+ *
+ * Bug fix : fileRel + tagRel etaient peuples mais jamais pushes
+ * depuis Tier 17 (regression mid-Phase-5). Detecte via self-audit
+ * byte-comparison.
+ */
+function emitFileMetadataFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
+  const fileRel: RelationDef = {
+    name: 'File',
+    decl: '(file:symbol)',
+    rows: [],
+  }
+  const tagRel: RelationDef = {
+    name: 'FileTag',
+    decl: '(file:symbol, tag:symbol)',
+    rows: [],
+  }
+  const unusedExportRel: RelationDef = {
+    name: 'UnusedExport',
+    decl: '(file:symbol, name:symbol, line:number, kind:symbol, confidence:symbol)',
+    rows: [],
+  }
+  const longFunctionRel: RelationDef = {
+    name: 'LongFunction',
+    decl: '(file:symbol, name:symbol, line:number, locCount:number)',
+    rows: [],
+  }
+  const magicNumberRel: RelationDef = {
+    name: 'MagicNumber',
+    decl: '(file:symbol, line:number, value:symbol, context:symbol, category:symbol)',
+    rows: [],
+  }
+
+  // Pattern files de fixtures synthétiques — non-importés par construction.
+  // Couvert par FileTag("test-fixture") pour permettre aux rules
+  // (orphan-file, copy-paste-fork) de les exclure.
+  const FIXTURE_PATH_RE = /(^|\/)tests?\/fixtures?\/|(^|\/)__fixtures__\//
+  for (const n of snapshot.nodes) {
+    if (n.type !== 'file') continue
+    fileRel.rows.push([sym(n.id)])
+    for (const t of n.tags ?? []) {
+      tagRel.rows.push([sym(n.id), sym(t)])
+    }
+    if (FIXTURE_PATH_RE.test(n.id)) {
+      tagRel.rows.push([sym(n.id), sym('test-fixture')])
+    }
+    for (const ex of n.exports ?? []) {
+      // Garde tous les exports avec confidence non-vide, la rule filtre.
+      if (!ex.confidence) continue
+      unusedExportRel.rows.push([
+        sym(n.id), sym(ex.name), num(ex.line),
+        sym(ex.kind), sym(ex.confidence),
+      ])
+    }
+  }
+  for (const lf of snapshot.longFunctions ?? []) {
+    longFunctionRel.rows.push([
+      sym(lf.file), sym(lf.name), num(lf.line), num(lf.loc),
+    ])
+  }
+  for (const mn of snapshot.magicNumbers ?? []) {
+    magicNumberRel.rows.push([
+      sym(mn.file), num(mn.line), sym(mn.value),
+      sym(mn.context || '_'), sym(mn.category),
+    ])
+  }
+  relations.push(fileRel, tagRel, unusedExportRel, longFunctionRel, magicNumberRel)
+}
+
+/**
+ * Package structure facts (Tier 17) — Barrel, PackageDepIssue,
+ * IsPackageEntryPoint. ASYNC : IsPackageEntryPoint resout les
+ * `main`/`bin`/`exports` de chaque package.json decouvert vers les
+ * paths source TS — fait via `discoverManifests` (full fs scan).
+ *
+ * Pourquoi `discoverManifests` plutot que `snapshot.packageDeps` :
+ * snapshot.packageDeps n'inclut QUE les packages avec issues, ce qui
+ * cassait le whitelist sur les packages sans dette.
+ */
+async function emitPackageStructureFacts(
+  snapshot: GraphSnapshot,
+  relations: RelationDef[],
+): Promise<void> {
+  const barrelRel: RelationDef = {
+    name: 'Barrel',
+    decl: '(file:symbol, reExportCount:number, consumerCount:number, lowValue:symbol)',
+    rows: [],
+  }
+  for (const b of snapshot.barrels ?? []) {
+    barrelRel.rows.push([
+      sym(b.file), num(b.reExportCount), num(b.consumerCount),
+      sym(b.lowValue ? 'true' : 'false'),
+    ])
+  }
+  relations.push(barrelRel)
+
+  const packageDepIssueRel: RelationDef = {
+    name: 'PackageDepIssue',
+    decl: '(packageName:symbol, packageJson:symbol, kind:symbol, declaredIn:symbol)',
+    rows: [],
+  }
+  for (const d of snapshot.packageDeps ?? []) {
+    packageDepIssueRel.rows.push([
+      sym(d.packageName), sym(d.packageJson), sym(d.kind),
+      sym(d.declaredIn ?? '_'),
+    ])
+  }
+  relations.push(packageDepIssueRel)
+
+  const isPackageEntryPointRel: RelationDef = {
+    name: 'IsPackageEntryPoint',
+    decl: '(file:symbol)',
+    rows: [],
+  }
+  const allManifests = await discoverManifests(snapshot.rootDir)
+  // Lit N package.json en parallèle (I/O fs indépendantes), parse séquentiel.
+  const manifestPjs = await Promise.all(
+    allManifests.map(async (m) => {
+      try {
+        return { m, raw: await fs.readFile(m.abs, 'utf8') }
+      } catch { return null /* skip silently — best effort */ }
+    }),
+  )
+  for (const entry of manifestPjs) {
+    if (!entry) continue
+    const { m, raw } = entry
+    try {
+      const pj = JSON.parse(raw)
+      // m.rel pointe vers le package.json relatif au rootDir — on prend
+      // son dirname pour préfixer les paths candidats.
+      const pjDir = path.dirname(m.rel)
+      const candidates: string[] = []
+      const collect = (val: unknown): void => {
+        if (typeof val === 'string') candidates.push(val)
+        else if (val && typeof val === 'object') {
+          for (const v of Object.values(val)) collect(v)
+        }
+      }
+      collect(pj.main)
+      collect(pj.bin)
+      collect(pj.exports)
+      for (const c of candidates) {
+        // dist/foo.js → src/foo.ts (heuristique standard)
+        const srcGuess = c.replace(/^\.?\/?dist\//, 'src/').replace(/\.js$/, '.ts')
+        const fullPath = path.join(pjDir, srcGuess).replace(/\\/g, '/')
+        isPackageEntryPointRel.rows.push([sym(fullPath)])
+      }
+    } catch {
+      // pjson parse error — skip silently (fact emit best effort)
+    }
+  }
+  relations.push(isPackageEntryPointRel)
+}
+
+/**
+ * Imports / ImportEdge + EmitsLiteral / EmitsConstRef / EmitsDynamic.
+ * - Imports : binaire (jointure transitive).
+ * - ImportEdge : ajoute la ligne pour rules localisant le call site.
+ * - Emits* : sites d'emission events (literal / const ref / dynamic).
+ */
+function emitImportAndEmitsFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
+  const importsRel: RelationDef = {
+    name: 'Imports',
+    decl: '(from:symbol, to:symbol)',
+    rows: [],
+  }
+  const importEdgeRel: RelationDef = {
+    name: 'ImportEdge',
+    decl: '(from:symbol, to:symbol, line:number)',
+    rows: [],
+  }
+  const importSeen = new Set<string>()
+  for (const e of snapshot.edges) {
+    if (e.type !== 'import') continue
+    const key = e.from + '\x00' + e.to
+    if (!importSeen.has(key)) {
+      importsRel.rows.push([sym(e.from), sym(e.to)])
+      importSeen.add(key)
+    }
+    importEdgeRel.rows.push([sym(e.from), sym(e.to), num(e.line ?? 0)])
+  }
+  relations.push(importsRel, importEdgeRel)
+
+  const emitsLiteralRel: RelationDef = {
+    name: 'EmitsLiteral',
+    decl: '(file:symbol, line:number, eventName:symbol)',
+    rows: [],
+  }
+  const emitsConstRefRel: RelationDef = {
+    name: 'EmitsConstRef',
+    decl: '(file:symbol, line:number, namespace:symbol, member:symbol)',
+    rows: [],
+  }
+  const emitsDynamicRel: RelationDef = {
+    name: 'EmitsDynamic',
+    decl: '(file:symbol, line:number)',
+    rows: [],
+  }
+  for (const s of snapshot.eventEmitSites ?? []) {
+    if (s.kind === 'literal' && s.literalValue !== undefined) {
+      emitsLiteralRel.rows.push([sym(s.file), num(s.line), sym(s.literalValue)])
+    } else if (s.kind === 'eventConstRef' && s.refExpression) {
+      const split = splitRef(s.refExpression)
+      if (split) {
+        emitsConstRefRel.rows.push([sym(s.file), num(s.line), sym(split.ns), sym(split.member)])
+      } else {
+        emitsDynamicRel.rows.push([sym(s.file), num(s.line)])
+      }
+    } else {
+      emitsDynamicRel.rows.push([sym(s.file), num(s.line)])
+    }
+  }
+  relations.push(emitsLiteralRel, emitsConstRefRel, emitsDynamicRel)
+}
+
+/**
+ * Sites de configuration : EnvRead/EnvReadWrapped + OauthScopeLiteral
+ * + ModuleFanIn. Sert ADR-019 (env), ADR-014 (scopes), centralite.
+ */
+function emitConfigSiteFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
+  const envReadRel: RelationDef = {
+    name: 'EnvRead',
+    decl: '(file:symbol, line:number, varName:symbol, hasDefault:symbol)',
+    rows: [],
+  }
+  // EnvReadWrapped — uniquement les sites où process.env.X est passé
+  // directement comme arg d'un call (parseInt, Number, envInt, …).
+  const envReadWrappedRel: RelationDef = {
+    name: 'EnvReadWrapped',
+    decl: '(file:symbol, line:number, varName:symbol, wrappedIn:symbol)',
+    rows: [],
+  }
+  for (const u of snapshot.envUsage ?? []) {
+    for (const r of u.readers) {
+      envReadRel.rows.push([
+        sym(r.file), num(r.line), sym(u.name),
+        sym(r.hasDefault ? 'true' : 'false'),
+      ])
+      if (r.wrappedIn) {
+        envReadWrappedRel.rows.push([
+          sym(r.file), num(r.line), sym(u.name), sym(r.wrappedIn),
+        ])
+      }
+    }
+  }
+  relations.push(envReadRel, envReadWrappedRel)
+
+  const oauthScopeRel: RelationDef = {
+    name: 'OauthScopeLiteral',
+    decl: '(file:symbol, line:number, scope:symbol)',
+    rows: [],
+  }
+  for (const s of snapshot.oauthScopeLiterals ?? []) {
+    oauthScopeRel.rows.push([sym(s.file), num(s.line), sym(s.scope)])
+  }
+  relations.push(oauthScopeRel)
+
+  const fanInRel: RelationDef = {
+    name: 'ModuleFanIn',
+    decl: '(file:symbol, count:number)',
+    rows: [],
+  }
+  for (const m of snapshot.moduleMetrics ?? []) {
+    fanInRel.rows.push([sym(m.file), num(m.fanIn)])
+  }
+  relations.push(fanInRel)
+}
+
+/**
+ * Cycles + typed call graph + entry points.
+ * - CycleNode/CycleSize : Tarjan SCC sur graphe combiné (import + event +
+ *   queue + dynamic-load) ; size vs sccSize differencie cycles benins
+ *   vs niches.
+ * - SymbolCallEdge/Signature : path queries CFG-level via Datalog
+ *   (Phase 4 axe 2). Source : snapshot.typedCalls.
+ * - EntryPoint : sources dataFlows[].entry, dedupe (file, kind, id) car
+ *   un handler peut apparaitre plusieurs fois (downstream chains).
+ */
+function emitCycleAndCallEdgeFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
+  const cycleNodeRel: RelationDef = {
+    name: 'CycleNode',
+    decl: '(file:symbol, cycleId:symbol, gated:symbol)',
+    rows: [],
+  }
+  const cycleNodeSeen = new Set<string>()
+  for (const c of snapshot.cycles ?? []) {
+    const gatedSym = c.gated ? 'true' : 'false'
+    for (const file of c.nodes) {
+      // dedupe : un fichier peut apparaitre plusieurs fois dans un cycle
+      // listé en path (premier == dernier). On émet un tuple unique.
+      const key = file + '\x00' + c.id
+      if (cycleNodeSeen.has(key)) continue
+      cycleNodeSeen.add(key)
+      cycleNodeRel.rows.push([sym(file), sym(c.id), gatedSym])
+    }
+  }
+  relations.push(cycleNodeRel)
+
+  const cycleSizeRel: RelationDef = {
+    name: 'CycleSize',
+    decl: '(cycleId:symbol, size:number, sccSize:number)',
+    rows: [],
+  }
+  for (const c of snapshot.cycles ?? []) {
+    cycleSizeRel.rows.push([sym(c.id), num(c.size), num(c.sccSize)])
+  }
+  relations.push(cycleSizeRel)
+
+  const symbolCallEdgeRel: RelationDef = {
+    name: 'SymbolCallEdge',
+    decl: '(fromFile:symbol, fromSymbol:symbol, toFile:symbol, toSymbol:symbol, line:number)',
+    rows: [],
+  }
+  const symbolSignatureRel: RelationDef = {
+    name: 'SymbolSignature',
+    decl: '(file:symbol, name:symbol, kind:symbol, line:number)',
+    rows: [],
+  }
+  if (snapshot.typedCalls) {
+    for (const sig of snapshot.typedCalls.signatures) {
+      symbolSignatureRel.rows.push([
+        sym(sig.file), sym(sig.exportName), sym(sig.kind), num(sig.line),
+      ])
+    }
+    for (const edge of snapshot.typedCalls.callEdges) {
+      // `from`/`to` au format "file:symbolName". Separateur = DERNIER `:`.
+      const fromSplit = splitFileSymbol(edge.from)
+      const toSplit = splitFileSymbol(edge.to)
+      if (!fromSplit || !toSplit) continue   // edge dégradé — skip
+      symbolCallEdgeRel.rows.push([
+        sym(fromSplit.file), sym(fromSplit.symbol),
+        sym(toSplit.file), sym(toSplit.symbol),
+        num(edge.line),
+      ])
+    }
+  }
+  relations.push(symbolCallEdgeRel, symbolSignatureRel)
+
+  const entryPointRel: RelationDef = {
+    name: 'EntryPoint',
+    decl: '(file:symbol, kind:symbol, id:symbol)',
+    rows: [],
+  }
+  const entryPointSeen = new Set<string>()
+  const collectEntries = (flows: Array<{ entry: { kind: string; id: string; file: string }; downstream?: any[] }>): void => {
+    for (const f of flows) {
+      const key = f.entry.file + '\x00' + f.entry.kind + '\x00' + f.entry.id
+      if (!entryPointSeen.has(key)) {
+        entryPointSeen.add(key)
+        entryPointRel.rows.push([
+          sym(f.entry.file), sym(f.entry.kind), sym(f.entry.id),
+        ])
+      }
+      if (f.downstream && f.downstream.length > 0) collectEntries(f.downstream)
+    }
+  }
+  if (snapshot.dataFlows) {
+    collectEntries(snapshot.dataFlows as any)
+  }
+  relations.push(entryPointRel)
+}
+
+/**
+ * Security & secrets facts (Tier 2/4/16) — EvalCall, CryptoCall, security
+ * patterns (SecretVarRef, CorsConfig, TlsConfigUnsafe, WeakRandomCall),
+ * HardcodedSecret. Source : extractors/{eval-calls, crypto-algo,
+ * security-patterns, hardcoded-secrets}.ts.
+ */
+function emitSecurityAndSecretFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
+  const evalCallRel: RelationDef = {
+    name: 'EvalCall',
+    decl: '(file:symbol, line:number, kind:symbol, containingSymbol:symbol)',
+    rows: [],
+  }
+  for (const ec of snapshot.evalCalls ?? []) {
+    evalCallRel.rows.push([
+      sym(ec.file), num(ec.line), sym(ec.kind), sym(ec.containingSymbol),
+    ])
+  }
+  relations.push(evalCallRel)
+
+  const cryptoCallRel: RelationDef = {
+    name: 'CryptoCall',
+    decl: '(file:symbol, line:number, fn:symbol, algo:symbol, containingSymbol:symbol)',
+    rows: [],
+  }
+  for (const cc of snapshot.cryptoCalls ?? []) {
+    cryptoCallRel.rows.push([
+      sym(cc.file), num(cc.line), sym(cc.fn),
+      sym(cc.algo || '_'), sym(cc.containingSymbol),
+    ])
+  }
+  relations.push(cryptoCallRel)
+
+  const secretRefRel: RelationDef = {
+    name: 'SecretVarRef',
+    decl: '(file:symbol, line:number, varName:symbol, kind:symbol, callee:symbol, containingSymbol:symbol)',
+    rows: [],
+  }
+  const corsConfigRel: RelationDef = {
+    name: 'CorsConfig',
+    decl: '(file:symbol, line:number, originKind:symbol, containingSymbol:symbol)',
+    rows: [],
+  }
+  const tlsUnsafeRel: RelationDef = {
+    name: 'TlsConfigUnsafe',
+    decl: '(file:symbol, line:number, key:symbol, containingSymbol:symbol)',
+    rows: [],
+  }
+  const weakRandomRel: RelationDef = {
+    name: 'WeakRandomCall',
+    decl: '(file:symbol, line:number, varName:symbol, secretKind:symbol, containingSymbol:symbol)',
+    rows: [],
+  }
+  const sp = snapshot.securityPatterns
+  if (sp) {
+    for (const r of sp.secretRefs) {
+      secretRefRel.rows.push([
+        sym(r.file), num(r.line), sym(r.varName), sym(r.kind),
+        sym(r.callee), sym(r.containingSymbol),
+      ])
+    }
+    for (const r of sp.corsConfigs) {
+      corsConfigRel.rows.push([
+        sym(r.file), num(r.line), sym(r.originKind), sym(r.containingSymbol),
+      ])
+    }
+    for (const r of sp.tlsUnsafe) {
+      tlsUnsafeRel.rows.push([
+        sym(r.file), num(r.line), sym(r.key), sym(r.containingSymbol),
+      ])
+    }
+    for (const r of sp.weakRandoms) {
+      weakRandomRel.rows.push([
+        sym(r.file), num(r.line), sym(r.varName || '_'),
+        sym(r.secretKind || '_'), sym(r.containingSymbol),
+      ])
+    }
+  }
+  relations.push(secretRefRel, corsConfigRel, tlsUnsafeRel, weakRandomRel)
+
+  const hardcodedSecretRel: RelationDef = {
+    name: 'HardcodedSecret',
+    decl: '(file:symbol, line:number, context:symbol, trigger:symbol, entropy:number)',
+    rows: [],
+  }
+  for (const s of snapshot.hardcodedSecrets ?? []) {
+    hardcodedSecretRel.rows.push([
+      sym(s.file), num(s.line), sym(s.context || '_'), sym(s.trigger),
+      num(Math.round(s.entropy * 100)),  // entropy * 100 pour rester en int
+    ])
+  }
+  relations.push(hardcodedSecretRel)
+}
+
 function emitListenerFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
   const listenerLitRel: RelationDef = {
     name: 'ListensLiteral',
