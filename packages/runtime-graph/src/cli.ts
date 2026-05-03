@@ -40,7 +40,7 @@ const program = new Command()
 program
   .name('liby-runtime-graph')
   .description('Runtime observability framework — captures actual execution graph, joins with codegraph statique via datalog')
-  .version('0.1.0-alpha.1')
+  .version('0.1.0-alpha.2')
 
 program
   .command('run')
@@ -319,12 +319,14 @@ async function runRulesAndPrint(projectRoot: string, factsDir: string): Promise<
     process.exit(2)
   }
 
-  // Le rules dir vit dans le package (cf. package.json files: ['rules'])
-  // Résolu via require.resolve sur package.json puis path.dirname.
-  const { createRequire } = await import('node:module')
-  const require = createRequire(import.meta.url)
-  const pkgJsonPath = require.resolve('@liby-tools/runtime-graph/package.json')
-  const rulesDir = path.join(path.dirname(pkgJsonPath), 'rules')
+  // Le rules dir vit dans le package : <packageRoot>/rules/.
+  // Le compiled cli.js est à <packageRoot>/dist/cli.js — donc rules
+  // est ../rules relatif au CLI courant. Approche robuste qui marche
+  // sans dépendre des exports du package.json.
+  const { fileURLToPath } = await import('node:url')
+  const __filename = fileURLToPath(import.meta.url)
+  const cliDir = path.dirname(__filename)
+  const rulesDir = path.resolve(cliDir, '../rules')
 
   // Ajouter le facts statique dir aussi — les rules joignent statique × runtime.
   const staticFactsDir = path.join(projectRoot, '.codegraph/facts')

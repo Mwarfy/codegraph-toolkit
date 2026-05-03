@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+cd9a769 feat(runtime-graph): Phase β — replay-tests + chaos + Express + MongoDB + config-driven
 ca252d2 fix(runtime-graph): retire grandfathers + refine rules + self-probe E2E validated
 e65ea40 feat(runtime-graph): Phase α — runtime observability framework with datalog query language
 8c49ff7 fix(analyzer): factsOnly mode must populate TestedFile
@@ -111,7 +112,6 @@ bbfa9d6 feat(toolkit): SQL ALTER TABLE tracking + CrossDisciplineDetector POC
 7362f13 refactor(invariants): raffiner composite-orphan-file (Next.js framework-routed)
 84544b9 refactor(invariants): raffiner extractor empty-catch + rule passthrough-fn
 8eb80b8 refactor(invariants): raffiner composite-async-sink-with-swallow
-81dd087 refactor(toolkit): extract NCD-detected duplications + analyzer.ts cross-discipline
 ```
 
 ## Comment contribuer à ce brief
