@@ -72,7 +72,8 @@ export async function exportFacts(
   const relations: RelationDef[] = []
 
   emitFileMetadataFacts(snapshot, relations)
-  await emitPackageStructureFacts(snapshot, relations)
+  emitBarrelAndDepFacts(snapshot, relations)
+  await emitPackageEntryFacts(snapshot, relations)
   emitGraphMetricFacts(snapshot, relations)
   emitListenerFacts(snapshot, relations)
   emitCodeQualityAndComplexityFacts(snapshot, relations)
@@ -83,8 +84,10 @@ export async function exportFacts(
 
   emitSqlFacts(snapshot, relations)
 
-  emitCycleAndCallEdgeFacts(snapshot, relations)
-  emitSecurityAndSecretFacts(snapshot, relations)
+  emitCycleFacts(snapshot, relations)
+  emitTypedCallAndEntryFacts(snapshot, relations)
+  emitDangerousCallFacts(snapshot, relations)
+  emitSecurityPatternFacts(snapshot, relations)
 
   emitTier234Facts(snapshot, relations)
   emitSqlViolationFacts(snapshot, relations)
@@ -481,19 +484,13 @@ function emitFileMetadataFacts(snapshot: GraphSnapshot, relations: RelationDef[]
 }
 
 /**
- * Package structure facts (Tier 17) — Barrel, PackageDepIssue,
- * IsPackageEntryPoint. ASYNC : IsPackageEntryPoint resout les
- * `main`/`bin`/`exports` de chaque package.json decouvert vers les
- * paths source TS — fait via `discoverManifests` (full fs scan).
- *
- * Pourquoi `discoverManifests` plutot que `snapshot.packageDeps` :
- * snapshot.packageDeps n'inclut QUE les packages avec issues, ce qui
- * cassait le whitelist sur les packages sans dette.
+ * Barrel + PackageDepIssue (Tier 17) — sync.
+ * - Barrel : files barrel (100% re-exports). lowValue=true ssi peu
+ *   de consumers.
+ * - PackageDepIssue : issues sur dependencies package.json
+ *   (declared-unused, missing, etc.).
  */
-async function emitPackageStructureFacts(
-  snapshot: GraphSnapshot,
-  relations: RelationDef[],
-): Promise<void> {
+function emitBarrelAndDepFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
   const barrelRel: RelationDef = {
     name: 'Barrel',
     decl: '(file:symbol, reExportCount:number, consumerCount:number, lowValue:symbol)',
@@ -519,7 +516,21 @@ async function emitPackageStructureFacts(
     ])
   }
   relations.push(packageDepIssueRel)
+}
 
+/**
+ * IsPackageEntryPoint (Tier 17 self-audit) — async.
+ * Resout les `main`/`bin`/`exports` de chaque package.json decouvert
+ * vers les paths source TS. Sert a whitelister les entry points npm
+ * dans les rules composite-barrel-low-value et composite-orphan-file.
+ *
+ * Utilise `discoverManifests` (full fs scan) plutot que
+ * `snapshot.packageDeps` qui n'inclut QUE les packages avec issues.
+ */
+async function emitPackageEntryFacts(
+  snapshot: GraphSnapshot,
+  relations: RelationDef[],
+): Promise<void> {
   const isPackageEntryPointRel: RelationDef = {
     name: 'IsPackageEntryPoint',
     decl: '(file:symbol)',
@@ -680,16 +691,12 @@ function emitConfigSiteFacts(snapshot: GraphSnapshot, relations: RelationDef[]):
 }
 
 /**
- * Cycles + typed call graph + entry points.
- * - CycleNode/CycleSize : Tarjan SCC sur graphe combiné (import + event +
- *   queue + dynamic-load) ; size vs sccSize differencie cycles benins
- *   vs niches.
- * - SymbolCallEdge/Signature : path queries CFG-level via Datalog
- *   (Phase 4 axe 2). Source : snapshot.typedCalls.
- * - EntryPoint : sources dataFlows[].entry, dedupe (file, kind, id) car
- *   un handler peut apparaitre plusieurs fois (downstream chains).
+ * Cycles (Tarjan SCC) — CycleNode + CycleSize.
+ * Graphe combiné import + event + queue + dynamic-load. Le champ
+ * `gated` distingue cycles intentionnels (gate explicite type
+ * `if (env.X)`). size vs sccSize : cycles benins (==) vs niches (<).
  */
-function emitCycleAndCallEdgeFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
+function emitCycleFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
   const cycleNodeRel: RelationDef = {
     name: 'CycleNode',
     decl: '(file:symbol, cycleId:symbol, gated:symbol)',
@@ -718,7 +725,17 @@ function emitCycleAndCallEdgeFacts(snapshot: GraphSnapshot, relations: RelationD
     cycleSizeRel.rows.push([sym(c.id), num(c.size), num(c.sccSize)])
   }
   relations.push(cycleSizeRel)
+}
 
+/**
+ * Typed call graph + entry points (Phase 4 axe 2).
+ * - SymbolCallEdge/Signature : path queries CFG-level via Datalog,
+ *   permet rules taint-analysis lite (auth-before-write,
+ *   validate-before-db). Source : snapshot.typedCalls.
+ * - EntryPoint : sources dataFlows[].entry, dedupe (file, kind, id)
+ *   car un handler peut apparaitre plusieurs fois (downstream chains).
+ */
+function emitTypedCallAndEntryFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
   const symbolCallEdgeRel: RelationDef = {
     name: 'SymbolCallEdge',
     decl: '(fromFile:symbol, fromSymbol:symbol, toFile:symbol, toSymbol:symbol, line:number)',
@@ -774,12 +791,15 @@ function emitCycleAndCallEdgeFacts(snapshot: GraphSnapshot, relations: RelationD
 }
 
 /**
- * Security & secrets facts (Tier 2/4/16) — EvalCall, CryptoCall, security
- * patterns (SecretVarRef, CorsConfig, TlsConfigUnsafe, WeakRandomCall),
- * HardcodedSecret. Source : extractors/{eval-calls, crypto-algo,
- * security-patterns, hardcoded-secrets}.ts.
+ * Dangerous calls + hardcoded secrets (Tier 2/4/16).
+ * - EvalCall : `eval(...)` et `new Function(...)` (RCE classiques).
+ *   Source : extractors/eval-calls.ts.
+ * - CryptoCall : APIs crypto avec algo extrait. Permet rule cwe-327
+ *   algo-aware. Source : extractors/crypto-algo.ts.
+ * - HardcodedSecret : entropy-based detection. entropy * 100 pour
+ *   rester en int Datalog.
  */
-function emitSecurityAndSecretFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
+function emitDangerousCallFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
   const evalCallRel: RelationDef = {
     name: 'EvalCall',
     decl: '(file:symbol, line:number, kind:symbol, containingSymbol:symbol)',
@@ -805,6 +825,25 @@ function emitSecurityAndSecretFacts(snapshot: GraphSnapshot, relations: Relation
   }
   relations.push(cryptoCallRel)
 
+  const hardcodedSecretRel: RelationDef = {
+    name: 'HardcodedSecret',
+    decl: '(file:symbol, line:number, context:symbol, trigger:symbol, entropy:number)',
+    rows: [],
+  }
+  for (const s of snapshot.hardcodedSecrets ?? []) {
+    hardcodedSecretRel.rows.push([
+      sym(s.file), num(s.line), sym(s.context || '_'), sym(s.trigger),
+      num(Math.round(s.entropy * 100)),
+    ])
+  }
+  relations.push(hardcodedSecretRel)
+}
+
+/**
+ * Security patterns 4-bundle (Tier 16) — SecretVarRef, CorsConfig,
+ * TlsConfigUnsafe, WeakRandomCall. Source : extractors/security-patterns.ts.
+ */
+function emitSecurityPatternFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
   const secretRefRel: RelationDef = {
     name: 'SecretVarRef',
     decl: '(file:symbol, line:number, varName:symbol, kind:symbol, callee:symbol, containingSymbol:symbol)',
@@ -851,19 +890,6 @@ function emitSecurityAndSecretFacts(snapshot: GraphSnapshot, relations: Relation
     }
   }
   relations.push(secretRefRel, corsConfigRel, tlsUnsafeRel, weakRandomRel)
-
-  const hardcodedSecretRel: RelationDef = {
-    name: 'HardcodedSecret',
-    decl: '(file:symbol, line:number, context:symbol, trigger:symbol, entropy:number)',
-    rows: [],
-  }
-  for (const s of snapshot.hardcodedSecrets ?? []) {
-    hardcodedSecretRel.rows.push([
-      sym(s.file), num(s.line), sym(s.context || '_'), sym(s.trigger),
-      num(Math.round(s.entropy * 100)),  // entropy * 100 pour rester en int
-    ])
-  }
-  relations.push(hardcodedSecretRel)
 }
 
 function emitListenerFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
