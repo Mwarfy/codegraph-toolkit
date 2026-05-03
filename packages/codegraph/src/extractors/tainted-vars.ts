@@ -1,3 +1,4 @@
+// ADR-007
 /**
  * Tainted variables — détecteur déterministe AST (Phase 4 Tier 11).
  *

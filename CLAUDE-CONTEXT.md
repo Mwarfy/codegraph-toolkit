@@ -83,14 +83,17 @@
 - `packages/codegraph/src/extractors/package-deps.ts` → ADR-005
 - `packages/codegraph/src/extractors/sql-schema.ts` → ADR-005
 - `packages/codegraph/src/extractors/state-machines.ts` → ADR-005
+- `packages/codegraph/src/extractors/tainted-vars.ts` → ADR-007
 - `packages/codegraph/src/extractors/unused-exports.ts` → ADR-005
 - `packages/codegraph/src/facts/index.ts` → ADR-010
+- `packages/codegraph/src/incremental/arguments.ts` → ADR-007
 - `packages/codegraph/src/incremental/barrels.ts` → ADR-007
 - `packages/codegraph/src/incremental/co-change.ts` → ADR-007
 - `packages/codegraph/src/incremental/code-quality-patterns.ts` → ADR-007
 - `packages/codegraph/src/incremental/complexity.ts` → ADR-007
 - `packages/codegraph/src/incremental/compression-similarity.ts` → ADR-007
 - `packages/codegraph/src/incremental/constant-expressions.ts` → ADR-007
+- `packages/codegraph/src/incremental/crypto-algo.ts` → ADR-007
 - `packages/codegraph/src/incremental/cycles.ts` → ADR-007
 - `packages/codegraph/src/incremental/data-flows.ts` → ADR-007
 - `packages/codegraph/src/incremental/database.ts` → ADR-007
@@ -110,10 +113,13 @@
 - `packages/codegraph/src/incremental/project-cache.ts` → ADR-007
 - `packages/codegraph/src/incremental/queries.ts` → ADR-007
 - `packages/codegraph/src/incremental/resource-balance.ts` → ADR-007
+- `packages/codegraph/src/incremental/sanitizers.ts` → ADR-007
 - `packages/codegraph/src/incremental/security-patterns.ts` → ADR-007
 - `packages/codegraph/src/incremental/state-machines.ts` → ADR-007
 - `packages/codegraph/src/incremental/symbol-refs.ts` → ADR-007
+- `packages/codegraph/src/incremental/taint-sinks.ts` → ADR-007
 - `packages/codegraph/src/incremental/taint.ts` → ADR-007
+- `packages/codegraph/src/incremental/tainted-vars.ts` → ADR-007
 - `packages/codegraph/src/incremental/truth-points.ts` → ADR-007
 - `packages/codegraph/src/incremental/ts-imports.ts` → ADR-007
 - `packages/codegraph/src/incremental/typed-calls.ts` → ADR-007
@@ -150,9 +156,9 @@
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
 - `packages/codegraph/src/core/types.ts` (in: 77) · gov by ADR-006
-- `packages/codegraph/src/incremental/queries.ts` (in: 35) · gov by ADR-007
-- `packages/codegraph/src/incremental/database.ts` (in: 33) · gov by ADR-007
-- `packages/salsa/dist/index.d.ts` (in: 32)
+- `packages/codegraph/src/incremental/queries.ts` (in: 40) · gov by ADR-007
+- `packages/codegraph/src/incremental/database.ts` (in: 38) · gov by ADR-007
+- `packages/salsa/dist/index.d.ts` (in: 37)
 - `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 25) · gov by ADR-012
 - `packages/codegraph/src/core/detector-registry.ts` (in: 18) · gov by ADR-008
 - `packages/runtime-graph/src/core/types.ts` (in: 13) · gov by ADR-009
@@ -162,7 +168,7 @@
 
 Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `// ADR-NNN`** dans le code. Intentionnel ? Sinon poser un marqueur ou créer un ADR :
 
-- **32** `packages/salsa/dist/index.d.ts` _(top-hub)_
+- **37** `packages/salsa/dist/index.d.ts` _(top-hub)_
 
 ## Tensions actives — invitations à explorer
 
@@ -177,9 +183,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/audit-listener.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/b.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/scheduler.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **FSM-ORPHAN** `ApprovalStatus#expired` — état déclaré mais jamais écrit dans le code  
   _→ supprimer l'état OU ajouter la transition manquante_
@@ -205,6 +211,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+231be93 perf(toolkit): Salsa-iso resource-balance detector — 82ms → 0ms warm
 c9e30bd perf(toolkit): Salsa-iso magic-numbers detector — 539ms → 0ms warm (top hot detector eliminé)
 702a89f refactor(toolkit): split codegraphContext (cyclo 50→<15) — context.ts ALL bombs cleared
 7369852 refactor(toolkit): split extractDeadCodeFileBundle (cyclo 50→3, cog 78→0) — dead-code.ts ALL bombs cleared
@@ -216,7 +223,6 @@ e27c2be refactor(toolkit): split codegraphAffected + dedup computeAffected — a
 3b1d650 refactor(toolkit): split scanObjectWrites + detectListenerTriggers — state-machines.ts ALL bombs cleared
 d534d97 refactor(toolkit): split constant-expressions (cyclo 35+23→under) — constant-expressions.ts ALL bombs cleared
 f4ee98f refactor(toolkit): split typed-calls (cyclo 18+16→under) — typed-calls.ts ALL bombs cleared
-ac2b550 refactor(toolkit): split symbol-refs (cyclo 20+18→under) — symbol-refs.ts ALL bombs cleared
 ```
 
 ## Comment contribuer à ce brief

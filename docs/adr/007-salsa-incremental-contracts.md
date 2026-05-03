@@ -50,12 +50,15 @@ DB via `new SalsaDatabase()` LOCAL au test, jamais exporté.
 
 <!-- AUTO-GÉNÉRÉ depuis les marqueurs ADR-NNN du code source. Voir @liby-tools/adr-toolkit. NE PAS éditer à la main. -->
 
+- `packages/codegraph/src/extractors/tainted-vars.ts`
+- `packages/codegraph/src/incremental/arguments.ts`
 - `packages/codegraph/src/incremental/barrels.ts`
 - `packages/codegraph/src/incremental/co-change.ts`
 - `packages/codegraph/src/incremental/code-quality-patterns.ts`
 - `packages/codegraph/src/incremental/complexity.ts`
 - `packages/codegraph/src/incremental/compression-similarity.ts`
 - `packages/codegraph/src/incremental/constant-expressions.ts`
+- `packages/codegraph/src/incremental/crypto-algo.ts`
 - `packages/codegraph/src/incremental/cycles.ts`
 - `packages/codegraph/src/incremental/data-flows.ts`
 - `packages/codegraph/src/incremental/database.ts`
@@ -75,10 +78,13 @@ DB via `new SalsaDatabase()` LOCAL au test, jamais exporté.
 - `packages/codegraph/src/incremental/project-cache.ts`
 - `packages/codegraph/src/incremental/queries.ts`
 - `packages/codegraph/src/incremental/resource-balance.ts`
+- `packages/codegraph/src/incremental/sanitizers.ts`
 - `packages/codegraph/src/incremental/security-patterns.ts`
 - `packages/codegraph/src/incremental/state-machines.ts`
 - `packages/codegraph/src/incremental/symbol-refs.ts`
+- `packages/codegraph/src/incremental/taint-sinks.ts`
 - `packages/codegraph/src/incremental/taint.ts`
+- `packages/codegraph/src/incremental/tainted-vars.ts`
 - `packages/codegraph/src/incremental/truth-points.ts`
 - `packages/codegraph/src/incremental/ts-imports.ts`
 - `packages/codegraph/src/incremental/typed-calls.ts`

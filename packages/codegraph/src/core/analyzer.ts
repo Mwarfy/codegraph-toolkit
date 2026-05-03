@@ -117,6 +117,11 @@ import { allConstantExpressions as incAllConstantExpressions } from '../incremen
 import { allHardcodedSecrets as incAllHardcodedSecrets } from '../incremental/hardcoded-secrets.js'
 import { allMagicNumbers as incAllMagicNumbers } from '../incremental/magic-numbers.js'
 import { allResourceBalances as incAllResourceBalances } from '../incremental/resource-balance.js'
+import { allTaintSinks as incAllTaintSinks } from '../incremental/taint-sinks.js'
+import { allSanitizers as incAllSanitizers } from '../incremental/sanitizers.js'
+import { allTaintedVars as incAllTaintedVars } from '../incremental/tainted-vars.js'
+import { allArguments as incAllArguments } from '../incremental/arguments.js'
+import { allCryptoCalls as incAllCryptoCalls } from '../incremental/crypto-algo.js'
 import { allFunctionComplexity as incAllFunctionComplexity } from '../incremental/function-complexity.js'
 import { allEvalCalls as incAllEvalCalls } from '../incremental/eval-calls.js'
 import { allDriftPatternsAst as incAllDriftPatternsAst } from '../incremental/drift-patterns.js'
@@ -804,7 +809,9 @@ async function runPhase2Phase1Dependent(
       ? Promise.resolve(incAllEvalCalls.get('all'))
       : analyzeEvalCalls(config.rootDir, files, sharedProject))
   const cryptoCalls = await runDetectorTimed(timing, 'crypto-algo',
-    () => analyzeCryptoCalls(config.rootDir, files, sharedProject))
+    () => incremental
+      ? Promise.resolve(incAllCryptoCalls.get('all'))
+      : analyzeCryptoCalls(config.rootDir, files, sharedProject))
   // Self-optim discovery : Salsa-isolation post-λ_lyap analysis.
   // Cold path identique au legacy ; warm path = cache hit ~99%.
   const securityPatterns = await runDetectorTimed(timing, 'security-patterns',
@@ -896,16 +903,24 @@ async function runPhase5SqlAndResource(ctx: DetectorPhaseContext) {
  * runtime), mais les rules Datalog en aval consomment les 4 facts.
  */
 async function runPhase6TaintChain(ctx: DetectorPhaseContext) {
-  const { config, files, sharedProject, timing } = ctx
+  const { config, files, sharedProject, timing, incremental } = ctx
 
   const taintSinks = await runDetectorTimed(timing, 'taint-sinks',
-    () => analyzeTaintSinks(config.rootDir, files, sharedProject))
+    () => incremental
+      ? Promise.resolve(incAllTaintSinks.get('all'))
+      : analyzeTaintSinks(config.rootDir, files, sharedProject))
   const sanitizerCalls = await runDetectorTimed(timing, 'sanitizers',
-    () => analyzeSanitizers(config.rootDir, files, sharedProject))
+    () => incremental
+      ? Promise.resolve(incAllSanitizers.get('all'))
+      : analyzeSanitizers(config.rootDir, files, sharedProject))
   const taintedVars = await runDetectorTimed(timing, 'tainted-vars',
-    () => analyzeTaintedVars(config.rootDir, files, sharedProject))
+    () => incremental
+      ? Promise.resolve(incAllTaintedVars.get('all'))
+      : analyzeTaintedVars(config.rootDir, files, sharedProject))
   const argumentsFacts = await runDetectorTimed(timing, 'arguments',
-    () => analyzeArguments(config.rootDir, files, sharedProject))
+    () => incremental
+      ? Promise.resolve(incAllArguments.get('all'))
+      : analyzeArguments(config.rootDir, files, sharedProject))
 
   return { taintSinks, sanitizerCalls, taintedVars, argumentsFacts }
 }
