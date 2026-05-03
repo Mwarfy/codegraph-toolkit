@@ -184,9 +184,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/env-usage/config.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/audit-listener.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/b.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
@@ -208,6 +208,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+2f99c5d refactor(codegraph): split analyzeTestCoverage (cyclo 27→1, cog 54→0) — analyzeTestCoverage bomb-free
 446c4b6 refactor(codegraph-mcp): split codegraphUncovered (cyclo 28→9, cog 29→3) — uncovered.ts bomb-free
 357636e refactor(codegraph): split scanImportsInSourceFile (cyclo 28→1, cog 45→0) — ts-imports.ts bomb-free
 091d636 refactor(codegraph): split isAwaitedOrConsumed (cyclo 28→4, cog 47→5) — floating-promises.ts bomb-free
@@ -219,7 +220,6 @@ bd1923f refactor(codegraph-mcp): split codegraphDatalogQuery (cyclo 31→7, cog 
 89be66f refactor(codegraph): split extractArgumentsFileBundle (cyclo 33→3, cog 53→2) — arguments.ts bomb-free
 c922d70 refactor(runtime-graph): split tdaPersistence (cyclo 33→5, cog 63→4) — tda-persistence.ts bomb-free
 a4bd164 refactor(adr-toolkit): split bootstrapAdrs (cyclo 34→10, cog 50→4) — bootstrap.ts bomb-free
-1d0518d refactor(codegraph): split extractTensions (cyclo 34→10, cog 52→7) — tensions.ts bomb-free
 ```
 
 ## Comment contribuer à ce brief

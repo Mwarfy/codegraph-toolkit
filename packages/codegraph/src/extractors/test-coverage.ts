@@ -71,8 +71,7 @@ async function applyTransitiveReexportCoverage(
   const barrelContents = await Promise.all(
     coveredBarrels.map(async (b) => {
       try {
-        const content = await fs.readFile(path.join(rootDir, b.file), 'utf-8')
-        return { ...b, content }
+        return { ...b, content: await fs.readFile(path.join(rootDir, b.file), 'utf-8') }
       } catch {
         return null
       }
@@ -80,22 +79,43 @@ async function applyTransitiveReexportCoverage(
   )
   for (const entry of barrelContents) {
     if (!entry) continue
-    const { file: barrel, tests, content } = entry
-    const localRe = new RegExp(reexportRegex.source, reexportRegex.flags)
-    let m: RegExpExecArray | null
-    while ((m = localRe.exec(content)) !== null) {
-      const spec = m[1]
-      if (!spec.startsWith('.')) continue
-      const target = resolveRelative(barrel, spec, sourceSet)
-      if (!target) continue
-      // Propage tous les tests du barrel vers la cible re-exportée.
-      if (!coverage.has(target)) coverage.set(target, new Map())
-      const targetTests = coverage.get(target)!
-      for (const [testFile, methods] of tests) {
-        if (!targetTests.has(testFile)) targetTests.set(testFile, new Set())
-        for (const method of methods) targetTests.get(testFile)!.add(method)
-      }
-    }
+    propagateBarrelCoverage(entry, reexportRegex, coverage, sourceSet)
+  }
+}
+
+/**
+ * Pour un barrel donné (file + tests qui le couvrent), parse les re-exports
+ * et propage `tests` vers chaque cible re-exportée.
+ */
+function propagateBarrelCoverage(
+  entry: { file: string; tests: Map<string, Set<'naming' | 'import'>>; content: string },
+  reexportRegex: RegExp,
+  coverage: Map<string, Map<string, Set<'naming' | 'import'>>>,
+  sourceSet: Set<string>,
+): void {
+  const { file: barrel, tests, content } = entry
+  const localRe = new RegExp(reexportRegex.source, reexportRegex.flags)
+  let m: RegExpExecArray | null
+  while ((m = localRe.exec(content)) !== null) {
+    const spec = m[1]
+    if (!spec.startsWith('.')) continue
+    const target = resolveRelative(barrel, spec, sourceSet)
+    if (!target) continue
+    mergeBarrelTestsIntoTarget(coverage, target, tests)
+  }
+}
+
+/** Fusionne les tests du barrel dans le set de tests de la cible re-exportée. */
+function mergeBarrelTestsIntoTarget(
+  coverage: Map<string, Map<string, Set<'naming' | 'import'>>>,
+  target: string,
+  tests: Map<string, Set<'naming' | 'import'>>,
+): void {
+  if (!coverage.has(target)) coverage.set(target, new Map())
+  const targetTests = coverage.get(target)!
+  for (const [testFile, methods] of tests) {
+    if (!targetTests.has(testFile)) targetTests.set(testFile, new Set())
+    for (const method of methods) targetTests.get(testFile)!.add(method)
   }
 }
 
