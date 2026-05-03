@@ -89,22 +89,19 @@
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
 - `packages/codegraph/src/core/types.ts` (in: 75) · gov by ADR-006
-- `packages/codegraph/src/incremental/queries.ts` (in: 22)
-- `packages/codegraph/src/incremental/database.ts` (in: 20)
+- `packages/codegraph/src/incremental/queries.ts` (in: 22) · gov by ADR-007
+- `packages/codegraph/src/incremental/database.ts` (in: 20) · gov by ADR-007
 - `packages/salsa/dist/index.d.ts` (in: 19)
-- `packages/codegraph/src/core/detector-registry.ts` (in: 18)
+- `packages/codegraph/src/core/detector-registry.ts` (in: 18) · gov by ADR-008
 - `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 14)
-- `packages/runtime-graph/src/core/types.ts` (in: 13)
+- `packages/runtime-graph/src/core/types.ts` (in: 13) · gov by ADR-009
 - `packages/adr-toolkit/src/config.ts` (in: 10) · gov by ADR-002
 
 ## ⚠ ADR anchor suggestions
 
 Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `// ADR-NNN`** dans le code. Intentionnel ? Sinon poser un marqueur ou créer un ADR :
 
-- **22** `packages/codegraph/src/incremental/queries.ts` _(top-hub)_
-- **20** `packages/codegraph/src/incremental/database.ts` _(top-hub)_
 - **19** `packages/salsa/dist/index.d.ts` _(top-hub)_
-- **18** `packages/codegraph/src/core/detector-registry.ts` _(top-hub)_
 
 ## Tensions actives — invitations à explorer
 
@@ -147,6 +144,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+173915c chore(toolkit): self-discipline pass — close credibility gap from external review
 03ef857 chore(runtime-graph): OSS launch prep — alpha.4 publish-ready
 79c4fed feat(runtime-graph): Phase γ.2c — TDA Persistent Homology dim-0
 fc1c79d feat(runtime-graph): Phase γ.2b — true time-series Lyapunov 1D
@@ -158,7 +156,6 @@ f642620 fix(runtime-graph): CLI rulesDir resolution via __dirname (no package.js
 cd9a769 feat(runtime-graph): Phase β — replay-tests + chaos + Express + MongoDB + config-driven
 ca252d2 fix(runtime-graph): retire grandfathers + refine rules + self-probe E2E validated
 e65ea40 feat(runtime-graph): Phase α — runtime observability framework with datalog query language
-8c49ff7 fix(analyzer): factsOnly mode must populate TestedFile
 ```
 
 ## Comment contribuer à ce brief

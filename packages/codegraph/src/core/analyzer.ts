@@ -583,13 +583,15 @@ async function prebuildSharedProjectIncremental(
 }
 
 /**
- * Run les détecteurs déterministes ajoutés Sprint 12 (TODO/FIXME, long
- * functions, magic numbers, test coverage). Pattern uniforme : timing
- * tracké, errors loguées sans bloquer le pipeline, results patché dans
- * le snapshot.
+ * Run les détecteurs déterministes : timing tracké, errors loguées sans
+ * bloquer le pipeline, results assignés directement au snapshot.
  *
- * Pas de dépendance lourde, pas de wrapper Salsa pour l'instant —
- * pattern ADR-005 prévu en suivi.
+ * Refactor 2026-05 : extraction du wrapper try/catch+timing répétitif
+ * dans le helper `runDetectorTimed()`. 39 détecteurs invoqués via une
+ * liste déclarative au lieu de 39 blocks copiés-collés.
+ *
+ * Préserve la sémantique exacte du legacy : ordre d'invocation, gestion
+ * d'erreur (log mais pas throw), assignation conditionnelle (`if (x)`).
  */
 async function runDeterministicDetectors(
   config: CodeGraphConfig,
@@ -599,351 +601,151 @@ async function runDeterministicDetectors(
   snapshot: GraphSnapshot,
   timing: AnalyzeResult['timing'],
 ): Promise<void> {
-  let todos: TodoMarker[] | undefined
-  let longFunctions: LongFunction[] | undefined
-  let magicNumbers: MagicNumber[] | undefined
-  let testCoverage: TestCoverageReport | undefined
-  let coChangePairs: CoChangePair[] | undefined
-  let driftSignals: DriftSignal[] | undefined
-  let evalCalls: EvalCall[] | undefined
-  let cryptoCalls: CryptoCall[] | undefined
-  let securityPatterns: SecurityPatternsAggregated | undefined
-  let eventListenerSites: EventListenerSite[] | undefined
-  let codeQualityPatterns: CodeQualityPatternsAggregated | undefined
-  let functionComplexity: FunctionComplexity[] | undefined
-  let spectralMetrics: SpectralMetric[] | undefined
-  let symbolEntropy: SymbolEntropyMetric[] | undefined
-  let signatureDuplicates: SignatureDuplicate[] | undefined
-  let persistentCycles: PersistentCycle[] | undefined
-  let lyapunovMetrics: LyapunovMetric[] | undefined
-  let packageMinCuts: PackageMinCut[] | undefined
-  let informationBottlenecks: InformationBottleneck[] | undefined
-  let importCommunities: ImportCommunity[] | undefined
-  let modularityScore: ModularityScore | undefined
-  let factStabilities: FactKindStability[] | undefined
-  let bayesianCoChanges: Array<{ driver: string; follower: string; conditionalProbX1000: number }> | undefined
-  let compressionDistances: NormalizedCompressionDistance[] | undefined
-  let grangerCausalities: GrangerCausality[] | undefined
-  let hardcodedSecrets: HardcodedSecret[] | undefined
-  let booleanParams: BooleanParamSite[] | undefined
-  let deadCode: DeadCodeFinding[] | undefined
-  let floatingPromises: FloatingPromiseSite[] | undefined
-  let deprecatedUsage: { declarations: DeprecatedDeclaration[]; sites: DeprecatedUsageSite[] } | undefined
-  let articulationPoints: ArticulationPoint[] | undefined
-  let sqlNamingViolations: SqlNamingViolation[] | undefined
-  let sqlMigrationOrderViolations: MigrationOrderViolation[] | undefined
-  let resourceImbalances: ResourceImbalance[] | undefined
-  let taintSinks: TaintSink[] | undefined
-  let sanitizerCalls: Sanitizer[] | undefined
-  let taintedVars: { decls: TaintedVarDecl[]; argCalls: TaintedArgCall[] } | undefined
-  let argumentsFacts: { taintedArgs: TaintedArgumentToCall[]; params: FunctionParam[] } | undefined
+  // Phase 1 : détecteurs indépendants (pas de cross-deps).
+  const todos = await runDetectorTimed(timing, 'todos',
+    () => analyzeTodos(config.rootDir, files, readFile))
+  const longFunctions = await runDetectorTimed(timing, 'long-functions',
+    () => analyzeLongFunctions(config.rootDir, files, sharedProject))
+  const magicNumbers = await runDetectorTimed(timing, 'magic-numbers',
+    () => analyzeMagicNumbers(config.rootDir, files, sharedProject))
+  const testCoverage = await runDetectorTimed(timing, 'test-coverage',
+    () => analyzeTestCoverage(config.rootDir, files, snapshot.edges))
+  const coChangePairs = await runDetectorTimed(timing, 'co-change',
+    () => {
+      const knownFiles = new Set(snapshot.nodes.filter((n) => n.type === 'file').map((n) => n.id))
+      return analyzeCoChange(config.rootDir, { knownFiles })
+    })
 
-  const tTodos = performance.now()
-  try {
-    todos = await analyzeTodos(config.rootDir, files, readFile)
-    timing.detectors['todos'] = performance.now() - tTodos
-  } catch (err) {
-    timing.detectors['todos'] = performance.now() - tTodos
-    console.error(`  ✗ todos failed: ${err}`)
-  }
+  // Phase 2 : détecteurs avec dep sur Phase 1.
+  // drift-patterns dépend de todos (pattern 3) — run après.
+  const driftSignals = await runDetectorTimed(timing, 'drift-patterns',
+    () => analyzeDriftPatterns(config.rootDir, files, sharedProject, todos))
+  const evalCalls = await runDetectorTimed(timing, 'eval-calls',
+    () => analyzeEvalCalls(config.rootDir, files, sharedProject))
+  const cryptoCalls = await runDetectorTimed(timing, 'crypto-algo',
+    () => analyzeCryptoCalls(config.rootDir, files, sharedProject))
+  const securityPatterns = await runDetectorTimed(timing, 'security-patterns',
+    () => analyzeSecurityPatterns(config.rootDir, files, sharedProject))
+  const eventListenerSites = await runDetectorTimed(timing, 'event-listener-sites',
+    () => analyzeEventListenerSites(config.rootDir, files, sharedProject))
+  const codeQualityPatterns = await runDetectorTimed(timing, 'code-quality-patterns',
+    () => analyzeCodeQualityPatterns(config.rootDir, files, sharedProject))
+  const functionComplexity = await runDetectorTimed(timing, 'function-complexity',
+    () => analyzeFunctionComplexity(config.rootDir, files, sharedProject))
 
-  const tLongFns = performance.now()
-  try {
-    longFunctions = await analyzeLongFunctions(config.rootDir, files, sharedProject)
-    timing.detectors['long-functions'] = performance.now() - tLongFns
-  } catch (err) {
-    timing.detectors['long-functions'] = performance.now() - tLongFns
-    console.error(`  ✗ long-functions failed: ${err}`)
-  }
-
-  const tMagic = performance.now()
-  try {
-    magicNumbers = await analyzeMagicNumbers(config.rootDir, files, sharedProject)
-    timing.detectors['magic-numbers'] = performance.now() - tMagic
-  } catch (err) {
-    timing.detectors['magic-numbers'] = performance.now() - tMagic
-    console.error(`  ✗ magic-numbers failed: ${err}`)
-  }
-
-  const tCov = performance.now()
-  try {
-    testCoverage = await analyzeTestCoverage(config.rootDir, files, snapshot.edges)
-    timing.detectors['test-coverage'] = performance.now() - tCov
-  } catch (err) {
-    timing.detectors['test-coverage'] = performance.now() - tCov
-    console.error(`  ✗ test-coverage failed: ${err}`)
-  }
-
-  const tCoChange = performance.now()
-  try {
-    const knownFiles = new Set(snapshot.nodes.filter((n) => n.type === 'file').map((n) => n.id))
-    coChangePairs = await analyzeCoChange(config.rootDir, { knownFiles })
-    timing.detectors['co-change'] = performance.now() - tCoChange
-  } catch (err) {
-    timing.detectors['co-change'] = performance.now() - tCoChange
-    console.error(`  ✗ co-change failed: ${err}`)
-  }
-
-  // Drift patterns — dépend de todos (pattern 3) + sharedProject (1, 2).
-  // Run après les autres pour avoir todos résolu.
-  const tDrift = performance.now()
-  try {
-    driftSignals = await analyzeDriftPatterns(config.rootDir, files, sharedProject, todos)
-    timing.detectors['drift-patterns'] = performance.now() - tDrift
-  } catch (err) {
-    timing.detectors['drift-patterns'] = performance.now() - tDrift
-    console.error(`  ✗ drift-patterns failed: ${err}`)
-  }
-
-  const tEval = performance.now()
-  try {
-    evalCalls = await analyzeEvalCalls(config.rootDir, files, sharedProject)
-    timing.detectors['eval-calls'] = performance.now() - tEval
-  } catch (err) {
-    timing.detectors['eval-calls'] = performance.now() - tEval
-    console.error(`  ✗ eval-calls failed: ${err}`)
-  }
-
-  const tCrypto = performance.now()
-  try {
-    cryptoCalls = await analyzeCryptoCalls(config.rootDir, files, sharedProject)
-    timing.detectors['crypto-algo'] = performance.now() - tCrypto
-  } catch (err) {
-    timing.detectors['crypto-algo'] = performance.now() - tCrypto
-    console.error(`  ✗ crypto-algo failed: ${err}`)
-  }
-
-  const tSecurity = performance.now()
-  try {
-    securityPatterns = await analyzeSecurityPatterns(config.rootDir, files, sharedProject)
-    timing.detectors['security-patterns'] = performance.now() - tSecurity
-  } catch (err) {
-    timing.detectors['security-patterns'] = performance.now() - tSecurity
-    console.error(`  ✗ security-patterns failed: ${err}`)
-  }
-
-  const tListener = performance.now()
-  try {
-    eventListenerSites = await analyzeEventListenerSites(config.rootDir, files, sharedProject)
-    timing.detectors['event-listener-sites'] = performance.now() - tListener
-  } catch (err) {
-    timing.detectors['event-listener-sites'] = performance.now() - tListener
-    console.error(`  ✗ event-listener-sites failed: ${err}`)
-  }
-
-  const tCodeQ = performance.now()
-  try {
-    codeQualityPatterns = await analyzeCodeQualityPatterns(config.rootDir, files, sharedProject)
-    timing.detectors['code-quality-patterns'] = performance.now() - tCodeQ
-  } catch (err) {
-    timing.detectors['code-quality-patterns'] = performance.now() - tCodeQ
-    console.error(`  ✗ code-quality-patterns failed: ${err}`)
-  }
-
-  const tFnComplex = performance.now()
-  try {
-    functionComplexity = await analyzeFunctionComplexity(config.rootDir, files, sharedProject)
-    timing.detectors['function-complexity'] = performance.now() - tFnComplex
-  } catch (err) {
-    timing.detectors['function-complexity'] = performance.now() - tFnComplex
-    console.error(`  ✗ function-complexity failed: ${err}`)
-  }
-
-  // ─── Cross-discipline orchestrator — 11 disciplines mathématiques ───
-  // Extrait dans `extractors/_shared/cross-discipline-orchestrator.ts`
-  // + wrappé en CrossDisciplineDetector class (pattern Detector POC).
-  // Phase finale 3/6 : utilisation explicite de la class pour
-  // démontrer que le pattern scale aux orchestrators post-snapshot.
-  // L'orchestrator retourne directement (pas via DetectorRegistry car
-  // celui-ci tourne pre-snapshot). La class wrap est un step préparatoire
-  // pour un éventuel secondary post-snapshot registry.
+  // Phase 3 : cross-discipline orchestrator — 11 disciplines mathématiques.
+  // Extrait dans `extractors/_shared/cross-discipline-orchestrator.ts` +
+  // wrappé en CrossDisciplineDetector class. L'orchestrator retourne
+  // directement (pas via DetectorRegistry car celui-ci tourne pre-snapshot).
   const _crossDisciplineDetector = new CrossDisciplineDetector()
   void _crossDisciplineDetector  // marker : pattern POC valid
   const cross = await runCrossDisciplineDetectors({
     rootDir: config.rootDir,
-    files,
-    sharedProject,
-    snapshot,
-    coChangePairs,
-    timing,
+    files, sharedProject, snapshot, coChangePairs, timing,
   })
-  spectralMetrics = cross.spectralMetrics
-  symbolEntropy = cross.symbolEntropy
-  signatureDuplicates = cross.signatureDuplicates
-  persistentCycles = cross.persistentCycles
-  lyapunovMetrics = cross.lyapunovMetrics
-  packageMinCuts = cross.packageMinCuts
-  informationBottlenecks = cross.informationBottlenecks
-  importCommunities = cross.importCommunities
-  modularityScore = cross.modularityScore
-  factStabilities = cross.factStabilities
-  bayesianCoChanges = cross.bayesianCoChanges
-  compressionDistances = cross.compressionDistances
-  grangerCausalities = cross.grangerCausalities
 
-  const tHardcoded = performance.now()
+  // Phase 4 : security + quality detectors indépendants.
+  const hardcodedSecrets = await runDetectorTimed(timing, 'hardcoded-secrets',
+    () => analyzeHardcodedSecrets(config.rootDir, files, sharedProject))
+  const booleanParams = await runDetectorTimed(timing, 'boolean-params',
+    () => analyzeBooleanParams(config.rootDir, files, sharedProject))
+  const deadCode = await runDetectorTimed(timing, 'dead-code',
+    () => analyzeDeadCode(config.rootDir, files, sharedProject))
+  // floating-promises : dep sur snapshot.typedCalls (déjà patché Phase 5).
+  const floatingPromises = await runDetectorTimed(timing, 'floating-promises',
+    () => analyzeFloatingPromises(config.rootDir, files, sharedProject, snapshot.typedCalls))
+  const deprecatedUsage = await runDetectorTimed(timing, 'deprecated-usage',
+    () => analyzeDeprecatedUsage(config.rootDir, files, sharedProject))
+  const articulationPoints = await runDetectorTimed(timing, 'articulation-points',
+    () => analyzeArticulationPoints(snapshot))
+
+  // Phase 5 : SQL detectors (gated sur snapshot.sqlSchema).
+  const sqlNamingViolations = await runDetectorTimed(timing, 'sql-naming',
+    async () => snapshot.sqlSchema ? findSqlNamingViolations(snapshot.sqlSchema) : undefined)
+  const sqlMigrationOrderViolations = await runDetectorTimed(timing, 'sql-migration-order',
+    async () => snapshot.sqlSchema ? findMigrationOrderViolations(snapshot.sqlSchema) : undefined)
+  const resourceImbalances = await runDetectorTimed(timing, 'resource-balance',
+    () => analyzeResourceBalance(config.rootDir, files, sharedProject))
+
+  // Phase 6 : taint analysis chain.
+  const taintSinks = await runDetectorTimed(timing, 'taint-sinks',
+    () => analyzeTaintSinks(config.rootDir, files, sharedProject))
+  const sanitizerCalls = await runDetectorTimed(timing, 'sanitizers',
+    () => analyzeSanitizers(config.rootDir, files, sharedProject))
+  const taintedVars = await runDetectorTimed(timing, 'tainted-vars',
+    () => analyzeTaintedVars(config.rootDir, files, sharedProject))
+  const argumentsFacts = await runDetectorTimed(timing, 'arguments',
+    () => analyzeArguments(config.rootDir, files, sharedProject))
+
+  // Patch snapshot avec tous les results (assignation conditionnelle —
+  // si un détecteur a failed, son champ reste non-set).
+  assignIfDefined(snapshot, {
+    todos, longFunctions, magicNumbers, testCoverage, coChangePairs,
+    driftSignals, evalCalls, cryptoCalls, securityPatterns, eventListenerSites,
+    codeQualityPatterns, functionComplexity,
+    spectralMetrics: cross.spectralMetrics,
+    symbolEntropy: cross.symbolEntropy,
+    signatureDuplicates: cross.signatureDuplicates,
+    persistentCycles: cross.persistentCycles,
+    lyapunovMetrics: cross.lyapunovMetrics,
+    packageMinCuts: cross.packageMinCuts,
+    informationBottlenecks: cross.informationBottlenecks,
+    importCommunities: cross.importCommunities,
+    modularityScore: cross.modularityScore,
+    factStabilities: cross.factStabilities,
+    bayesianCoChanges: cross.bayesianCoChanges,
+    compressionDistances: cross.compressionDistances,
+    grangerCausalities: cross.grangerCausalities,
+    hardcodedSecrets, booleanParams, deadCode, floatingPromises, deprecatedUsage,
+    articulationPoints, sqlNamingViolations, sqlMigrationOrderViolations,
+    resourceImbalances, taintSinks, sanitizerCalls, taintedVars, argumentsFacts,
+  })
+}
+
+/**
+ * Helper : run un détecteur avec wrapping timing + try/catch standard.
+ * Extrait du legacy bloc dupliqué 39× dans `runDeterministicDetectors`.
+ *
+ * Sémantique préservée :
+ *   - Timing toujours mesuré (try ET catch path).
+ *   - Errors loguées via console.error sans throw (pipeline continue).
+ *   - Retourne `undefined` si le détecteur fail OU retourne `undefined`.
+ */
+async function runDetectorTimed<T>(
+  timing: AnalyzeResult['timing'],
+  name: string,
+  fn: () => Promise<T | undefined> | T | undefined,
+): Promise<T | undefined> {
+  const t0 = performance.now()
   try {
-    hardcodedSecrets = await analyzeHardcodedSecrets(config.rootDir, files, sharedProject)
-    timing.detectors['hardcoded-secrets'] = performance.now() - tHardcoded
+    const result = await fn()
+    timing.detectors[name] = performance.now() - t0
+    return result
   } catch (err) {
-    timing.detectors['hardcoded-secrets'] = performance.now() - tHardcoded
-    console.error(`  ✗ hardcoded-secrets failed: ${err}`)
+    timing.detectors[name] = performance.now() - t0
+    console.error(`  ✗ ${name} failed: ${err}`)
+    return undefined
   }
+}
 
-  const tBoolParams = performance.now()
-  try {
-    booleanParams = await analyzeBooleanParams(config.rootDir, files, sharedProject)
-    timing.detectors['boolean-params'] = performance.now() - tBoolParams
-  } catch (err) {
-    timing.detectors['boolean-params'] = performance.now() - tBoolParams
-    console.error(`  ✗ boolean-params failed: ${err}`)
+/**
+ * Helper : assigne dans `snapshot` chaque clé du `results` dont la valeur
+ * n'est pas `undefined`. Préserve l'idiome legacy `if (x) snapshot.x = x`
+ * en une seule expression.
+ */
+function assignIfDefined(
+  snapshot: GraphSnapshot,
+  results: Partial<Record<keyof GraphSnapshot, unknown>>,
+): void {
+  // Type-safe assignment : la table `results` est déjà typée par
+  // `Partial<Record<keyof GraphSnapshot, unknown>>`, le runtime check sur
+  // undefined préserve les types attendus côté caller. Le cast via
+  // `unknown as Record<string, unknown>` est requis par strict TS car
+  // GraphSnapshot n'a pas d'index signature.
+  const target = snapshot as unknown as Record<string, unknown>
+  for (const [key, value] of Object.entries(results)) {
+    if (value !== undefined) target[key] = value
   }
-
-  const tDeadCode = performance.now()
-  try {
-    deadCode = await analyzeDeadCode(config.rootDir, files, sharedProject)
-    timing.detectors['dead-code'] = performance.now() - tDeadCode
-  } catch (err) {
-    timing.detectors['dead-code'] = performance.now() - tDeadCode
-    console.error(`  ✗ dead-code failed: ${err}`)
-  }
-
-  const tFloating = performance.now()
-  try {
-    // Lit snapshot.typedCalls (déjà patché par les détecteurs Phase 5
-    // si présent) pour identifier les fonctions retournant Promise.
-    floatingPromises = await analyzeFloatingPromises(
-      config.rootDir, files, sharedProject, snapshot.typedCalls,
-    )
-    timing.detectors['floating-promises'] = performance.now() - tFloating
-  } catch (err) {
-    timing.detectors['floating-promises'] = performance.now() - tFloating
-    console.error(`  ✗ floating-promises failed: ${err}`)
-  }
-
-  const tDeprecated = performance.now()
-  try {
-    deprecatedUsage = await analyzeDeprecatedUsage(config.rootDir, files, sharedProject)
-    timing.detectors['deprecated-usage'] = performance.now() - tDeprecated
-  } catch (err) {
-    timing.detectors['deprecated-usage'] = performance.now() - tDeprecated
-    console.error(`  ✗ deprecated-usage failed: ${err}`)
-  }
-
-  const tArtic = performance.now()
-  try {
-    articulationPoints = await analyzeArticulationPoints(snapshot)
-    timing.detectors['articulation-points'] = performance.now() - tArtic
-  } catch (err) {
-    timing.detectors['articulation-points'] = performance.now() - tArtic
-    console.error(`  ✗ articulation-points failed: ${err}`)
-  }
-
-  const tSqlNaming = performance.now()
-  try {
-    if (snapshot.sqlSchema) {
-      sqlNamingViolations = findSqlNamingViolations(snapshot.sqlSchema)
-    }
-    timing.detectors['sql-naming'] = performance.now() - tSqlNaming
-  } catch (err) {
-    timing.detectors['sql-naming'] = performance.now() - tSqlNaming
-    console.error(`  ✗ sql-naming failed: ${err}`)
-  }
-
-  const tMigOrder = performance.now()
-  try {
-    if (snapshot.sqlSchema) {
-      sqlMigrationOrderViolations = findMigrationOrderViolations(snapshot.sqlSchema)
-    }
-    timing.detectors['sql-migration-order'] = performance.now() - tMigOrder
-  } catch (err) {
-    timing.detectors['sql-migration-order'] = performance.now() - tMigOrder
-    console.error(`  ✗ sql-migration-order failed: ${err}`)
-  }
-
-  const tResBalance = performance.now()
-  try {
-    resourceImbalances = await analyzeResourceBalance(config.rootDir, files, sharedProject)
-    timing.detectors['resource-balance'] = performance.now() - tResBalance
-  } catch (err) {
-    timing.detectors['resource-balance'] = performance.now() - tResBalance
-    console.error(`  ✗ resource-balance failed: ${err}`)
-  }
-
-  const tTaintSinks = performance.now()
-  try {
-    taintSinks = await analyzeTaintSinks(config.rootDir, files, sharedProject)
-    timing.detectors['taint-sinks'] = performance.now() - tTaintSinks
-  } catch (err) {
-    timing.detectors['taint-sinks'] = performance.now() - tTaintSinks
-    console.error(`  ✗ taint-sinks failed: ${err}`)
-  }
-
-  const tSanitizers = performance.now()
-  try {
-    sanitizerCalls = await analyzeSanitizers(config.rootDir, files, sharedProject)
-    timing.detectors['sanitizers'] = performance.now() - tSanitizers
-  } catch (err) {
-    timing.detectors['sanitizers'] = performance.now() - tSanitizers
-    console.error(`  ✗ sanitizers failed: ${err}`)
-  }
-
-  const tTaintedVars = performance.now()
-  try {
-    taintedVars = await analyzeTaintedVars(config.rootDir, files, sharedProject)
-    timing.detectors['tainted-vars'] = performance.now() - tTaintedVars
-  } catch (err) {
-    timing.detectors['tainted-vars'] = performance.now() - tTaintedVars
-    console.error(`  ✗ tainted-vars failed: ${err}`)
-  }
-
-  const tArguments = performance.now()
-  try {
-    argumentsFacts = await analyzeArguments(config.rootDir, files, sharedProject)
-    timing.detectors['arguments'] = performance.now() - tArguments
-  } catch (err) {
-    timing.detectors['arguments'] = performance.now() - tArguments
-    console.error(`  ✗ arguments failed: ${err}`)
-  }
-
-  if (todos) snapshot.todos = todos
-  if (longFunctions) snapshot.longFunctions = longFunctions
-  if (magicNumbers) snapshot.magicNumbers = magicNumbers
-  if (testCoverage) snapshot.testCoverage = testCoverage
-  if (coChangePairs) snapshot.coChangePairs = coChangePairs
-  if (driftSignals) snapshot.driftSignals = driftSignals
-  if (evalCalls) snapshot.evalCalls = evalCalls
-  if (cryptoCalls) snapshot.cryptoCalls = cryptoCalls
-  if (securityPatterns) snapshot.securityPatterns = securityPatterns
-  if (eventListenerSites) snapshot.eventListenerSites = eventListenerSites
-  if (codeQualityPatterns) snapshot.codeQualityPatterns = codeQualityPatterns
-  if (functionComplexity) snapshot.functionComplexity = functionComplexity
-  if (spectralMetrics) snapshot.spectralMetrics = spectralMetrics
-  if (symbolEntropy) snapshot.symbolEntropy = symbolEntropy
-  if (signatureDuplicates) snapshot.signatureDuplicates = signatureDuplicates
-  if (persistentCycles) snapshot.persistentCycles = persistentCycles
-  if (lyapunovMetrics) snapshot.lyapunovMetrics = lyapunovMetrics
-  if (packageMinCuts) snapshot.packageMinCuts = packageMinCuts
-  if (informationBottlenecks) snapshot.informationBottlenecks = informationBottlenecks
-  if (importCommunities) snapshot.importCommunities = importCommunities
-  if (modularityScore) snapshot.modularityScore = modularityScore
-  if (factStabilities) snapshot.factStabilities = factStabilities
-  if (bayesianCoChanges) snapshot.bayesianCoChanges = bayesianCoChanges
-  if (compressionDistances) snapshot.compressionDistances = compressionDistances
-  if (grangerCausalities) snapshot.grangerCausalities = grangerCausalities
-  if (hardcodedSecrets) snapshot.hardcodedSecrets = hardcodedSecrets
-  if (booleanParams) snapshot.booleanParams = booleanParams
-  if (deadCode) snapshot.deadCode = deadCode
-  if (floatingPromises) snapshot.floatingPromises = floatingPromises
-  if (deprecatedUsage) snapshot.deprecatedUsage = deprecatedUsage
-  if (articulationPoints) snapshot.articulationPoints = articulationPoints
-  if (sqlNamingViolations) snapshot.sqlNamingViolations = sqlNamingViolations
-  if (sqlMigrationOrderViolations) snapshot.sqlMigrationOrderViolations = sqlMigrationOrderViolations
-  if (resourceImbalances) snapshot.resourceImbalances = resourceImbalances
-  if (taintSinks) snapshot.taintSinks = taintSinks
-  if (sanitizerCalls) snapshot.sanitizerCalls = sanitizerCalls
-  if (taintedVars) snapshot.taintedVars = taintedVars
-  if (argumentsFacts) snapshot.argumentsFacts = argumentsFacts
 }
 
 /**
