@@ -5,7 +5,7 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T23:45:07Z
+Last update : 2026-05-03T23:47:21Z
 
 ## By type
 
@@ -19,6 +19,7 @@ Last update : 2026-05-03T23:45:07Z
 
 ### `refactor` (46)
 
+- **78eeb86** refactor(codegraph): split parseSqlFile (cyclo 20→1, cog 32→0) — sql-schema.ts cleared — 2026-05-04
 - **b431f2f** refactor(codegraph): split getOrBuildSharedProject (cyclo 20→2, cog 33→1) — project-cache.ts cleared — 2026-05-04
 - **600fdb0** refactor(codegraph): split BullmqQueueDetector.detect (cyclo 20→2, cog 42→1) — bullmq-queues.ts cleared — 2026-05-04
 - **fb50d40** refactor(codegraph): split EventBusDetector.detect (cyclo 20→1, cog 48→0) — event-bus.ts cleared — 2026-05-04
@@ -38,11 +39,11 @@ Last update : 2026-05-03T23:45:07Z
 - **3814233** refactor(codegraph): split findSqlNamingViolations (cyclo 26→3, cog 42→3) — sql-naming.ts bomb-free — 2026-05-04
 - **024b628** refactor(codegraph): split computeModuleMetrics (cyclo 27→4, cog 22→0) — module-metrics.ts bomb-free — 2026-05-04
 - **8a6e1e1** refactor(codegraph): split applyTransitiveReexportCoverage (cyclo 11→4, cog 26→4) — test-coverage.ts FULLY bomb-free — 2026-05-04
-- **2f99c5d** refactor(codegraph): split analyzeTestCoverage (cyclo 27→1, cog 54→0) — analyzeTestCoverage bomb-free — 2026-05-04
 
 
 ## Full history
 
+- **78eeb86** refactor(codegraph): split parseSqlFile (cyclo 20→1, cog 32→0) — sql-schema.ts cleared — 2026-05-04
 - **b431f2f** refactor(codegraph): split getOrBuildSharedProject (cyclo 20→2, cog 33→1) — project-cache.ts cleared — 2026-05-04
 - **600fdb0** refactor(codegraph): split BullmqQueueDetector.detect (cyclo 20→2, cog 42→1) — bullmq-queues.ts cleared — 2026-05-04
 - **fb50d40** refactor(codegraph): split EventBusDetector.detect (cyclo 20→1, cog 48→0) — event-bus.ts cleared — 2026-05-04
@@ -92,4 +93,3 @@ Last update : 2026-05-03T23:45:07Z
 - **8caddca** refactor(toolkit): split computeAffectedFromCli + scanTestsImportingAffected — cli/index.ts ALL bombs cleared — 2026-05-03
 - **e27c2be** refactor(toolkit): split codegraphAffected + dedup computeAffected — affected.ts ALL bombs cleared — 2026-05-03
 - **66cbcd7** refactor(toolkit): split findContainingSymbol + buildLineToSymbol — _shared/ast-helpers.ts ALL bombs cleared — 2026-05-03
-- **1ca9363** refactor(toolkit): split getTaintFromExpression + buildLineToSymbol — taint.ts ALL bombs cleared — 2026-05-03

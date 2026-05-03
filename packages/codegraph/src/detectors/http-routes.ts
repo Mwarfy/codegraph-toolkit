@@ -44,18 +44,19 @@ export class HttpRouteDetector implements Detector {
     const apiCalls: ApiCall[] = []
     const links: DetectedLink[] = []
 
-    // ─── Scan backend route files ──────────────────────────────────
+    await this.scanBackendRoutes(ctx, routes)
+    await this.scanFrontendApiCalls(ctx, apiCalls)
+    this.matchRoutesToApiCalls(apiCalls, routes, links)
+    this.linkHandlerMountsToRouteFiles(routes, ctx, links)
 
-    // Regex route patterns: path.match(/^\/api\/.../)
-    const regexRoutePattern = /path\.match\(\/\^(\\\/api\\\/[^/]+(?:\\\/[^)]*)?)\$\/\)/g
+    return this.deduplicateLinks(links)
+  }
 
-    // Exact route patterns: path === '/api/...'
-    const exactRoutePattern = /path\s*===\s*['"](\/(api|health)[^'"]*)['"]/g
-
-    // Handler mount patterns: handleXxxRoutes
-    const handlerMountPattern = /await\s+(handle\w+Routes)\s*\(/g
-
-    // Lit en parallèle les .ts api/server files (I/O fs indépendantes).
+  /** Scan backend api/server files pour les 3 patterns route declaration. */
+  private async scanBackendRoutes(
+    ctx: DetectorContext,
+    routes: RouteDeclaration[],
+  ): Promise<void> {
     const apiFiles = ctx.files.filter((f) =>
       f.endsWith('.ts') && (f.includes('api/') || f.includes('server')),
     )
@@ -63,113 +64,116 @@ export class HttpRouteDetector implements Detector {
       apiFiles.map(async (file) => ({ file, content: await ctx.readFile(file) })),
     )
     for (const { file, content } of fileContents) {
-      let match: RegExpExecArray | null
-
-      // Local regexes pour éviter race lastIndex partagé entre fichiers.
-      const regexRouteRe = new RegExp(regexRoutePattern.source, regexRoutePattern.flags)
-      const exactRouteRe = new RegExp(exactRoutePattern.source, exactRoutePattern.flags)
-      const handlerMountRe = new RegExp(handlerMountPattern.source, handlerMountPattern.flags)
-      while ((match = regexRouteRe.exec(content)) !== null) {
-        const routePath = match[1]
-          .replace(/\\\//g, '/')
-          .replace(/\(\[\^\/\]\+\)/g, ':param')
-          .replace(/\[\^\/\]\+/g, ':param')
-        routes.push({
-          file,
-          path: routePath,
-          line: this.getLineNumber(content, match.index),
-          pattern: 'regex',
-        })
-      }
-
-      while ((match = exactRouteRe.exec(content)) !== null) {
-        routes.push({
-          file,
-          path: match[1],
-          line: this.getLineNumber(content, match.index),
-          pattern: 'exact',
-        })
-      }
-
-      // Handler mounts in server.ts → link to route files
-      while ((match = handlerMountRe.exec(content)) !== null) {
-        routes.push({
-          file,
-          path: match[1],
-          line: this.getLineNumber(content, match.index),
-          pattern: 'handler-mount',
-        })
-      }
+      this.scanFileForRoutes(file, content, routes)
     }
+  }
 
-    // ─── Scan frontend for API calls ───────────────────────────────
+  private scanFileForRoutes(
+    file: string,
+    content: string,
+    routes: RouteDeclaration[],
+  ): void {
+    // Local regexes pour éviter race lastIndex partagé entre fichiers.
+    const regexRouteRe = /path\.match\(\/\^(\\\/api\\\/[^/]+(?:\\\/[^)]*)?)\$\/\)/g
+    const exactRouteRe = /path\s*===\s*['"](\/(api|health)[^'"]*)['"]/g
+    const handlerMountRe = /await\s+(handle\w+Routes)\s*\(/g
 
-    // apiFetch('/api/...')  or  apiFetch(`/api/...`)
-    const apiFetchPattern = /apiFetch\s*(?:<[^>]*>)?\s*\(\s*['"`](\/api[^'"`]*)/g
+    let match: RegExpExecArray | null
+    while ((match = regexRouteRe.exec(content)) !== null) {
+      routes.push({
+        file,
+        path: this.normalizeRegexRoutePath(match[1]),
+        line: this.getLineNumber(content, match.index),
+        pattern: 'regex',
+      })
+    }
+    while ((match = exactRouteRe.exec(content)) !== null) {
+      routes.push({
+        file,
+        path: match[1],
+        line: this.getLineNumber(content, match.index),
+        pattern: 'exact',
+      })
+    }
+    while ((match = handlerMountRe.exec(content)) !== null) {
+      routes.push({
+        file,
+        path: match[1],
+        line: this.getLineNumber(content, match.index),
+        pattern: 'handler-mount',
+      })
+    }
+  }
 
-    // Template literal API calls: apiFetch(`/api/projects/${id}`)
-    const templateFetchPattern = /apiFetch\s*(?:<[^>]*>)?\s*\(\s*`(\/api[^`]*)`/g
+  private normalizeRegexRoutePath(raw: string): string {
+    return raw
+      .replace(/\\\//g, '/')
+      .replace(/\(\[\^\/\]\+\)/g, ':param')
+      .replace(/\[\^\/\]\+/g, ':param')
+  }
 
-    // Direct fetch with API_BASE
-    const directFetchPattern = /fetch\(\s*`\$\{API_BASE\}(\/api[^`]*)`/g
-
-    // Filtre frontend files puis lit en parallèle.
-    const frontendFiles = ctx.files.filter((file) => {
-      // Heuristique frontend : .tsx OU dans un dir typiquement frontend
-      // (app/, hooks/, components/, frontend/). Évite de scanner inutilement
-      // tous les fichiers backend.
-      const isFrontendDir = /(?:^|\/)(?:app|hooks|components|frontend|src\/app|src\/components|src\/hooks)\//.test(file)
-      const isTsx = file.endsWith('.tsx')
-      if (!isTsx && !isFrontendDir) return false
-      return file.endsWith('.ts') || file.endsWith('.tsx')
-    })
+  /** Scan frontend (.tsx + dirs) pour les 3 patterns API call. */
+  private async scanFrontendApiCalls(
+    ctx: DetectorContext,
+    apiCalls: ApiCall[],
+  ): Promise<void> {
+    const frontendFiles = ctx.files.filter((file) => isFrontendFile(file))
     const frontendContents = await Promise.all(
       frontendFiles.map(async (file) => ({ file, content: await ctx.readFile(file) })),
     )
     for (const { file, content } of frontendContents) {
-      let match: RegExpExecArray | null
-
-      // Local regexes pour éviter race lastIndex partagé.
-      const apiFetchRe = new RegExp(apiFetchPattern.source, apiFetchPattern.flags)
-      const templateFetchRe = new RegExp(templateFetchPattern.source, templateFetchPattern.flags)
-      const directFetchRe = new RegExp(directFetchPattern.source, directFetchPattern.flags)
-      void apiFetchPattern; void templateFetchPattern; void directFetchPattern  // markers — used via local copies below
-
-      while ((match = apiFetchRe.exec(content)) !== null) {
-        apiCalls.push({
-          file,
-          path: match[1],
-          line: this.getLineNumber(content, match.index),
-          isDynamic: false,
-        })
-      }
-
-      while ((match = templateFetchRe.exec(content)) !== null) {
-        const apiPath = match[1].replace(/\$\{[^}]+\}/g, ':param')
-        apiCalls.push({
-          file,
-          path: apiPath,
-          line: this.getLineNumber(content, match.index),
-          isDynamic: apiPath.includes(':param'),
-        })
-      }
-
-      while ((match = directFetchRe.exec(content)) !== null) {
-        const apiPath = match[1].replace(/\$\{[^}]+\}/g, ':param')
-        apiCalls.push({
-          file,
-          path: apiPath,
-          line: this.getLineNumber(content, match.index),
-          isDynamic: apiPath.includes(':param'),
-        })
-      }
+      this.scanFileForApiCalls(file, content, apiCalls)
     }
+  }
 
-    // ─── Match routes to API calls ─────────────────────────────────
+  private scanFileForApiCalls(
+    file: string,
+    content: string,
+    apiCalls: ApiCall[],
+  ): void {
+    // Local regexes pour éviter race lastIndex partagé.
+    const apiFetchRe = /apiFetch\s*(?:<[^>]*>)?\s*\(\s*['"`](\/api[^'"`]*)/g
+    const templateFetchRe = /apiFetch\s*(?:<[^>]*>)?\s*\(\s*`(\/api[^`]*)`/g
+    const directFetchRe = /fetch\(\s*`\$\{API_BASE\}(\/api[^`]*)`/g
 
+    this.collectApiFetchCalls(file, content, apiFetchRe, false, apiCalls)
+    this.collectApiFetchCalls(file, content, templateFetchRe, true, apiCalls)
+    this.collectApiFetchCalls(file, content, directFetchRe, true, apiCalls)
+  }
+
+  /**
+   * Si `templateInterpolated`, replace `${...}` par `:param` dans le path et
+   * deduce isDynamic depuis la présence de `:param` dans la version normalisée.
+   */
+  private collectApiFetchCalls(
+    file: string,
+    content: string,
+    re: RegExp,
+    templateInterpolated: boolean,
+    apiCalls: ApiCall[],
+  ): void {
+    let match: RegExpExecArray | null
+    while ((match = re.exec(content)) !== null) {
+      const apiPath = templateInterpolated
+        ? match[1].replace(/\$\{[^}]+\}/g, ':param')
+        : match[1]
+      apiCalls.push({
+        file,
+        path: apiPath,
+        line: this.getLineNumber(content, match.index),
+        isDynamic: templateInterpolated && apiPath.includes(':param'),
+      })
+    }
+  }
+
+  /** Match each API call to backend routes ; émit "UNRESOLVED_ROUTE" si nope. */
+  private matchRoutesToApiCalls(
+    apiCalls: ApiCall[],
+    routes: RouteDeclaration[],
+    links: DetectedLink[],
+  ): void {
     for (const call of apiCalls) {
       const matchingRoutes = this.findMatchingRoutes(call.path, routes)
-
       if (matchingRoutes.length > 0) {
         for (const route of matchingRoutes) {
           links.push({
@@ -188,7 +192,6 @@ export class HttpRouteDetector implements Detector {
           })
         }
       } else {
-        // API call with no matching route — might be an issue
         links.push({
           from: call.file,
           to: 'UNRESOLVED_ROUTE',
@@ -200,35 +203,34 @@ export class HttpRouteDetector implements Detector {
         })
       }
     }
+  }
 
-    // ─── Link server.ts handler mounts to route files ──────────────
-
-    const handlerMounts = routes.filter(r => r.pattern === 'handler-mount')
+  /** Match handleProjectRoutes → routes/projects.ts. */
+  private linkHandlerMountsToRouteFiles(
+    routes: RouteDeclaration[],
+    ctx: DetectorContext,
+    links: DetectedLink[],
+  ): void {
+    const handlerMounts = routes.filter((r) => r.pattern === 'handler-mount')
     for (const mount of handlerMounts) {
-      // Match handleProjectRoutes → routes/projects.ts
       const routeName = mount.path
         .replace('handle', '')
         .replace('Routes', '')
         .toLowerCase()
-
-      const matchingFile = ctx.files.find(f =>
-        f.includes('routes/') && f.includes(routeName)
+      const matchingFile = ctx.files.find((f) =>
+        f.includes('routes/') && f.includes(routeName),
       )
-
-      if (matchingFile) {
-        links.push({
-          from: mount.file,
-          to: matchingFile,
-          type: 'route',
-          label: mount.path,
-          resolved: true,
-          line: mount.line,
-          meta: { handlerMount: true },
-        })
-      }
+      if (!matchingFile) continue
+      links.push({
+        from: mount.file,
+        to: matchingFile,
+        type: 'route',
+        label: mount.path,
+        resolved: true,
+        line: mount.line,
+        meta: { handlerMount: true },
+      })
     }
-
-    return this.deduplicateLinks(links)
   }
 
   private findMatchingRoutes(apiPath: string, routes: RouteDeclaration[]): RouteDeclaration[] {
@@ -281,4 +283,16 @@ export class HttpRouteDetector implements Detector {
       return true
     })
   }
+}
+
+/**
+ * Heuristique frontend : .tsx OU dans un dir typiquement frontend
+ * (app/, hooks/, components/, frontend/). Évite de scanner inutilement tous
+ * les fichiers backend.
+ */
+function isFrontendFile(file: string): boolean {
+  const isFrontendDir = /(?:^|\/)(?:app|hooks|components|frontend|src\/app|src\/components|src\/hooks)\//.test(file)
+  const isTsx = file.endsWith('.tsx')
+  if (!isTsx && !isFrontendDir) return false
+  return file.endsWith('.ts') || file.endsWith('.tsx')
 }
