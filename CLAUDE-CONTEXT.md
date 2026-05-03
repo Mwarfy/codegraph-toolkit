@@ -102,6 +102,7 @@
 - `packages/codegraph/src/incremental/unused-exports.ts` → ADR-007
 - `packages/codegraph/src/incremental/watcher.ts` → ADR-007
 - `packages/codegraph/src/map/dsm-renderer.ts` → ADR-008
+- `packages/codegraph/src/memory/store.ts` → ADR-002
 - `packages/codegraph/src/synopsis/builder.ts` → ADR-001
 - `packages/codegraph/src/synopsis/tensions.ts` → ADR-001
 - `packages/datalog/src/canonical.ts` → ADR-010
@@ -155,11 +156,11 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/adr-toolkit/tests/fixtures/sample-project/src/services/state-service.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/codegraph/src/cli/commands/_template.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/b.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/c.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **FSM-ORPHAN** `ApprovalStatus#expired` — état déclaré mais jamais écrit dans le code  
   _→ supprimer l'état OU ajouter la transition manquante_
@@ -185,6 +186,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+0146402 fix(toolkit): close P0+P1+P2+P3 — review credibility gap part 2
 0485ce4 feat(toolkit): self-optim Niveau 2A + Niveau 4 — math cost predict + auto-synth Salsa
 3ca2f45 feat(toolkit): self-optim auto-loop — connect probe → diag → brief → scaffold
 ce4e6e8 perf(toolkit): deprecated-usage Salsa-isolation + math regression gate
@@ -196,7 +198,6 @@ c484f1f refactor(codegraph): runDeterministicDetectors 279→108 LOC + git-fixtu
 79c4fed feat(runtime-graph): Phase γ.2c — TDA Persistent Homology dim-0
 fc1c79d feat(runtime-graph): Phase γ.2b — true time-series Lyapunov 1D
 5c78f3a feat(runtime-graph): Phase γ.2a — Granger causality runtime + time-series infra
-81b8fb9 fix(toolkit): self-detected defects via codegraph + runtime-graph
 ```
 
 ## Comment contribuer à ce brief

@@ -5,11 +5,11 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T13:28:31Z
+Last update : 2026-05-03T13:34:20Z
 
 ## By type
 
-### `feat` (28)
+### `feat` (27)
 
 - **0485ce4** feat(toolkit): self-optim Niveau 2A + Niveau 4 — math cost predict + auto-synth Salsa — 2026-05-03
 - **3ca2f45** feat(toolkit): self-optim auto-loop — connect probe → diag → brief → scaffold — 2026-05-03
@@ -33,8 +33,9 @@ Last update : 2026-05-03T13:28:31Z
 - **f35acd1** feat(toolkit): self-audit — 5 quick-wins + 2 meta-fix + dogfood gate — 2026-05-01
 
 
-### `fix` (5)
+### `fix` (6)
 
+- **0146402** fix(toolkit): close P0+P1+P2+P3 — review credibility gap part 2 — 2026-05-03
 - **81b8fb9** fix(toolkit): self-detected defects via codegraph + runtime-graph — 2026-05-03
 - **e73e85d** fix(codegraph): break direct cycle sql-helpers ↔ sql-schema via type extraction — 2026-05-03
 - **f642620** fix(runtime-graph): CLI rulesDir resolution via __dirname (no package.json export) — 2026-05-03
@@ -81,6 +82,7 @@ Last update : 2026-05-03T13:28:31Z
 
 ## Full history
 
+- **0146402** fix(toolkit): close P0+P1+P2+P3 — review credibility gap part 2 — 2026-05-03
 - **0485ce4** feat(toolkit): self-optim Niveau 2A + Niveau 4 — math cost predict + auto-synth Salsa — 2026-05-03
 - **3ca2f45** feat(toolkit): self-optim auto-loop — connect probe → diag → brief → scaffold — 2026-05-03
 - **ce4e6e8** perf(toolkit): deprecated-usage Salsa-isolation + math regression gate — 2026-05-03
@@ -130,4 +132,3 @@ Last update : 2026-05-03T13:28:31Z
 - **4418c90** feat(codegraph): Tier 16 extractors — crypto-algo + security-patterns + 2 sink kinds — 2026-05-01
 - **10f4bf9** feat(invariants): Tier 15 — 21 nouvelles rules library + PHASE-5 backlog — 2026-05-01
 - **ecc5303** feat(codegraph): tainted-vars supporte les destructurings (Tier 15) — 2026-05-01
-- **fd50aa4** feat(datalog): comparison ops (>, <, >=, <=, !=) + 2nd pass post-aggregate — 2026-05-01

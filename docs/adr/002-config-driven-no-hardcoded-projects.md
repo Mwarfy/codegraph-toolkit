@@ -49,6 +49,7 @@ l'install.
 
 - `packages/adr-toolkit/src/check-asserts.ts`
 - `packages/adr-toolkit/src/config.ts` — config-driven obligatoire, pas de hardcoded projet
+- `packages/codegraph/src/memory/store.ts`
 
 
 ## Tested by

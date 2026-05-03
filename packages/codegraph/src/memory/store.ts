@@ -1,3 +1,4 @@
+// ADR-002
 /**
  * Mémoire inter-sessions du codegraph-toolkit (Phase 4 axe 3).
  *
