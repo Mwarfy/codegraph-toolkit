@@ -5,11 +5,11 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T19:34:39Z
+Last update : 2026-05-03T19:36:45Z
 
 ## By type
 
-### `feat` (7)
+### `feat` (6)
 
 - **af41582** feat(toolkit): symbolic simplification facts + 5 composite rules cross-discipline — 2026-05-03
 - **2f84a70** feat(toolkit): Niveau 5 effect-analysis + roadmap defers Niveaux 6/7 — 2026-05-03
@@ -17,7 +17,6 @@ Last update : 2026-05-03T19:34:39Z
 - **3ca2f45** feat(toolkit): self-optim auto-loop — connect probe → diag → brief → scaffold — 2026-05-03
 - **67c5581** feat(toolkit): mathematical self-governance — 100% load-bearing files governed — 2026-05-03
 - **79c4fed** feat(runtime-graph): Phase γ.2c — TDA Persistent Homology dim-0 — 2026-05-03
-- **fc1c79d** feat(runtime-graph): Phase γ.2b — true time-series Lyapunov 1D — 2026-05-03
 
 
 ### `fix` (9)
@@ -42,8 +41,9 @@ Last update : 2026-05-03T19:34:39Z
 - **afd0965** perf(toolkit): self-discovered Salsa optimizations — warm runtime −40% — 2026-05-03
 
 
-### `refactor` (21)
+### `refactor` (22)
 
+- **af4705f** refactor(toolkit): split renderCoreFlows (cyclo 22→4) — 3 helpers (group + table + detail) — 2026-05-03
 - **69911dc** refactor(toolkit): split renderStats (cyclo 24→11) — 5 helpers stats lines — 2026-05-03
 - **9609b7d** refactor(toolkit): split renderIndex (cyclo 28→3) — 3 helpers + bucket pattern factor — 2026-05-03
 - **a0add06** refactor(toolkit): split renderModuleFiche (cyclo 32→4) — 5 helpers section-by-section — 2026-05-03
@@ -63,7 +63,6 @@ Last update : 2026-05-03T19:34:39Z
 - **fbebea4** refactor(toolkit): extract makeIsExempt helper (NCD: 25→16, total 434→422) — 2026-05-03
 - **b0f2c9a** refactor(toolkit): split cli/index.ts god-file (2190→1520 LOC, −30%) — 2026-05-03
 - **c613ac7** refactor(toolkit): split analyzer.ts:runDeterministicDetectors en 5 phases — 2026-05-03
-- **5f8d691** refactor(toolkit): split god-files + fix REDOS detector + tests hubs — 2026-05-03
 
 
 ### `chore` (4)
@@ -84,6 +83,7 @@ Last update : 2026-05-03T19:34:39Z
 
 ## Full history
 
+- **af4705f** refactor(toolkit): split renderCoreFlows (cyclo 22→4) — 3 helpers (group + table + detail) — 2026-05-03
 - **69911dc** refactor(toolkit): split renderStats (cyclo 24→11) — 5 helpers stats lines — 2026-05-03
 - **9609b7d** refactor(toolkit): split renderIndex (cyclo 28→3) — 3 helpers + bucket pattern factor — 2026-05-03
 - **a0add06** refactor(toolkit): split renderModuleFiche (cyclo 32→4) — 5 helpers section-by-section — 2026-05-03
@@ -133,4 +133,3 @@ Last update : 2026-05-03T19:34:39Z
 - **173915c** chore(toolkit): self-discipline pass — close credibility gap from external review — 2026-05-03
 - **03ef857** chore(runtime-graph): OSS launch prep — alpha.4 publish-ready — 2026-05-03
 - **79c4fed** feat(runtime-graph): Phase γ.2c — TDA Persistent Homology dim-0 — 2026-05-03
-- **fc1c79d** feat(runtime-graph): Phase γ.2b — true time-series Lyapunov 1D — 2026-05-03

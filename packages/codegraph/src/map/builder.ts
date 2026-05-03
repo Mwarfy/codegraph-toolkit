@@ -497,6 +497,49 @@ function renderStateMachines(s: GraphSnapshot): string {
 
 // ─── Section 3 : Truth points ───────────────────────────────────────────────
 
+function formatTruthMirrors(mirrors: TruthPoint['mirrors']): string {
+  if (mirrors.length === 0) return '—'
+  return mirrors
+    .slice(0, 2)
+    .map((m) => `${m.kind}:\`${truncate(m.key, 36)}\`${m.ttl ? ` ttl=${m.ttl}` : ''}`)
+    .join(' · ') + (mirrors.length > 2 ? ' …' : '')
+}
+
+function formatTruthExposed(exposed: TruthPoint['exposed']): string {
+  if (exposed.length === 0) return '—'
+  return exposed
+    .slice(0, 3)
+    .map((e) => `\`${truncate(e.id, 28)}\``)
+    .join(', ') + (exposed.length > 3 ? ' …' : '')
+}
+
+function renderTruthHotspots(interesting: TruthPoint[]): string[] {
+  const hotspots = interesting
+    .filter(p => p.writers.length + p.readers.length >= 4)
+    .sort((a, b) => (b.writers.length + b.readers.length) - (a.writers.length + a.readers.length))
+    .slice(0, 15)
+  if (hotspots.length === 0) return []
+  const lines: string[] = [
+    '',
+    '### Lineage des hotspots (W ≥ 2 ou R ≥ 2)',
+    '',
+    '_Pour refacto de schéma : liste explicite des fichiers writer/reader._',
+    '',
+  ]
+  for (const p of hotspots) {
+    const writerFiles = uniqueFiles(p.writers.map(w => w.file))
+    const readerFiles = uniqueFiles(p.readers.map(r => r.file))
+    const wLine = writerFiles.length === 0
+      ? '_(aucun writer)_'
+      : writerFiles.map(f => `\`${shortenFile(f)}\``).join(', ')
+    const rLine = readerFiles.length === 0
+      ? '_(aucun reader)_'
+      : readerFiles.map(f => `\`${shortenFile(f)}\``).join(', ')
+    lines.push(`- **\`${p.concept}\`**`, `  - W: ${wLine}`, `  - R: ${rLine}`)
+  }
+  return lines
+}
+
 function renderTruthPoints(s: GraphSnapshot): string {
   const tp = s.truthPoints
   if (!tp || tp.length === 0) return ''
@@ -512,61 +555,22 @@ function renderTruthPoints(s: GraphSnapshot): string {
   )
   if (interesting.length === 0) return ''
 
-  const lines: string[] = ['## 3. Truth points', '']
-  lines.push(`${interesting.length} concepts "actifs" (≥2 writers/readers, ou mirror, ou exposed). Total : ${tp.length}.`)
-  lines.push('')
-  lines.push('| Concept | Canonical | Mirrors | W | R | Exposed |')
-  lines.push('|---|---|---|---:|---:|---|')
+  const lines: string[] = [
+    '## 3. Truth points', '',
+    `${interesting.length} concepts "actifs" (≥2 writers/readers, ou mirror, ou exposed). Total : ${tp.length}.`,
+    '',
+    '| Concept | Canonical | Mirrors | W | R | Exposed |',
+    '|---|---|---|---:|---:|---|',
+  ]
   for (const p of interesting.slice(0, 50)) {
-    const mirrors = p.mirrors.length === 0
-      ? '—'
-      : p.mirrors
-          .slice(0, 2)
-          .map((m) => `${m.kind}:\`${truncate(m.key, 36)}\`${m.ttl ? ` ttl=${m.ttl}` : ''}`)
-          .join(' · ') + (p.mirrors.length > 2 ? ' …' : '')
-    const exposed = p.exposed.length === 0
-      ? '—'
-      : p.exposed
-          .slice(0, 3)
-          .map((e) => `\`${truncate(e.id, 28)}\``)
-          .join(', ') + (p.exposed.length > 3 ? ' …' : '')
     const canonical = p.canonical ? `\`${p.canonical.name}\`` : '—'
-    lines.push(`| \`${p.concept}\` | ${canonical} | ${mirrors} | ${p.writers.length} | ${p.readers.length} | ${exposed} |`)
+    lines.push(`| \`${p.concept}\` | ${canonical} | ${formatTruthMirrors(p.mirrors)} | ${p.writers.length} | ${p.readers.length} | ${formatTruthExposed(p.exposed)} |`)
   }
   if (interesting.length > 50) {
-    lines.push('')
-    lines.push(`_(${interesting.length - 50} concepts actifs supplémentaires non listés)_`)
+    lines.push('', `_(${interesting.length - 50} concepts actifs supplémentaires non listés)_`)
   }
 
-  // ── Expanded lineage : pour les concepts à forte activité, lister les
-  // fichiers writers/readers explicitement. Accélère les refacto de schéma :
-  // qui casser si on change la table X.
-  const hotspots = interesting
-    .filter(p => p.writers.length + p.readers.length >= 4)
-    .sort((a, b) => (b.writers.length + b.readers.length) - (a.writers.length + a.readers.length))
-    .slice(0, 15)
-
-  if (hotspots.length > 0) {
-    lines.push('')
-    lines.push('### Lineage des hotspots (W ≥ 2 ou R ≥ 2)')
-    lines.push('')
-    lines.push('_Pour refacto de schéma : liste explicite des fichiers writer/reader._')
-    lines.push('')
-    for (const p of hotspots) {
-      const writerFiles = uniqueFiles(p.writers.map(w => w.file))
-      const readerFiles = uniqueFiles(p.readers.map(r => r.file))
-      const wLine = writerFiles.length === 0
-        ? '_(aucun writer)_'
-        : writerFiles.map(f => `\`${shortenFile(f)}\``).join(', ')
-      const rLine = readerFiles.length === 0
-        ? '_(aucun reader)_'
-        : readerFiles.map(f => `\`${shortenFile(f)}\``).join(', ')
-      lines.push(`- **\`${p.concept}\`**`)
-      lines.push(`  - W: ${wLine}`)
-      lines.push(`  - R: ${rLine}`)
-    }
-  }
-
+  lines.push(...renderTruthHotspots(interesting))
   return lines.join('\n')
 }
 
@@ -696,20 +700,48 @@ function renderEnvUsage(s: GraphSnapshot): string {
 
 // ─── Section 4.6 : Package deps hygiene ────────────────────────────────────
 
+type PackageDepIssue = NonNullable<GraphSnapshot['packageDeps']>[number]
+
+function renderPackageDepIssue(issue: PackageDepIssue): string {
+  const icon = issue.kind === 'missing' ? '✗' : issue.kind === 'devOnly' ? '◐' : '–'
+  const loc = issue.declaredIn ? ` _(${issue.declaredIn})_` : ''
+  const importers = issue.importers.length === 0
+    ? ''
+    : ` — ${issue.importers.slice(0, 3).map((f) => `\`${f}\``).join(', ')}${issue.importers.length > 3 ? ` …+${issue.importers.length - 3}` : ''}`
+  return `- ${icon} **${issue.kind}** \`${issue.packageName}\`${loc}${importers}`
+}
+
+function renderPackageDepManifest(manifest: string, list: PackageDepIssue[]): string[] {
+  const out: string[] = [`### \`${manifest}\` (${list.length})`, '']
+  const byKind = new Map<string, PackageDepIssue[]>()
+  for (const i of list) {
+    const arr = byKind.get(i.kind) ?? []
+    arr.push(i)
+    byKind.set(i.kind, arr)
+  }
+  for (const kind of ['missing', 'devOnly', 'declared-unused'] as const) {
+    const group = byKind.get(kind)
+    if (!group || group.length === 0) continue
+    for (const issue of group) out.push(renderPackageDepIssue(issue))
+  }
+  out.push('')
+  return out
+}
+
 function renderPackageDeps(s: GraphSnapshot): string {
   const issues = s.packageDeps
   if (!issues || issues.length === 0) return ''
 
-  const lines: string[] = ['## 4.6. Package deps hygiene', '']
   const counts = { missing: 0, 'declared-unused': 0, 'declared-runtime-asset': 0, devOnly: 0 }
   for (const i of issues) counts[i.kind]++
-  lines.push(
-    `${counts.missing} missing (build hazard) · ${counts['declared-unused']} declared-unused · ${counts['declared-runtime-asset']} runtime-asset (review before uninstall) · ${counts.devOnly} devOnly (misplaced in \`dependencies\`).`,
-  )
-  lines.push('')
 
-  // Group by package.json.
-  const byManifest = new Map<string, typeof issues>()
+  const lines: string[] = [
+    '## 4.6. Package deps hygiene', '',
+    `${counts.missing} missing (build hazard) · ${counts['declared-unused']} declared-unused · ${counts['declared-runtime-asset']} runtime-asset (review before uninstall) · ${counts.devOnly} devOnly (misplaced in \`dependencies\`).`,
+    '',
+  ]
+
+  const byManifest = new Map<string, PackageDepIssue[]>()
   for (const i of issues) {
     const arr = byManifest.get(i.packageJson) ?? []
     arr.push(i)
@@ -717,27 +749,7 @@ function renderPackageDeps(s: GraphSnapshot): string {
   }
 
   for (const [manifest, list] of [...byManifest].sort()) {
-    lines.push(`### \`${manifest}\` (${list.length})`)
-    lines.push('')
-    const byKind = new Map<string, typeof list>()
-    for (const i of list) {
-      const arr = byKind.get(i.kind) ?? []
-      arr.push(i)
-      byKind.set(i.kind, arr)
-    }
-    for (const kind of ['missing', 'devOnly', 'declared-unused'] as const) {
-      const group = byKind.get(kind)
-      if (!group || group.length === 0) continue
-      const icon = kind === 'missing' ? '✗' : kind === 'devOnly' ? '◐' : '–'
-      for (const i of group) {
-        const loc = i.declaredIn ? ` _(${i.declaredIn})_` : ''
-        const importers = i.importers.length === 0
-          ? ''
-          : ` — ${i.importers.slice(0, 3).map((f) => `\`${f}\``).join(', ')}${i.importers.length > 3 ? ` …+${i.importers.length - 3}` : ''}`
-        lines.push(`- ${icon} **${kind}** \`${i.packageName}\`${loc}${importers}`)
-      }
-    }
-    lines.push('')
+    lines.push(...renderPackageDepManifest(manifest, list))
   }
 
   return lines.join('\n').trimEnd()
@@ -768,20 +780,34 @@ function renderBarrels(s: GraphSnapshot): string {
 
 // ─── Section 4.8 : Taint violations ────────────────────────────────────────
 
+type TaintViolation = NonNullable<GraphSnapshot['taintViolations']>[number]
+
+function severityIcon(severity: 'critical' | 'high' | 'medium' | 'low'): string {
+  if (severity === 'critical') return '🔴'
+  if (severity === 'high') return '🟠'
+  if (severity === 'medium') return '🟡'
+  return '⚪'
+}
+
+function renderTaintViolation(v: TaintViolation): string[] {
+  const sym = v.symbol ? ` (\`${v.symbol}\`)` : ''
+  const lines: string[] = [
+    `- ${severityIcon(v.severity)} **${v.severity}** \`${v.sourceName}\` → \`${v.sinkName}\` — \`${v.file}:${v.line}\`${sym}`,
+  ]
+  for (const step of v.chain) {
+    const stepIcon = step.kind === 'source' ? '┌' : step.kind === 'sink' ? '└' : '│'
+    lines.push(`    - ${stepIcon} L${step.line}: ${step.detail}`)
+  }
+  return lines
+}
+
 function renderTaintViolations(s: GraphSnapshot): string {
   const list = s.taintViolations
   if (!list || list.length === 0) return ''
 
-  const lines: string[] = ['## 4.8. Taint violations', '']
   const bySev = { critical: 0, high: 0, medium: 0, low: 0 }
   for (const v of list) bySev[v.severity]++
-  lines.push(
-    `${list.length} flux source → sink sans sanitizer. ` +
-    `crit ${bySev.critical} · high ${bySev.high} · med ${bySev.medium} · low ${bySev.low}.`,
-  )
-  lines.push('')
 
-  // Tri : severity desc puis file.
   const sevRank: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 }
   const sorted = [...list].sort((a, b) => {
     if (sevRank[a.severity] !== sevRank[b.severity]) return sevRank[a.severity] - sevRank[b.severity]
@@ -789,20 +815,18 @@ function renderTaintViolations(s: GraphSnapshot): string {
     return a.line - b.line
   })
 
+  const lines: string[] = [
+    '## 4.8. Taint violations', '',
+    `${list.length} flux source → sink sans sanitizer. ` +
+    `crit ${bySev.critical} · high ${bySev.high} · med ${bySev.medium} · low ${bySev.low}.`,
+    '',
+  ]
+
   for (const v of sorted.slice(0, 30)) {
-    const sevIcon = v.severity === 'critical' ? '🔴'
-                  : v.severity === 'high' ? '🟠'
-                  : v.severity === 'medium' ? '🟡'
-                  : '⚪'
-    const sym = v.symbol ? ` (\`${v.symbol}\`)` : ''
-    lines.push(`- ${sevIcon} **${v.severity}** \`${v.sourceName}\` → \`${v.sinkName}\` — \`${v.file}:${v.line}\`${sym}`)
-    for (const step of v.chain) {
-      lines.push(`    - ${step.kind === 'source' ? '┌' : step.kind === 'sink' ? '└' : '│'} L${step.line}: ${step.detail}`)
-    }
+    lines.push(...renderTaintViolation(v))
   }
   if (sorted.length > 30) {
-    lines.push('')
-    lines.push(`_(${sorted.length - 30} violations supplémentaires non listées)_`)
+    lines.push('', `_(${sorted.length - 30} violations supplémentaires non listées)_`)
   }
 
   return lines.join('\n').trimEnd()
