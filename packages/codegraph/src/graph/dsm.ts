@@ -27,9 +27,24 @@ export function computeDsm(
   edges: Array<{ from: string; to: string }>,
   _options: DsmOptions = {},
 ): DsmResult {
-  const nodeSet = new Set(nodes)
+  const adj = buildAdjacency(nodes, edges)
+  const sccs = tarjanScc(nodes, adj)
+  const sccIdOf = invertSccs(sccs)
+  const condAdj = buildCondensedDag(adj, sccIdOf, sccs.length)
+  const minIdOf = computeMinIdOfScc(sccs)
+  const topoOrder = topoSortCondensed(condAdj, sccs.length, minIdOf)
+  const { order, levels } = emitOrderFromSccs(topoOrder, sccs)
+  const { matrix, backEdges } = buildMatrixAndBackEdges(order, adj)
+  return { order, levels, matrix, backEdges }
+}
 
-  // Adjacency (dédup, pas de self-loops).
+// ─── Phase 0: adjacency (dédup, no self-loops) ─────────────────────────────
+
+function buildAdjacency(
+  nodes: string[],
+  edges: Array<{ from: string; to: string }>,
+): Map<string, Set<string>> {
+  const nodeSet = new Set(nodes)
   const adj = new Map<string, Set<string>>()
   for (const n of nodes) adj.set(n, new Set())
   for (const e of edges) {
@@ -37,19 +52,26 @@ export function computeDsm(
     if (e.from === e.to) continue
     adj.get(e.from)!.add(e.to)
   }
+  return adj
+}
 
-  // ─── 1. Tarjan SCC (itératif) ────────────────────────────────────────
-  const sccs = tarjanScc(nodes, adj)
+// ─── Phase 2: invert SCCs into nodeId → sccId map ───────────────────────────
 
-  // sccId par node.
+function invertSccs(sccs: string[][]): Map<string, number> {
   const sccIdOf = new Map<string, number>()
-  sccs.forEach((scc, i) => {
-    for (const n of scc) sccIdOf.set(n, i)
-  })
+  sccs.forEach((scc, i) => { for (const n of scc) sccIdOf.set(n, i) })
+  return sccIdOf
+}
 
-  // ─── 2. Condensation DAG ─────────────────────────────────────────────
+// ─── Phase 2b: condensation DAG (sccId → sccId edges) ───────────────────────
+
+function buildCondensedDag(
+  adj: Map<string, Set<string>>,
+  sccIdOf: Map<string, number>,
+  sccCount: number,
+): Map<number, Set<number>> {
   const condAdj = new Map<number, Set<number>>()
-  for (let i = 0; i < sccs.length; i++) condAdj.set(i, new Set())
+  for (let i = 0; i < sccCount; i++) condAdj.set(i, new Set())
   for (const [from, targets] of adj) {
     const a = sccIdOf.get(from)!
     for (const to of targets) {
@@ -57,48 +79,70 @@ export function computeDsm(
       if (a !== b) condAdj.get(a)!.add(b)
     }
   }
+  return condAdj
+}
 
-  // ─── 3. Topo sort du DAG condensé (Kahn, tie-break lex) ──────────────
+/** Pour tie-break stable du topo sort : min-id (alpha) de chaque SCC. */
+function computeMinIdOfScc(sccs: string[][]): Map<number, string> {
+  const minIdOf = new Map<number, string>()
+  sccs.forEach((scc, i) => { minIdOf.set(i, [...scc].sort()[0]!) })
+  return minIdOf
+}
+
+// ─── Phase 3: topo sort (Kahn, lex tie-break) ───────────────────────────────
+
+function topoSortCondensed(
+  condAdj: Map<number, Set<number>>,
+  sccCount: number,
+  minIdOf: Map<number, string>,
+): number[] {
   const indeg = new Map<number, number>()
-  for (let i = 0; i < sccs.length; i++) indeg.set(i, 0)
+  for (let i = 0; i < sccCount; i++) indeg.set(i, 0)
   for (const targets of condAdj.values()) {
     for (const t of targets) indeg.set(t, (indeg.get(t) ?? 0) + 1)
   }
-  // Pour tie-break stable : min-id (alpha) de chaque SCC.
-  const minIdOf = new Map<number, string>()
-  sccs.forEach((scc, i) => {
-    minIdOf.set(i, [...scc].sort()[0]!)
-  })
 
-  const topoOrder: number[] = []
-  // Priority queue naïve (O(N²) insert) — suffisant jusqu'à ~10k SCCs.
   const ready: number[] = []
-  for (let i = 0; i < sccs.length; i++) {
+  for (let i = 0; i < sccCount; i++) {
     if ((indeg.get(i) ?? 0) === 0) ready.push(i)
   }
   ready.sort((a, b) => minIdOf.get(a)!.localeCompare(minIdOf.get(b)!))
 
+  const topoOrder: number[] = []
   while (ready.length > 0) {
     const cur = ready.shift()!
     topoOrder.push(cur)
     for (const nxt of condAdj.get(cur)!) {
       const d = (indeg.get(nxt) ?? 0) - 1
       indeg.set(nxt, d)
-      if (d === 0) {
-        // Insertion triée
-        const key = minIdOf.get(nxt)!
-        let lo = 0, hi = ready.length
-        while (lo < hi) {
-          const mid = (lo + hi) >>> 1
-          if (minIdOf.get(ready[mid]!)!.localeCompare(key) < 0) lo = mid + 1
-          else hi = mid
-        }
-        ready.splice(lo, 0, nxt)
-      }
+      if (d === 0) insertSortedByMinId(ready, nxt, minIdOf)
     }
   }
+  return topoOrder
+}
 
-  // ─── 4. Emit order : SCC par SCC, membres tri alpha ─────────────────
+/** Insertion triée par minIdOf, binary scan. O(log N) lookup, O(N) splice. */
+function insertSortedByMinId(
+  ready: number[],
+  val: number,
+  minIdOf: Map<number, string>,
+): void {
+  const key = minIdOf.get(val)!
+  let lo = 0, hi = ready.length
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1
+    if (minIdOf.get(ready[mid]!)!.localeCompare(key) < 0) lo = mid + 1
+    else hi = mid
+  }
+  ready.splice(lo, 0, val)
+}
+
+// ─── Phase 4: emit order : SCC par SCC, membres tri alpha ──────────────────
+
+function emitOrderFromSccs(
+  topoOrder: number[],
+  sccs: string[][],
+): { order: string[]; levels: string[][] } {
   const order: string[] = []
   const levels: string[][] = []
   for (const sccId of topoOrder) {
@@ -106,8 +150,15 @@ export function computeDsm(
     levels.push(members)
     order.push(...members)
   }
+  return { order, levels }
+}
 
-  // ─── 5. Build matrix + back-edges ────────────────────────────────────
+// ─── Phase 5: matrix + back-edges ───────────────────────────────────────────
+
+function buildMatrixAndBackEdges(
+  order: string[],
+  adj: Map<string, Set<string>>,
+): { matrix: number[][]; backEdges: DsmResult['backEdges'] } {
   const idxOf = new Map<string, number>()
   order.forEach((n, i) => idxOf.set(n, i))
 
@@ -120,9 +171,7 @@ export function computeDsm(
     for (const to of targets) {
       const j = idxOf.get(to)!
       matrix[i]![j] = 1
-      if (i > j) {
-        backEdges.push({ from, to, fromIdx: i, toIdx: j })
-      }
+      if (i > j) backEdges.push({ from, to, fromIdx: i, toIdx: j })
     }
   }
 
@@ -130,8 +179,7 @@ export function computeDsm(
     if (a.fromIdx !== b.fromIdx) return a.fromIdx - b.fromIdx
     return a.toIdx - b.toIdx
   })
-
-  return { order, levels, matrix, backEdges }
+  return { matrix, backEdges }
 }
 
 // ─── Tarjan SCC (itératif) ────────────────────────────────────────────
