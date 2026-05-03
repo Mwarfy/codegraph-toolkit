@@ -230,6 +230,65 @@ export function evaluate(
 // ─── Single rule evaluation ────────────────────────────────────────────────
 
 /** Evaluate one rule, derive new tuples for its head. Return count. */
+/**
+ * True si l'env passe TOUS les constraints + n'a AUCUN negative match.
+ * Reject = rule body insatisfait pour cet env.
+ */
+function envPassesGuards(
+  env: Env,
+  constraints: Constraint[],
+  negatives: Atom[],
+  db: Database,
+  program: Program,
+): boolean {
+  for (const c of constraints) {
+    if (!evaluateConstraint(c, env, program)) return false
+  }
+  for (const neg of negatives) {
+    if (matchesAny(neg, env, db)) return false
+  }
+  return true
+}
+
+function buildHeadTuple(rule: Rule, env: Env, program: Program): DatalogValue[] {
+  const headTuple: DatalogValue[] = []
+  for (const t of rule.head.args) {
+    if (t.kind === 'const') {
+      headTuple.push(t.value)
+    } else if (t.kind === 'var') {
+      const v = env.get(t.name)
+      if (v === undefined) {
+        throw new DatalogError('eval.unboundHeadVar',
+          `head variable '${t.name}' is unbound after body match`,
+          t.pos, program.source)
+      }
+      headTuple.push(v)
+    } else {
+      throw new DatalogError('eval.wildcardInHead',
+        `wildcard in head — caught earlier in parser?`, t.pos, program.source)
+    }
+  }
+  return headTuple
+}
+
+function recordProofIfWanted(
+  rule: Rule,
+  headTuple: DatalogValue[],
+  bodyTuples: Array<{ rel: string; tuple: Tuple }>,
+  recordSet: Set<string>,
+  provenance: Map<string, Map<string, ProofRecord>>,
+): void {
+  if (!recordSet.has(rule.head.rel)) return
+  const k = tupleKey(rule.head.rel, headTuple)
+  const rec = provenance.get(rule.head.rel)!
+  if (rec.has(k)) return
+  rec.set(k, {
+    ruleIndex: rule.index,
+    ruleHead: rule.head.rel,
+    bodyTuples,
+  })
+}
+
 function evaluateRule(
   rule: Rule,
   db: Database,
@@ -239,60 +298,19 @@ function evaluateRule(
 ): number {
   const positives = rule.body.filter((a) => !a.negated)
   const negatives = rule.body.filter((a) => a.negated)
+  const constraints = rule.constraints ?? []
 
-  // Iterate all environments that satisfy the positive body.
   const envs: Array<{ env: Env; bodyTuples: Array<{ rel: string; tuple: Tuple }> }> = []
   joinPositive(positives, 0, new Map(), [], db, envs)
 
-  const constraints = rule.constraints ?? []
-
   let derived = 0
   for (const { env, bodyTuples } of envs) {
-    // Constraints (Tier 15) : numeric post-filter on bound variables.
-    let rejected = false
-    for (const c of constraints) {
-      if (!evaluateConstraint(c, env, program)) { rejected = true; break }
-    }
-    if (rejected) continue
-    // Negatives : reject if any matches.
-    for (const neg of negatives) {
-      if (matchesAny(neg, env, db)) { rejected = true; break }
-    }
-    if (rejected) continue
-
-    // Build the head tuple.
-    const headTuple: DatalogValue[] = []
-    for (const t of rule.head.args) {
-      if (t.kind === 'const') {
-        headTuple.push(t.value)
-      } else if (t.kind === 'var') {
-        const v = env.get(t.name)
-        if (v === undefined) {
-          throw new DatalogError('eval.unboundHeadVar',
-            `head variable '${t.name}' is unbound after body match`,
-            t.pos, program.source)
-        }
-        headTuple.push(v)
-      } else {
-        throw new DatalogError('eval.wildcardInHead',
-          `wildcard in head — caught earlier in parser?`, t.pos, program.source)
-      }
-    }
+    if (!envPassesGuards(env, constraints, negatives, db, program)) continue
+    const headTuple = buildHeadTuple(rule, env, program)
     const headRel = db.relations.get(rule.head.rel)!
     if (insertTuple(headRel, headTuple)) {
       derived++
-      // Record proof if asked.
-      if (recordSet.has(rule.head.rel)) {
-        const k = tupleKey(rule.head.rel, headTuple)
-        const rec = provenance.get(rule.head.rel)!
-        if (!rec.has(k)) {
-          rec.set(k, {
-            ruleIndex: rule.index,
-            ruleHead: rule.head.rel,
-            bodyTuples,
-          })
-        }
-      }
+      recordProofIfWanted(rule, headTuple, bodyTuples, recordSet, provenance)
     }
   }
   return derived

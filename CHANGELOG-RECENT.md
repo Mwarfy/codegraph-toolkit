@@ -5,7 +5,7 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T20:24:46Z
+Last update : 2026-05-03T20:26:02Z
 
 ## By type
 
@@ -28,6 +28,7 @@ Last update : 2026-05-03T20:24:46Z
 
 ### `refactor` (41)
 
+- **953ea56** refactor(toolkit): split Lexer.skipWS (cyclo 16→3) — parser.ts ALL bombs cleared — 2026-05-03
 - **a023167** refactor(toolkit): split Lexer.next (cyclo 19→under) — table single-char + tryTwoCharOp helper — 2026-05-03
 - **4b0c89d** refactor(toolkit): split Parser.validateRule (cyclo 20→3) — 4 helpers safety checks — 2026-05-03
 - **1878143** refactor(toolkit): split analyzeDrizzleSchema (cyclo 20→3) — 4 helpers (3 cmp + 1 parse loop) — 2026-05-03
@@ -47,11 +48,11 @@ Last update : 2026-05-03T20:24:46Z
 - **bddfb2a** refactor(toolkit): split data-flows top-level (analyzeDataFlows + buildDataFlowsFromBundles) — 2026-05-03
 - **d176584** refactor(toolkit): split renderLevel1/2/3 — synopsis/builder.ts ALL bombs cleared — 2026-05-03
 - **8f1792b** refactor(toolkit): split buildComponents (cyclo 24→under) — 5 helpers (groupByComp, edgeDeg, topFiles, tags, adrs) — 2026-05-03
-- **275466c** refactor(toolkit): split buildSynopsis (cyclo 75→5, cog 130→4) — 9 helpers + ctx struct — 2026-05-03
 
 
 ## Full history
 
+- **953ea56** refactor(toolkit): split Lexer.skipWS (cyclo 16→3) — parser.ts ALL bombs cleared — 2026-05-03
 - **a023167** refactor(toolkit): split Lexer.next (cyclo 19→under) — table single-char + tryTwoCharOp helper — 2026-05-03
 - **4b0c89d** refactor(toolkit): split Parser.validateRule (cyclo 20→3) — 4 helpers safety checks — 2026-05-03
 - **1878143** refactor(toolkit): split analyzeDrizzleSchema (cyclo 20→3) — 4 helpers (3 cmp + 1 parse loop) — 2026-05-03
@@ -101,4 +102,3 @@ Last update : 2026-05-03T20:24:46Z
 - **25fc296** fix(toolkit): kill META-CRITICAL (7→0) + 2 bugs détecteur + 6 tests — 2026-05-03
 - **70afbdc** fix(toolkit): clean 93 violations (534→441, −17.4%) sans bypass — 2026-05-03
 - **b0f2c9a** refactor(toolkit): split cli/index.ts god-file (2190→1520 LOC, −30%) — 2026-05-03
-- **c613ac7** refactor(toolkit): split analyzer.ts:runDeterministicDetectors en 5 phases — 2026-05-03
