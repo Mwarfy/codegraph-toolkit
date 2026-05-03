@@ -357,26 +357,22 @@ function renderStats(s: GraphSnapshot): string {
 
 // ─── Section 1 : Core flows ─────────────────────────────────────────────────
 
-function renderCoreFlows(s: GraphSnapshot, opts: Required<MapBuilderOptions>): string {
-  const df = s.dataFlows
-  if (!df || df.length === 0) return ''
+interface HandlerGroup {
+  key: string                    // handler key or synthetic id for inline
+  kind: DataFlowEntryKind
+  routes: string[]               // entry.id pour chaque flow partageant ce handler
+  sample: DataFlow               // un flow représentatif pour inputType / file / sinks
+}
 
-  // Les handlers polymorphes (ex: `handleSystemRoutes`) servent N routes mais
-  // le BFS visite TOUT le body → chaque route partage les mêmes sinks.
-  // Afficher N entrées identiques trompe le lecteur : il croit que chaque
-  // route écrit dans chaque sink. Groupement par handler + liste des routes.
-  // Les flows sans handler (arrows inline) restent individuels.
-  interface HandlerGroup {
-    key: string                    // handler key or synthetic id for inline
-    kind: DataFlowEntryKind
-    routes: string[]               // entry.id pour chaque flow partageant ce handler
-    sample: DataFlow               // un flow représentatif pour inputType / file / sinks
-  }
-
+/**
+ * Les handlers polymorphes (ex: `handleSystemRoutes`) servent N routes mais
+ * le BFS visite TOUT le body → chaque route partage les mêmes sinks.
+ * Afficher N entrées identiques trompe le lecteur. Groupement par handler
+ * + liste des routes. Les flows sans handler (arrows inline) restent individuels.
+ */
+function groupFlowsByHandler(df: readonly DataFlow[]): HandlerGroup[] {
   const groups = new Map<string, HandlerGroup>()
   for (const f of df) {
-    // Handler-dedupable : même handler ET même set de sinks = on groupe.
-    // Si handler absent (arrow inline), chaque flow reste unique.
     const sinkKey = f.sinks
       .map((x) => `${x.kind}|${x.target}|${x.file}|${x.line}`)
       .sort()
@@ -384,35 +380,27 @@ function renderCoreFlows(s: GraphSnapshot, opts: Required<MapBuilderOptions>): s
     const groupKey = f.entry.handler
       ? `${f.entry.kind}|${f.entry.handler}|${sinkKey}`
       : `__inline__|${f.entry.id}|${f.entry.file}:${f.entry.line}`
-
     const existing = groups.get(groupKey)
     if (existing) {
       existing.routes.push(f.entry.id)
     } else {
-      groups.set(groupKey, {
-        key: groupKey,
-        kind: f.entry.kind,
-        routes: [f.entry.id],
-        sample: f,
-      })
+      groups.set(groupKey, { key: groupKey, kind: f.entry.kind, routes: [f.entry.id], sample: f })
     }
   }
+  return [...groups.values()].sort((a, b) => {
+    // Priorité : plus de sinks > plus de routes > plus de steps > id.
+    if (a.sample.sinks.length !== b.sample.sinks.length) return b.sample.sinks.length - a.sample.sinks.length
+    if (a.routes.length !== b.routes.length) return b.routes.length - a.routes.length
+    if (a.sample.steps.length !== b.sample.steps.length) return b.sample.steps.length - a.sample.steps.length
+    return a.sample.entry.id < b.sample.entry.id ? -1 : 1
+  })
+}
 
-  const ranked = [...groups.values()]
-    .sort((a, b) => {
-      // Priorité : plus de sinks > plus de routes > plus de steps > id.
-      if (a.sample.sinks.length !== b.sample.sinks.length) return b.sample.sinks.length - a.sample.sinks.length
-      if (a.routes.length !== b.routes.length) return b.routes.length - a.routes.length
-      if (a.sample.steps.length !== b.sample.steps.length) return b.sample.steps.length - a.sample.steps.length
-      return a.sample.entry.id < b.sample.entry.id ? -1 : 1
-    })
-    .slice(0, opts.topCoreFlows)
-
-  const lines: string[] = ['## 1. Core flows', '']
-  lines.push(`Top entry-points par sinks. Handlers polymorphes (N routes → 1 fonction) regroupés.`)
-  lines.push('')
-  lines.push('| Kind | Handler | Routes | Steps | Sinks | Downstream |')
-  lines.push('|---|---|---:|---:|---:|---:|')
+function renderCoreFlowsTable(ranked: HandlerGroup[]): string[] {
+  const lines: string[] = [
+    '| Kind | Handler | Routes | Steps | Sinks | Downstream |',
+    '|---|---|---:|---:|---:|---:|',
+  ]
   for (const g of ranked) {
     const ds = g.sample.downstream?.length ?? 0
     const handlerShort = g.sample.entry.handler
@@ -420,31 +408,49 @@ function renderCoreFlows(s: GraphSnapshot, opts: Required<MapBuilderOptions>): s
       : g.sample.entry.id
     lines.push(`| \`${g.kind}\` | ${escapePipe(handlerShort)} | ${g.routes.length} | ${g.sample.steps.length} | ${g.sample.sinks.length} | ${ds} |`)
   }
-  lines.push('')
-  // Détail des top 3 groupes.
+  return lines
+}
+
+function renderCoreFlowDetail(g: HandlerGroup): string[] {
+  const title = g.routes.length === 1 ? g.routes[0] : `${g.sample.entry.kind} handler (${g.routes.length} routes)`
+  const out: string[] = [`### ${title}`, '']
+  if (g.sample.entry.handler) {
+    out.push(`- Handler : \`${g.sample.entry.handler}\``)
+  }
+  out.push(`- Entry file : \`${g.sample.entry.file}:${g.sample.entry.line}\``)
+  if (g.sample.inputType) out.push(`- Input type : \`${truncate(g.sample.inputType, 80)}\``)
+  if (g.routes.length > 1) {
+    const sorted = [...g.routes].sort()
+    const shown = sorted.slice(0, 8).map((r) => `\`${escapePipe(r)}\``).join(', ')
+    const extra = sorted.length > 8 ? ` …+${sorted.length - 8}` : ''
+    out.push(`- Routes gérées : ${shown}${extra}`)
+    out.push(`  _NB : sinks listés ci-dessous sont l'union pour TOUTES les routes ; non attribuables à une route spécifique sans isolation de branche._`)
+  }
+  const sinkSummary = summarizeSinks(g.sample)
+  if (sinkSummary) out.push(`- Sinks : ${sinkSummary}`)
+  if (g.sample.downstream && g.sample.downstream.length > 0) {
+    const dsIds = g.sample.downstream.map((d) => `\`${d.entry.id}\``).join(', ')
+    out.push(`- Downstream : ${dsIds}`)
+  }
+  out.push('')
+  return out
+}
+
+function renderCoreFlows(s: GraphSnapshot, opts: Required<MapBuilderOptions>): string {
+  const df = s.dataFlows
+  if (!df || df.length === 0) return ''
+
+  const ranked = groupFlowsByHandler(df).slice(0, opts.topCoreFlows)
+
+  const lines: string[] = [
+    '## 1. Core flows', '',
+    `Top entry-points par sinks. Handlers polymorphes (N routes → 1 fonction) regroupés.`,
+    '',
+    ...renderCoreFlowsTable(ranked),
+    '',
+  ]
   for (const g of ranked.slice(0, 3)) {
-    const title = g.routes.length === 1 ? g.routes[0] : `${g.sample.entry.kind} handler (${g.routes.length} routes)`
-    lines.push(`### ${title}`)
-    lines.push('')
-    if (g.sample.entry.handler) {
-      lines.push(`- Handler : \`${g.sample.entry.handler}\``)
-    }
-    lines.push(`- Entry file : \`${g.sample.entry.file}:${g.sample.entry.line}\``)
-    if (g.sample.inputType) lines.push(`- Input type : \`${truncate(g.sample.inputType, 80)}\``)
-    if (g.routes.length > 1) {
-      const sorted = [...g.routes].sort()
-      const shown = sorted.slice(0, 8).map((r) => `\`${escapePipe(r)}\``).join(', ')
-      const extra = sorted.length > 8 ? ` …+${sorted.length - 8}` : ''
-      lines.push(`- Routes gérées : ${shown}${extra}`)
-      lines.push(`  _NB : sinks listés ci-dessous sont l'union pour TOUTES les routes ; non attribuables à une route spécifique sans isolation de branche._`)
-    }
-    const sinkSummary = summarizeSinks(g.sample)
-    if (sinkSummary) lines.push(`- Sinks : ${sinkSummary}`)
-    if (g.sample.downstream && g.sample.downstream.length > 0) {
-      const dsIds = g.sample.downstream.map((d) => `\`${d.entry.id}\``).join(', ')
-      lines.push(`- Downstream : ${dsIds}`)
-    }
-    lines.push('')
+    lines.push(...renderCoreFlowDetail(g))
   }
   return lines.join('\n').trimEnd()
 }
