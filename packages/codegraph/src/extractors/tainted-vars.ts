@@ -95,6 +95,45 @@ function matchSource(text: string): TaintSourceKind | null {
   return null
 }
 
+interface FnScope {
+  fnNode: Node
+  fnId: string
+  fnName: string
+}
+
+/**
+ * Itère les function-like scopes du SourceFile et yield {fnNode, fnId, fnName}.
+ * fnId encode le kind+nom+ligne pour servir de clé stable de Map.
+ *
+ * Mêmes 3 patterns que dans drift-patterns.ts mais shape différente :
+ * ici on a besoin du `Node` pour traverser les descendants ; là-bas on a
+ * besoin de body/params. Pas de mutualisation utile.
+ */
+function* iterateFnScopes(sf: SourceFile): Generator<FnScope> {
+  for (const fn of sf.getFunctions()) {
+    const name = fn.getName() ?? '(anonymous)'
+    yield { fnNode: fn, fnId: `fn:${name}:${fn.getStartLineNumber()}`, fnName: name }
+  }
+  for (const cls of sf.getClasses()) {
+    const className = cls.getName() ?? '(anonymous)'
+    for (const method of cls.getMethods()) {
+      const name = `${className}.${method.getName()}`
+      yield {
+        fnNode: method,
+        fnId: `mth:${name}:${method.getStartLineNumber()}`,
+        fnName: name,
+      }
+    }
+  }
+  for (const v of sf.getVariableDeclarations()) {
+    const init = v.getInitializer()
+    if (!init) continue
+    if (!Node.isArrowFunction(init) && !Node.isFunctionExpression(init)) continue
+    const name = v.getName()
+    yield { fnNode: init, fnId: `arrow:${name}:${v.getStartLineNumber()}`, fnName: name }
+  }
+}
+
 export function extractTaintedVarsFileBundle(
   sf: SourceFile,
   relPath: string,
@@ -104,129 +143,128 @@ export function extractTaintedVarsFileBundle(
   const argCalls: TaintedArgCall[] = []
 
   // ─── Pass 1 : collecter les VariableDeclaration tainted ─────────────
-  // Pour chaque function scope, build un Map<varName, source>.
   const taintedByFn = new Map<string, Map<string, TaintSourceKind>>()
-
-  const collectInScope = (
-    fnNode: Node,
-    fnId: string,
-    fnName: string,
-  ): void => {
-    const taintedVars = new Map<string, TaintSourceKind>()
-    for (const v of fnNode.getDescendantsOfKind(SyntaxKind.VariableDeclaration)) {
-      const init = v.getInitializer()
-      if (!init) continue
-      const text = init.getText()
-      const source = matchSource(text)
-      if (!source) continue
-      const nameNode = v.getNameNode()
-      const line = v.getStartLineNumber()
-      if (Node.isIdentifier(nameNode)) {
-        const varName = nameNode.getText()
-        taintedVars.set(varName, source)
-        decls.push({ file: relPath, containingSymbol: fnName, varName, line, source })
-      } else if (
-        Node.isObjectBindingPattern(nameNode) ||
-        Node.isArrayBindingPattern(nameNode)
-      ) {
-        // V2 (Tier 15) : `const { id, name } = req.body` ou `const [a] = req.params`.
-        // Chaque BindingElement devient une tainted var. Alias supporté
-        // (`{ id: userId }` → `userId`). Nested destructuring skip V1.
-        for (const elem of nameNode.getElements()) {
-          if (!Node.isBindingElement(elem)) continue
-          const elemName = elem.getNameNode()
-          if (!Node.isIdentifier(elemName)) continue
-          const varName = elemName.getText()
-          taintedVars.set(varName, source)
-          decls.push({ file: relPath, containingSymbol: fnName, varName, line, source })
-        }
-      }
-    }
-    if (taintedVars.size > 0) {
-      taintedByFn.set(fnId, taintedVars)
-    }
-  }
-
-  // Function-like nodes à inspecter.
-  for (const fn of sf.getFunctions()) {
-    const name = fn.getName() ?? '(anonymous)'
-    collectInScope(fn, `fn:${name}:${fn.getStartLineNumber()}`, name)
-  }
-  for (const cls of sf.getClasses()) {
-    const className = cls.getName() ?? '(anonymous)'
-    for (const method of cls.getMethods()) {
-      const name = `${className}.${method.getName()}`
-      collectInScope(method, `mth:${name}:${method.getStartLineNumber()}`, name)
-    }
-  }
-  for (const v of sf.getVariableDeclarations()) {
-    const init = v.getInitializer()
-    if (!init) continue
-    if (!Node.isArrowFunction(init) && !Node.isFunctionExpression(init)) continue
-    const name = v.getName()
-    collectInScope(init, `arrow:${name}:${v.getStartLineNumber()}`, name)
+  for (const { fnNode, fnId, fnName } of iterateFnScopes(sf)) {
+    const taintedVars = collectTaintedDeclsInScope(fnNode, fnName, relPath, decls)
+    if (taintedVars.size > 0) taintedByFn.set(fnId, taintedVars)
   }
 
   // ─── Pass 2 : trouver les call-sites qui passent ces vars en arg ──
-  // On re-traverse les fonctions et pour chaque CallExpression interne,
-  // on check chaque argument identifier contre la map des tainted vars.
-  const checkCallsInScope = (
-    fnNode: Node,
-    fnId: string,
-    fnName: string,
-  ): void => {
+  for (const { fnNode, fnId, fnName } of iterateFnScopes(sf)) {
     const taintedVars = taintedByFn.get(fnId)
-    if (!taintedVars) return
-    for (const call of fnNode.getDescendantsOfKind(SyntaxKind.CallExpression)) {
-      const callee = call.getExpression()
-      let calleeText: string
-      if (Node.isIdentifier(callee)) calleeText = callee.getText()
-      else if (Node.isPropertyAccessExpression(callee)) calleeText = callee.getText()
-      else continue
-
-      const args = call.getArguments()
-      for (let i = 0; i < args.length; i++) {
-        const arg = args[i]
-        if (!Node.isIdentifier(arg)) continue
-        const varName = arg.getText()
-        const source = taintedVars.get(varName)
-        if (!source) continue
-        argCalls.push({
-          file: relPath,
-          line: call.getStartLineNumber(),
-          callee: calleeText,
-          argVarName: varName,
-          argIndex: i,
-          source,
-          containingSymbol: fnName,
-        })
-      }
-      // Aussi : check les arguments qui sont des PropertyAccess sur tainted
-      // var (ex: `db.query(userId.toString())` → userId est tainted).
-      // V1 skip : trop de faux-positifs sans dataflow propre.
-    }
-  }
-
-  for (const fn of sf.getFunctions()) {
-    const name = fn.getName() ?? '(anonymous)'
-    checkCallsInScope(fn, `fn:${name}:${fn.getStartLineNumber()}`, name)
-  }
-  for (const cls of sf.getClasses()) {
-    const className = cls.getName() ?? '(anonymous)'
-    for (const method of cls.getMethods()) {
-      const name = `${className}.${method.getName()}`
-      checkCallsInScope(method, `mth:${name}:${method.getStartLineNumber()}`, name)
-    }
-  }
-  for (const v of sf.getVariableDeclarations()) {
-    const init = v.getInitializer()
-    if (!init) continue
-    if (!Node.isArrowFunction(init) && !Node.isFunctionExpression(init)) continue
-    const name = v.getName()
-    checkCallsInScope(init, `arrow:${name}:${v.getStartLineNumber()}`, name)
+    if (!taintedVars) continue
+    collectArgCallsInScope(fnNode, fnName, relPath, taintedVars, argCalls)
   }
 
   return { decls, argCalls }
+}
+
+/**
+ * Pass 1 : pour un scope fn, collecte les VariableDeclaration dont l'init
+ * matche un user-input source, et retourne un Map<varName, source>.
+ * Push aussi les TaintedVarDecl correspondants dans `decls`.
+ */
+function collectTaintedDeclsInScope(
+  fnNode: Node,
+  fnName: string,
+  relPath: string,
+  decls: TaintedVarDecl[],
+): Map<string, TaintSourceKind> {
+  const taintedVars = new Map<string, TaintSourceKind>()
+  for (const v of fnNode.getDescendantsOfKind(SyntaxKind.VariableDeclaration)) {
+    const init = v.getInitializer()
+    if (!init) continue
+    const source = matchSource(init.getText())
+    if (!source) continue
+    const nameNode = v.getNameNode()
+    const line = v.getStartLineNumber()
+    if (Node.isIdentifier(nameNode)) {
+      pushTaintedDecl(nameNode.getText(), line, source, fnName, relPath, taintedVars, decls)
+    } else if (Node.isObjectBindingPattern(nameNode) || Node.isArrayBindingPattern(nameNode)) {
+      collectFromBindingPattern(nameNode, line, source, fnName, relPath, taintedVars, decls)
+    }
+  }
+  return taintedVars
+}
+
+/**
+ * V2 (Tier 15) : `const { id, name } = req.body` ou `const [a] = req.params`.
+ * Chaque BindingElement devient une tainted var. Alias supporté
+ * (`{ id: userId }` → `userId`). Nested destructuring skip V1.
+ */
+function collectFromBindingPattern(
+  nameNode: Node,
+  line: number,
+  source: TaintSourceKind,
+  fnName: string,
+  relPath: string,
+  taintedVars: Map<string, TaintSourceKind>,
+  decls: TaintedVarDecl[],
+): void {
+  if (!Node.isObjectBindingPattern(nameNode) && !Node.isArrayBindingPattern(nameNode)) return
+  for (const elem of nameNode.getElements()) {
+    if (!Node.isBindingElement(elem)) continue
+    const elemName = elem.getNameNode()
+    if (!Node.isIdentifier(elemName)) continue
+    pushTaintedDecl(elemName.getText(), line, source, fnName, relPath, taintedVars, decls)
+  }
+}
+
+function pushTaintedDecl(
+  varName: string,
+  line: number,
+  source: TaintSourceKind,
+  fnName: string,
+  relPath: string,
+  taintedVars: Map<string, TaintSourceKind>,
+  decls: TaintedVarDecl[],
+): void {
+  taintedVars.set(varName, source)
+  decls.push({ file: relPath, containingSymbol: fnName, varName, line, source })
+}
+
+/**
+ * Pass 2 : pour un scope fn dont on a la map de tainted vars, scanne tous
+ * les CallExpression internes et émet un TaintedArgCall pour chaque arg
+ * identifier matchant la map.
+ *
+ * V1 skip : args qui sont des PropertyAccess sur tainted var
+ * (ex: `db.query(userId.toString())`). Trop de FP sans dataflow propre.
+ */
+function collectArgCallsInScope(
+  fnNode: Node,
+  fnName: string,
+  relPath: string,
+  taintedVars: Map<string, TaintSourceKind>,
+  argCalls: TaintedArgCall[],
+): void {
+  for (const call of fnNode.getDescendantsOfKind(SyntaxKind.CallExpression)) {
+    const calleeText = readCalleeText(call.getExpression())
+    if (!calleeText) continue
+    const args = call.getArguments()
+    for (let i = 0; i < args.length; i++) {
+      const arg = args[i]
+      if (!Node.isIdentifier(arg)) continue
+      const varName = arg.getText()
+      const source = taintedVars.get(varName)
+      if (!source) continue
+      argCalls.push({
+        file: relPath,
+        line: call.getStartLineNumber(),
+        callee: calleeText,
+        argVarName: varName,
+        argIndex: i,
+        source,
+        containingSymbol: fnName,
+      })
+    }
+  }
+}
+
+function readCalleeText(callee: Node): string | null {
+  if (Node.isIdentifier(callee)) return callee.getText()
+  if (Node.isPropertyAccessExpression(callee)) return callee.getText()
+  return null
 }
 
 export async function analyzeTaintedVars(
