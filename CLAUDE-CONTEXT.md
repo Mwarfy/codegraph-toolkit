@@ -199,6 +199,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+377916d refactor(toolkit): split parseIndexFunction (cyclo 23→3) — 2 helpers (body-unwrap + chain-parse)
 23de1a8 refactor(toolkit): split parseDrizzleFile (cyclo 26→3) — 4 helpers + iteratePgTables generator
 bdec532 refactor(toolkit): split collectOrmSignals (cyclo 28→3) — truth-points.ts ALL bombs cleared
 1bdb707 refactor(toolkit): split collectAstSignals (cyclo 29→3) — 3 per-domain collectors
@@ -210,7 +211,6 @@ a023167 refactor(toolkit): split Lexer.next (cyclo 19→under) — table single-
 4b0c89d refactor(toolkit): split Parser.validateRule (cyclo 20→3) — 4 helpers safety checks
 1878143 refactor(toolkit): split analyzeDrizzleSchema (cyclo 20→3) — 4 helpers (3 cmp + 1 parse loop)
 4215f48 refactor(toolkit): split scanInlineSinks (cyclo 17→2, cog 63→3) — reuse trySink* helpers
-ce0b0a8 refactor(toolkit): split detectListenerEntries (cyclo 23→under) — 4 helpers
 ```
 
 ## Comment contribuer à ce brief

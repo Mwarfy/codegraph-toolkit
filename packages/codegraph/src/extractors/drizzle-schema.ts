@@ -290,6 +290,53 @@ export function parseDrizzleFile(
  *
  * Returns { column } ou null si pas reconnu comme column Drizzle.
  */
+interface ColumnModifiers {
+  notNull: boolean
+  isUnique: boolean
+  isPrimaryKey: boolean
+  foreignKey?: { toTable: string; toColumn: string }
+}
+
+/**
+ * Resoud `references(() => other.id)` vers `{ toTable, toColumn }`.
+ * Returns undefined si shape n'est pas reconnue ou table cible non
+ * trouvee dans le map intra-fichier.
+ */
+function resolveReferencesArg(
+  call: import('ts-morph').CallExpression,
+  varNameToTable: Map<string, string>,
+): { toTable: string; toColumn: string } | undefined {
+  const refArgs = call.getArguments()
+  if (refArgs.length === 0) return undefined
+  const fnArg = refArgs[0]
+  if (!Node.isArrowFunction(fnArg)) return undefined
+  const body = fnArg.getBody()
+  // Body = `players.id` (PropertyAccessExpression)
+  if (!Node.isPropertyAccessExpression(body)) return undefined
+  const expr = body.getExpression()
+  if (!Node.isIdentifier(expr)) return undefined
+  const targetTable = varNameToTable.get(expr.getText())
+  if (!targetTable) return undefined
+  return { toTable: targetTable, toColumn: body.getName() }
+}
+
+function collectColumnModifiers(
+  chain: import('ts-morph').CallExpression[],
+  varNameToTable: Map<string, string>,
+): ColumnModifiers {
+  const mods: ColumnModifiers = { notNull: false, isUnique: false, isPrimaryKey: false }
+  for (const call of chain.slice(1)) {
+    const methodName = getCalleeName(call)
+    if (methodName === 'notNull') mods.notNull = true
+    else if (methodName === 'unique') mods.isUnique = true
+    else if (methodName === 'primaryKey') mods.isPrimaryKey = true
+    else if (methodName === 'references') {
+      mods.foreignKey = resolveReferencesArg(call, varNameToTable)
+    }
+  }
+  return mods
+}
+
 function parseColumnProperty(
   prop: PropertyAssignment,
   varNameToTable: Map<string, string>,
@@ -297,65 +344,28 @@ function parseColumnProperty(
   const init = prop.getInitializer()
   if (!init || !Node.isCallExpression(init)) return null
 
-  // Walk up la chaîne de méthodes : on a `text('foo').notNull().unique()`
-  // L'init courant est `unique()`, son parent est `notNull()`, etc.
-  // Pour simplifier : on collecte tous les call names + le BASE call.
+  // Walk la chaine `text('foo').notNull().unique()` : init courant est
+  // `unique()`, parent `notNull()`, etc. Le BASE est le premier call.
   const chain = collectCallChain(init)
   if (chain.length === 0) return null
 
-  // Le BASE est le premier call (le plus profond) : `text('foo')`,
-  // `uuid('foo')`, etc.
   const baseCall = chain[0]
   const baseName = getCalleeName(baseCall)
   if (!baseName || !DRIZZLE_COLUMN_TYPES.has(baseName)) return null
 
   const baseArgs = baseCall.getArguments()
   if (baseArgs.length === 0 || !Node.isStringLiteral(baseArgs[0])) return null
-  const dbColumnName = baseArgs[0].getLiteralText()
-  const sqlType = baseName.toUpperCase() // simple mapping
 
-  let notNull = false
-  let isUnique = false
-  let isPrimaryKey = false
-  let foreignKey: { toTable: string; toColumn: string } | undefined
-
-  for (const call of chain.slice(1)) {
-    const methodName = getCalleeName(call)
-    if (methodName === 'notNull') notNull = true
-    else if (methodName === 'unique') isUnique = true
-    else if (methodName === 'primaryKey') isPrimaryKey = true
-    else if (methodName === 'references') {
-      const refArgs = call.getArguments()
-      if (refArgs.length === 0) continue
-      const fnArg = refArgs[0]
-      if (Node.isArrowFunction(fnArg)) {
-        const body = fnArg.getBody()
-        // Body = `players.id` (PropertyAccessExpression)
-        if (Node.isPropertyAccessExpression(body)) {
-          const expr = body.getExpression()
-          if (Node.isIdentifier(expr)) {
-            const varName = expr.getText()
-            const targetTable = varNameToTable.get(varName)
-            if (targetTable) {
-              foreignKey = {
-                toTable: targetTable,
-                toColumn: body.getName(),
-              }
-            }
-          }
-        }
-      }
-    }
-  }
+  const mods = collectColumnModifiers(chain, varNameToTable)
 
   return {
     column: {
-      name: dbColumnName,
-      type: sqlType,
-      notNull,
-      isUnique,
-      isPrimaryKey,
-      foreignKey,
+      name: baseArgs[0].getLiteralText(),
+      type: baseName.toUpperCase(),
+      notNull: mods.notNull,
+      isUnique: mods.isUnique,
+      isPrimaryKey: mods.isPrimaryKey,
+      foreignKey: mods.foreignKey,
       line: prop.getStartLineNumber(),
     },
   }

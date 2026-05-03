@@ -5,7 +5,7 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T20:38:06Z
+Last update : 2026-05-03T20:39:39Z
 
 ## By type
 
@@ -26,6 +26,7 @@ Last update : 2026-05-03T20:38:06Z
 
 ### `refactor` (43)
 
+- **377916d** refactor(toolkit): split parseIndexFunction (cyclo 23→3) — 2 helpers (body-unwrap + chain-parse) — 2026-05-03
 - **23de1a8** refactor(toolkit): split parseDrizzleFile (cyclo 26→3) — 4 helpers + iteratePgTables generator — 2026-05-03
 - **bdec532** refactor(toolkit): split collectOrmSignals (cyclo 28→3) — truth-points.ts ALL bombs cleared — 2026-05-03
 - **1bdb707** refactor(toolkit): split collectAstSignals (cyclo 29→3) — 3 per-domain collectors — 2026-05-03
@@ -45,11 +46,11 @@ Last update : 2026-05-03T20:38:06Z
 - **4b6165c** refactor(toolkit): split buildFlow (cyclo 19→4) — 4 helpers BFS-extracted — 2026-05-03
 - **a5ac751** refactor(toolkit): split buildTestFilesIndex (cyclo 17→1) — 5 helpers + ImportIndices struct — 2026-05-03
 - **62de53a** refactor(toolkit): split analyzeScope (cyclo 17→3) — extract per-kind handlers — 2026-05-03
-- **6cfd2fe** refactor(toolkit): split analyzePackageDeps (cyclo 17→4) — 3 helpers — 2026-05-03
 
 
 ## Full history
 
+- **377916d** refactor(toolkit): split parseIndexFunction (cyclo 23→3) — 2 helpers (body-unwrap + chain-parse) — 2026-05-03
 - **23de1a8** refactor(toolkit): split parseDrizzleFile (cyclo 26→3) — 4 helpers + iteratePgTables generator — 2026-05-03
 - **bdec532** refactor(toolkit): split collectOrmSignals (cyclo 28→3) — truth-points.ts ALL bombs cleared — 2026-05-03
 - **1bdb707** refactor(toolkit): split collectAstSignals (cyclo 29→3) — 3 per-domain collectors — 2026-05-03
@@ -99,4 +100,3 @@ Last update : 2026-05-03T20:38:06Z
 - **dcf47d4** perf(toolkit): split stat-from-read en prebuild + layered allDeprecatedUsage — 2026-05-03
 - **f55039d** perf(toolkit): Salsa-iso compression-similarity (per-file snippets cached) — 2026-05-03
 - **c24fb16** refactor(toolkit): tame AWAIT-IN-LOOP batch 6 — 33→0, AWAIT-IN-LOOP éliminé — 2026-05-03
-- **2b4ebc0** refactor(toolkit): tame AWAIT-IN-LOOP batch 3+4+5 — detectors + extractors (58→33) — 2026-05-03
