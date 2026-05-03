@@ -380,99 +380,113 @@ export function buildTruthPointsFromSignals(args: BuildTruthPointsArgs): TruthPo
 
 // ─── SQL signal collection ──────────────────────────────────────────────────
 
+const SQL_KEYWORDS = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'FROM']
+
+function hasAnySqlKeyword(text: string): boolean {
+  for (const kw of SQL_KEYWORDS) {
+    if (text.includes(kw)) return true
+  }
+  return false
+}
+
+const SQL_PATTERNS: Array<{ regex: RegExp; operation: 'read' | 'write' }> = [
+  { regex: /\bFROM\s+(\w+)/gi, operation: 'read' },
+  { regex: /\bJOIN\s+(\w+)/gi, operation: 'read' },
+  { regex: /\bINSERT\s+INTO\s+(\w+)/gi, operation: 'write' },
+  { regex: /\bUPDATE\s+(\w+)\s+SET/gi, operation: 'write' },
+  { regex: /\bDELETE\s+FROM\s+(\w+)/gi, operation: 'write' },
+]
+
+/**
+ * Extract le texte d'un literal AST (StringLiteral, NoSubstitutionTemplateLiteral,
+ * ou fragment Template) avec son offset absolu (pour calcul ligne).
+ * Retourne null si le node n'est pas un literal scannable.
+ */
+function extractLiteralTextAndOffset(node: Node): { text: string; startOffset: number } | null {
+  const k = node.getKind()
+  if (k === SyntaxKind.StringLiteral || k === SyntaxKind.NoSubstitutionTemplateLiteral) {
+    const n = node as any
+    const text = n.getLiteralText?.() ?? null
+    if (!text) return null
+    // getStart() retourne la position du token (y.c. quotes). +1 pour
+    // compenser le premier ' / " / `.
+    return { text, startOffset: (n.getStart?.() ?? 0) + 1 }
+  }
+  // Template fragments (head/middle/tail) — TemplateExpression englobe les 3
+  // donc on traite au niveau des sous-fragments pour offsets corrects.
+  if (k === SyntaxKind.TemplateHead || k === SyntaxKind.TemplateMiddle || k === SyntaxKind.TemplateTail) {
+    const n = node as any
+    const text = n.getLiteralText?.() ?? null
+    if (!text) return null
+    return { text, startOffset: (n.getStart?.() ?? 0) + 1 }
+  }
+  return null
+}
+
+function isValidSqlTable(table: string): boolean {
+  if (SQL_EXCLUDE.has(table)) return false
+  if (table.startsWith('$')) return false
+  if (table.length < 2) return false
+  if (/^\d/.test(table)) return false
+  return true
+}
+
+/**
+ * Overlap `DELETE FROM` : le pattern `FROM` tire aussi sur DELETE FROM.
+ * Quand on scanne un read-pattern qui demarre par `\\bFROM`, on regarde
+ * 15 chars en arriere pour exclure les `DELETE\s+FROM`.
+ */
+function isDeleteFromOverlap(text: string, matchIndex: number, regex: RegExp, operation: string): boolean {
+  if (operation !== 'read') return false
+  if (!regex.source.startsWith('\\bFROM')) return false
+  const before = text.substring(Math.max(0, matchIndex - 15), matchIndex)
+  return /\bDELETE\s+$/i.test(before)
+}
+
+function scanSqlPatterns(
+  text: string,
+  startOffset: number,
+  content: string,
+  file: string,
+  lineToSymbol: Map<number, string>,
+  out: SqlSignal[],
+): void {
+  for (const { regex, operation } of SQL_PATTERNS) {
+    regex.lastIndex = 0
+    let match: RegExpExecArray | null
+    while ((match = regex.exec(text)) !== null) {
+      const table = match[1].toLowerCase()
+      if (!isValidSqlTable(table)) continue
+      if (isDeleteFromOverlap(text, match.index, regex, operation)) continue
+
+      const absIdx = startOffset + match.index
+      const line = content.substring(0, absIdx).split('\n').length
+      const symbol = lineToSymbol.get(line) ?? ''
+      out.push({ file, table, operation, line, symbol })
+    }
+  }
+}
+
 function collectSqlSignals(
   content: string,
   file: string,
   sf: SourceFile,
   out: SqlSignal[],
 ): void {
-  // Court-circuit : si aucun mot SQL n'apparaît dans le fichier, on saute
-  // tout le walk AST. Gain perf majeur (la plupart des fichiers TS n'ont
-  // pas de SQL).
-  if (
-    !content.includes('SELECT') &&
-    !content.includes('INSERT') &&
-    !content.includes('UPDATE') &&
-    !content.includes('DELETE') &&
-    !content.includes('FROM')
-  ) {
-    return
-  }
-
-  // Patterns SQL-write/read. `FROM` est sensible à un overlap avec
-  // `DELETE FROM` — filtré ci-dessous.
-  const patterns: Array<{ regex: RegExp; operation: 'read' | 'write' }> = [
-    { regex: /\bFROM\s+(\w+)/gi, operation: 'read' },
-    { regex: /\bJOIN\s+(\w+)/gi, operation: 'read' },
-    { regex: /\bINSERT\s+INTO\s+(\w+)/gi, operation: 'write' },
-    { regex: /\bUPDATE\s+(\w+)\s+SET/gi, operation: 'write' },
-    { regex: /\bDELETE\s+FROM\s+(\w+)/gi, operation: 'write' },
-  ]
+  // Court-circuit : aucun mot SQL → skip walk AST. Gain perf majeur
+  // (la plupart des fichiers TS n'ont pas de SQL).
+  if (!hasAnySqlKeyword(content)) return
 
   const lineToSymbol = buildLineToSymbol(sf)
 
   // Scan AST : on ne regarde que les string literals et template literals.
-  // CRUCIAL vs v1 : éviter les faux positifs sur les commentaires et noms
-  // de variables (ex: `from connected clients` dans un commentaire JSDoc,
-  // ou `const fromDb = ...`). Un SQL existe dans une string, jamais ailleurs.
+  // CRUCIAL vs v1 : eviter les faux positifs sur les commentaires et noms
+  // de variables. Un SQL existe dans une string, jamais ailleurs.
   sf.forEachDescendant((node) => {
-    const k = node.getKind()
-    let text: string | null = null
-    let startOffset = 0
-
-    if (k === SyntaxKind.StringLiteral || k === SyntaxKind.NoSubstitutionTemplateLiteral) {
-      const n = node as any
-      text = n.getLiteralText?.() ?? null
-      // getStart() retourne la position du token (y.c. quotes). +1 pour
-      // compenser le premier ' / " / `.
-      startOffset = (n.getStart?.() ?? 0) + 1
-    } else if (k === SyntaxKind.TemplateExpression || k === SyntaxKind.TemplateHead || k === SyntaxKind.TemplateMiddle || k === SyntaxKind.TemplateTail) {
-      // Pour les template strings avec ${}, on scanne chaque fragment.
-      // TemplateExpression englobe head+middle+tail ; on traite au niveau
-      // des sous-fragments pour garder les offsets corrects.
-      if (k !== SyntaxKind.TemplateExpression) {
-        const n = node as any
-        text = n.getLiteralText?.() ?? null
-        startOffset = (n.getStart?.() ?? 0) + 1  // +1 pour le backtick / }
-      }
-    }
-
-    if (!text) return
-
-    // Court-circuit par fragment.
-    if (
-      !text.includes('SELECT') &&
-      !text.includes('INSERT') &&
-      !text.includes('UPDATE') &&
-      !text.includes('DELETE') &&
-      !text.includes('FROM')
-    ) {
-      return
-    }
-
-    for (const { regex, operation } of patterns) {
-      regex.lastIndex = 0
-      let match: RegExpExecArray | null
-      while ((match = regex.exec(text)) !== null) {
-        const table = match[1].toLowerCase()
-        if (SQL_EXCLUDE.has(table)) continue
-        if (table.startsWith('$')) continue
-        if (table.length < 2) continue
-        if (/^\d/.test(table)) continue
-
-        // Overlap DELETE FROM : le pattern FROM tire aussi sur `DELETE FROM`.
-        if (operation === 'read' && regex.source.startsWith('\\bFROM')) {
-          const before = text.substring(Math.max(0, match.index - 15), match.index)
-          if (/\bDELETE\s+$/i.test(before)) continue
-        }
-
-        // Position absolue dans le fichier → ligne (même calcul que v1).
-        const absIdx = startOffset + match.index
-        const line = content.substring(0, absIdx).split('\n').length
-        const symbol = lineToSymbol.get(line) ?? ''
-        out.push({ file, table, operation, line, symbol })
-      }
-    }
+    const extracted = extractLiteralTextAndOffset(node)
+    if (!extracted) return
+    if (!hasAnySqlKeyword(extracted.text)) return
+    scanSqlPatterns(extracted.text, extracted.startOffset, content, file, lineToSymbol, out)
   })
 }
 
