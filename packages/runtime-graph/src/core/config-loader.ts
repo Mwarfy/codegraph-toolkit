@@ -63,10 +63,12 @@ export async function loadConfig(projectRoot: string): Promise<LoadedConfig> {
   for (const name of CONFIG_BASENAMES) {
     const candidate = path.join(projectRoot, name)
     try {
+      // await-ok: probe avec return on first match, séquentiel requis
       await fs.access(candidate)
     } catch { continue }
 
     try {
+      // await-ok: load séquentiel après probe validé (return immédiat)
       const config = await loadFile(candidate)
       return {
         path: candidate,

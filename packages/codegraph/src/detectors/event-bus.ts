@@ -45,15 +45,21 @@ export class EventBusDetector implements Detector {
     // Regex for direct listen calls
     const listenCallPattern = /listen\(\s*['"]([^'"]+)['"]/g
 
-    for (const file of ctx.files) {
-      if (!file.endsWith('.ts') && !file.endsWith('.tsx')) continue
-
-      const content = await ctx.readFile(file)
+    // Lit en parallèle les .ts/.tsx files (I/O fs indépendantes).
+    const tsFiles = ctx.files.filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'))
+    const fileContents = await Promise.all(
+      tsFiles.map(async (file) => ({ file, content: await ctx.readFile(file) })),
+    )
+    for (const { file, content } of fileContents) {
+      // Local regexes pour éviter race lastIndex partagé entre fichiers.
+      const emitsRe = new RegExp(emitsPattern.source, emitsPattern.flags)
+      const listensToRe = new RegExp(listensToPattern.source, listensToPattern.flags)
+      const emitCallRe = new RegExp(emitCallPattern.source, emitCallPattern.flags)
+      const listenCallRe = new RegExp(listenCallPattern.source, listenCallPattern.flags)
+      let match: RegExpExecArray | null
 
       // Block emits declarations
-      let match: RegExpExecArray | null
-      emitsPattern.lastIndex = 0
-      while ((match = emitsPattern.exec(content)) !== null) {
+      while ((match = emitsRe.exec(content)) !== null) {
         const events = this.parseStringArray(match[1])
         if (events.length > 0) {
           const line = this.getLineNumber(content, match.index)
@@ -62,8 +68,7 @@ export class EventBusDetector implements Detector {
       }
 
       // Block listensTo declarations
-      listensToPattern.lastIndex = 0
-      while ((match = listensToPattern.exec(content)) !== null) {
+      while ((match = listensToRe.exec(content)) !== null) {
         const events = this.parseStringArray(match[1])
         if (events.length > 0) {
           const line = this.getLineNumber(content, match.index)
@@ -72,15 +77,13 @@ export class EventBusDetector implements Detector {
       }
 
       // Direct emit() calls
-      emitCallPattern.lastIndex = 0
-      while ((match = emitCallPattern.exec(content)) !== null) {
+      while ((match = emitCallRe.exec(content)) !== null) {
         const line = this.getLineNumber(content, match.index)
         directEmits.push({ file, eventNames: [match[1]], line })
       }
 
       // Direct listen() calls
-      listenCallPattern.lastIndex = 0
-      while ((match = listenCallPattern.exec(content)) !== null) {
+      while ((match = listenCallRe.exec(content)) !== null) {
         const line = this.getLineNumber(content, match.index)
         directListens.push({ file, eventNames: [match[1]], line })
       }

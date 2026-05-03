@@ -51,28 +51,34 @@ export async function collectAdrMarkers(
   async function walk(dir: string): Promise<void> {
     let entries
     try { entries = await readdir(dir, { withFileTypes: true }) } catch { return }
+    // Sub-dirs récursés en parallèle, files lus en parallèle (push partagé OK).
+    const subdirs: string[] = []
+    const fileTasks: Array<Promise<void>> = []
     for (const e of entries) {
       if (e.name.startsWith('.') && e.name !== '.github') continue
       if (skipDirs.has(e.name)) continue
       const full = path.join(dir, e.name)
       if (e.isDirectory()) {
-        await walk(full)
+        subdirs.push(full)
       } else if (e.isFile()) {
         const ext = e.name.split('.').pop() || ''
         if (!extensions.has(ext)) continue
-        const content = await readFile(full, 'utf-8')
-        const adrs = new Set<string>()
-        for (const line of content.split('\n')) {
-          const m = line.match(ANCHOR_LINE)
-          if (!m) continue
-          for (const tok of m[1].matchAll(ADR_NUM)) adrs.add(tok[1])
-        }
-        if (adrs.size > 0) {
-          const rel = path.relative(repoRoot, full)
-          out.set(rel, [...adrs].sort())
-        }
+        fileTasks.push((async () => {
+          const content = await readFile(full, 'utf-8')
+          const adrs = new Set<string>()
+          for (const line of content.split('\n')) {
+            const m = line.match(ANCHOR_LINE)
+            if (!m) continue
+            for (const tok of m[1].matchAll(ADR_NUM)) adrs.add(tok[1])
+          }
+          if (adrs.size > 0) {
+            const rel = path.relative(repoRoot, full)
+            out.set(rel, [...adrs].sort())
+          }
+        })())
       }
     }
+    await Promise.all([...fileTasks, ...subdirs.map((sd) => walk(sd))])
   }
   await walk(repoRoot)
   return out

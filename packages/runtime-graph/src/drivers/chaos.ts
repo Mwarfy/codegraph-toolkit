@@ -81,11 +81,13 @@ export const chaosDriver: Driver = {
         if (Date.now() >= deadline) break outer
         const variant = chaosVariant(route, i)
         try {
+          // await-ok: chaos driver — séquentiel par design (ordre + observability)
           await issueChaosRequest(baseUrl, route.method, variant.path, variant.body, variant.headers)
           actionsCount++
         } catch (err) {
           warnings.push(`${route.method} ${variant.path}: ${err instanceof Error ? err.message : String(err)}`)
         }
+        // await-ok: rate-limit between requests — burst would skew chaos signal
         await sleep(requestDelayMs)
       }
     }

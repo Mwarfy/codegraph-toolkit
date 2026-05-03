@@ -110,6 +110,7 @@ export class DetectorRegistry {
       if (factsOnly && !detector.factsOnlyEligible) continue
       const t0 = performance.now()
       try {
+        // await-ok: ordre détecteurs requis (typed-calls avant data-flows etc.) — ctx.results accumulés
         const result = await detector.run(ctx)
         if (result !== undefined) {
           ctx.results[detector.name] = result

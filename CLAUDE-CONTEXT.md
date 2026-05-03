@@ -166,15 +166,15 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 > pas verdict. Une tension non explorée n'est pas un bug — c'est un saut
 > latéral possible que le sol stable rend testable.
 
-- **ORPHELIN** `packages/adr-toolkit/tests/fixtures/sample-project/src/core/event-bus.ts` — aucun importeur  
+- **ORPHELIN** `packages/datalog/src/cli.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/adr-toolkit/tests/fixtures/sample-project/src/services/state-service.ts` — aucun importeur  
+- **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
+- **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/b.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/audit-listener.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/c.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/scheduler.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **FSM-ORPHAN** `ApprovalStatus#expired` — état déclaré mais jamais écrit dans le code  
   _→ supprimer l'état OU ajouter la transition manquante_
@@ -200,6 +200,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+2b4ebc0 refactor(toolkit): tame AWAIT-IN-LOOP batch 3+4+5 — detectors + extractors (58→33)
 9a86461 refactor(toolkit): tame AWAIT-IN-LOOP batch 2 — _shared, regenerate-anchors, drivers (70→58)
 5933423 refactor(toolkit): tame AWAIT-IN-LOOP — parallelize hot paths + mark scaffold (105→70)
 fbebea4 refactor(toolkit): extract makeIsExempt helper (NCD: 25→16, total 434→422)
@@ -211,7 +212,6 @@ c613ac7 refactor(toolkit): split analyzer.ts:runDeterministicDetectors en 5 phas
 f2f93bc chore(brief): regen CLAUDE-CONTEXT + CHANGELOG post-refactor (553→534)
 5f8d691 refactor(toolkit): split god-files + fix REDOS detector + tests hubs
 ee89730 docs(validation): self-analysis run #2 — toolkit voit 553 violations sur lui-même
-9a5d5ac docs(validation): run #1.5 — composite rules sur Sentinel — 33× signal-to-noise
 ```
 
 ## Comment contribuer à ce brief

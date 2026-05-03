@@ -68,17 +68,28 @@ export async function loadProgramFromDirs(dirs: string[]): Promise<Program> {
   if (dirs.length === 0) {
     throw new DatalogError('runner.noRules', 'no rules dir provided')
   }
-  const sources: Array<{ name: string; content: string }> = []
-  for (const dir of dirs) {
-    const entries = await fs.readdir(dir)
-    const dlFiles = entries.filter((f) => f.endsWith('.dl')).sort()
+  // Lit tous les .dl files de tous les dirs en parallèle (I/O indépendantes).
+  // Préfixe le nom avec le dir pour disambiguer en cas de doublon de
+  // filename dans 2 dirs (erreur claire au merge plutôt qu'écrase).
+  const dirEntries = await Promise.all(
+    dirs.map(async (dir) => ({
+      dir,
+      dlFiles: (await fs.readdir(dir)).filter((f) => f.endsWith('.dl')).sort(),
+    })),
+  )
+  const fileTasks: Array<Promise<{ name: string; content: string }>> = []
+  for (const { dir, dlFiles } of dirEntries) {
     for (const f of dlFiles) {
       const p = path.join(dir, f)
-      // Préfixe le nom avec le dir pour disambiguer en cas de doublon
-      // de filename dans 2 dirs (erreur claire au merge plutôt qu'écrase).
-      sources.push({ name: `${path.basename(dir)}/${f}`, content: await fs.readFile(p, 'utf-8') })
+      fileTasks.push(
+        fs.readFile(p, 'utf-8').then((content) => ({
+          name: `${path.basename(dir)}/${f}`,
+          content,
+        })),
+      )
     }
   }
+  const sources = await Promise.all(fileTasks)
   if (sources.length === 0) {
     throw new DatalogError('runner.noRules', `no .dl files found in ${dirs.join(', ')}`)
   }

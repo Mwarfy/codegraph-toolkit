@@ -162,19 +162,25 @@ export async function loadFactsFromDir(
 ): Promise<Database> {
   const fs = await import('node:fs/promises')
   const path = await import('node:path')
+  // Lit N .facts en parallèle (I/O fs indépendantes).
+  const inputDecls = [...decls.values()].filter((d) => d.isInput)
+  const reads = await Promise.all(
+    inputDecls.map(async (decl) => {
+      const file = path.join(dir, `${decl.name}.facts`)
+      try {
+        return { decl, file, content: await fs.readFile(file, 'utf-8') }
+      } catch (err: any) {
+        if (err.code === 'ENOENT') return null  // empty input rel — OK
+        throw err
+      }
+    }),
+  )
   const factsByRelation = new Map<string, string>()
   const sourcesByRelation = new Map<string, string>()
-  for (const decl of decls.values()) {
-    if (!decl.isInput) continue
-    const file = path.join(dir, `${decl.name}.facts`)
-    try {
-      const content = await fs.readFile(file, 'utf-8')
-      factsByRelation.set(decl.name, content)
-      sourcesByRelation.set(decl.name, file)
-    } catch (err: any) {
-      if (err.code === 'ENOENT') continue            // empty input rel — OK
-      throw err
-    }
+  for (const entry of reads) {
+    if (!entry) continue
+    factsByRelation.set(entry.decl.name, entry.content)
+    sourcesByRelation.set(entry.decl.name, entry.file)
   }
   return loadFacts(decls, { factsByRelation, sourcesByRelation })
 }

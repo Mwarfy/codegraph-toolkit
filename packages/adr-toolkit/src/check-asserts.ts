@@ -91,12 +91,17 @@ async function loadAdrsWithAsserts(config: AdrToolkitConfig): Promise<ADRWithAss
   } catch {
     return []
   }
+  // Lit les ADR files en parallèle (≤30 typique, indépendants).
+  const adrFiles = files.sort().filter((f) => /^\d{3}-/.test(f))
+  const adrEntries = await Promise.all(
+    adrFiles.map(async (f) => {
+      const filePath = path.join(adrDir, f)
+      const content = await readFile(filePath, 'utf-8')
+      return { f, filePath, asserts: parseFrontmatter(content) }
+    }),
+  )
   const out: ADRWithAsserts[] = []
-  for (const f of files.sort()) {
-    if (!/^\d{3}-/.test(f)) continue
-    const filePath = path.join(adrDir, f)
-    const content = await readFile(filePath, 'utf-8')
-    const asserts = parseFrontmatter(content)
+  for (const { f, filePath, asserts } of adrEntries) {
     if (asserts.length === 0) continue
     out.push({ num: f.slice(0, 3), filePath, asserts })
   }

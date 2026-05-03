@@ -195,10 +195,19 @@ export async function exportFacts(
     rows: [],
   }
   const allManifests = await discoverManifests(snapshot.rootDir)
-  for (const m of allManifests) {
+  // Lit N package.json en parallèle (I/O fs indépendantes), parse séquentiel.
+  const manifestPjs = await Promise.all(
+    allManifests.map(async (m) => {
+      try {
+        return { m, raw: await fs.readFile(m.abs, 'utf8') }
+      } catch { return null /* skip silently — best effort */ }
+    }),
+  )
+  for (const entry of manifestPjs) {
+    if (!entry) continue
+    const { m, raw } = entry
     try {
-      const pjRaw = await fs.readFile(m.abs, 'utf8')
-      const pj = JSON.parse(pjRaw)
+      const pj = JSON.parse(raw)
       // m.rel pointe vers le package.json relatif au rootDir — on prend
       // son dirname pour préfixer les paths candidats. m.dir est absolu
       // (cf. PackageManifest interface), pas utilisable ici.
@@ -899,13 +908,16 @@ export async function exportFacts(
     schemaFile: path.join(options.outDir, 'schema.dl'),
   }
 
-  for (const rel of relations) {
-    const factPath = path.join(options.outDir, `${rel.name}.facts`)
-    const content = rel.rows.map((cols) => cols.join('\t')).join('\n')
-    // Soufflé attend que les .facts existent même vides (sinon il warn).
-    await fs.writeFile(factPath, content + (content.length > 0 ? '\n' : ''))
-    result.relations.push({ name: rel.name, tuples: rel.rows.length, file: factPath })
-  }
+  // Write N relations en parallèle (.facts files indépendants).
+  await Promise.all(
+    relations.map(async (rel) => {
+      const factPath = path.join(options.outDir, `${rel.name}.facts`)
+      const content = rel.rows.map((cols) => cols.join('\t')).join('\n')
+      // Soufflé attend que les .facts existent même vides (sinon il warn).
+      await fs.writeFile(factPath, content + (content.length > 0 ? '\n' : ''))
+      result.relations.push({ name: rel.name, tuples: rel.rows.length, file: factPath })
+    }),
+  )
 
   // ─── schema.dl ────────────────────────────────────────────────────────
   // Header + .decl + .input pour chaque relation. Les règles `.dl`

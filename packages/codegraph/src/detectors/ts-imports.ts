@@ -47,6 +47,7 @@ export class TsImportDetector implements Detector {
 
       for (const candidate of candidates) {
         try {
+          // await-ok: probe avec break sur première match, séquentiel requis
           await fs.access(candidate)
           tsConfigPath = candidate
           break

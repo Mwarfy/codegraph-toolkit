@@ -157,14 +157,17 @@ export async function computeFactStability(
     tupleCountsByRelation.set(rel, [])
   }
 
-  for (const f of snapshotFiles) {
-    let snap: SnapshotFactsShape
-    try {
-      const raw = await fs.readFile(path.join(codegraphDir, f), 'utf8')
-      snap = JSON.parse(raw)
-    } catch {
-      continue
-    }
+  // Lit N snapshots en parallèle (I/O indépendantes), parse séquentiel.
+  const snapshots = await Promise.all(
+    snapshotFiles.map(async (f) => {
+      try {
+        const raw = await fs.readFile(path.join(codegraphDir, f), 'utf8')
+        return JSON.parse(raw) as SnapshotFactsShape
+      } catch { return null }
+    }),
+  )
+  for (const snap of snapshots) {
+    if (!snap) continue
     for (const rel of TRACKED_RELATIONS) {
       const arr = snap[rel]
       hashesByRelation.get(rel)!.push(hashArray(arr))

@@ -99,15 +99,18 @@ export async function computePersistentCycles(
     gated: boolean
   }>()
 
-  for (const f of snapshotFiles) {
-    const fullPath = path.join(codegraphDir, f)
-    let snapshot: SnapshotShape
-    try {
-      const raw = await fs.readFile(fullPath, 'utf8')
-      snapshot = JSON.parse(raw)
-    } catch {
-      continue
-    }
+  // Lit N snapshots en parallèle (I/O indépendantes), parse séquentiel.
+  const snapshotEntries = await Promise.all(
+    snapshotFiles.map(async (f) => {
+      try {
+        const raw = await fs.readFile(path.join(codegraphDir, f), 'utf8')
+        return { f, snapshot: JSON.parse(raw) as SnapshotShape }
+      } catch { return null }
+    }),
+  )
+  for (const entry of snapshotEntries) {
+    if (!entry) continue
+    const { f, snapshot } = entry
     const generatedAt = snapshot.generatedAt ?? f.replace(/^snapshot-/, '').replace(/\.json$/, '')
     for (const c of snapshot.cycles ?? []) {
       const stats = cycleStats.get(c.id)

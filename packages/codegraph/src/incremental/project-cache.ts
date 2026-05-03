@@ -102,6 +102,7 @@ export async function getOrBuildSharedProject(
     const absPath = path.join(rootDir, f)
     let mtime: number | undefined
     try {
+      // await-ok: incremental run touche peu de files (delta), séquentiel acceptable
       const stat = await fs.stat(absPath)
       mtime = stat.mtimeMs
     } catch {
@@ -111,11 +112,12 @@ export async function getOrBuildSharedProject(
 
     const sf = project.getSourceFile(absPath)
     if (!sf) {
-      try { project.addSourceFileAtPath(absPath) } catch { /* parse fail — laisse fileSet incohérent volontairement, prochain run rebuild */ }
+      try { project.addSourceFileAtPath(absPath) } catch { /* parse fail — fileSet incohérent volontairement */ }
       continue
     }
     let content = fileCache.get(f)
     if (content === undefined) {
+      // await-ok: cache miss read, séquentiel acceptable (delta typique petit)
       try { content = await fs.readFile(absPath, 'utf-8') } catch { content = '' }
       fileCache.set(f, content)
     }

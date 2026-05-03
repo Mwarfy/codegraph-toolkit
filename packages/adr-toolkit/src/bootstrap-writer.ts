@@ -116,6 +116,7 @@ export async function applyDrafts(opts: ApplyOptions): Promise<ApplyResult> {
     // (anchors de 1 draft sont des fichiers distincts, write idempotente
     // car content guard sur `marker` already present).
     if (opts.applyMarkers !== false) {
+      // await-ok: outer drafts loop séquentielle (numbering nextNum++) ; le Promise.all interne paralllise les anchors d'1 draft
       const anchorResults = await Promise.all(
         (draft.anchors ?? [draft.primaryAnchor]).map(async (anchor) => {
           const fullAnchor = path.join(config.rootDir, anchor)

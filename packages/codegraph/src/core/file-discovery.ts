@@ -58,13 +58,16 @@ async function walkDir(
     return
   }
 
+  // Files matchent localement, dirs récursés en parallèle (push partagé OK).
+  const subdirs: string[] = []
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name)
     if (entry.isDirectory()) {
-      await walkDir(fullPath, rootDir, result)
+      subdirs.push(fullPath)
     } else if (entry.isFile()) {
       const relativePath = path.relative(rootDir, fullPath).replace(/\\/g, '/')
       result.push(relativePath)
     }
   }
+  await Promise.all(subdirs.map((sd) => walkDir(sd, rootDir, result)))
 }

@@ -173,7 +173,8 @@ export class CodeGraphWatcher {
     for (const f of changedFiles) {
       const abs = path.join(this.config.rootDir, f)
       let exists = false
-      try { await fs.access(abs); exists = true } catch { /* probe : file deleted → exists reste false, branch removal ci-dessous */ }
+      // await-ok: probe per-file dans run incremental — séquentiel acceptable, batch petit
+      try { await fs.access(abs); exists = true } catch { /* file deleted → exists false */ }
       const idx = this.files.indexOf(f)
       if (exists && idx === -1) this.files.push(f)
       else if (!exists && idx !== -1) this.files.splice(idx, 1)
@@ -273,10 +274,11 @@ export class CodeGraphWatcher {
     try { entries = await fs.readdir(dir, { withFileTypes: true }) }
     catch { return }
     acc.push(dir)
-    for (const e of entries) {
-      if (e.isDirectory()) {
-        await this.walkForDirs(path.join(dir, e.name), acc)
-      }
-    }
+    // Walk sub-dirs en parallèle (push partagé OK en JS single-thread).
+    await Promise.all(
+      entries
+        .filter((e) => e.isDirectory())
+        .map((e) => this.walkForDirs(path.join(dir, e.name), acc)),
+    )
   }
 }

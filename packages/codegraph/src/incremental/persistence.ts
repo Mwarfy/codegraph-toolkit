@@ -132,6 +132,7 @@ export async function loadPersistedCache(
   const deltaFiles = await listDeltas(rootDir)
   for (const df of deltaFiles) {
     let dRaw: string
+    // await-ok: deltas en ordre strict (db.applyDelta accumule), break-on-error
     try { dRaw = await fs.readFile(df, 'utf-8') } catch { break }
     let dParsed: PersistedDelta
     try { dParsed = JSON.parse(dRaw) } catch { break }
@@ -183,10 +184,12 @@ export async function savePersistedCache(
 
   if (shouldFull) {
     await writeFullSnapshot(rootDir, mtimes, db)
-    // Cleanup deltas — full snapshot englobe tout.
-    for (const df of existingDeltas) {
-      try { await fs.unlink(df) } catch { /* delta file disparu (concurrent run) — déjà au but */ }
-    }
+    // Cleanup deltas en parallèle — full snapshot englobe tout, indépendants.
+    await Promise.all(
+      existingDeltas.map(async (df) => {
+        try { await fs.unlink(df) } catch { /* delta disparu (concurrent run) — déjà au but */ }
+      }),
+    )
     db.markPersisted()
     return
   }

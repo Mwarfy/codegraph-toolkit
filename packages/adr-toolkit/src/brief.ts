@@ -35,10 +35,15 @@ async function collectADRs(config: AdrToolkitConfig): Promise<ADRSummary[]> {
   } catch {
     return []
   }
+  // Lit les ADR files en parallèle (≤30 typique, indépendants).
+  const adrFiles = files.sort().filter((f) => /^\d{3}-/.test(f))
+  const adrContents = await Promise.all(
+    adrFiles.map(async (f) => ({
+      f, content: await readFile(path.join(adrDir, f), 'utf-8'),
+    })),
+  )
   const adrs: ADRSummary[] = []
-  for (const f of files.sort()) {
-    if (!/^\d{3}-/.test(f)) continue
-    const content = await readFile(path.join(adrDir, f), 'utf-8')
+  for (const { f, content } of adrContents) {
     const titleMatch = content.match(/^# ADR-(\d+):\s*(.+)$/m)
     if (!titleMatch) continue
     let rule: string | null = null
@@ -108,6 +113,7 @@ async function collectInvariantTests(config: AdrToolkitConfig): Promise<string[]
         continue
       }
       try {
+        // await-ok: glob expansion 1-shot, séquentiel acceptable
         const entries = await readdir(dir)
         const re = new RegExp('^' + namePattern.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$')
         for (const e of entries) {

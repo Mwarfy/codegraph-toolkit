@@ -5,7 +5,7 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T17:14:17Z
+Last update : 2026-05-03T17:28:11Z
 
 ## By type
 
@@ -47,8 +47,9 @@ Last update : 2026-05-03T17:14:17Z
 - **afd0965** perf(toolkit): self-discovered Salsa optimizations — warm runtime −40% — 2026-05-03
 
 
-### `refactor` (14)
+### `refactor` (15)
 
+- **2b4ebc0** refactor(toolkit): tame AWAIT-IN-LOOP batch 3+4+5 — detectors + extractors (58→33) — 2026-05-03
 - **9a86461** refactor(toolkit): tame AWAIT-IN-LOOP batch 2 — _shared, regenerate-anchors, drivers (70→58) — 2026-05-03
 - **5933423** refactor(toolkit): tame AWAIT-IN-LOOP — parallelize hot paths + mark scaffold (105→70) — 2026-05-03
 - **fbebea4** refactor(toolkit): extract makeIsExempt helper (NCD: 25→16, total 434→422) — 2026-05-03
@@ -73,13 +74,12 @@ Last update : 2026-05-03T17:14:17Z
 - **03ef857** chore(runtime-graph): OSS launch prep — alpha.4 publish-ready — 2026-05-03
 
 
-### `docs` (5)
+### `docs` (4)
 
 - **ee89730** docs(validation): self-analysis run #2 — toolkit voit 553 violations sur lui-même — 2026-05-03
 - **9a5d5ac** docs(validation): run #1.5 — composite rules sur Sentinel — 33× signal-to-noise — 2026-05-03
 - **a191d61** docs(validation): full-chain run #1 — 4 bugs trouvés sur Hono — 2026-05-03
 - **095661e** docs(validation): run #1 — Hono framework (186 files, 3.5s, 0 crash, 0 hallucination) — 2026-05-03
-- **c003043** docs: update READMEs for v0.5.0 — 91 rules, multi-dir, 7 cross-discipline — 2026-05-01
 
 
 ### `test` (1)
@@ -89,6 +89,7 @@ Last update : 2026-05-03T17:14:17Z
 
 ## Full history
 
+- **2b4ebc0** refactor(toolkit): tame AWAIT-IN-LOOP batch 3+4+5 — detectors + extractors (58→33) — 2026-05-03
 - **9a86461** refactor(toolkit): tame AWAIT-IN-LOOP batch 2 — _shared, regenerate-anchors, drivers (70→58) — 2026-05-03
 - **5933423** refactor(toolkit): tame AWAIT-IN-LOOP — parallelize hot paths + mark scaffold (105→70) — 2026-05-03
 - **fbebea4** refactor(toolkit): extract makeIsExempt helper (NCD: 25→16, total 434→422) — 2026-05-03
@@ -138,4 +139,3 @@ Last update : 2026-05-03T17:14:17Z
 - **81dd087** refactor(toolkit): extract NCD-detected duplications + analyzer.ts cross-discipline — 2026-05-01
 - **dc48f25** feat(toolkit): 4 nouvelles disciplines mathématiques (8e→11e) — 2026-05-01
 - **691337e** feat(toolkit): 8e discipline Newman-Girvan + 4 méta-composites cross-disciplines — 2026-05-01
-- **c003043** docs: update READMEs for v0.5.0 — 91 rules, multi-dir, 7 cross-discipline — 2026-05-01

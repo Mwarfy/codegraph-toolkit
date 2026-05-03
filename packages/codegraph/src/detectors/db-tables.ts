@@ -50,11 +50,12 @@ export class DbTableDetector implements Detector {
       'true', 'false', 'null', 'values', 'returning',
     ])
 
-    for (const file of ctx.files) {
-      if (!file.endsWith('.ts')) continue
-
-      const content = await ctx.readFile(file)
-
+    // Lit en parallèle les .ts files (I/O fs indépendantes), match séquentiel.
+    const tsFiles = ctx.files.filter((f) => f.endsWith('.ts'))
+    const fileContents = await Promise.all(
+      tsFiles.map(async (file) => ({ file, content: await ctx.readFile(file) })),
+    )
+    for (const { file, content } of fileContents) {
       // Only scan files that contain SQL-like patterns
       if (!content.includes('SELECT') && !content.includes('INSERT') &&
           !content.includes('UPDATE') && !content.includes('DELETE') &&
@@ -63,9 +64,10 @@ export class DbTableDetector implements Detector {
       }
 
       for (const { regex, operation } of patterns) {
-        regex.lastIndex = 0
+        // Local regex pour éviter race lastIndex partagé entre fichiers.
+        const localRe = new RegExp(regex.source, regex.flags)
         let match: RegExpExecArray | null
-        while ((match = regex.exec(content)) !== null) {
+        while ((match = localRe.exec(content)) !== null) {
           const tableName = match[1].toLowerCase()
 
           // Filter out non-table matches

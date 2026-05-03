@@ -162,12 +162,15 @@ async function persistAnalyzeOutputs(
   await fs.writeFile(path.join(snapDir, 'synopsis-level1.md'), l1)
   await fs.writeFile(path.join(snapDir, 'synopsis.md'), l1)
   await fs.writeFile(path.join(snapDir, 'synopsis-level2.md'), renderLevel2(synopsis))
-  for (const c of synopsis.containers) {
-    await fs.writeFile(
-      path.join(snapDir, `synopsis-level3-${c.id}.md`),
-      renderLevel3(synopsis, c.id),
-    )
-  }
+  // Write level3 files en parallèle (par container, indépendants).
+  await Promise.all(
+    synopsis.containers.map((c) =>
+      fs.writeFile(
+        path.join(snapDir, `synopsis-level3-${c.id}.md`),
+        renderLevel3(synopsis, c.id),
+      ),
+    ),
+  )
   console.log(chalk.green(
     `  ✓ Synopsis written: synopsis.json + ${synopsis.containers.length + 2} markdown files in ${snapDir}\n`,
   ))

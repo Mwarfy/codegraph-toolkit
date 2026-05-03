@@ -143,12 +143,14 @@ export async function exportFactsRuntime(
     ]),
   })
 
-  // Write all
-  const written: ExportResult['relations'] = []
-  for (const rel of relations) {
-    const r = await writeRelation(opts.outDir, rel)
-    written.push({ name: rel.name, tuples: r.tuples, file: r.file })
-  }
+  // Write all relations en parallèle (.facts files indépendants).
+  const writes = await Promise.all(
+    relations.map(async (rel) => {
+      const r = await writeRelation(opts.outDir, rel)
+      return { name: rel.name, tuples: r.tuples, file: r.file }
+    }),
+  )
+  const written: ExportResult['relations'] = writes
 
   // Schema file (auto-generated, matches Sentinel runtime-facts.ts pattern)
   const schemaLines: string[] = [

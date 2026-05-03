@@ -92,10 +92,13 @@ export async function analyzeTodos(
   files: string[],
   readFile: (relPath: string) => Promise<string>,
 ): Promise<TodoMarker[]> {
+  // Lit en parallèle les .ts/.tsx files (I/O fs indépendantes), parse séquentiel.
+  const tsFiles = files.filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'))
+  const fileContents = await Promise.all(
+    tsFiles.map(async (file) => ({ file, content: await readFile(file) })),
+  )
   const all: TodoMarker[] = []
-  for (const file of files) {
-    if (!file.endsWith('.ts') && !file.endsWith('.tsx')) continue
-    const content = await readFile(file)
+  for (const { file, content } of fileContents) {
     const bundle = extractTodosFileBundle(content, file)
     all.push(...bundle.todos)
   }
