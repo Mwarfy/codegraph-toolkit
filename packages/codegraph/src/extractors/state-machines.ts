@@ -391,6 +391,36 @@ function extractEnumStates(en: EnumDeclaration): string[] {
 
 // ─── Trigger detection ──────────────────────────────────────────────────────
 
+const SM_BUS_NAME_RE = /bus|events?|emit|listen|signal/
+
+/**
+ * Resolve le method name d'1 call expression. Pour PropertyAccess, filter
+ * le left-side pour matcher un identifier bus-like (sinon return null
+ * pour skip). Pour Identifier, retourne le text directement.
+ */
+function resolveListenMethodName(expr: any): string | null {
+  if (expr.getKind() === SyntaxKind.Identifier) return expr.getText()
+  if (expr.getKind() !== SyntaxKind.PropertyAccessExpression) return null
+  const left = expr.getExpression?.()
+  if (left?.getKind() !== SyntaxKind.Identifier) return null
+  const leftName = left.getText().toLowerCase()
+  if (!SM_BUS_NAME_RE.test(leftName)) return null
+  return expr.getName?.() ?? null
+}
+
+/**
+ * Unwrap `as Type` / `<Type>` cast wrappers + return final kind.
+ */
+function unwrapCastArg(arg: any): { node: any; kind: number } {
+  let cur = arg
+  let k = cur?.getKind?.()
+  if (k === SyntaxKind.AsExpression || k === SyntaxKind.TypeAssertionExpression) {
+    cur = cur.getExpression?.() ?? cur
+    k = cur.getKind?.()
+  }
+  return { node: cur, kind: k }
+}
+
 function detectListenerTriggers(
   sf: SourceFile,
   file: string,
@@ -404,41 +434,20 @@ function detectListenerTriggers(
     const expr = call.getExpression?.()
     if (!expr) return
 
-    let method: string | undefined
-    if (expr.getKind() === SyntaxKind.Identifier) {
-      method = expr.getText()
-    } else if (expr.getKind() === SyntaxKind.PropertyAccessExpression) {
-      method = expr.getName?.()
-      // Filtre : le left side doit être "bus" / "events" / etc.
-      const left = expr.getExpression?.()
-      if (left?.getKind() === SyntaxKind.Identifier) {
-        const leftName = left.getText().toLowerCase()
-        if (!/bus|events?|emit|listen|signal/.test(leftName)) return
-      } else {
-        return
-      }
-    }
+    const method = resolveListenMethodName(expr)
     if (!method || !listenFns.has(method)) return
 
     const args = call.getArguments?.() ?? []
     const eventName = extractLiteralString(args[0])
     if (!eventName) return
+    if (!args[1]) return
 
-    let handlerArg = args[1]
-    if (!handlerArg) return
-    let hk = handlerArg.getKind?.()
-    if (hk === SyntaxKind.AsExpression || hk === SyntaxKind.TypeAssertionExpression) {
-      handlerArg = handlerArg.getExpression?.() ?? handlerArg
-      hk = handlerArg.getKind?.()
-    }
-
+    const { node: handlerArg, kind: hk } = unwrapCastArg(args[1])
     if (hk === SyntaxKind.Identifier) {
-      const handlerName = handlerArg.getText()
-      out.set(`${file}:${handlerName}`, eventName)
+      out.set(`${file}:${handlerArg.getText()}`, eventName)
     }
-    // Arrows inline : on pourrait stocker le container = "<anon@line>" mais
-    // les writes à l'intérieur sont rattachés au container inline, pas à un
-    // nom. Pour v1 on traite tout ce qui est dans l'arrow comme 'init'.
+    // Arrows inline : v1 traite tout ce qui est dans l'arrow comme 'init',
+    // pas comme un container nomme — on n'en stocke pas de mapping ici.
   })
 }
 
@@ -526,51 +535,80 @@ function scanSqlWrites(
   }
 }
 
+/**
+ * Extract le LiteralText d'un node si StringLiteral / NoSubstitutionTemplate.
+ * Returns null sinon — le caller skip la signal.
+ */
+function literalStringOrNull(node: any): string | null {
+  const k = node?.getKind?.()
+  if (k !== SyntaxKind.StringLiteral && k !== SyntaxKind.NoSubstitutionTemplateLiteral) return null
+  return node.getLiteralText?.() ?? null
+}
+
+function emitWriteSignal(
+  field: string,
+  value: string,
+  line: number,
+  ranges: FnRange[],
+  file: string,
+  out: WriteSignal[],
+): void {
+  const container = findContainerAtLine(ranges, line) ?? ''
+  out.push({ field: field.toLowerCase(), value, file, line, container: `${file}:${container}` })
+}
+
+/**
+ * `{ field: 'value' }` PropertyAssignment avec value StringLiteral.
+ */
+function tryObjectPropertyWrite(
+  node: any,
+  ranges: FnRange[],
+  file: string,
+  out: WriteSignal[],
+): void {
+  const nameNode = node.getNameNode?.()
+  const init = node.getInitializer?.()
+  if (!nameNode || !init) return
+  const field = nameNode.getText?.()?.replace(/['"]/g, '')
+  if (!field) return
+  const value = literalStringOrNull(init)
+  if (!value) return
+  emitWriteSignal(field, value, node.getStartLineNumber?.() ?? 0, ranges, file, out)
+}
+
+/**
+ * `x.y = 'z'` BinaryExpression avec `=` operator.
+ */
+function tryBinaryAssignmentWrite(
+  node: any,
+  ranges: FnRange[],
+  file: string,
+  out: WriteSignal[],
+): void {
+  if (node.getOperatorToken?.()?.getKind?.() !== SyntaxKind.EqualsToken) return
+  const left = node.getLeft?.()
+  const right = node.getRight?.()
+  if (!left || !right) return
+  if (left.getKind?.() !== SyntaxKind.PropertyAccessExpression) return
+  const field = left.getName?.()
+  if (!field) return
+  const value = literalStringOrNull(right)
+  if (!value) return
+  emitWriteSignal(field, value, node.getStartLineNumber?.() ?? 0, ranges, file, out)
+}
+
 function scanObjectWrites(
   sf: SourceFile,
   file: string,
   ranges: FnRange[],
   out: WriteSignal[],
 ): void {
-  // Pour chaque PropertyAssignment dont la valeur est un StringLiteral,
-  // extraire field + value. Et pour chaque BinaryExpression `x.y = 'z'`.
   sf.forEachDescendant((node) => {
     const k = node.getKind()
-
     if (k === SyntaxKind.PropertyAssignment) {
-      const pa = node as any
-      const nameNode = pa.getNameNode?.()
-      const init = pa.getInitializer?.()
-      if (!nameNode || !init) return
-      const field = nameNode.getText?.()?.replace(/['"]/g, '')
-      if (!field) return
-      const initKind = init.getKind?.()
-      if (initKind !== SyntaxKind.StringLiteral && initKind !== SyntaxKind.NoSubstitutionTemplateLiteral) return
-      const value = init.getLiteralText?.()
-      if (!value) return
-      const line = pa.getStartLineNumber?.() ?? 0
-      const container = findContainerAtLine(ranges, line) ?? ''
-      out.push({ field: field.toLowerCase(), value, file, line, container: `${file}:${container}` })
-      return
-    }
-
-    if (k === SyntaxKind.BinaryExpression) {
-      const be = node as any
-      const op = be.getOperatorToken?.()
-      if (op?.getKind?.() !== SyntaxKind.EqualsToken) return
-      const left = be.getLeft?.()
-      const right = be.getRight?.()
-      if (!left || !right) return
-      if (left.getKind?.() !== SyntaxKind.PropertyAccessExpression) return
-      const field = left.getName?.()
-      if (!field) return
-      const rightKind = right.getKind?.()
-      if (rightKind !== SyntaxKind.StringLiteral && rightKind !== SyntaxKind.NoSubstitutionTemplateLiteral) return
-      const value = right.getLiteralText?.()
-      if (!value) return
-      const line = be.getStartLineNumber?.() ?? 0
-      const container = findContainerAtLine(ranges, line) ?? ''
-      out.push({ field: field.toLowerCase(), value, file, line, container: `${file}:${container}` })
+      tryObjectPropertyWrite(node as any, ranges, file, out)
+    } else if (k === SyntaxKind.BinaryExpression) {
+      tryBinaryAssignmentWrite(node as any, ranges, file, out)
     }
   })
 }
