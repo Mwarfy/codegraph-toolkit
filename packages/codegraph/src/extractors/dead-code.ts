@@ -55,28 +55,21 @@ const SUSPECT_OPS = new Set<string>([
   '>', '>=', '<', '<=',
 ])
 
-export function extractDeadCodeFileBundle(
+type DeadCodeIsExempt = (line: number) => boolean
+
+function detectIdenticalSubexpressions(
   sf: SourceFile,
   relPath: string,
-): DeadCodeFileBundle {
-  if (TEST_FILE_RE.test(relPath)) return { findings: [] }
-  const findings: DeadCodeFinding[] = []
-
-  const isExempt = makeIsExemptForMarker(sf, 'dead-code-ok')
-  // Aussi gardé localement pour le check `// fallthrough` ci-dessous
-  // (convention C/Java spécifique au switch-fallthrough pattern).
-  const lines = sf.getFullText().split('\n')
-
-  // ─── Pattern 1 : identical-subexpressions ──────────────────────────
+  isExempt: DeadCodeIsExempt,
+  findings: DeadCodeFinding[],
+): void {
   for (const expr of sf.getDescendantsOfKind(SyntaxKind.BinaryExpression)) {
     const op = expr.getOperatorToken().getText()
     if (!SUSPECT_OPS.has(op)) continue
     const left = expr.getLeft().getText().trim()
     const right = expr.getRight().getText().trim()
     if (left !== right) continue
-    // Skip si c'est juste une constante littérale identique de chaque
-    // côté (ex `0 === 0` typique de tests / typings) — peu probable
-    // d'être un bug.
+    // Skip constantes litterales identiques courtes (ex `0 === 0`).
     if (/^[\d"'`]/.test(left) && left.length < 4) continue
     const line = expr.getStartLineNumber()
     if (isExempt(line)) continue
@@ -88,13 +81,14 @@ export function extractDeadCodeFileBundle(
       details: { operator: op, expression: truncate(left, 60) },
     })
   }
+}
 
-  // ─── Pattern 4 : switch-empty / switch-no-default (Tier 6, MISRA 16.6) ───
-  // - switch vide (0 case) = bug-prone (probable refactor inachevé)
-  // - switch sans clause `default` = oubli d'un cas, comportement
-  //   silencieux. Skip si le switch est sur une discriminated union
-  //   exhaustive (impossible à détecter sans typecheck — donc on
-  //   préfère flagger et laisser le user grandfather si exhaustif).
+function detectSwitchEmptyOrNoDefault(
+  sf: SourceFile,
+  relPath: string,
+  isExempt: DeadCodeIsExempt,
+  findings: DeadCodeFinding[],
+): void {
   for (const sw of sf.getDescendantsOfKind(SyntaxKind.SwitchStatement)) {
     const clauses = sw.getCaseBlock().getClauses()
     const line = sw.getStartLineNumber()
@@ -102,114 +96,99 @@ export function extractDeadCodeFileBundle(
     if (clauses.length === 0) {
       findings.push({
         kind: 'switch-empty',
-        file: relPath,
-        line,
+        file: relPath, line,
         message: `switch vide (0 case) — refactor inacheve ?`,
       })
       continue
     }
-    const hasDefault = clauses.some((c) => Node.isDefaultClause(c))
-    if (!hasDefault) {
+    if (!clauses.some((c) => Node.isDefaultClause(c))) {
       findings.push({
         kind: 'switch-no-default',
-        file: relPath,
-        line,
+        file: relPath, line,
         message: `switch sans clause default — comportement silencieux si valeur inattendue`,
       })
     }
   }
+}
 
-  // ─── Pattern 5 : controlling-expression-constant (Tier 6, MISRA 14.3) ───
-  // `if (true && X)`, `if (false || X)`, `if (X || true)`, `if (true)`
-  // — la valeur du test est connue statiquement. Constant folding lite.
-  // Skip `while (true)` (boucle infinie volontaire), `do {} while(false)`
-  // (forme idiomatique).
-  const isLiteralBool = (n: Node, value: boolean): boolean => {
-    if (Node.isTrueLiteral(n)) return value === true
-    if (Node.isFalseLiteral(n)) return value === false
-    return false
-  }
-  const checkControlling = (cond: Node | undefined, line: number): void => {
+function detectControllingConstantExpressions(
+  sf: SourceFile,
+  relPath: string,
+  isExempt: DeadCodeIsExempt,
+  findings: DeadCodeFinding[],
+): void {
+  const isLiteralBool = (n: Node): boolean => Node.isTrueLiteral(n) || Node.isFalseLiteral(n)
+
+  const check = (cond: Node | undefined, line: number): void => {
     if (!cond || isExempt(line)) return
-    // `if (true)` ou `if (false)` direct.
-    if (isLiteralBool(cond, true) || isLiteralBool(cond, false)) {
+    if (isLiteralBool(cond)) {
       findings.push({
         kind: 'controlling-expression-constant',
-        file: relPath,
-        line,
+        file: relPath, line,
         message: `condition constante (${cond.getText()}) — branche dead ou code mort`,
       })
       return
     }
-    // `cond && true/false` ou `true/false && cond` ou `||` variants.
-    if (Node.isBinaryExpression(cond)) {
-      const op = cond.getOperatorToken().getText()
-      if (op !== '&&' && op !== '||') return
-      const left = cond.getLeft()
-      const right = cond.getRight()
-      // `X && true` redondant ; `X && false` toujours faux ; `X || true`
-      // toujours vrai ; `X || false` redondant. Tous les 4 = controlling
-      // expression simplifiable.
-      const litLeft = Node.isTrueLiteral(left) || Node.isFalseLiteral(left)
-      const litRight = Node.isTrueLiteral(right) || Node.isFalseLiteral(right)
-      if (litLeft || litRight) {
-        findings.push({
-          kind: 'controlling-expression-constant',
-          file: relPath,
-          line,
-          message: `expression ${op} avec un cote constant — simplifier`,
-          details: { operator: op },
-        })
-      }
-    }
-  }
-  for (const ifStmt of sf.getDescendantsOfKind(SyntaxKind.IfStatement)) {
-    checkControlling(ifStmt.getExpression(), ifStmt.getStartLineNumber())
-  }
-  for (const cond of sf.getDescendantsOfKind(SyntaxKind.ConditionalExpression)) {
-    checkControlling(cond.getCondition(), cond.getStartLineNumber())
+    if (!Node.isBinaryExpression(cond)) return
+    const op = cond.getOperatorToken().getText()
+    if (op !== '&&' && op !== '||') return
+    if (!isLiteralBool(cond.getLeft()) && !isLiteralBool(cond.getRight())) return
+    findings.push({
+      kind: 'controlling-expression-constant',
+      file: relPath, line,
+      message: `expression ${op} avec un cote constant — simplifier`,
+      details: { operator: op },
+    })
   }
 
-  // ─── Pattern 3 : switch-fallthrough (Tier 4) ───────────────────────
-  // gcc -Wimplicit-fallthrough. `case X: doStuff()` sans break / return
-  // / throw / continue → tombe silencieusement dans le case suivant.
-  // Bug-prone classique. Skip le DERNIER case (pas de fall-through
-  // possible) et les cases vides (groupage explicite : `case A: case B:`).
+  for (const ifStmt of sf.getDescendantsOfKind(SyntaxKind.IfStatement)) {
+    check(ifStmt.getExpression(), ifStmt.getStartLineNumber())
+  }
+  for (const cond of sf.getDescendantsOfKind(SyntaxKind.ConditionalExpression)) {
+    check(cond.getCondition(), cond.getStartLineNumber())
+  }
+}
+
+function isExitStatement(stmt: Node): boolean {
+  return Node.isBreakStatement(stmt)
+    || Node.isReturnStatement(stmt)
+    || Node.isThrowStatement(stmt)
+    || Node.isContinueStatement(stmt)
+}
+
+function clauseLastStmtExits(stmts: import('ts-morph').Statement[]): boolean {
+  if (stmts.length === 0) return true  // groupage explicite OK
+  const last = stmts[stmts.length - 1]
+  if (isExitStatement(last)) return true
+  if (Node.isBlock(last)) {
+    const blockStmts = last.getStatements()
+    const blockLast = blockStmts[blockStmts.length - 1]
+    return blockLast ? isExitStatement(blockLast) : false
+  }
+  return false
+}
+
+function detectSwitchFallthroughs(
+  sf: SourceFile,
+  relPath: string,
+  isExempt: DeadCodeIsExempt,
+  lines: string[],
+  findings: DeadCodeFinding[],
+): void {
   for (const sw of sf.getDescendantsOfKind(SyntaxKind.SwitchStatement)) {
     const clauses = sw.getCaseBlock().getClauses()
     for (let i = 0; i < clauses.length - 1; i++) {
       const clause = clauses[i]
-      // Skip default au milieu (rare, mais le check fall-through s'applique).
-      if (Node.isDefaultClause(clause) && i === clauses.length - 1) continue
       const stmts = clause.getStatements()
-      if (stmts.length === 0) continue       // groupage explicite, OK
-      const last = stmts[stmts.length - 1]
-      if (
-        Node.isBreakStatement(last) ||
-        Node.isReturnStatement(last) ||
-        Node.isThrowStatement(last) ||
-        Node.isContinueStatement(last)
-      ) continue
-      // Block dont le dernier statement exit ?
-      if (Node.isBlock(last)) {
-        const blockStmts = last.getStatements()
-        const blockLast = blockStmts[blockStmts.length - 1]
-        if (
-          blockLast && (
-            Node.isBreakStatement(blockLast) ||
-            Node.isReturnStatement(blockLast) ||
-            Node.isThrowStatement(blockLast) ||
-            Node.isContinueStatement(blockLast)
-          )
-        ) continue
-      }
+      if (clauseLastStmtExits(stmts)) continue
 
       const line = clause.getStartLineNumber()
       if (isExempt(line)) continue
-      // Comment // fallthrough sur la ligne juste après le dernier
-      // statement = exemption explicite (convention C/Java).
-      const lastLine = last.getEndLineNumber()
-      const fallthroughCommentIdx = lastLine + 1   // ligne 1-based, lines[] 0-based
+
+      // Convention C/Java : `// fallthrough` sur la ligne juste apres
+      // le dernier statement = exemption explicite.
+      const last = stmts[stmts.length - 1]
+      const fallthroughCommentIdx = last.getEndLineNumber() + 1
       if (
         fallthroughCommentIdx - 1 < lines.length &&
         /\/\/\s*fallthrough\b/i.test(lines[fallthroughCommentIdx - 1])
@@ -217,34 +196,51 @@ export function extractDeadCodeFileBundle(
 
       findings.push({
         kind: 'switch-fallthrough',
-        file: relPath,
-        line,
+        file: relPath, line,
         message: `case sans break/return/throw — fall-through silencieux ; ajouter break ou \`// fallthrough\``,
       })
     }
   }
+}
 
-  // ─── Pattern 2 : return-then-else ──────────────────────────────────
-  // `if (cond) { return X } else { ... }` — le else est inatteignable
-  // APRÈS le if (le return du then court-circuite). Pattern Sonar S1126.
+function detectReturnThenElse(
+  sf: SourceFile,
+  relPath: string,
+  isExempt: DeadCodeIsExempt,
+  findings: DeadCodeFinding[],
+): void {
+  // `if (cond) { return X } else { ... }` — Sonar S1126. Skip `else if` chain.
   for (const ifStmt of sf.getDescendantsOfKind(SyntaxKind.IfStatement)) {
     const elseBranch = ifStmt.getElseStatement()
     if (!elseBranch) continue
-    // Skip `else if` chain — c'est un pattern lisible reconnu.
     if (Node.isIfStatement(elseBranch)) continue
-
-    const thenBranch = ifStmt.getThenStatement()
-    if (!thenAlwaysExits(thenBranch)) continue
-
+    if (!thenAlwaysExits(ifStmt.getThenStatement())) continue
     const line = ifStmt.getStartLineNumber()
     if (isExempt(line)) continue
     findings.push({
       kind: 'return-then-else',
-      file: relPath,
-      line,
+      file: relPath, line,
       message: `if/return suivi de else — flatten : retirer le else, dedent le bloc`,
     })
   }
+}
+
+export function extractDeadCodeFileBundle(
+  sf: SourceFile,
+  relPath: string,
+): DeadCodeFileBundle {
+  if (TEST_FILE_RE.test(relPath)) return { findings: [] }
+  const findings: DeadCodeFinding[] = []
+
+  const isExempt = makeIsExemptForMarker(sf, 'dead-code-ok')
+  // Garde localement pour le check `// fallthrough` (convention C/Java).
+  const lines = sf.getFullText().split('\n')
+
+  detectIdenticalSubexpressions(sf, relPath, isExempt, findings)
+  detectSwitchEmptyOrNoDefault(sf, relPath, isExempt, findings)
+  detectControllingConstantExpressions(sf, relPath, isExempt, findings)
+  detectSwitchFallthroughs(sf, relPath, isExempt, lines, findings)
+  detectReturnThenElse(sf, relPath, isExempt, findings)
 
   return { findings }
 }
