@@ -238,28 +238,44 @@ export function detectFsmCandidates(
 ): FsmCandidate[] {
   const suffixes = options.suffixes ?? DEFAULT_SUFFIXES
 
-  // Étape 0 — charger les fichiers dans un Project ts-morph
+  const project = buildFsmProject(config, files)
+  const discovered = discoverFsmTypes(project, config.rootDir, suffixes)
+  if (discovered.length === 0) return []
+
+  const allValues = collectAllValues(discovered)
+  const allSites = findWriteSites(project, allValues, config.rootDir)
+  return assembleFsmCandidates(discovered, allSites)
+}
+
+/** Étape 0 — charge les .ts/.tsx files dans un Project ts-morph (parse-tolerant). */
+function buildFsmProject(config: AdrToolkitConfig, files: string[]): Project {
   const project = new Project({
     tsConfigFilePath: config.tsconfigPath
       ? path.join(config.rootDir, config.tsconfigPath)
       : undefined,
-    skipAddingFilesFromTsConfig: true,  // on ajoute manuellement
+    skipAddingFilesFromTsConfig: true,
     skipFileDependencyResolution: true,
   })
   for (const f of files) {
     if (!f.endsWith('.ts') && !f.endsWith('.tsx')) continue
-    const full = path.join(config.rootDir, f)
     try {
-      project.addSourceFileAtPath(full)
+      project.addSourceFileAtPath(path.join(config.rootDir, f))
     } catch {
       // Fichier inexistant ou non-parsable, skip
     }
   }
+  return project
+}
 
-  // Étape 1 — découvrir les types FSM-like
+/** Étape 1 — découvre les TypeAliases + Enums FSM-like (suffix match). */
+function discoverFsmTypes(
+  project: Project,
+  rootDir: string,
+  suffixes: string[],
+): DiscoveredFsm[] {
   const discovered: DiscoveredFsm[] = []
   for (const sf of project.getSourceFiles()) {
-    const sfRel = path.relative(config.rootDir, sf.getFilePath())
+    const sfRel = path.relative(rootDir, sf.getFilePath())
 
     for (const ta of sf.getTypeAliases()) {
       if (!hasSuffix(ta.getName(), suffixes)) continue
@@ -287,26 +303,31 @@ export function detectFsmCandidates(
       })
     }
   }
+  return discovered
+}
 
-  if (discovered.length === 0) return []
-
-  // Étape 2 — union de toutes les valeurs pour le scan writes
+/** Étape 2 — union de toutes les valeurs FSM (pour le scan writes). */
+function collectAllValues(discovered: DiscoveredFsm[]): Set<string> {
   const allValues = new Set<string>()
   for (const d of discovered) {
     for (const v of d.values) allValues.add(v)
   }
+  return allValues
+}
 
-  // Étape 3 — scan writes (une seule passe, dispatch par valeur)
-  const allSites = findWriteSites(project, allValues, config.rootDir)
-
-  // Étape 4 — assigner chaque write à sa FSM par valeur
-  // Note : si 2 FSMs ont des valeurs qui se chevauchent (ex: 'pending'),
-  // on attribue le write aux DEUX. C'est volontaire — le LLM tranchera.
+/**
+ * Étape 4 — assigne chaque write à sa FSM par valeur. Si 2 FSMs ont des
+ * valeurs qui se chevauchent (ex: 'pending'), le write est attribué aux
+ * DEUX — c'est volontaire, le LLM tranchera.
+ */
+function assembleFsmCandidates(
+  discovered: DiscoveredFsm[],
+  allSites: ReturnType<typeof findWriteSites>,
+): FsmCandidate[] {
   const candidates: FsmCandidate[] = []
   for (const d of discovered) {
     const valueSet = new Set(d.values)
-    const writeSites = allSites.filter(s => valueSet.has(s.value))
-
+    const writeSites = allSites.filter((s) => valueSet.has(s.value))
     candidates.push({
       kind: 'fsm',
       filePath: d.filePath,
@@ -319,6 +340,5 @@ export function detectFsmCandidates(
       writeSites,
     })
   }
-
   return candidates
 }
