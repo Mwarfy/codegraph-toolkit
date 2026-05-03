@@ -199,6 +199,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+1bdb707 refactor(toolkit): split collectAstSignals (cyclo 29→3) — 3 per-domain collectors
 cde9741 refactor(toolkit): split collectSqlSignals (cyclo 33→3) — 5 helpers SQL pattern matching
 423bc96 refactor(toolkit): split evaluate (cyclo 40→7, cog 123→4) — eval.ts ALL bombs cleared
 c55801c refactor(toolkit): split evaluateRule (cyclo 16→4) — 3 helpers (guards + head + proof)
@@ -210,7 +211,6 @@ a023167 refactor(toolkit): split Lexer.next (cyclo 19→under) — table single-
 ce0b0a8 refactor(toolkit): split detectListenerEntries (cyclo 23→under) — 4 helpers
 47e3476 refactor(toolkit): split scanHttpOutboundSinks (cyclo 21→under) — 2 helpers
 9efbf60 refactor(toolkit): split scanSinks (cyclo 18→under) — 4 per-kind sink helpers
-2e2a8e8 refactor(toolkit): split prebuildSharedProjectIncremental (cyclo 16→3) — 3 helpers + reuse findTsConfigPath
 ```
 
 ## Comment contribuer à ce brief

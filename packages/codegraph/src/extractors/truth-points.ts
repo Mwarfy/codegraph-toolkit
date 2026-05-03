@@ -734,6 +734,71 @@ const PRISMA_WRITE_METHODS = new Set([
  *   - Prisma  : `(prisma|db|client|pc).<model>.<crudMethod>(...)` → read/write
  *               selon le method name.
  */
+/**
+ * Drizzle-style : `<any>.<method>(<Ident>)` ou la 1re col du method-call est
+ * un Identifier de table. Returns true si signal pushed.
+ */
+function tryDrizzleCall(
+  call: any,
+  method: string,
+  file: string,
+  lineToSymbol: Map<number, string>,
+  out: SqlSignal[],
+): boolean {
+  let drizzleOp: 'read' | 'write' | null = null
+  if (DRIZZLE_WRITE_METHODS.has(method)) drizzleOp = 'write'
+  else if (DRIZZLE_READ_METHODS.has(method)) drizzleOp = 'read'
+  if (!drizzleOp) return false
+
+  const callArgs = call.getArguments?.() ?? []
+  if (callArgs.length === 0 || callArgs[0].getKind() !== SyntaxKind.Identifier) return false
+
+  const tableIdent = callArgs[0].getText()
+  // Guard : ignorer identifiers trop generiques.
+  if (tableIdent.length < 2 || tableIdent === 'this' || tableIdent === 'super') return false
+
+  const line = call.getStartLineNumber?.() ?? 0
+  out.push({
+    file, table: tableIdent.toLowerCase(), operation: drizzleOp, line,
+    symbol: lineToSymbol.get(line) ?? '',
+  })
+  return true
+}
+
+/**
+ * Prisma-style : `(prisma|db|client).<model>.<method>(...)`. Returns true
+ * si signal pushed.
+ */
+function tryPrismaCall(
+  call: any,
+  expr: any,
+  method: string,
+  file: string,
+  lineToSymbol: Map<number, string>,
+  out: SqlSignal[],
+): boolean {
+  let prismaOp: 'read' | 'write' | null = null
+  if (PRISMA_READ_METHODS.has(method)) prismaOp = 'read'
+  else if (PRISMA_WRITE_METHODS.has(method)) prismaOp = 'write'
+  if (!prismaOp) return false
+
+  const tableAccess = expr.getExpression?.()
+  if (!tableAccess || tableAccess.getKind?.() !== SyntaxKind.PropertyAccessExpression) return false
+  const tableName = tableAccess.getName?.()
+  const clientNode = tableAccess.getExpression?.()
+  if (!tableName || !clientNode) return false
+  if (clientNode.getKind?.() !== SyntaxKind.Identifier) return false
+  const clientName = clientNode.getText()
+  if (!PRISMA_CLIENT_NAMES.has(clientName)) return false
+
+  const line = call.getStartLineNumber?.() ?? 0
+  out.push({
+    file, table: tableName.toLowerCase(), operation: prismaOp, line,
+    symbol: lineToSymbol.get(line) ?? '',
+  })
+  return true
+}
+
 function collectOrmSignals(
   sf: SourceFile,
   file: string,
@@ -747,63 +812,11 @@ function collectOrmSignals(
     const call = node as any
     const expr = call.getExpression?.()
     if (!expr || expr.getKind() !== SyntaxKind.PropertyAccessExpression) return
-
     const method = expr.getName?.()
     if (!method) return
 
-    // ── Drizzle-style : `<any>.<method>(<Ident>)` ──
-    if (orm.drizzle) {
-      let drizzleOp: 'read' | 'write' | null = null
-      if (DRIZZLE_WRITE_METHODS.has(method)) drizzleOp = 'write'
-      else if (DRIZZLE_READ_METHODS.has(method)) drizzleOp = 'read'
-
-      if (drizzleOp) {
-        const args = call.getArguments?.() ?? []
-        if (args.length > 0 && args[0].getKind() === SyntaxKind.Identifier) {
-          const tableIdent = args[0].getText()
-          // Guard : ignorer les identifiers trop génériques qui ne seraient
-          // pas des tables (ex: `this`, `super`, vars 1 char).
-          if (tableIdent.length >= 2 && !['this', 'super'].includes(tableIdent)) {
-            const line = call.getStartLineNumber?.() ?? 0
-            out.push({
-              file,
-              table: tableIdent.toLowerCase(),
-              operation: drizzleOp,
-              line,
-              symbol: lineToSymbol.get(line) ?? '',
-            })
-            return
-          }
-        }
-      }
-    }
-
-    // ── Prisma-style : `(prisma|db|client).<model>.<method>(...)` ──
-    if (orm.prisma) {
-      let prismaOp: 'read' | 'write' | null = null
-      if (PRISMA_READ_METHODS.has(method)) prismaOp = 'read'
-      else if (PRISMA_WRITE_METHODS.has(method)) prismaOp = 'write'
-
-      if (prismaOp) {
-        const tableAccess = expr.getExpression?.()
-        if (!tableAccess || tableAccess.getKind?.() !== SyntaxKind.PropertyAccessExpression) return
-        const tableName = tableAccess.getName?.()
-        const clientNode = tableAccess.getExpression?.()
-        if (!tableName || !clientNode) return
-        if (clientNode.getKind?.() !== SyntaxKind.Identifier) return
-        const clientName = clientNode.getText()
-        if (!PRISMA_CLIENT_NAMES.has(clientName)) return
-
-        const line = call.getStartLineNumber?.() ?? 0
-        out.push({
-          file,
-          table: tableName.toLowerCase(),
-          operation: prismaOp,
-          line,
-          symbol: lineToSymbol.get(line) ?? '',
-        })
-      }
-    }
+    if (orm.drizzle && tryDrizzleCall(call, method, file, lineToSymbol, out)) return
+    if (orm.prisma) tryPrismaCall(call, expr, method, file, lineToSymbol, out)
   })
 }
 
