@@ -145,148 +145,145 @@ export interface SynopsisOptions {
 
 // ─── Build ───────────────────────────────────────────────────────────────────
 
-export function buildSynopsis(snapshot: GraphSnapshot, options: SynopsisOptions = {}): SynopsisJSON {
+interface SynopsisCtx {
+  files: GraphNode[]
+  edges: GraphEdge[]
+  inDeg: Map<string, number>
+  outDeg: Map<string, number>
+  containerOf: (fileId: string) => string
+  adrMarkers?: Map<string, string[]>
+  hubThreshold: number
+  adrsFor: (fileId: string) => string[] | undefined
+}
+
+function buildSynopsisCtx(snapshot: GraphSnapshot, options: SynopsisOptions): SynopsisCtx {
   const files = snapshot.nodes.filter(n => n.type === 'file')
   const edges = snapshot.edges
   const adrMarkers = options.adrMarkers
   const hubThreshold = options.hubThreshold ?? 15
-  const adrsFor = (fileId: string): string[] | undefined => {
-    if (!adrMarkers) return undefined
-    return adrMarkers.get(fileId)
-  }
-
-  // In-degree per file (all edge types included — db-table noise is informative too)
   const inDeg = new Map<string, number>()
   const outDeg = new Map<string, number>()
   for (const e of edges) {
     inDeg.set(e.to, (inDeg.get(e.to) || 0) + 1)
     outDeg.set(e.from, (outDeg.get(e.from) || 0) + 1)
   }
-
   const containerOf = (fileId: string): string => fileId.split('/')[0] || fileId
+  const adrsFor = (fileId: string): string[] | undefined => adrMarkers?.get(fileId)
+  return { files, edges, inDeg, outDeg, containerOf, adrMarkers, hubThreshold, adrsFor }
+}
 
-  // ── Global top-10 hubs ──────────────────────────────────────────────
-  const topHubs: HubEntry[] = files
-    .map(f => {
-      const entry: HubEntry = {
-        id: f.id,
-        inDegree: inDeg.get(f.id) || 0,
-        tags: f.tags,
-        container: containerOf(f.id),
-      }
-      const adrs = adrsFor(f.id)
-      if (adrs) entry.adrs = adrs
-      return entry
-    })
+function buildHubEntry(file: GraphNode, ctx: SynopsisCtx, container: string): HubEntry {
+  const entry: HubEntry = {
+    id: file.id,
+    inDegree: ctx.inDeg.get(file.id) || 0,
+    tags: file.tags,
+    container,
+  }
+  const adrs = ctx.adrsFor(file.id)
+  if (adrs) entry.adrs = adrs
+  return entry
+}
+
+function rankHubs(files: GraphNode[], ctx: SynopsisCtx, container: string, limit: number): HubEntry[] {
+  return files
+    .map(f => buildHubEntry(f, ctx, container))
     .filter(h => h.inDegree > 0)
     .sort((a, b) => b.inDegree - a.inDegree || a.id.localeCompare(b.id))
-    .slice(0, 10)
+    .slice(0, limit)
+}
 
-  // ── Per-container aggregates ────────────────────────────────────────
-  const containerIds = Array.from(new Set(files.map(f => containerOf(f.id)))).sort()
+interface ContainerEventState {
+  emitsSet: Set<string>
+  listensSet: Set<string>
+  routeSet: Set<string>
+  tableSet: Set<string>
+  evEmits: Map<string, string[]>
+  evListens: Map<string, string[]>
+}
 
-  const containers: ContainerEntry[] = containerIds.map(cid => {
-    const cFiles = files.filter(f => containerOf(f.id) === cid)
-    const cFileIds = new Set(cFiles.map(f => f.id))
+function recordEventEdge(
+  e: GraphEdge,
+  cFileIds: Set<string>,
+  state: ContainerEventState,
+): void {
+  if (!e.label) return
+  if (cFileIds.has(e.from)) {
+    state.emitsSet.add(e.label)
+    const arr = state.evEmits.get(e.label) || []
+    if (!arr.includes(e.from)) arr.push(e.from)
+    state.evEmits.set(e.label, arr)
+  }
+  if (cFileIds.has(e.to)) {
+    state.listensSet.add(e.label)
+    const arr = state.evListens.get(e.label) || []
+    if (!arr.includes(e.to)) arr.push(e.to)
+    state.evListens.set(e.label, arr)
+  }
+}
 
-    // Components = second-to-top directory, or first if not under src/
-    const components = buildComponents(cid, cFiles, edges, inDeg, outDeg, adrMarkers)
+function collectContainerEvents(edges: GraphEdge[], cFileIds: Set<string>): ContainerEventState {
+  const state: ContainerEventState = {
+    emitsSet: new Set(),
+    listensSet: new Set(),
+    routeSet: new Set(),
+    tableSet: new Set(),
+    evEmits: new Map(),
+    evListens: new Map(),
+  }
+  for (const e of edges) {
+    if (e.type === 'event') recordEventEdge(e, cFileIds, state)
+    else if (e.type === 'route' && e.label && cFileIds.has(e.to)) state.routeSet.add(e.label)
+    else if (e.type === 'db-table' && e.label && (cFileIds.has(e.from) || cFileIds.has(e.to))) state.tableSet.add(e.label)
+  }
+  return state
+}
 
-    const entryPoints = cFiles
-      .filter(f => f.status === 'entry-point')
-      .map(f => f.id)
-      .sort()
+function buildContainerEntry(cid: string, ctx: SynopsisCtx): ContainerEntry {
+  const cFiles = ctx.files.filter(f => ctx.containerOf(f.id) === cid)
+  const cFileIds = new Set(cFiles.map(f => f.id))
 
-    // Top 15 intra-container hubs (up from 5) — densité pour que Level 2
-    // puisse répondre seul aux "où est X" sans drill-down.
-    const intraHubs: HubEntry[] = cFiles
-      .map(f => {
-        const entry: HubEntry = {
-          id: f.id,
-          inDegree: inDeg.get(f.id) || 0,
-          tags: f.tags,
-          container: cid,
-        }
-        const adrs = adrsFor(f.id)
-        if (adrs) entry.adrs = adrs
-        return entry
-      })
-      .filter(h => h.inDegree > 0)
-      .sort((a, b) => b.inDegree - a.inDegree || a.id.localeCompare(b.id))
-      .slice(0, 15)
+  const components = buildComponents(cid, cFiles, ctx.edges, ctx.inDeg, ctx.outDeg, ctx.adrMarkers)
+  const entryPoints = cFiles.filter(f => f.status === 'entry-point').map(f => f.id).sort()
+  const intraHubs = rankHubs(cFiles, ctx, cid, 15)
 
-    const emitsSet = new Set<string>()
-    const listensSet = new Set<string>()
-    const routeSet = new Set<string>()
-    const tableSet = new Set<string>()
+  const ev = collectContainerEvents(ctx.edges, cFileIds)
+  const allEventLabels = Array.from(new Set([...ev.emitsSet, ...ev.listensSet])).sort()
+  const mappings: EventMapping[] = allEventLabels.map(label => ({
+    label,
+    emitters: (ev.evEmits.get(label) || []).sort().slice(0, 2),
+    listeners: (ev.evListens.get(label) || []).sort().slice(0, 2),
+  }))
 
-    // Mapping event → emitter(s) + listener(s) côté container courant.
-    // Permet "qui écoute X.Y ?" en Level 2 sans appel supplémentaire.
-    // Paths full — nécessaire pour que le test de fidélité traçabilité passe.
-    const evEmits = new Map<string, string[]>()
-    const evListens = new Map<string, string[]>()
-
-    for (const e of edges) {
-      if (e.type === 'event' && e.label) {
-        if (cFileIds.has(e.from)) {
-          emitsSet.add(e.label)
-          const arr = evEmits.get(e.label) || []
-          if (!arr.includes(e.from)) arr.push(e.from)
-          evEmits.set(e.label, arr)
-        }
-        if (cFileIds.has(e.to)) {
-          listensSet.add(e.label)
-          const arr = evListens.get(e.label) || []
-          if (!arr.includes(e.to)) arr.push(e.to)
-          evListens.set(e.label, arr)
-        }
-      }
-      if (e.type === 'route' && e.label) {
-        // A route edge from web → core means `core` exposes the route
-        if (cFileIds.has(e.to)) routeSet.add(e.label)
-      }
-      if (e.type === 'db-table' && e.label) {
-        if (cFileIds.has(e.from) || cFileIds.has(e.to)) tableSet.add(e.label)
-      }
+  let containerAdrs: string[] | undefined
+  if (ctx.adrMarkers) {
+    const set = new Set<string>()
+    for (const f of cFiles) {
+      const arr = ctx.adrMarkers.get(f.id)
+      if (arr) for (const a of arr) set.add(a)
     }
+    if (set.size > 0) containerAdrs = [...set].sort()
+  }
 
-    const allEventLabels = Array.from(new Set([...emitsSet, ...listensSet])).sort()
-    const mappings: EventMapping[] = allEventLabels.map(label => ({
-      label,
-      emitters: (evEmits.get(label) || []).sort().slice(0, 2),
-      listeners: (evListens.get(label) || []).sort().slice(0, 2),
-    }))
+  return {
+    id: cid,
+    label: cid,
+    fileCount: cFiles.length,
+    orphanCount: cFiles.filter(f => f.status === 'orphan').length,
+    entryPoints,
+    topHubs: intraHubs,
+    components,
+    events: {
+      emits: Array.from(ev.emitsSet).sort(),
+      listens: Array.from(ev.listensSet).sort(),
+      mappings,
+    },
+    routes: Array.from(ev.routeSet).sort(),
+    tables: Array.from(ev.tableSet).sort(),
+    ...(containerAdrs ? { adrs: containerAdrs } : {}),
+  }
+}
 
-    let containerAdrs: string[] | undefined
-    if (adrMarkers) {
-      const set = new Set<string>()
-      for (const f of cFiles) {
-        const arr = adrMarkers.get(f.id)
-        if (arr) for (const a of arr) set.add(a)
-      }
-      if (set.size > 0) containerAdrs = [...set].sort()
-    }
-
-    return {
-      id: cid,
-      label: cid,
-      fileCount: cFiles.length,
-      orphanCount: cFiles.filter(f => f.status === 'orphan').length,
-      entryPoints,
-      topHubs: intraHubs,
-      components,
-      events: {
-        emits: Array.from(emitsSet).sort(),
-        listens: Array.from(listensSet).sort(),
-        mappings,
-      },
-      routes: Array.from(routeSet).sort(),
-      tables: Array.from(tableSet).sort(),
-      ...(containerAdrs ? { adrs: containerAdrs } : {}),
-    }
-  })
-
-  // ── Cross-container edges ───────────────────────────────────────────
+function buildCrossContainerEdges(edges: GraphEdge[], containerOf: (id: string) => string): CrossEdge[] {
   const crossMap = new Map<string, CrossEdge>()
   for (const e of edges) {
     const cf = containerOf(e.from)
@@ -300,27 +297,15 @@ export function buildSynopsis(snapshot: GraphSnapshot, options: SynopsisOptions 
         existing.samples.push(e.label)
       }
     } else {
-      crossMap.set(key, {
-        from: cf,
-        to: ct,
-        type: e.type,
-        count: 1,
-        samples: e.label ? [e.label] : [],
-      })
+      crossMap.set(key, { from: cf, to: ct, type: e.type, count: 1, samples: e.label ? [e.label] : [] })
     }
   }
-  const crossContainerEdges = Array.from(crossMap.values()).sort(
-    (a, b) => b.count - a.count || a.from.localeCompare(b.from) || a.to.localeCompare(b.to) || a.type.localeCompare(b.type)
+  return Array.from(crossMap.values()).sort(
+    (a, b) => b.count - a.count || a.from.localeCompare(b.from) || a.to.localeCompare(b.to) || a.type.localeCompare(b.type),
   )
+}
 
-  // ── Edge type totals ────────────────────────────────────────────────
-  const edgesByType: Partial<Record<EdgeType, number>> = {}
-  for (const e of edges) {
-    edgesByType[e.type] = (edgesByType[e.type] || 0) + 1
-  }
-
-  // ── Phase 3.8 summary (optional — absent si extracteurs désactivés) ────
-  let phase38: Phase38Summary | undefined
+function buildPhase38Summary(snapshot: GraphSnapshot): Phase38Summary | undefined {
   const phase38Parts: Phase38Summary = {}
   if (snapshot.packageDeps) {
     const c = { missing: 0, declaredUnused: 0, devOnly: 0 }
@@ -340,10 +325,7 @@ export function buildSynopsis(snapshot: GraphSnapshot, options: SynopsisOptions 
   if (snapshot.taintViolations) {
     const sev = { critical: 0, high: 0, medium: 0, low: 0 }
     for (const v of snapshot.taintViolations) sev[v.severity]++
-    phase38Parts.taint = {
-      total: snapshot.taintViolations.length,
-      ...sev,
-    }
+    phase38Parts.taint = { total: snapshot.taintViolations.length, ...sev }
   }
   if (snapshot.dsm) {
     phase38Parts.dsm = {
@@ -352,36 +334,55 @@ export function buildSynopsis(snapshot: GraphSnapshot, options: SynopsisOptions 
       sccSizeGt1: snapshot.dsm.levels.filter((l) => l.length >= 2).length,
     }
   }
-  if (Object.keys(phase38Parts).length > 0) phase38 = phase38Parts
+  return Object.keys(phase38Parts).length > 0 ? phase38Parts : undefined
+}
 
-  // ── ADR anchor suggestions (Lien 1+2) ───────────────────────────────
-  // Si options.adrMarkers fourni : tout fichier load-bearing (in-degree
-  // ≥ hubThreshold OU tag truth-point) sans aucun marqueur `// ADR-NNN`
-  // remonté en suggestion. Signal au dev sans bloquer (intentionnel
-  // possible : utility libs, glue code, etc.).
-  let adrSuggestions: AdrAnchorSuggestion[] | undefined
-  if (adrMarkers) {
-    const truthPointSet = new Set<string>()
-    if ((snapshot as { truthPoints?: Array<{ file?: string; id?: string }> }).truthPoints) {
-      for (const tp of (snapshot as { truthPoints: Array<{ file?: string; id?: string }> }).truthPoints) {
-        const fid = tp.file || tp.id
-        if (fid) truthPointSet.add(fid)
-      }
+/**
+ * ADR anchor suggestions (Lien 1+2) — fichier load-bearing (in-degree
+ * ≥ hubThreshold OU tag truth-point) sans aucun marqueur `// ADR-NNN`.
+ * Signal au dev sans bloquer (intentionnel possible : utility libs,
+ * glue code).
+ */
+function buildAdrSuggestions(snapshot: GraphSnapshot, ctx: SynopsisCtx): AdrAnchorSuggestion[] | undefined {
+  if (!ctx.adrMarkers) return undefined
+  const truthPointSet = new Set<string>()
+  const tps = (snapshot as { truthPoints?: Array<{ file?: string; id?: string }> }).truthPoints
+  if (tps) {
+    for (const tp of tps) {
+      const fid = tp.file || tp.id
+      if (fid) truthPointSet.add(fid)
     }
-    const suggestions: AdrAnchorSuggestion[] = []
-    for (const f of files) {
-      if (adrMarkers.has(f.id)) continue
-      const ind = inDeg.get(f.id) || 0
-      const isHub = ind >= hubThreshold
-      const isTruth = truthPointSet.has(f.id)
-      if (!isHub && !isTruth) continue
-      const reason: AdrAnchorSuggestion['reason'] =
-        isHub && isTruth ? 'top-hub+truth-point' : isHub ? 'top-hub' : 'truth-point'
-      suggestions.push({ file: f.id, inDegree: ind, reason })
-    }
-    suggestions.sort((a, b) => b.inDegree - a.inDegree || a.file.localeCompare(b.file))
-    adrSuggestions = suggestions
   }
+  const suggestions: AdrAnchorSuggestion[] = []
+  for (const f of ctx.files) {
+    if (ctx.adrMarkers.has(f.id)) continue
+    const ind = ctx.inDeg.get(f.id) || 0
+    const isHub = ind >= ctx.hubThreshold
+    const isTruth = truthPointSet.has(f.id)
+    if (!isHub && !isTruth) continue
+    const reason: AdrAnchorSuggestion['reason'] =
+      isHub && isTruth ? 'top-hub+truth-point' : isHub ? 'top-hub' : 'truth-point'
+    suggestions.push({ file: f.id, inDegree: ind, reason })
+  }
+  suggestions.sort((a, b) => b.inDegree - a.inDegree || a.file.localeCompare(b.file))
+  return suggestions
+}
+
+export function buildSynopsis(snapshot: GraphSnapshot, options: SynopsisOptions = {}): SynopsisJSON {
+  const ctx = buildSynopsisCtx(snapshot, options)
+  const topHubs = rankHubs(ctx.files, ctx, '', 10)
+    .map(h => ({ ...h, container: ctx.containerOf(h.id) }))
+
+  const containerIds = Array.from(new Set(ctx.files.map(f => ctx.containerOf(f.id)))).sort()
+  const containers: ContainerEntry[] = containerIds.map(cid => buildContainerEntry(cid, ctx))
+
+  const crossContainerEdges = buildCrossContainerEdges(ctx.edges, ctx.containerOf)
+
+  const edgesByType: Partial<Record<EdgeType, number>> = {}
+  for (const e of ctx.edges) edgesByType[e.type] = (edgesByType[e.type] || 0) + 1
+
+  const phase38 = buildPhase38Summary(snapshot)
+  const adrSuggestions = buildAdrSuggestions(snapshot, ctx)
 
   return {
     version: '1',

@@ -169,9 +169,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 > pas verdict. Une tension non explorée n'est pas un bug — c'est un saut
 > latéral possible que le sol stable rend testable.
 
-- **ORPHELIN** `packages/datalog/src/cli.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/datalog/src/cli.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
@@ -199,6 +199,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+e4019fb refactor(toolkit): builder.ts ALL bombs cleared — split TruthPoints + PackageDeps + TaintViolations
 af4705f refactor(toolkit): split renderCoreFlows (cyclo 22→4) — 3 helpers (group + table + detail)
 69911dc refactor(toolkit): split renderStats (cyclo 24→11) — 5 helpers stats lines
 9609b7d refactor(toolkit): split renderIndex (cyclo 28→3) — 3 helpers + bucket pattern factor
@@ -210,7 +211,6 @@ df1ee8c refactor(toolkit): split renderEventFlows (cyclo 25→5, cog 63→4) —
 1b532d0 fix(toolkit): grandfather 3 cross-package loadConfig pairs (FP shape-match)
 686fb09 fix(toolkit): quick-win violations — 4 fixes (1 floating-promise FP, 1 return-then-else, 2 deprecated FPs)
 e19790b fix(toolkit): cochange-without-cotest filter to TS source — 5 FPs eliminated
-64b3dcd refactor(toolkit): split exportFacts batch 5 — eliminate ALL bombs in facts/index.ts (CrossDiscipline + Tier234)
 ```
 
 ## Comment contribuer à ce brief

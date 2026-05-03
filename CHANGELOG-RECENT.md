@@ -5,18 +5,17 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T19:36:45Z
+Last update : 2026-05-03T19:39:55Z
 
 ## By type
 
-### `feat` (6)
+### `feat` (5)
 
 - **af41582** feat(toolkit): symbolic simplification facts + 5 composite rules cross-discipline — 2026-05-03
 - **2f84a70** feat(toolkit): Niveau 5 effect-analysis + roadmap defers Niveaux 6/7 — 2026-05-03
 - **0485ce4** feat(toolkit): self-optim Niveau 2A + Niveau 4 — math cost predict + auto-synth Salsa — 2026-05-03
 - **3ca2f45** feat(toolkit): self-optim auto-loop — connect probe → diag → brief → scaffold — 2026-05-03
 - **67c5581** feat(toolkit): mathematical self-governance — 100% load-bearing files governed — 2026-05-03
-- **79c4fed** feat(runtime-graph): Phase γ.2c — TDA Persistent Homology dim-0 — 2026-05-03
 
 
 ### `fix` (9)
@@ -41,8 +40,9 @@ Last update : 2026-05-03T19:36:45Z
 - **afd0965** perf(toolkit): self-discovered Salsa optimizations — warm runtime −40% — 2026-05-03
 
 
-### `refactor` (22)
+### `refactor` (23)
 
+- **e4019fb** refactor(toolkit): builder.ts ALL bombs cleared — split TruthPoints + PackageDeps + TaintViolations — 2026-05-03
 - **af4705f** refactor(toolkit): split renderCoreFlows (cyclo 22→4) — 3 helpers (group + table + detail) — 2026-05-03
 - **69911dc** refactor(toolkit): split renderStats (cyclo 24→11) — 5 helpers stats lines — 2026-05-03
 - **9609b7d** refactor(toolkit): split renderIndex (cyclo 28→3) — 3 helpers + bucket pattern factor — 2026-05-03
@@ -62,7 +62,6 @@ Last update : 2026-05-03T19:36:45Z
 - **5933423** refactor(toolkit): tame AWAIT-IN-LOOP — parallelize hot paths + mark scaffold (105→70) — 2026-05-03
 - **fbebea4** refactor(toolkit): extract makeIsExempt helper (NCD: 25→16, total 434→422) — 2026-05-03
 - **b0f2c9a** refactor(toolkit): split cli/index.ts god-file (2190→1520 LOC, −30%) — 2026-05-03
-- **c613ac7** refactor(toolkit): split analyzer.ts:runDeterministicDetectors en 5 phases — 2026-05-03
 
 
 ### `chore` (4)
@@ -83,6 +82,7 @@ Last update : 2026-05-03T19:36:45Z
 
 ## Full history
 
+- **e4019fb** refactor(toolkit): builder.ts ALL bombs cleared — split TruthPoints + PackageDeps + TaintViolations — 2026-05-03
 - **af4705f** refactor(toolkit): split renderCoreFlows (cyclo 22→4) — 3 helpers (group + table + detail) — 2026-05-03
 - **69911dc** refactor(toolkit): split renderStats (cyclo 24→11) — 5 helpers stats lines — 2026-05-03
 - **9609b7d** refactor(toolkit): split renderIndex (cyclo 28→3) — 3 helpers + bucket pattern factor — 2026-05-03
@@ -132,4 +132,3 @@ Last update : 2026-05-03T19:36:45Z
 - **c484f1f** refactor(codegraph): runDeterministicDetectors 279→108 LOC + git-fixture determinism — 2026-05-03
 - **173915c** chore(toolkit): self-discipline pass — close credibility gap from external review — 2026-05-03
 - **03ef857** chore(runtime-graph): OSS launch prep — alpha.4 publish-ready — 2026-05-03
-- **79c4fed** feat(runtime-graph): Phase γ.2c — TDA Persistent Homology dim-0 — 2026-05-03
