@@ -199,6 +199,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+673129e refactor(toolkit): split resolveTsConfigAndSharedProject (cyclo 16→4) — 3 helpers
 4b6165c refactor(toolkit): split buildFlow (cyclo 19→4) — 4 helpers BFS-extracted
 a5ac751 refactor(toolkit): split buildTestFilesIndex (cyclo 17→1) — 5 helpers + ImportIndices struct
 62de53a refactor(toolkit): split analyzeScope (cyclo 17→3) — extract per-kind handlers
@@ -210,7 +211,6 @@ bddfb2a refactor(toolkit): split data-flows top-level (analyzeDataFlows + buildD
 d176584 refactor(toolkit): split renderLevel1/2/3 — synopsis/builder.ts ALL bombs cleared
 8f1792b refactor(toolkit): split buildComponents (cyclo 24→under) — 5 helpers (groupByComp, edgeDeg, topFiles, tags, adrs)
 275466c refactor(toolkit): split buildSynopsis (cyclo 75→5, cog 130→4) — 9 helpers + ctx struct
-e4019fb refactor(toolkit): builder.ts ALL bombs cleared — split TruthPoints + PackageDeps + TaintViolations
 ```
 
 ## Comment contribuer à ce brief

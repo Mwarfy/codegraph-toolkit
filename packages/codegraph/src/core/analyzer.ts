@@ -576,57 +576,27 @@ async function resolveTsConfigAndSharedProject(
  * boucle pour que `allTsImports.get('all')` puisse remplacer le
  * détecteur legacy ts-imports (warm 109ms → <10ms via cache Salsa).
  */
-async function prebuildSharedProjectIncremental(
-  config: CodeGraphConfig,
-  files: string[],
-  fileCache: Map<string, string>,
-): Promise<ReturnType<typeof createSharedProject>> {
-  // Find tsconfig
-  let earlyTsConfigPath: string | undefined
-  const earlyCandidates: string[] = []
-  if (config.tsconfigPath) {
-    earlyCandidates.push(
-      path.isAbsolute(config.tsconfigPath)
-        ? config.tsconfigPath
-        : path.join(config.rootDir, config.tsconfigPath),
-    )
-  }
-  earlyCandidates.push(path.join(config.rootDir, 'tsconfig.json'))
-  for (const candidate of earlyCandidates) {
-    // await-ok: probe avec break sur première match, séquentiel requis
-    try { await fs.access(candidate); earlyTsConfigPath = candidate; break } catch { /* probe: try next */ }
-  }
+interface FileStatEntry { f: string; absPath: string; mtime: number | undefined }
 
-  // Capture previous mtimes for Project cache reuse
-  const previousMtimes = new Map<string, number>()
-  for (const f of files) {
-    const m = incGetCachedMtime(f)
-    if (m !== undefined) previousMtimes.set(f, m)
-  }
-
-  const project = await incGetOrBuildProject(
-    config.rootDir, files, earlyTsConfigPath, previousMtimes, fileCache,
-  )
-  setIncrementalContext({ project, rootDir: config.rootDir })
-  setTsImportPrebuiltProject(project)
-
-  // Feed fileContent + projectFiles inputs so Salsa queries can hit cache.
-  //
-  // Two-phase parallelization : (1) stat en parallèle pour identifier les
-  // fichiers qui ont VRAIMENT changé (mtime ≠ cached), (2) read seulement
-  // ceux-là en parallèle. Le warm path (rien changé) ne fait QUE des stats
-  // — pas de readFile gaspillé. Cold path : full read parallèle.
-  const stats = await Promise.all(
+async function statFilesParallel(rootDir: string, files: string[]): Promise<FileStatEntry[]> {
+  return Promise.all(
     files.map(async (f) => {
-      const absPath = path.join(config.rootDir, f)
+      const absPath = path.join(rootDir, f)
       try {
         const stat = await fs.stat(absPath)
         return { f, absPath, mtime: stat.mtimeMs }
       } catch { return { f, absPath, mtime: undefined as number | undefined } }
     }),
   )
-  // Identifie les files à (re)lire — skip si cellExists && mtime inchangé.
-  const toRead: Array<{ f: string; absPath: string; mtime: number | undefined }> = []
+}
+
+/**
+ * Filtre les files pour ne lire que ceux qui ont VRAIMENT change
+ * (mtime ≠ cached) ou qui ne sont pas encore dans la cell. Le warm
+ * path (rien change) ne fait QUE des stats — pas de readFile gaspille.
+ */
+function filterFilesToRead(stats: FileStatEntry[]): FileStatEntry[] {
+  const toRead: FileStatEntry[] = []
   for (const entry of stats) {
     const { f, mtime } = entry
     const cachedMtime = incGetCachedMtime(f)
@@ -634,7 +604,10 @@ async function prebuildSharedProjectIncremental(
     if (mtime !== undefined && cachedMtime === mtime && cellExists) continue
     toRead.push(entry)
   }
-  // Read en parallèle uniquement les files à update.
+  return toRead
+}
+
+async function readAndCacheFiles(toRead: FileStatEntry[], fileCache: Map<string, string>): Promise<void> {
   const reads = await Promise.all(
     toRead.map(async ({ f, absPath, mtime }) => {
       let content = fileCache.get(f)
@@ -649,6 +622,33 @@ async function prebuildSharedProjectIncremental(
     incFileContent.set(f, content)
     if (mtime !== undefined) incSetCachedMtime(f, mtime)
   }
+}
+
+async function prebuildSharedProjectIncremental(
+  config: CodeGraphConfig,
+  files: string[],
+  fileCache: Map<string, string>,
+): Promise<ReturnType<typeof createSharedProject>> {
+  const earlyTsConfigPath = await findTsConfigPath(config)
+
+  const previousMtimes = new Map<string, number>()
+  for (const f of files) {
+    const m = incGetCachedMtime(f)
+    if (m !== undefined) previousMtimes.set(f, m)
+  }
+
+  const project = await incGetOrBuildProject(
+    config.rootDir, files, earlyTsConfigPath, previousMtimes, fileCache,
+  )
+  setIncrementalContext({ project, rootDir: config.rootDir })
+  setTsImportPrebuiltProject(project)
+
+  // Two-phase parallelization : (1) stat en parallele pour identifier les
+  // fichiers qui ont VRAIMENT change (mtime ≠ cached), (2) read seulement
+  // ceux-la en parallele. Cold path : full read parallele.
+  const stats = await statFilesParallel(config.rootDir, files)
+  const toRead = filterFilesToRead(stats)
+  await readAndCacheFiles(toRead, fileCache)
   incSetInputIfChanged(incProjectFiles, 'all', files)
 
   return project
