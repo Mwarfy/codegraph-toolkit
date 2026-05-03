@@ -5,7 +5,7 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T16:52:52Z
+Last update : 2026-05-03T17:09:08Z
 
 ## By type
 
@@ -48,8 +48,9 @@ Last update : 2026-05-03T16:52:52Z
 - **afd0965** perf(toolkit): self-discovered Salsa optimizations — warm runtime −40% — 2026-05-03
 
 
-### `refactor` (12)
+### `refactor` (13)
 
+- **5933423** refactor(toolkit): tame AWAIT-IN-LOOP — parallelize hot paths + mark scaffold (105→70) — 2026-05-03
 - **fbebea4** refactor(toolkit): extract makeIsExempt helper (NCD: 25→16, total 434→422) — 2026-05-03
 - **b0f2c9a** refactor(toolkit): split cli/index.ts god-file (2190→1520 LOC, −30%) — 2026-05-03
 - **c613ac7** refactor(toolkit): split analyzer.ts:runDeterministicDetectors en 5 phases — 2026-05-03
@@ -64,13 +65,12 @@ Last update : 2026-05-03T16:52:52Z
 - **81dd087** refactor(toolkit): extract NCD-detected duplications + analyzer.ts cross-discipline — 2026-05-01
 
 
-### `chore` (5)
+### `chore` (4)
 
 - **f2f93bc** chore(brief): regen CLAUDE-CONTEXT + CHANGELOG post-refactor (553→534) — 2026-05-03
 - **2067d1f** chore(release): v0.3.0 consolidation — npm-publishable core, experimental gated — 2026-05-03
 - **173915c** chore(toolkit): self-discipline pass — close credibility gap from external review — 2026-05-03
 - **03ef857** chore(runtime-graph): OSS launch prep — alpha.4 publish-ready — 2026-05-03
-- **18a37a7** chore(toolkit): retire 3 exports dead code (UnusedExport.facts) — 2026-05-01
 
 
 ### `docs` (5)
@@ -89,6 +89,7 @@ Last update : 2026-05-03T16:52:52Z
 
 ## Full history
 
+- **5933423** refactor(toolkit): tame AWAIT-IN-LOOP — parallelize hot paths + mark scaffold (105→70) — 2026-05-03
 - **fbebea4** refactor(toolkit): extract makeIsExempt helper (NCD: 25→16, total 434→422) — 2026-05-03
 - **25fc296** fix(toolkit): kill META-CRITICAL (7→0) + 2 bugs détecteur + 6 tests — 2026-05-03
 - **70afbdc** fix(toolkit): clean 93 violations (534→441, −17.4%) sans bypass — 2026-05-03
@@ -138,4 +139,3 @@ Last update : 2026-05-03T16:52:52Z
 - **691337e** feat(toolkit): 8e discipline Newman-Girvan + 4 méta-composites cross-disciplines — 2026-05-01
 - **c003043** docs: update READMEs for v0.5.0 — 91 rules, multi-dir, 7 cross-discipline — 2026-05-01
 - **443e072** feat(datalog): runFromDirs accepte rulesDir array (multi-dir loader) — 2026-05-01
-- **18a37a7** chore(toolkit): retire 3 exports dead code (UnusedExport.facts) — 2026-05-01

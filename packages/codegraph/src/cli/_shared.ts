@@ -80,8 +80,10 @@ export async function loadConfig(
 
   for (const p of defaultPaths) {
     try {
+      // await-ok: probe avec return on first match, séquentiel requis
       await fs.access(p)
       if (p.endsWith('.json')) {
+        // await-ok: probe path validé ci-dessus, séquentiel requis (return)
         const raw = JSON.parse(await fs.readFile(p, 'utf-8'))
         if (raw.rootDir && !path.isAbsolute(raw.rootDir)) {
           raw.rootDir = path.resolve(path.dirname(p), raw.rootDir)
@@ -90,6 +92,7 @@ export async function loadConfig(
         }
         return applyConfigDefaults(raw)
       }
+      // await-ok: dynamic import du config TS/JS, séquentiel (return)
       const mod = await import(p)
       return applyConfigDefaults({ rootDir: root, ...(mod.default || mod) })
     } catch {
@@ -177,16 +180,18 @@ export async function pruneSnapshots(dir: string, keep: number): Promise<number>
     .reverse()                                                           // newest first
   if (snapshots.length <= keep) return 0
   const toDelete = snapshots.slice(keep)
-  let deleted = 0
-  for (const f of toDelete) {
-    try {
-      await fs.unlink(path.join(dir, f))
-      deleted++
-    } catch {
-      // skip silently — one stale file shouldn't break the analyze
-    }
-  }
-  return deleted
+  // Delete N stale snapshots en parallèle (fichiers indépendants).
+  const results = await Promise.all(
+    toDelete.map(async (f): Promise<number> => {
+      try {
+        await fs.unlink(path.join(dir, f))
+        return 1
+      } catch {
+        return 0  // skip silently — one stale file shouldn't break the analyze
+      }
+    }),
+  )
+  return results.reduce((a, b) => a + b, 0)
 }
 
 /**

@@ -200,6 +200,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+5933423 refactor(toolkit): tame AWAIT-IN-LOOP — parallelize hot paths + mark scaffold (105→70)
 fbebea4 refactor(toolkit): extract makeIsExempt helper (NCD: 25→16, total 434→422)
 25fc296 fix(toolkit): kill META-CRITICAL (7→0) + 2 bugs détecteur + 6 tests
 70afbdc fix(toolkit): clean 93 violations (534→441, −17.4%) sans bypass
@@ -211,7 +212,6 @@ f2f93bc chore(brief): regen CLAUDE-CONTEXT + CHANGELOG post-refactor (553→534)
 ee89730 docs(validation): self-analysis run #2 — toolkit voit 553 violations sur lui-même
 9a5d5ac docs(validation): run #1.5 — composite rules sur Sentinel — 33× signal-to-noise
 af41582 feat(toolkit): symbolic simplification facts + 5 composite rules cross-discipline
-866eb25 fix(toolkit): bugs #1 #2 #3 #4 trouvés via test externe Hono
 ```
 
 ## Comment contribuer à ce brief

@@ -142,6 +142,7 @@ async function runSyntheticRequests(
       if (Date.now() >= deadline) break
 
       try {
+        // await-ok: driver synthetic — séquentiel par design (rate-limit + observability)
         await issueRequest(baseUrl, route.method, route.path)
         actionsCount++
       } catch (err) {
@@ -150,8 +151,7 @@ async function runSyntheticRequests(
         )
       }
 
-      // await-ok: rate-limit between requests (driver = sequential by design,
-      // burst would skew latency measurement)
+      // await-ok: rate-limit between requests — burst would skew latency measurement
       await sleep(requestDelayMs)
     }
 
@@ -199,6 +199,7 @@ async function spawnAppWithBootstrap(
       throw new Error(`spawned process exited early with code ${child.exitCode}`)
     }
     try {
+      // await-ok: readiness probe loop — séquentiel par design (poll + sleep)
       const res = await fetch(baseUrl, {
         method: 'GET',
         signal: AbortSignal.timeout(2000),
@@ -208,6 +209,7 @@ async function spawnAppWithBootstrap(
     } catch {
       // ECONNREFUSED / timeout — keep polling
     }
+    // await-ok: backoff entre poll iterations
     await sleep(250)
   }
   child.kill('SIGKILL')

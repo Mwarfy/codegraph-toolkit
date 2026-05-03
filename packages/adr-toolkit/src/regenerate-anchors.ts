@@ -45,8 +45,10 @@ async function collectMarkers(config: AdrToolkitConfig): Promise<Marker[]> {
       if (skipDirs.has(e.name)) continue
       const full = path.join(dir, e.name)
       if (e.isDirectory()) {
+        // await-ok: walk récursif — séquentiel délibéré (ordre stable + simple)
         await walk(full)
       } else if (e.isFile() && extRe.test(e.name)) {
+        // await-ok: scan one-shot regenerate-anchors, perf non-critique
         const content = await readFile(full, 'utf-8')
         const lines = content.split('\n')
         for (let i = 0; i < lines.length; i++) {
@@ -80,13 +82,19 @@ async function loadADRs(config: AdrToolkitConfig): Promise<ADR[]> {
     return []
   }
   const adrs: ADR[] = []
-  for (const f of files.sort()) {
-    if (!/^\d{3}-/.test(f)) continue
-    const num = f.slice(0, 3)
-    const filePath = path.join(adrDir, f)
-    const content = await readFile(filePath, 'utf-8')
-    adrs.push({ num, filePath, content })
-  }
+  // Lit les ADR files en parallèle (≤30 fichiers typique, indépendants).
+  const adrEntries = await Promise.all(
+    files
+      .sort()
+      .filter((f) => /^\d{3}-/.test(f))
+      .map(async (f) => {
+        const num = f.slice(0, 3)
+        const filePath = path.join(adrDir, f)
+        const content = await readFile(filePath, 'utf-8')
+        return { num, filePath, content }
+      }),
+  )
+  adrs.push(...adrEntries)
   return adrs
 }
 
@@ -170,6 +178,7 @@ export async function regenerateAnchors(opts: RegenOptions): Promise<RegenResult
     if (checkOnly) {
       drift = true
     } else {
+      // await-ok: ADR file write — séquentiel par ADR processé, perf non-critique
       await writeFile(adr.filePath, updated, 'utf-8')
       modified.push(adr.filePath)
     }
