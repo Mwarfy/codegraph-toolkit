@@ -1,0 +1,24 @@
+// DEAD_HANDLER — function exportée jamais touchée pendant le run runtime
+//
+// Pourquoi : Phase α règle phare. Détecte les fonctions exportées que
+// le code import statiquement quelque part (déclaration vivante) mais
+// qui ne sont JAMAIS exécutées pendant un run synthetic complet.
+// Cas typique Sentinel : feedback-aggregator a été oublié dans le
+// lifecycle Phase 2 — `runFeedbackAggregator` est exportée, importée
+// par les tests, mais aucun caller en runtime → l'auto-amélioration
+// dort 14 jours.
+//
+// Cross-fact join : Export (statique, codegraph analyze) ∩
+// SymbolTouchedRuntime (runtime, runtime-graph capture).
+//
+// Grandfather pattern : un export non-touché peut être légitime (helpers
+// publics, plugin entry points). Le pattern ratchet permet de marquer
+// les cas connus pour ne flagguer que les NOUVELLES dérives.
+
+.decl DeadHandlerGrandfathered(file: symbol, fn: symbol)
+
+RuntimeAlert("DEAD_HANDLER", File, Fn,
+    "exported but never invoked at runtime — orphan wiring suspect") :-
+    Export(File, Fn),
+    !SymbolTouchedRuntime(File, Fn, _, _),
+    !DeadHandlerGrandfathered(File, Fn).

@@ -1,0 +1,23 @@
+// STALE_QUERY — table avec writers déclarés mais 0 query observée au runtime
+//
+// Pourquoi : si le code statique dit qu'une table est écrite par un
+// truth-point writer, mais aucune DbQueryExecuted n'apparaît pendant
+// le run, c'est un signal :
+//   1. soit le writer est dead code (le fichier writer n'est plus appelé)
+//   2. soit le smoke driver ne stimule pas le code path qui écrit
+//   3. soit la table a été retirée du business sans cleanup du writer
+//
+// Ce signal est plus fort que DEAD_HANDLER car il croise statique
+// (TruthPointWriter — quel fichier écrit quelle table) avec runtime
+// (DbQueryExecuted — quelles tables ont reçu des writes).
+
+.decl StaleQueryGrandfathered(tableName: symbol)
+
+.decl HasDbActivity(tableName: symbol)
+HasDbActivity(T) :- DbQueryExecuted(T, _, _, _).
+
+RuntimeAlert("STALE_QUERY", TableName, "",
+    "table has static writer(s) but received 0 DB queries during run") :-
+    TruthPointWriter(TableName, _),
+    !HasDbActivity(TableName),
+    !StaleQueryGrandfathered(TableName).

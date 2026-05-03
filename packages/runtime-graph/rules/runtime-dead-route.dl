@@ -1,0 +1,25 @@
+// DEAD_ROUTE — route HTTP déclarée dans le code, jamais hit au runtime
+//
+// Pourquoi : signal de dette / refactor incomplet. Une route qui existe
+// mais ne reçoit aucun trafic est :
+//   1. soit pas wired côté frontend (à supprimer ou activer)
+//   2. soit non-couverte par le smoke driver (ajouter à excludePaths
+//      ou enrichir le driver)
+//
+// `RuntimeRouteExpected` est généré par le CLI runtime-graph qui parse
+// EntryPoint.facts (statique) et émet (method, path) déjà tokenisé —
+// les routes sont string-parsed côté TS, pas en datalog.
+
+.decl RuntimeRouteExpected(method: symbol, routePath: symbol)
+.input RuntimeRouteExpected
+
+.decl DeadRouteGrandfathered(method: symbol, routePath: symbol)
+
+.decl HttpRouteHitAny(method: symbol, routePath: symbol)
+HttpRouteHitAny(M, P) :- HttpRouteHit(M, P, _, _, _).
+
+RuntimeAlert("DEAD_ROUTE", RoutePath, Method,
+    "route declared in code but received 0 requests during run") :-
+    RuntimeRouteExpected(Method, RoutePath),
+    !HttpRouteHitAny(Method, RoutePath),
+    !DeadRouteGrandfathered(Method, RoutePath).

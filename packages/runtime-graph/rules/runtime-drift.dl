@@ -1,0 +1,24 @@
+// RUNTIME_DRIFT — code dit "X est appelé", runtime dit "X n'est jamais touché"
+//
+// Pourquoi : le codegraph statique détecte les call edges via AST scan
+// (SymbolCallEdge). Mais certains edges sont théoriques : une fonction
+// peut être référencée dans un import sans jamais être invoquée à
+// runtime (dynamic feature flag, dead code path, lazy import jamais
+// résolu).
+//
+// Cette règle joint statique × runtime pour pointer ces edges fantômes.
+// Différence avec DEAD_HANDLER : DEAD_HANDLER cible les FONCTIONS
+// jamais touchées, RUNTIME_DRIFT cible les EDGES jamais empruntés.
+//
+// Note : RUNTIME_DRIFT est plus bruyant que DEAD_HANDLER (un function
+// peut avoir 10 callers statiques dont 1 seul s'exécute → 9 drifts
+// flaggés). En α on grandfather agressivement, en β on ajoutera un
+// seuil "min_callers_for_drift" pour ne flagguer qu'à partir de N.
+
+.decl RuntimeDriftGrandfathered(file: symbol, fn: symbol)
+
+RuntimeAlert("RUNTIME_DRIFT", File, Fn,
+    "static call graph references this symbol but runtime never touched it") :-
+    SymbolCallEdge(_, _, File, Fn, _),
+    !SymbolTouchedRuntime(File, Fn, _, _),
+    !RuntimeDriftGrandfathered(File, Fn).

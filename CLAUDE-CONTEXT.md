@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+8c49ff7 fix(analyzer): factsOnly mode must populate TestedFile
 6eb35b2 refactor(toolkit): HotAllocation requires ModuleCentrality>200 (FP reduction)
 40b2842 refactor(toolkit): SQL DROP/skip-rollbacks + disable noisy composite rules
 51d7e5f refactor(toolkit): sql-naming exemptions + ADD/RENAME ordering + edge-case patterns
@@ -111,7 +112,6 @@ bbfa9d6 feat(toolkit): SQL ALTER TABLE tracking + CrossDisciplineDetector POC
 81dd087 refactor(toolkit): extract NCD-detected duplications + analyzer.ts cross-discipline
 dc48f25 feat(toolkit): 4 nouvelles disciplines mathématiques (8e→11e)
 691337e feat(toolkit): 8e discipline Newman-Girvan + 4 méta-composites cross-disciplines
-c003043 docs: update READMEs for v0.5.0 — 91 rules, multi-dir, 7 cross-discipline
 ```
 
 ## Comment contribuer à ce brief

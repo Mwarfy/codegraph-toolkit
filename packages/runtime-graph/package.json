@@ -1,0 +1,62 @@
+{
+  "name": "@liby-tools/runtime-graph",
+  "version": "0.1.0-alpha.1",
+  "description": "Runtime observability framework — captures actual execution graph, joins with codegraph static facts via datalog. The OSS alternative to Datadog Live Code Coverage / JFrog X-Ray.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./capture": "./dist/capture/index.js",
+    "./drivers": "./dist/drivers/index.js",
+    "./facts": "./dist/facts/index.js",
+    "./rules": "./dist/rules/index.js"
+  },
+  "bin": {
+    "liby-runtime-graph": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "rules",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsc -b --watch",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.55.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.57.0",
+    "@opentelemetry/sdk-node": "^0.57.0",
+    "@opentelemetry/sdk-trace-base": "^1.30.0",
+    "commander": "^13.0.0",
+    "chalk": "^5.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Mwarfy/codegraph-toolkit.git",
+    "directory": "packages/runtime-graph"
+  },
+  "keywords": [
+    "observability",
+    "runtime-analysis",
+    "dead-code",
+    "opentelemetry",
+    "datalog",
+    "codegraph",
+    "typescript",
+    "static-runtime-analysis"
+  ],
+  "license": "MIT"
+}
