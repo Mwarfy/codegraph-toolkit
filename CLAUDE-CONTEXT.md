@@ -208,6 +208,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+3340d64 refactor(datalog): split stratify (cyclo 42→2, cog 67→0) — stratify.ts bomb-free
 ead1516 refactor(toolkit): split extractDriftPatternsFileBundle (cyclo 45→3) — drift-patterns.ts ALL bombs cleared
 101b1b5 perf(toolkit): Salsa-iso boolean-params — 35ms → 0ms warm
 20b9ace perf(toolkit): Salsa-iso 5 taint chain detectors — 5×0ms warm
@@ -219,7 +220,6 @@ c9e30bd perf(toolkit): Salsa-iso magic-numbers detector — 539ms → 0ms warm (
 e27c2be refactor(toolkit): split codegraphAffected + dedup computeAffected — affected.ts ALL bombs cleared
 66cbcd7 refactor(toolkit): split findContainingSymbol + buildLineToSymbol — _shared/ast-helpers.ts ALL bombs cleared
 1ca9363 refactor(toolkit): split getTaintFromExpression + buildLineToSymbol — taint.ts ALL bombs cleared
-22ced53 refactor(toolkit): split walkForManifests + buildPackageDepsIssues — package-deps.ts ALL bombs cleared
 ```
 
 ## Comment contribuer à ce brief

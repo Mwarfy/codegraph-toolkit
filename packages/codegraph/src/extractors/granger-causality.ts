@@ -78,25 +78,60 @@ export async function computeGrangerCausality(
   const maxFilesPerCommit = options.maxFilesPerCommit ?? 50
   const knownFiles = options.knownFiles
 
-  let raw: string
+  const raw = fetchGitLog(rootDir, sinceDays)
+  if (raw === null) return []
+
+  const commits = parseCommitsFromGitLog(raw, knownFiles, maxFilesPerCommit, maxCommits)
+  if (commits.length < 4) return []
+
+  const marginalProb = computeMarginalProb(commits)
+  const { condCount, driverCount } = computeLag1Counts(commits)
+
+  return emitGrangerSignals(
+    condCount,
+    driverCount,
+    marginalProb,
+    minObservations,
+    minExcessX1000,
+  )
+}
+
+// ─── Phase 1: fetch raw git log ─────────────────────────────────────────────
+
+function fetchGitLog(rootDir: string, sinceDays: number): string | null {
   try {
-    raw = execSync(
+    return execSync(
       `git log --name-only --pretty=format:'COMMIT' --since=${sinceDays}.days --no-renames`,
       { cwd: rootDir, encoding: 'utf-8', maxBuffer: 50 * 1024 * 1024 },
     )
   } catch {
-    return []
+    return null
   }
+}
 
-  // Parser : COMMIT lines délimitent. Order = chronological reverse (newest first).
-  // On reverse pour avoir t=0 le plus ancien, t=N-1 le plus récent.
+// ─── Phase 2: parse raw log into chronological commits ─────────────────────
+
+/**
+ * COMMIT lines délimitent. Order brut = chronological reverse (newest first).
+ * On reverse en sortie pour avoir t=0 le plus ancien, t=N-1 le plus récent
+ * (sliced à `maxCommits` pour garder les plus récents si > limite).
+ */
+function parseCommitsFromGitLog(
+  raw: string,
+  knownFiles: Set<string> | undefined,
+  maxFilesPerCommit: number,
+  maxCommits: number,
+): CommitChanges[] {
   const commitsReversed: CommitChanges[] = []
   let current: Set<string> | null = null
+  const flush = (): void => {
+    if (current && current.size > 0 && current.size <= maxFilesPerCommit) {
+      commitsReversed.push({ files: current })
+    }
+  }
   for (const line of raw.split('\n')) {
     if (line === 'COMMIT') {
-      if (current && current.size > 0 && current.size <= maxFilesPerCommit) {
-        commitsReversed.push({ files: current })
-      }
+      flush()
       current = new Set()
       continue
     }
@@ -106,17 +141,14 @@ export async function computeGrangerCausality(
     if (knownFiles && !knownFiles.has(trimmed)) continue
     current.add(trimmed)
   }
-  if (current && current.size > 0 && current.size <= maxFilesPerCommit) {
-    commitsReversed.push({ files: current })
-  }
+  flush()
+  return commitsReversed.reverse().slice(-maxCommits)
+}
 
-  if (commitsReversed.length < 4) return []
+// ─── Phase 3: marginal P(file moves at any t) ──────────────────────────────
 
-  // Reverse pour avoir ordre chronologique
-  const commits = commitsReversed.reverse().slice(-maxCommits)
+function computeMarginalProb(commits: CommitChanges[]): Map<string, number> {
   const T = commits.length
-
-  // Marginal P(B at t) pour chaque file
   const marginalCount = new Map<string, number>()
   for (const c of commits) {
     for (const f of c.files) {
@@ -127,13 +159,22 @@ export async function computeGrangerCausality(
   for (const [f, n] of marginalCount) {
     marginalProb.set(f, n / T)
   }
+  return marginalProb
+}
 
-  // Conditional count : nb fois où A at t et B at t+1
-  // Map<driver, Map<follower, count>>
+// ─── Phase 4: lag-1 conditional counts ─────────────────────────────────────
+
+interface Lag1Counts {
+  /** condCount.get(driver).get(follower) = nb fois (driver at t, follower at t+1). */
+  condCount: Map<string, Map<string, number>>
+  /** driverCount.get(driver) = nb fois driver at t (avec un t+1 valide). */
+  driverCount: Map<string, number>
+}
+
+function computeLag1Counts(commits: CommitChanges[]): Lag1Counts {
   const condCount = new Map<string, Map<string, number>>()
-  // Driver count : nb fois où A change (peu importe ce qui suit)
   const driverCount = new Map<string, number>()
-  for (let t = 0; t < T - 1; t++) {
+  for (let t = 0; t < commits.length - 1; t++) {
     const ct = commits[t]
     const ctNext = commits[t + 1]
     for (const driver of ct.files) {
@@ -149,19 +190,27 @@ export async function computeGrangerCausality(
       }
     }
   }
+  return { condCount, driverCount }
+}
 
+// ─── Phase 5: filter + sort + emit signals ─────────────────────────────────
+
+function emitGrangerSignals(
+  condCount: Map<string, Map<string, number>>,
+  driverCount: Map<string, number>,
+  marginalProb: Map<string, number>,
+  minObservations: number,
+  minExcessX1000: number,
+): GrangerCausality[] {
   const out: GrangerCausality[] = []
   for (const [driver, inner] of condCount) {
     const driverN = driverCount.get(driver) ?? 0
     if (driverN === 0) continue
     for (const [follower, observed] of inner) {
       if (observed < minObservations) continue
-      // P(follower at t+1 | driver at t)
       const condProb = observed / driverN
-      // Marginal P(follower at t)
       const marginal = marginalProb.get(follower) ?? 0
-      const excess = condProb - marginal
-      const excessX1000 = Math.round(excess * 1000)
+      const excessX1000 = Math.round((condProb - marginal) * 1000)
       if (excessX1000 < minExcessX1000) continue
       out.push({
         driverFile: driver,
@@ -171,13 +220,13 @@ export async function computeGrangerCausality(
       })
     }
   }
-
-  out.sort((a, b) => {
-    if (a.excessConditionalX1000 !== b.excessConditionalX1000)
-      return b.excessConditionalX1000 - a.excessConditionalX1000
-    if (a.driverFile !== b.driverFile) return a.driverFile < b.driverFile ? -1 : 1
-    return a.followerFile < b.followerFile ? -1 : 1
-  })
-
+  out.sort(compareGrangerCausality)
   return out
+}
+
+function compareGrangerCausality(a: GrangerCausality, b: GrangerCausality): number {
+  if (a.excessConditionalX1000 !== b.excessConditionalX1000)
+    return b.excessConditionalX1000 - a.excessConditionalX1000
+  if (a.driverFile !== b.driverFile) return a.driverFile < b.driverFile ? -1 : 1
+  return a.followerFile < b.followerFile ? -1 : 1
 }
