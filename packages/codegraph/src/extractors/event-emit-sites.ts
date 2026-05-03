@@ -100,102 +100,131 @@ export function scanEmitSitesInSourceFile(
   targetNames: ReadonlySet<string> = EMIT_NAMES,
 ): EventEmitSite[] {
   const out: EventEmitSite[] = []
-
-  const text = sf.getFullText()
-  let any = false
-  for (const n of targetNames) {
-    if (text.includes(n + '(')) { any = true; break }
-  }
-  if (!any) return out
+  if (!hasAnyTargetCallee(sf, targetNames)) return out
 
   const lineToSymbol = buildLineToSymbol(sf)
-
   sf.forEachDescendant((node) => {
     if (node.getKind() !== SyntaxKind.CallExpression) return
-    const call = node as any
-    const callee = call.getExpression?.()
-    if (!callee) return
-
-    const calleeKind = callee.getKind?.()
-    let calleeName: string | undefined
-    let isMethodCall = false
-    let receiver: string | undefined
-
-    if (calleeKind === SyntaxKind.Identifier) {
-      calleeName = callee.getText?.()
-    } else if (calleeKind === SyntaxKind.PropertyAccessExpression) {
-      // bus.emit(...), this.emit(...), foo.bar.emit(...)
-      calleeName = callee.getName?.()
-      isMethodCall = true
-      const left = callee.getExpression?.()
-      if (left) receiver = left.getText?.()
-    } else {
-      return
-    }
-
-    if (!calleeName || !targetNames.has(calleeName)) return
-
-    const args = call.getArguments?.() as Node[] | undefined
-    if (!args || args.length === 0) return
-    const firstArg = args[0]
-    if (firstArg.getKind() !== SyntaxKind.ObjectLiteralExpression) return
-
-    // Trouver la propriété `type:`
-    const obj = firstArg as any
-    const props = obj.getProperties?.() as Node[] | undefined
-    if (!props) return
-    let typeProp: any
-    for (const p of props) {
-      if (p.getKind() !== SyntaxKind.PropertyAssignment) continue
-      const pa = p as any
-      const nameNode = pa.getNameNode?.()
-      if (!nameNode) continue
-      const nameText = nameNode.getKind?.() === SyntaxKind.Identifier
-        ? nameNode.getText?.()
-        : nameNode.getKind?.() === SyntaxKind.StringLiteral
-          ? nameNode.getLiteralText?.()
-          : undefined
-      if (nameText === 'type') { typeProp = pa; break }
-    }
-    if (!typeProp) return
-
-    const init = typeProp.getInitializer?.()
-    if (!init) return
-    const initKind = init.getKind?.()
-    const line = call.getStartLineNumber?.() ?? 0
-    const symbol = lineToSymbol.get(line) ?? ''
-
-    let kind: EventEmitSite['kind']
-    let literalValue: string | undefined
-    let refExpression: string | undefined
-
-    if (
-      initKind === SyntaxKind.StringLiteral ||
-      initKind === SyntaxKind.NoSubstitutionTemplateLiteral
-    ) {
-      kind = 'literal'
-      literalValue = init.getLiteralText?.()
-    } else if (initKind === SyntaxKind.PropertyAccessExpression) {
-      kind = 'eventConstRef'
-      refExpression = init.getText?.()
-    } else {
-      kind = 'dynamic'
-    }
-
-    out.push({
-      file: relPath,
-      line,
-      symbol,
-      callee: calleeName,
-      isMethodCall,
-      ...(receiver ? { receiver } : {}),
-      kind,
-      ...(literalValue !== undefined ? { literalValue } : {}),
-      ...(refExpression !== undefined ? { refExpression } : {}),
-    })
+    processEmitCall(node, targetNames, lineToSymbol, relPath, out)
   })
-
   return out
+}
+
+/**
+ * Court-circuit textuel : si aucun nom de callee cible n'apparaît dans le
+ * fichier, on évite le forEachDescendant complet.
+ */
+function hasAnyTargetCallee(sf: SourceFile, targetNames: ReadonlySet<string>): boolean {
+  const text = sf.getFullText()
+  for (const n of targetNames) {
+    if (text.includes(n + '(')) return true
+  }
+  return false
+}
+
+interface CalleeInfo {
+  calleeName: string
+  isMethodCall: boolean
+  receiver?: string
+}
+
+/** Extrait calleeName + isMethodCall + receiver (bus.emit / this.emit / etc). */
+function extractCalleeInfo(callee: any): CalleeInfo | null {
+  const calleeKind = callee.getKind?.()
+  if (calleeKind === SyntaxKind.Identifier) {
+    const name = callee.getText?.()
+    return name ? { calleeName: name, isMethodCall: false } : null
+  }
+  if (calleeKind === SyntaxKind.PropertyAccessExpression) {
+    const name = callee.getName?.()
+    if (!name) return null
+    const left = callee.getExpression?.()
+    return {
+      calleeName: name,
+      isMethodCall: true,
+      ...(left ? { receiver: left.getText?.() as string | undefined } : {}),
+    }
+  }
+  return null
+}
+
+/** Cherche la PropertyAssignment `type:` dans un ObjectLiteral. */
+function findTypePropAssignment(props: Node[]): any | null {
+  for (const p of props) {
+    if (p.getKind() !== SyntaxKind.PropertyAssignment) continue
+    const pa = p as any
+    const nameNode = pa.getNameNode?.()
+    if (!nameNode) continue
+    if (readPropName(nameNode) === 'type') return pa
+  }
+  return null
+}
+
+function readPropName(nameNode: any): string | undefined {
+  const k = nameNode.getKind?.()
+  if (k === SyntaxKind.Identifier) return nameNode.getText?.()
+  if (k === SyntaxKind.StringLiteral) return nameNode.getLiteralText?.()
+  return undefined
+}
+
+interface TypeKind {
+  kind: EventEmitSite['kind']
+  literalValue?: string
+  refExpression?: string
+}
+
+/** Classifie l'initializer de la prop `type:` : literal / eventConstRef / dynamic. */
+function classifyTypeInit(init: any): TypeKind {
+  const initKind = init.getKind?.()
+  if (initKind === SyntaxKind.StringLiteral || initKind === SyntaxKind.NoSubstitutionTemplateLiteral) {
+    return { kind: 'literal', literalValue: init.getLiteralText?.() as string | undefined }
+  }
+  if (initKind === SyntaxKind.PropertyAccessExpression) {
+    return { kind: 'eventConstRef', refExpression: init.getText?.() as string | undefined }
+  }
+  return { kind: 'dynamic' }
+}
+
+/** Process un CallExpression candidat : valide la shape + push si match. */
+function processEmitCall(
+  call: Node,
+  targetNames: ReadonlySet<string>,
+  lineToSymbol: Map<number, string>,
+  relPath: string,
+  out: EventEmitSite[],
+): void {
+  const c = call as any
+  const callee = c.getExpression?.()
+  if (!callee) return
+  const calleeInfo = extractCalleeInfo(callee)
+  if (!calleeInfo || !targetNames.has(calleeInfo.calleeName)) return
+
+  const args = c.getArguments?.() as Node[] | undefined
+  if (!args || args.length === 0) return
+  const firstArg = args[0]
+  if (firstArg.getKind() !== SyntaxKind.ObjectLiteralExpression) return
+
+  const props = (firstArg as any).getProperties?.() as Node[] | undefined
+  if (!props) return
+  const typeProp = findTypePropAssignment(props)
+  if (!typeProp) return
+
+  const init = typeProp.getInitializer?.()
+  if (!init) return
+
+  const line = c.getStartLineNumber?.() ?? 0
+  const typeKind = classifyTypeInit(init)
+  out.push({
+    file: relPath,
+    line,
+    symbol: lineToSymbol.get(line) ?? '',
+    callee: calleeInfo.calleeName,
+    isMethodCall: calleeInfo.isMethodCall,
+    ...(calleeInfo.receiver ? { receiver: calleeInfo.receiver } : {}),
+    kind: typeKind.kind,
+    ...(typeKind.literalValue !== undefined ? { literalValue: typeKind.literalValue } : {}),
+    ...(typeKind.refExpression !== undefined ? { refExpression: typeKind.refExpression } : {}),
+  })
 }
 
 export const DEFAULT_EMIT_NAMES = EMIT_NAMES
