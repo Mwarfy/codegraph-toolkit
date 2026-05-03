@@ -27,3 +27,8 @@
 
 .decl TestedFile(file: symbol)
 .input TestedFile
+
+// Optional — produced by codegraph statique (granger-causality extractor).
+// Used by composite rules to cross-validate runtime Granger findings.
+.decl GrangerCausality(driverFile: symbol, followerFile: symbol, observations: number, excessConditionalX1000: number)
+.input GrangerCausality

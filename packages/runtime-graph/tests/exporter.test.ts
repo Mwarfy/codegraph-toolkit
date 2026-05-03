@@ -31,11 +31,12 @@ const emptySnapshot: RuntimeSnapshot = {
 }
 
 describe('exportFactsRuntime', () => {
-  it('writes 7 fact files + schema + manifest', async () => {
+  it('writes 8 fact files + schema + manifest', async () => {
+    // 7 base facts (α/β) + LatencySeries (γ.2) = 8
     await exportFactsRuntime(emptySnapshot, { outDir: tmpDir })
     const files = await fs.readdir(tmpDir)
     const factsFiles = files.filter(f => f.endsWith('.facts'))
-    expect(factsFiles).toHaveLength(7)
+    expect(factsFiles).toHaveLength(8)
     expect(files).toContain('schema-runtime-graph.dl')
     expect(files).toContain('manifest.json')
   })

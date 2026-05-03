@@ -116,16 +116,30 @@ export async function exportFactsRuntime(
     ]),
   })
 
-  // ─── RuntimeRunMeta(driver, startedAtUnix, durationMs, totalSpans) ─
+  // ─── RuntimeRunMeta(driver, startedAtUnix, durationMs, totalSpans, bucketSizeMs, bucketCount) ─
+  // γ.2 : 2 cols ajoutées pour permettre aux rules datalog de reconstruire
+  // la fenêtre temporelle. 0 si time-series désactivé (compat α/β).
   relations.push({
     name: 'RuntimeRunMeta',
-    decl: '(driver:symbol, startedAtUnix:number, durationMs:number, totalSpans:number)',
+    decl: '(driver:symbol, startedAtUnix:number, durationMs:number, totalSpans:number, bucketSizeMs:number, bucketCount:number)',
     rows: [[
       sym(snapshot.meta.driver),
       num(snapshot.meta.startedAtUnix),
       num(snapshot.meta.durationMs),
       num(snapshot.meta.totalSpans),
+      num(snapshot.meta.bucketSizeMs ?? 0),
+      num(snapshot.meta.bucketCount ?? 0),
     ]],
+  })
+
+  // ─── LatencySeries(kind, key, bucketIdx, count, meanLatencyMs) ─────
+  // γ.2 — sparse time-series. Vide si bucketSizeMs absent.
+  relations.push({
+    name: 'LatencySeries',
+    decl: '(kind:symbol, seriesKey:symbol, bucketIdx:number, count:number, meanLatencyMs:number)',
+    rows: (snapshot.latencySeries ?? []).map(s => [
+      sym(s.kind), sym(s.key), num(s.bucketIdx), num(s.count), num(s.meanLatencyMs),
+    ]),
   })
 
   // Write all

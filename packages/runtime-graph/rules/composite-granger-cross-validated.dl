@@ -1,0 +1,29 @@
+// rule: composite-granger-cross-validated
+// fires: a file pair (A, B) where A "Granger-causes" B at BOTH timescales :
+//        - static :  commit lag-1 (over the project's git history)
+//        - runtime : event spike lag-1 (over a run window)
+// signal: highly-confidence directional coupling between two files.
+//         Architectural drift is unlikely — A really is a driver of B.
+//         Common shape : A is a producer/coordinator, B is a consumer/handler
+//         that depends on A's state both at edit-time and at execution-time.
+// action: this is signal — make the coupling explicit (introduce a typed
+//         contract / event interface) or document it as intentional. Hidden
+//         load-bearing causation is worth surfacing.
+//
+// Why a composite rule and not two independent ones :
+//   - GrangerRuntime alone : may catch coincidental temporal alignment.
+//   - GrangerCausality (static) alone : may catch shared context (both
+//     touched in the same refactor) without real causation.
+//   - Cross-validating both timescales filters noise from each layer.
+
+// Schemas chargés via _schema-runtime-disciplines.dl + _schema-static.dl
+// (concat automatique par le runner — pas de #include).
+
+.decl GrangerCrossValidated(driverFile: symbol, followerFile: symbol, runtimeExcessX1000: number, staticExcessX1000: number)
+.output GrangerCrossValidated
+
+GrangerCrossValidated(D, F, RuntimeExcess, StaticExcess) :-
+  GrangerRuntimeFile(D, F, _, RuntimeExcess),
+  GrangerCausality(D, F, _, StaticExcess),
+  RuntimeExcess >= 200,
+  StaticExcess >= 200.

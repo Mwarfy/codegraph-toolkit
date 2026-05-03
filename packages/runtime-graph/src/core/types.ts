@@ -94,6 +94,35 @@ export interface CallEdgeRuntimeFact {
 }
 
 /**
+ * Time-series d'événements bucketisés par fenêtre temporelle (default 1s).
+ * Permet l'analyse causale lag-N entre paires de séries (Granger runtime,
+ * time-series Lyapunov, TDA persistence en γ.3).
+ *
+ * Représentation sparse : on n'émet QUE les buckets avec count > 0. Le
+ * datalog reconstruit la série complète en joignant avec le total nombre
+ * de buckets (RuntimeRunMeta.bucketCount).
+ *
+ * Phase γ.2 : 4 kinds supportés — http-route, db-table, event-type, symbol.
+ */
+export interface LatencySeriesFact {
+  kind: 'http-route' | 'db-table' | 'event-type' | 'symbol'
+  /**
+   * Identité de la série :
+   *   - http-route : "<METHOD> <path>"
+   *   - db-table   : "<table>::<op>"
+   *   - event-type : "<type>"
+   *   - symbol     : "<file>::<fn>"
+   */
+  key: string
+  /** Index du bucket depuis runStart (0..bucketCount-1). */
+  bucketIdx: number
+  /** Nb d'événements dans ce bucket. ≥ 1 (sparse — on n'émet pas les zéros). */
+  count: number
+  /** Moyenne des latences ms dans ce bucket (Math.floor pour TSV). */
+  meanLatencyMs: number
+}
+
+/**
  * Métadonnées du run (audit + reproductibilité).
  * Toujours 1 row par run — sert de NowUnix pour les rules datalog.
  */
@@ -102,6 +131,17 @@ export interface RuntimeRunMetaFact {
   startedAtUnix: number
   durationMs: number
   totalSpans: number
+  /**
+   * Taille des buckets time-series en ms. γ.2+ uniquement (default 1000ms).
+   * Si 0/absent → time-series désactivé (compat α/β).
+   */
+  bucketSizeMs?: number
+  /**
+   * Nb total de buckets sur la fenêtre du run = ceil(durationMs / bucketSizeMs).
+   * Permet aux rules datalog de reconstruire la série complète depuis le
+   * format sparse de LatencySeries.
+   */
+  bucketCount?: number
 }
 
 // ─── Aggregated runtime snapshot — émis par capture, consommé par exporter ──
@@ -113,6 +153,8 @@ export interface RuntimeSnapshot {
   redisOps: RedisOpExecutedFact[]
   eventsEmitted: EventEmittedAtRuntimeFact[]
   callEdges: CallEdgeRuntimeFact[]
+  /** Phase γ.2 — sparse time-series buckets pour Granger / time-series Lyapunov. */
+  latencySeries?: LatencySeriesFact[]
   meta: RuntimeRunMetaFact
 }
 

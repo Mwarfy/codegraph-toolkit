@@ -140,8 +140,9 @@ describe('Phase α self-probe — end-to-end on toolkit itself', () => {
     expect(runFromStringSym, 'datalog runFromString span captured').toBeDefined()
 
     // ─── 5. Export facts → tmpDir ───────────────────────────────────
+    // 7 base facts (α/β) + LatencySeries (γ.2) = 8
     const exportResult = await exportFactsRuntime(snapshot, { outDir: tmpFactsDir })
-    expect(exportResult.relations).toHaveLength(7)
+    expect(exportResult.relations).toHaveLength(8)
 
     // RuntimeRuleExempt empty file (CLI-side helper not in lib path)
     await fs.writeFile(path.join(tmpFactsDir, 'RuntimeRuleExempt.facts'), '', 'utf-8')

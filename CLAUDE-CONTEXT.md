@@ -47,8 +47,8 @@
 - `packages/salsa/dist/index.d.ts` (in: 19)
 - `packages/codegraph/src/core/detector-registry.ts` (in: 18)
 - `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 14)
+- `packages/runtime-graph/src/core/types.ts` (in: 11)
 - `packages/adr-toolkit/src/config.ts` (in: 10) · gov by ADR-002
-- `packages/runtime-graph/src/core/types.ts` (in: 10)
 
 ## ⚠ ADR anchor suggestions
 
@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+81b8fb9 fix(toolkit): self-detected defects via codegraph + runtime-graph
 e73e85d fix(codegraph): break direct cycle sql-helpers ↔ sql-schema via type extraction
 e9a2b44 feat(runtime-graph): Phase γ — 4 mathematical disciplines runtime + composite rules
 f642620 fix(runtime-graph): CLI rulesDir resolution via __dirname (no package.json export)
@@ -111,7 +112,6 @@ e65ea40 feat(runtime-graph): Phase α — runtime observability framework with d
 40b2842 refactor(toolkit): SQL DROP/skip-rollbacks + disable noisy composite rules
 51d7e5f refactor(toolkit): sql-naming exemptions + ADD/RENAME ordering + edge-case patterns
 0c9d608 test(toolkit): contract tests pour CrossDisciplineDetector POC
-bbfa9d6 feat(toolkit): SQL ALTER TABLE tracking + CrossDisciplineDetector POC
 ```
 
 ## Comment contribuer à ce brief

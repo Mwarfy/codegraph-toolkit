@@ -21,7 +21,8 @@
 .decl CallEdgeRuntime(fromFile: symbol, fromFn: symbol, toFile: symbol, toFn: symbol, count: number)
 .input CallEdgeRuntime
 
-.decl RuntimeRunMeta(driver: symbol, startedAtUnix: number, durationMs: number, totalSpans: number)
+// γ.2 : bucketSizeMs + bucketCount ajoutés (0 si time-series désactivé)
+.decl RuntimeRunMeta(driver: symbol, startedAtUnix: number, durationMs: number, totalSpans: number, bucketSizeMs: number, bucketCount: number)
 .input RuntimeRunMeta
 
 // Route expectations parsed côté CLI depuis EntryPoint.facts statique.

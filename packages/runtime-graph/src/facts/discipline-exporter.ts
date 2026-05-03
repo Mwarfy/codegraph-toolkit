@@ -14,6 +14,8 @@ import type {
   InformationBottleneckRuntimeFact,
   LyapunovRuntimeFact,
   NewmanGirvanRuntimeFact,
+  GrangerRuntimeFact,
+  GrangerRuntimeFileFact,
 } from '../metrics/runtime-disciplines.js'
 
 function sym(s: string): string {
@@ -110,6 +112,31 @@ export async function exportDisciplineFacts(
   ])
   await writeRelation(outDir, 'LyapunovRuntime', lyapunovRows)
   written.push({ name: 'LyapunovRuntime', tuples: lyapunovRows.length })
+
+  // ─── GrangerRuntime (γ.2) ──────────────────────────────────────
+  // schema : (driverSeries:symbol, followerSeries:symbol, observations:number,
+  //           excessConditionalX1000:number, lagBuckets:number)
+  const grangerRows: string[][] = result.granger.map((f: GrangerRuntimeFact) => [
+    sym(f.driverSeries),
+    sym(f.followerSeries),
+    num(f.observations),
+    num(f.excessConditionalX1000),
+    num(f.lagBuckets),
+  ])
+  await writeRelation(outDir, 'GrangerRuntime', grangerRows)
+  written.push({ name: 'GrangerRuntime', tuples: grangerRows.length })
+
+  // ─── GrangerRuntimeFile (γ.2) ──────────────────────────────────
+  // File-level rollup pour cross-validation avec GrangerCausality statique.
+  // schema : (driverFile, followerFile, observations, maxExcessX1000)
+  const grangerFileRows: string[][] = result.grangerFile.map((f: GrangerRuntimeFileFact) => [
+    sym(f.driverFile),
+    sym(f.followerFile),
+    num(f.observations),
+    num(f.maxExcessConditionalX1000),
+  ])
+  await writeRelation(outDir, 'GrangerRuntimeFile', grangerFileRows)
+  written.push({ name: 'GrangerRuntimeFile', tuples: grangerFileRows.length })
 
   return { outDir, relations: written }
 }

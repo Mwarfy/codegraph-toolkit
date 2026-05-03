@@ -22,6 +22,7 @@ import type {
   RedisOpExecutedFact,
   EventEmittedAtRuntimeFact,
   CallEdgeRuntimeFact,
+  LatencySeriesFact,
 } from '../core/types.js'
 
 /** OTel SemConv attribute keys we care about (subset). */
@@ -47,6 +48,9 @@ const ATTR = {
 /**
  * Project les spans vers un RuntimeSnapshot.
  * IDEMPOTENT — appelable plusieurs fois sur le même array de spans.
+ *
+ * Si `runMeta.bucketSizeMs` est défini (γ.2+), génère aussi `latencySeries`
+ * via bucketisation par fenêtre temporelle.
  */
 export function aggregateSpans(
   spans: ReadableSpan[],
@@ -59,6 +63,11 @@ export function aggregateSpans(
   const eventsEmitted = aggregateEventsEmitted(spans)
   const callEdges = aggregateCallEdges(spans, opts.projectRoot)
 
+  const bucketSizeMs = opts.runMeta.bucketSizeMs
+  const latencySeries = bucketSizeMs && bucketSizeMs > 0
+    ? aggregateLatencySeries(spans, opts.projectRoot, opts.runMeta.startedAtUnix, bucketSizeMs)
+    : undefined
+
   return {
     symbolsTouched,
     httpRouteHits,
@@ -66,6 +75,7 @@ export function aggregateSpans(
     redisOps,
     eventsEmitted,
     callEdges,
+    latencySeries,
     meta: opts.runMeta,
   }
 }
@@ -317,6 +327,114 @@ function aggregateCallEdges(
   }
 
   return Array.from(buckets.values())
+}
+
+// ─── LatencySeries (γ.2 — time-series buckets) ──────────────────────────
+
+/**
+ * Bucketise les spans en fenêtres de `bucketSizeMs` à partir de
+ * `startedAtUnix`. Génère 1 row par (kind, key, bucketIdx) où `count > 0`
+ * (sparse). Permet l'analyse causale lag-N (Granger), time-series Lyapunov,
+ * et TDA persistence (γ.3) sur des séries temporelles courtes (run window).
+ *
+ * 4 kinds en γ.2 :
+ *   - http-route : key = "<METHOD> <path>"
+ *   - db-table   : key = "<table>::<op>"
+ *   - event-type : key = "<type>"
+ *   - symbol     : key = "<file>::<fn>"
+ */
+function aggregateLatencySeries(
+  spans: ReadableSpan[],
+  projectRoot: string,
+  startedAtUnix: number,
+  bucketSizeMs: number,
+): LatencySeriesFact[] {
+  // Bucket key = `${kind}\x00${key}\x00${bucketIdx}` → { latencies: number[] }
+  const buckets = new Map<string, {
+    kind: LatencySeriesFact['kind']
+    key: string
+    bucketIdx: number
+    latencies: number[]
+  }>()
+
+  const startedAtMs = startedAtUnix * 1000
+
+  for (const span of spans) {
+    const [sec, nsec] = span.startTime
+    const startMs = sec * 1000 + nsec / 1_000_000
+    const offsetMs = startMs - startedAtMs
+    if (offsetMs < 0) continue                                            // span started before run window
+    const bucketIdx = Math.floor(offsetMs / bucketSizeMs)
+    const latencyMs = spanDurationMs(span)
+
+    const kindKeys = extractKindKeys(span, projectRoot)
+    for (const { kind, key } of kindKeys) {
+      const id = `${kind}\x00${key}\x00${bucketIdx}`
+      let b = buckets.get(id)
+      if (!b) {
+        b = { kind, key, bucketIdx, latencies: [] }
+        buckets.set(id, b)
+      }
+      b.latencies.push(latencyMs)
+    }
+  }
+
+  return Array.from(buckets.values()).map(b => ({
+    kind: b.kind,
+    key: b.key,
+    bucketIdx: b.bucketIdx,
+    count: b.latencies.length,
+    meanLatencyMs: b.latencies.length === 0
+      ? 0
+      : Math.floor(b.latencies.reduce((s, x) => s + x, 0) / b.latencies.length),
+  }))
+}
+
+/**
+ * Extrait les (kind, key) pour un span — un même span peut contribuer à
+ * plusieurs séries (ex: span HTTP route + symbol touched). Permet la
+ * réutilisation des spans existants au lieu de les re-walker.
+ */
+function extractKindKeys(
+  span: ReadableSpan,
+  projectRoot: string,
+): Array<{ kind: LatencySeriesFact['kind']; key: string }> {
+  const out: Array<{ kind: LatencySeriesFact['kind']; key: string }> = []
+  const attrs = span.attributes
+
+  // http-route
+  const method = attrs[ATTR.HTTP_METHOD] as string | undefined
+  const httpPath = (attrs[ATTR.HTTP_ROUTE] as string | undefined)
+                ?? (attrs[ATTR.HTTP_TARGET] as string | undefined)
+  if (method && httpPath) {
+    out.push({ kind: 'http-route', key: `${method} ${stripQueryString(httpPath)}` })
+  }
+
+  // db-table
+  const dbSystem = attrs[ATTR.DB_SYSTEM] as string | undefined
+  if (dbSystem && dbSystem !== 'redis') {
+    let table: string | null = null
+    let op: string | null = null
+    if (dbSystem === 'mongodb') {
+      table = (attrs[ATTR.DB_MONGODB_COLLECTION] as string | undefined) ?? null
+      op = ((attrs[ATTR.DB_OPERATION] as string | undefined) ?? '').toUpperCase() || null
+    } else {
+      const stmt = attrs[ATTR.DB_STATEMENT] as string | undefined
+      op = (attrs[ATTR.DB_OPERATION] as string | undefined) ?? extractSqlOp(stmt)
+      table = extractSqlTable(stmt)
+    }
+    if (table && op) out.push({ kind: 'db-table', key: `${table}::${op}` })
+  }
+
+  // event-type (custom OTel attribute set by event-bus hook)
+  const eventType = attrs[ATTR.RG_EVENT_TYPE] as string | undefined
+  if (eventType) out.push({ kind: 'event-type', key: eventType })
+
+  // symbol (project code only)
+  const symKey = extractSymbolKey(span, projectRoot)
+  if (symKey) out.push({ kind: 'symbol', key: `${symKey.file}::${symKey.fn}` })
+
+  return out
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────

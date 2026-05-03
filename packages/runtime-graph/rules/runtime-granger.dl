@@ -1,0 +1,22 @@
+// rule: runtime-granger
+// fires: GrangerRuntime detected with lag-1 excess conditional probability ≥ 0.20
+//        AND at least 5 observations (more conservative than the discipline default
+//        to suppress weak signals at the rule level).
+// signal: directional causation between two runtime series — when X spikes,
+//         Y spikes ~1 bucket later. Reveals hidden coupling that's invisible
+//         in static dependencies (e.g. an HTTP route that triggers a delayed
+//         DB query through an event chain).
+// action: investigate the chain — is the lag a feature (async pipeline working)
+//         or a leak (cascading failures, sync work pretending to be async) ?
+
+// Schemas chargés depuis _schema-runtime-disciplines.dl (lib runner concat
+// tous les .dl du rulesDir, pas besoin de #include — non supporté par le
+// parser local @liby-tools/datalog).
+
+.decl RuntimeGrangerHigh(driver: symbol, follower: symbol, observations: number, excessX1000: number)
+.output RuntimeGrangerHigh
+
+RuntimeGrangerHigh(D, F, Obs, Excess) :-
+  GrangerRuntime(D, F, Obs, Excess, _),
+  Excess >= 200,
+  Obs >= 5.

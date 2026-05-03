@@ -20,6 +20,13 @@
  */
 
 import type { RuntimeSnapshot } from '../core/types.js'
+import {
+  grangerRuntime,
+  grangerRuntimeFileRollup,
+  type GrangerRuntimeFact,
+  type GrangerRuntimeFileFact,
+  type GrangerRuntimeOptions,
+} from './granger-runtime.js'
 
 // ─── 1. HAMMING DISTANCE (statique ↔ runtime) ───────────────────────────
 
@@ -263,16 +270,34 @@ export interface AllDisciplinesResult {
   informationBottleneck: InformationBottleneckRuntimeFact[]
   newmanGirvan: NewmanGirvanRuntimeFact
   lyapunov: LyapunovRuntimeFact[]
+  /** Phase γ.2 — empty si snap.latencySeries absent (compat α/β). */
+  granger: GrangerRuntimeFact[]
+  /** Phase γ.2 — file-level rollup pour cross-validation avec static GrangerCausality. */
+  grangerFile: GrangerRuntimeFileFact[]
+}
+
+export interface ComputeAllDisciplinesOptions {
+  granger?: GrangerRuntimeOptions
 }
 
 export function computeAllDisciplines(
   snap: RuntimeSnapshot,
   staticEdges: StaticCallEdge[] = [],
+  options: ComputeAllDisciplinesOptions = {},
 ): AllDisciplinesResult {
+  const granger = grangerRuntime(snap, options.granger)
   return {
     hamming: staticEdges.length > 0 ? hammingStaticRuntime(snap, staticEdges) : null,
     informationBottleneck: informationBottleneckRuntime(snap),
     newmanGirvan: newmanGirvanRuntime(snap),
     lyapunov: lyapunovRuntime(snap),
+    granger,
+    grangerFile: grangerRuntimeFileRollup(granger),
   }
 }
+
+export type {
+  GrangerRuntimeFact,
+  GrangerRuntimeFileFact,
+  GrangerRuntimeOptions,
+} from './granger-runtime.js'

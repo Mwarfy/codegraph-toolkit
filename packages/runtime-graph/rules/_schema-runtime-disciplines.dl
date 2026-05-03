@@ -16,3 +16,15 @@
 
 .decl LyapunovRuntime(file: symbol, fn: symbol, p95LatencyMs: number, count: number, lambdaPermille: number)
 .input LyapunovRuntime
+
+// Phase γ.2 — Granger causality runtime
+.decl GrangerRuntime(driverSeries: symbol, followerSeries: symbol, observations: number, excessConditionalX1000: number, lagBuckets: number)
+.input GrangerRuntime
+
+// Phase γ.2 — File-level rollup pour cross-validation avec static GrangerCausality
+.decl GrangerRuntimeFile(driverFile: symbol, followerFile: symbol, observations: number, maxExcessX1000: number)
+.input GrangerRuntimeFile
+
+// Phase γ.2 — sparse time-series buckets
+.decl LatencySeries(kind: symbol, seriesKey: symbol, bucketIdx: number, eventCount: number, meanLatencyMs: number)
+.input LatencySeries
