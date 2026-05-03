@@ -1,0 +1,29 @@
+// Static facts schema — relations consumed by runtime-graph rules but
+// PRODUCED by codegraph statique (`npx codegraph analyze`).
+//
+// Ces declarations doivent matcher EXACTEMENT le schema émis par
+// `@liby-tools/codegraph` (cf. .codegraph/facts/schema.dl du projet
+// observé). Si codegraph evolve un schema, mettre à jour ici.
+//
+// Pourquoi ce fichier dans le package runtime-graph :
+// les rules sont bundle avec leur dependence schemas — l'utilisateur
+// installe @liby-tools/runtime-graph et tout fonctionne. Pas besoin
+// de re-bricoler les schemas côté projet.
+
+.decl UnusedExport(file: symbol, name: symbol, line: number, kind: symbol, confidence: symbol)
+.input UnusedExport
+
+.decl ImportEdge(from: symbol, to: symbol, line: number)
+.input ImportEdge
+
+.decl SymbolCallEdge(fromFile: symbol, fromSymbol: symbol, toFile: symbol, toSymbol: symbol, line: number)
+.input SymbolCallEdge
+
+.decl EntryPoint(file: symbol, kind: symbol, id: symbol)
+.input EntryPoint
+
+.decl TruthPointWriter(concept: symbol, file: symbol)
+.input TruthPointWriter
+
+.decl TestedFile(file: symbol)
+.input TestedFile

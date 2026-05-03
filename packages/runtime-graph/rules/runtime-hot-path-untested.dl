@@ -1,18 +1,17 @@
 // HOT_PATH_UNTESTED — fonction high-traffic au runtime mais sans test associé
 //
-// Pourquoi : le test coverage statique (TestedFile) dit qu'un fichier a
-// AU MOINS un test qui l'importe. Mais ça ne dit rien du throughput
-// runtime. Une fonction qui voit 1000 invocations/run sans test = risque
-// élevé : régression silencieuse possible.
+// Pourquoi : TestedFile dit qu'un fichier a au moins un test qui l'importe.
+// Mais ça ne dit rien du throughput runtime. Une fonction qui voit beaucoup
+// d'invocations sans test = risque élevé de régression silencieuse.
 //
-// Le seuil count > 10 en α est conservateur. Phase β tunera selon
-// le percentile P75 du throughput observé sur le run.
-
-.decl HotPathUntestedGrandfathered(file: symbol, fn: symbol)
+// Précision by-design : seuil count >= 10 est conservateur — sur un run
+// synthetic court (5-10 min), atteindre 10 invocations indique un hot path
+// (1 par 30s minimum). Sur un run plus long, augmenter via env override
+// (Phase β : threshold dynamique p75 du throughput observé).
 
 RuntimeAlert("HOT_PATH_UNTESTED", File, Fn,
-    "high runtime invocation count but no test file imports this") :-
+    "high runtime invocation count but no test imports this file") :-
     SymbolTouchedRuntime(File, Fn, Count, _),
-    Count > 10,
+    Count >= 10,
     !TestedFile(File),
-    !HotPathUntestedGrandfathered(File, Fn).
+    !RuntimeRuleExempt("HOT_PATH_UNTESTED", File, Fn).

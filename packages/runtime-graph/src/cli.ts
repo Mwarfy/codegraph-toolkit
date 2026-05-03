@@ -117,6 +117,10 @@ program
     // 5. Generate RuntimeRouteExpected.facts (parsed from EntryPoint.facts)
     await generateRuntimeRouteExpected(projectRoot, outDir)
 
+    // 6. Ensure RuntimeRuleExempt.facts exists (empty if no project exemptions)
+    //    Datalog runner requires every .input relation to have a file (or empty file).
+    await ensureRuntimeRuleExempt(projectRoot, outDir)
+
     // 6. Run datalog rules (unless --no-rules)
     if (opts.rules !== false) {
       await runRulesAndPrint(projectRoot, outDir)
@@ -146,6 +150,25 @@ program.parseAsync(process.argv).catch(err => {
 })
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
+
+/**
+ * Crée un RuntimeRuleExempt.facts vide si l'utilisateur n'a pas
+ * fourni le sien dans son projet. Datalog .input requiert un fichier.
+ *
+ * Si le projet a `<projectRoot>/runtime-rule-exempt.facts`, on le copie.
+ * Sinon, on écrit un fichier vide.
+ */
+async function ensureRuntimeRuleExempt(projectRoot: string, outDir: string): Promise<void> {
+  const userExemptions = path.join(projectRoot, 'runtime-rule-exempt.facts')
+  const dst = path.join(outDir, 'RuntimeRuleExempt.facts')
+  try {
+    const content = await fs.readFile(userExemptions, 'utf-8')
+    await fs.writeFile(dst, content, 'utf-8')
+  } catch {
+    // Pas d'exemptions utilisateur → fichier vide
+    await fs.writeFile(dst, '', 'utf-8')
+  }
+}
 
 /**
  * Génère RuntimeRouteExpected.facts depuis EntryPoint.facts (statique).

@@ -1,0 +1,39 @@
+// Runtime facts schema — relations PRODUCED by @liby-tools/runtime-graph.
+// Ces declarations matchent EXACTEMENT le schema émis par
+// `src/facts/exporter.ts`. Si la signature change côté code, mettre à
+// jour ici aussi (Phase β automatisera via tests cross-validation).
+
+.decl SymbolTouchedRuntime(file: symbol, fn: symbol, count: number, p95LatencyMs: number)
+.input SymbolTouchedRuntime
+
+.decl HttpRouteHit(method: symbol, routePath: symbol, status: number, count: number, p95LatencyMs: number)
+.input HttpRouteHit
+
+.decl DbQueryExecuted(tableName: symbol, op: symbol, count: number, lastAtUnix: number)
+.input DbQueryExecuted
+
+.decl RedisOpExecuted(op: symbol, keyPattern: symbol, count: number)
+.input RedisOpExecuted
+
+.decl EventEmittedAtRuntime(eventType: symbol, count: number, lastAtUnix: number)
+.input EventEmittedAtRuntime
+
+.decl CallEdgeRuntime(fromFile: symbol, fromFn: symbol, toFile: symbol, toFn: symbol, count: number)
+.input CallEdgeRuntime
+
+.decl RuntimeRunMeta(driver: symbol, startedAtUnix: number, durationMs: number, totalSpans: number)
+.input RuntimeRunMeta
+
+// Route expectations parsed côté CLI depuis EntryPoint.facts statique.
+.decl RuntimeRouteExpected(method: symbol, routePath: symbol)
+.input RuntimeRouteExpected
+
+// Exemptions explicites de rules — déclarées par le projet utilisateur
+// dans <projectRoot>/runtime-rule-exempt.facts. PAS un grandfather qui
+// enterre la dette : un opt-out documenté case-par-case.
+.decl RuntimeRuleExempt(ruleName: symbol, target1: symbol, target2: symbol)
+.input RuntimeRuleExempt
+
+// Output relation (consommée par les caller pour récupérer les alertes).
+.decl RuntimeAlert(category: symbol, target: symbol, detail: symbol, message: symbol)
+.output RuntimeAlert

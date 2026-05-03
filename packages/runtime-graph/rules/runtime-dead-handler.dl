@@ -1,24 +1,52 @@
 // DEAD_HANDLER — function exportée jamais touchée pendant le run runtime
 //
-// Pourquoi : Phase α règle phare. Détecte les fonctions exportées que
-// le code import statiquement quelque part (déclaration vivante) mais
-// qui ne sont JAMAIS exécutées pendant un run synthetic complet.
-// Cas typique Sentinel : feedback-aggregator a été oublié dans le
-// lifecycle Phase 2 — `runFeedbackAggregator` est exportée, importée
-// par les tests, mais aucun caller en runtime → l'auto-amélioration
-// dort 14 jours.
+// Pourquoi : règle phare. Détecte les fonctions exportées que le code
+// importe statiquement quelque part (déclaration vivante) mais qui ne
+// sont JAMAIS exécutées pendant un run runtime complet.
+// Cas typique : un service oublié dans le wiring lifecycle — son
+// `runX()` est exporté, importé par les tests, mais aucun caller en
+// runtime → l'auto-amélioration dort.
 //
-// Cross-fact join : Export (statique, codegraph analyze) ∩
-// SymbolTouchedRuntime (runtime, runtime-graph capture).
+// Précision by-design (pas de grandfather pour enterrer la dette) :
+//   - Le symbole DOIT avoir au moins 1 importer entrant (ImportEdge).
+//     Un export jamais importé est déjà flaggé par codegraph statique
+//     (composite-orphan-file / dead-export). Inutile de double-flag.
+//   - Le symbole DOIT être touché par 0 spans (¬SymbolTouchedRuntime).
+//   - Le filtre est BINAIRE — soit le run l'a touché, soit non. C'est
+//     le caller (driver) de fournir un run représentatif.
 //
-// Grandfather pattern : un export non-touché peut être légitime (helpers
-// publics, plugin entry points). Le pattern ratchet permet de marquer
-// les cas connus pour ne flagguer que les NOUVELLES dérives.
+// Si une exception est légitime (ex: plugin entry point invoqué par
+// un système externe non-stimulé par le driver), l'utilisateur ajoute
+// le symbole à `RuntimeRuleExempt` dans son projet — c'est une
+// EXCEPTION EXPLICITE qui doit être justifiée par un commentaire
+// adjacent, pas une dette qui s'accumule.
 
-.decl DeadHandlerGrandfathered(file: symbol, fn: symbol)
+// Derive callable Export from UnusedExport.
+// CRUCIAL : on ne flag QUE les `function` et `class` — les `interface`,
+// `type`, `enum`, etc. ne sont pas exécutables au runtime, leur absence
+// de SymbolTouchedRuntime est triviale.
+//
+// Schema codegraph : UnusedExport(file, name, line, kind, confidence)
+//   kind ∈ {function, class, const, let, var, interface, type, enum, ...}
+//   confidence ∈ {used, unused}
+.decl CallableExport(file: symbol, fn: symbol)
+CallableExport(F, N) :- UnusedExport(F, N, _, "function", _).
+CallableExport(F, N) :- UnusedExport(F, N, _, "class", _).
+
+.decl HasImporter(file: symbol)
+HasImporter(F) :- ImportEdge(_, F, _).
+
+// Précision additionnelle : on exige aussi que la fonction soit
+// EFFECTIVEMENT consommée par au moins 1 SymbolCallEdge entrant.
+// Sinon `confidence='used'` peut signifier "importé mais jamais
+// appelé" (re-export, type-only import), pas "appelé".
+.decl HasIncomingCall(file: symbol, fn: symbol)
+HasIncomingCall(F, N) :- SymbolCallEdge(_, _, F, N, _).
 
 RuntimeAlert("DEAD_HANDLER", File, Fn,
-    "exported but never invoked at runtime — orphan wiring suspect") :-
-    Export(File, Fn),
+    "callable export with statique callers but never invoked at runtime") :-
+    CallableExport(File, Fn),
+    HasImporter(File),
+    HasIncomingCall(File, Fn),
     !SymbolTouchedRuntime(File, Fn, _, _),
-    !DeadHandlerGrandfathered(File, Fn).
+    !RuntimeRuleExempt("DEAD_HANDLER", File, Fn).

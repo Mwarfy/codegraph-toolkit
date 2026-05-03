@@ -2,23 +2,29 @@
 //
 // Pourquoi : le codegraph statique détecte les call edges via AST scan
 // (SymbolCallEdge). Mais certains edges sont théoriques : une fonction
-// peut être référencée dans un import sans jamais être invoquée à
-// runtime (dynamic feature flag, dead code path, lazy import jamais
-// résolu).
+// peut être référencée dans un import sans jamais être invoquée à runtime
+// (dynamic feature flag, dead code path, lazy import jamais résolu).
 //
-// Cette règle joint statique × runtime pour pointer ces edges fantômes.
-// Différence avec DEAD_HANDLER : DEAD_HANDLER cible les FONCTIONS
-// jamais touchées, RUNTIME_DRIFT cible les EDGES jamais empruntés.
-//
-// Note : RUNTIME_DRIFT est plus bruyant que DEAD_HANDLER (un function
-// peut avoir 10 callers statiques dont 1 seul s'exécute → 9 drifts
-// flaggés). En α on grandfather agressivement, en β on ajoutera un
-// seuil "min_callers_for_drift" pour ne flagguer qu'à partir de N.
+// Précision by-design (pas de grandfather) :
+//   - On exige au moins 2 callers statiques distincts pour flag
+//     (un seul caller ≈ wrapper utility qui peut être conditionnel,
+//     trop bruyant). Les fonctions avec 2+ callers et 0 touch runtime
+//     sont les plus suspectes.
+//   - On joint avec HasRuntimeTraffic — si AUCUN span n'a été capturé
+//     dans le projet, le run n'est pas représentatif et on n'émet rien.
 
-.decl RuntimeDriftGrandfathered(file: symbol, fn: symbol)
+// Aggregate count of static callers per (toFile, toFn).
+// Toolkit datalog `.count` syntax : capitalized vars in `by` bind to source
+// columns + define group-by, lowercase result cols receive them by position.
+.count StaticCallerCount(toFile: symbol, toFn: symbol, n: number) by SymbolCallEdge(_, _, F, S, _)
+
+.decl HasRuntimeTraffic()
+HasRuntimeTraffic() :- SymbolTouchedRuntime(_, _, _, _).
 
 RuntimeAlert("RUNTIME_DRIFT", File, Fn,
-    "static call graph references this symbol but runtime never touched it") :-
-    SymbolCallEdge(_, _, File, Fn, _),
+    "static call graph references symbol from 2+ sites but runtime never touched it") :-
+    StaticCallerCount(File, Fn, N),
+    N >= 2,
     !SymbolTouchedRuntime(File, Fn, _, _),
-    !RuntimeDriftGrandfathered(File, Fn).
+    HasRuntimeTraffic(),
+    !RuntimeRuleExempt("RUNTIME_DRIFT", File, Fn).

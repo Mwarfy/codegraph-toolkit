@@ -146,6 +146,17 @@ export async function exportFactsRuntime(
     schemaLines.push(`.input ${rel.name}`)
     schemaLines.push('')
   }
+  // RuntimeRuleExempt — exception EXPLICITE déclarée par le projet
+  // utilisateur dans un .dl à part. PAS un grandfather (qui enterre la
+  // dette) — un opt-out documenté case-par-case.
+  // Le projet ajoute :
+  //   RuntimeRuleExempt("DEAD_HANDLER", "src/plugins/foo.ts", "doFoo").
+  // dans son fichier runtime-rule-exempt.dl avec un commentaire
+  // expliquant pourquoi cette exception est légitime.
+  schemaLines.push('.decl RuntimeRuleExempt(ruleName: symbol, target1: symbol, target2: symbol)')
+  schemaLines.push('.input RuntimeRuleExempt')
+  schemaLines.push('')
+
   // RuntimeAlert is the output relation — declared here too for self-contained schema.
   schemaLines.push('.decl RuntimeAlert(category: symbol, target: symbol, detail: symbol, message: symbol)')
   schemaLines.push('.output RuntimeAlert')

@@ -172,6 +172,7 @@ export interface RuntimeGraphConfig {
     sampleRate?: number                                                // 0..1 (default 1.0)
     excludePaths?: string[]                                            // ['/health', '/metrics']
     excludePackages?: string[]                                         // ['@some/lib']
+    enableAutoInstruments?: boolean                                    // default true ; false pour test pure manual span
   }
 
   /** Tables expected (pour STALE_QUERY rule) — clone Sentinel pattern. */
