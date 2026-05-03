@@ -66,101 +66,76 @@ interface ExportedUnit {
  * `exportedOnly` (marqué via le flag retourné) permet aux consommateurs de
  * filtrer ultérieurement quand ils ne veulent que le graphe inter-exports.
  */
-function getAllUnits(sf: SourceFile): Array<ExportedUnit & { exported: boolean }> {
-  const units: Array<ExportedUnit & { exported: boolean }> = []
+type Unit = ExportedUnit & { exported: boolean }
 
-  // 1. FunctionDeclarations (exported ou non)
+function pushFunctionDeclarations(sf: SourceFile, out: Unit[]): void {
   for (const fd of sf.getFunctions()) {
     const name = fd.getName()
     if (!name) continue
     const body = fd.getBody()
     if (!body) continue
-    units.push({
-      name,
-      body,
-      startLine: fd.getStartLineNumber(),
-      exported: fd.isExported(),
-    })
+    out.push({ name, body, startLine: fd.getStartLineNumber(), exported: fd.isExported() })
   }
+}
 
-  // 2. Classes : méthodes + constructeur + getters/setters, quelle que soit
-  //    l'exportation. BUG HISTORIQUE (fix 2026-04-18) : la première version ne
-  //    capturait que cd.getMethods() qui EXCLUT les getters/setters en ts-morph.
-  //    Résultat : un `get tools()` qui wrappait les call sites réels (ex:
-  //    sendGmail dans FulfillmentBlock) était invisible, et find_references
-  //    remontait zéro caller. Fix : traiter getters/setters comme des méthodes
-  //    avec un préfixe "get "/"set " pour les distinguer visuellement.
+/**
+ * BUG HISTORIQUE (fix 2026-04-18) : la 1re version ne capturait que
+ * cd.getMethods() qui EXCLUT les getters/setters en ts-morph. Resultat :
+ * un `get tools()` qui wrappait les call sites reels (ex: sendGmail dans
+ * FulfillmentBlock) etait invisible, et find_references remontait zero
+ * caller. Fix : traiter getters/setters comme des methodes avec un
+ * prefixe "get "/"set " pour les distinguer.
+ */
+function pushClassMembers(sf: SourceFile, out: Unit[]): void {
   for (const cd of sf.getClasses()) {
     const className = cd.getName() || '<anonymous-class>'
-    const classExported = cd.isExported()
-    for (const method of cd.getMethods()) {
-      const body = method.getBody()
-      if (!body) continue
-      units.push({
-        name: `${className}.${method.getName()}`,
-        body,
-        startLine: method.getStartLineNumber(),
-        exported: classExported,
-      })
+    const exported = cd.isExported()
+    for (const m of cd.getMethods()) {
+      const body = m.getBody()
+      if (body) out.push({ name: `${className}.${m.getName()}`, body, startLine: m.getStartLineNumber(), exported })
     }
-    for (const getter of cd.getGetAccessors()) {
-      const body = getter.getBody()
-      if (!body) continue
-      units.push({
-        name: `${className}.get ${getter.getName()}`,
-        body,
-        startLine: getter.getStartLineNumber(),
-        exported: classExported,
-      })
+    for (const g of cd.getGetAccessors()) {
+      const body = g.getBody()
+      if (body) out.push({ name: `${className}.get ${g.getName()}`, body, startLine: g.getStartLineNumber(), exported })
     }
-    for (const setter of cd.getSetAccessors()) {
-      const body = setter.getBody()
-      if (!body) continue
-      units.push({
-        name: `${className}.set ${setter.getName()}`,
-        body,
-        startLine: setter.getStartLineNumber(),
-        exported: classExported,
-      })
+    for (const s of cd.getSetAccessors()) {
+      const body = s.getBody()
+      if (body) out.push({ name: `${className}.set ${s.getName()}`, body, startLine: s.getStartLineNumber(), exported })
     }
     const ctor = cd.getConstructors()[0]
     if (ctor) {
       const body = ctor.getBody()
-      if (body) {
-        units.push({
-          name: `${className}.constructor`,
-          body,
-          startLine: ctor.getStartLineNumber(),
-          exported: classExported,
-        })
-      }
+      if (body) out.push({ name: `${className}.constructor`, body, startLine: ctor.getStartLineNumber(), exported })
     }
   }
+}
 
-  // 3. Variables-fonctions (arrow/function expressions) — exportées ou non.
-  //    Pour les non-exportées, on doit éviter de capturer les closures imbriquées
-  //    via getVariableDeclarations() (qui remonte aussi les vars internes des
-  //    fonctions) — on se limite aux VariableStatement au scope du fichier.
+/**
+ * Variables-fonctions (arrow/function expressions). On se limite aux
+ * VariableStatement au scope du fichier pour eviter de capturer les
+ * closures imbriquees via getVariableDeclarations() (qui remonterait
+ * aussi les vars internes des fonctions).
+ */
+function pushFunctionVarDeclarations(sf: SourceFile, out: Unit[]): void {
   for (const vs of sf.getVariableStatements()) {
     const exported = vs.isExported()
     for (const vd of vs.getDeclarations()) {
       const init = vd.getInitializer()
       if (!init) continue
       const kind = init.getKind()
-      if (kind === SyntaxKind.ArrowFunction || kind === SyntaxKind.FunctionExpression) {
-        const body = (init as any).getBody?.() as Node | undefined
-        if (body) {
-          units.push({
-            name: vd.getName(),
-            body,
-            startLine: vd.getStartLineNumber(),
-            exported,
-          })
-        }
-      }
+      if (kind !== SyntaxKind.ArrowFunction && kind !== SyntaxKind.FunctionExpression) continue
+      const body = (init as any).getBody?.() as Node | undefined
+      if (!body) continue
+      out.push({ name: vd.getName(), body, startLine: vd.getStartLineNumber(), exported })
     }
   }
+}
 
+function getAllUnits(sf: SourceFile): Unit[] {
+  const units: Unit[] = []
+  pushFunctionDeclarations(sf, units)
+  pushClassMembers(sf, units)
+  pushFunctionVarDeclarations(sf, units)
   return units
 }
 
@@ -236,62 +211,87 @@ function getImportMap(sf: SourceFile, rootDir: string): ImportMaps {
  *     d'un PropertyAccess (`X.foo`). On émet alors un edge vers `target:foo`.
  *     Un `X` bare (passé en argument, réaffecté) est ignoré.
  */
-function collectRefs(
-  body: Node,
+type RefHit = { line: number; file: string; name: string }
+
+/**
+ * `foo.bar` : si `bar` est notre node (right side du PropertyAccess), on
+ * skip car ce n'est pas un import — c'est une property access. Le node
+ * gauche `foo` peut etre un import lui-meme et est traite separement.
+ */
+function isPropertyAccessRightSide(node: Node, parent: Node, text: string): boolean {
+  if (parent.getKind() !== SyntaxKind.PropertyAccessExpression) return false
+  const pa = parent as any
+  return pa.getName?.() === text && pa.getExpression?.() !== node
+}
+
+function isObjectPropertyName(node: Node, parent: Node): boolean {
+  if (parent.getKind() !== SyntaxKind.PropertyAssignment) return false
+  const nameNode = (parent as any).getNameNode?.()
+  return nameNode === node
+}
+
+/**
+ * Chemin 1 : import nomme ou defaut. Returns null si skip (false-pos),
+ * sinon le hit.
+ */
+function tryNamedImportRef(
+  node: Node,
+  text: string,
+  parent: Node | undefined,
   maps: ImportMaps,
-): Array<{ line: number; file: string; name: string }> {
+): RefHit | null {
+  const info = maps.named.get(text)
+  if (!info) return null
+  if (parent && isPropertyAccessRightSide(node, parent, text)) return null
+  if (parent && isObjectPropertyName(node, parent)) return null
+
+  const line = node.getSourceFile().getLineAndColumnAtPos(node.getStart()).line
+  return { line, file: info.file, name: info.originalName }
+}
+
+/**
+ * Chemin 2 : namespace import. `X` doit etre en position expression
+ * d'1 PropertyAccess (`X.foo`). Returns null si skip.
+ */
+function tryNamespaceImportRef(
+  node: Node,
+  text: string,
+  parent: Node | undefined,
+  maps: ImportMaps,
+): RefHit | null {
+  const nsFile = maps.namespace.get(text)
+  if (!nsFile) return null
+  if (!parent || parent.getKind() !== SyntaxKind.PropertyAccessExpression) return null
+  const pa = parent as any
+  if (pa.getExpression?.() !== node) return null  // skip `obj.X` ou X est un property name
+
+  const propertyName = pa.getName?.()
+  if (!propertyName || typeof propertyName !== 'string') return null
+
+  const line = node.getSourceFile().getLineAndColumnAtPos(node.getStart()).line
+  return { line, file: nsFile, name: propertyName }
+}
+
+function collectRefs(body: Node, maps: ImportMaps): RefHit[] {
   const seen = new Set<string>() // dedup par targetKey:line
-  const hits: Array<{ line: number; file: string; name: string }> = []
+  const hits: RefHit[] = []
+
+  const tryEmit = (hit: RefHit | null): void => {
+    if (!hit) return
+    const key = `${hit.file}:${hit.name}:${hit.line}`
+    if (seen.has(key)) return
+    seen.add(key)
+    hits.push(hit)
+  }
 
   body.forEachDescendant((node) => {
     if (node.getKind() !== SyntaxKind.Identifier) return
-
     const text = node.getText()
     const parent = node.getParent()
 
-    // === Chemin 1 : import nommé ou défaut ===
-    const info = maps.named.get(text)
-    if (info) {
-      // Skip property access : `foo.bar` — `bar` n'est pas un import.
-      if (parent && parent.getKind() === SyntaxKind.PropertyAccessExpression) {
-        const pa = parent as any
-        // Si le parent est "x.y" et notre node est "y" (right side), skip.
-        if (pa.getName?.() === text && pa.getExpression?.() !== node) return
-      }
-
-      // Skip si c'est le nom d'une propriété d'objet : { foo: ... }.
-      if (parent && parent.getKind() === SyntaxKind.PropertyAssignment) {
-        const nameNode = (parent as any).getNameNode?.()
-        if (nameNode === node) return
-      }
-
-      const line = body.getSourceFile().getLineAndColumnAtPos(node.getStart()).line
-      const key = `${info.file}:${info.originalName}:${line}`
-      if (seen.has(key)) return
-      seen.add(key)
-
-      hits.push({ line, file: info.file, name: info.originalName })
-      return
-    }
-
-    // === Chemin 2 : namespace import ===
-    const nsFile = maps.namespace.get(text)
-    if (!nsFile) return
-
-    // `X` doit être en position expression d'un PropertyAccess : `X.foo`.
-    if (!parent || parent.getKind() !== SyntaxKind.PropertyAccessExpression) return
-    const pa = parent as any
-    if (pa.getExpression?.() !== node) return  // skip `obj.X` où X est juste un name
-
-    const propertyName = pa.getName?.()
-    if (!propertyName || typeof propertyName !== 'string') return
-
-    const line = body.getSourceFile().getLineAndColumnAtPos(node.getStart()).line
-    const key = `${nsFile}:${propertyName}:${line}`
-    if (seen.has(key)) return
-    seen.add(key)
-
-    hits.push({ line, file: nsFile, name: propertyName })
+    const named = tryNamedImportRef(node, text, parent, maps)
+    if (named) { tryEmit(named); return }
+    tryEmit(tryNamespaceImportRef(node, text, parent, maps))
   })
 
   return hits
