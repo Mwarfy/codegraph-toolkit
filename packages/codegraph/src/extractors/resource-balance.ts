@@ -71,70 +71,88 @@ const PAIRS: PairDef[] = [
   { acquire: 'addEventListener', release: 'removeEventListener' },
 ]
 
-export function extractResourceBalanceFileBundle(
-  sf: SourceFile,
-  relPath: string,
-): ResourceBalanceFileBundle {
-  if (TEST_FILE_RE.test(relPath)) return { imbalances: [] }
-  const imbalances: ResourceImbalance[] = []
+interface FnScope { name: string; body: Node | undefined; line: number }
 
-  const isExempt = makeIsExemptForMarker(sf, 'resource-balance-ok')
-
-  const checkFn = (
-    name: string,
-    body: Node | undefined,
-    line: number,
-  ): void => {
-    if (!body || isExempt(line)) return
-    // Compter les calls par méthode name.
-    const counts = new Map<string, number>()
-    for (const call of body.getDescendantsOfKind(SyntaxKind.CallExpression)) {
-      const callee = call.getExpression()
-      let methodName: string | null = null
-      if (Node.isIdentifier(callee)) methodName = callee.getText()
-      else if (Node.isPropertyAccessExpression(callee)) methodName = callee.getName()
-      if (!methodName) continue
-      counts.set(methodName, (counts.get(methodName) ?? 0) + 1)
-    }
-    // Pour chaque pair, comparer les counts.
-    // Skip les pure-acquire / pure-release functions (= pattern split
-    // start/stop typique). On ne flag que si LES DEUX existent dans la
-    // même fonction avec counts différents — vrai signal de leak intra-
-    // function.
-    for (const pair of PAIRS) {
-      const acq = counts.get(pair.acquire) ?? 0
-      const rel = counts.get(pair.release) ?? 0
-      if (acq === 0 || rel === 0) continue   // pure-X = start/stop split
-      if (acq !== rel) {
-        imbalances.push({
-          file: relPath,
-          containingSymbol: name,
-          line,
-          pair: `${pair.acquire}/${pair.release}`,
-          acquireCount: acq,
-          releaseCount: rel,
-        })
-      }
-    }
-  }
-
+/** Itère les function-likes : fn decls, class methods, arrow vars. Yield {name, body, line}. */
+function* iterateFnScopes(sf: SourceFile): Generator<FnScope> {
   for (const fn of sf.getFunctions()) {
-    checkFn(fn.getName() ?? '(anonymous)', fn.getBody(), fn.getStartLineNumber())
+    yield { name: fn.getName() ?? '(anonymous)', body: fn.getBody(), line: fn.getStartLineNumber() }
   }
   for (const cls of sf.getClasses()) {
     const className = cls.getName() ?? '(anonymous)'
     for (const method of cls.getMethods()) {
-      checkFn(`${className}.${method.getName()}`, method.getBody(), method.getStartLineNumber())
+      yield {
+        name: `${className}.${method.getName()}`,
+        body: method.getBody(),
+        line: method.getStartLineNumber(),
+      }
     }
   }
   for (const v of sf.getVariableDeclarations()) {
     const init = v.getInitializer()
     if (!init) continue
     if (!Node.isArrowFunction(init) && !Node.isFunctionExpression(init)) continue
-    checkFn(v.getName(), init.getBody(), v.getStartLineNumber())
+    yield { name: v.getName(), body: init.getBody(), line: v.getStartLineNumber() }
   }
+}
 
+export function extractResourceBalanceFileBundle(
+  sf: SourceFile,
+  relPath: string,
+): ResourceBalanceFileBundle {
+  if (TEST_FILE_RE.test(relPath)) return { imbalances: [] }
+  const imbalances: ResourceImbalance[] = []
+  const isExempt = makeIsExemptForMarker(sf, 'resource-balance-ok')
+
+  for (const scope of iterateFnScopes(sf)) {
+    if (!scope.body || isExempt(scope.line)) continue
+    checkScopeForImbalances(scope, scope.body, relPath, imbalances)
+  }
   return { imbalances }
+}
+
+/**
+ * Skip pure-acquire / pure-release functions (= pattern split start/stop
+ * typique). On flag UNIQUEMENT si LES DEUX existent dans la même fn avec
+ * counts différents — vrai signal de leak intra-function.
+ */
+function checkScopeForImbalances(
+  scope: FnScope,
+  body: Node,
+  relPath: string,
+  imbalances: ResourceImbalance[],
+): void {
+  const counts = countCallsByMethodName(body)
+  for (const pair of PAIRS) {
+    const acq = counts.get(pair.acquire) ?? 0
+    const rel = counts.get(pair.release) ?? 0
+    if (acq === 0 || rel === 0) continue   // pure-X = start/stop split
+    if (acq === rel) continue
+    imbalances.push({
+      file: relPath,
+      containingSymbol: scope.name,
+      line: scope.line,
+      pair: `${pair.acquire}/${pair.release}`,
+      acquireCount: acq,
+      releaseCount: rel,
+    })
+  }
+}
+
+function countCallsByMethodName(body: Node): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (const call of body.getDescendantsOfKind(SyntaxKind.CallExpression)) {
+    const methodName = readCalleeName(call.getExpression())
+    if (!methodName) continue
+    counts.set(methodName, (counts.get(methodName) ?? 0) + 1)
+  }
+  return counts
+}
+
+function readCalleeName(callee: Node): string | null {
+  if (Node.isIdentifier(callee)) return callee.getText()
+  if (Node.isPropertyAccessExpression(callee)) return callee.getName()
+  return null
 }
 
 export async function analyzeResourceBalance(
