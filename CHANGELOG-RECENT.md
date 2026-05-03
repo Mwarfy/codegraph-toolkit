@@ -5,7 +5,7 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T23:33:11Z
+Last update : 2026-05-03T23:34:58Z
 
 ## By type
 
@@ -19,6 +19,7 @@ Last update : 2026-05-03T23:33:11Z
 
 ### `refactor` (46)
 
+- **9e41eaa** refactor(codegraph): split loadConfig (cyclo 21→4, cog 38→3) — _shared.ts cleared — 2026-05-04
 - **65c2c5c** refactor(codegraph): split mergeSqlSchemaResults (cyclo 21→1, cog 42→0) — drizzle-schema-detector.ts cleared — 2026-05-04
 - **725ecdf** refactor(runtime-graph): split grangerRuntime (cyclo 22→5, cog 41→4) — granger-runtime.ts cleared — 2026-05-04
 - **1bc0481** refactor(codegraph): split DbTableDetector.detect (cyclo 22→1, cog 47→0) — db-tables.ts cleared — 2026-05-04
@@ -38,11 +39,11 @@ Last update : 2026-05-03T23:33:11Z
 - **2afff33** refactor(codegraph): split tarjanScc (cyclo 13→3, cog 37→3) — dsm.ts FULLY bomb-free — 2026-05-04
 - **5e798f4** refactor(codegraph): split computeDsm (cyclo 29→1, cog 45→0) — top-level orchestrator clean — 2026-05-04
 - **aa09cb1** refactor(codegraph): split runCrossDisciplineDetectors (cyclo 30→9, cog 43→6) — cross-discipline-orchestrator.ts bomb-free — 2026-05-04
-- **798d038** refactor(codegraph): split scanEmitSitesInSourceFile (cyclo 31→3, cog 39→2) — event-emit-sites.ts bomb-free — 2026-05-04
 
 
 ## Full history
 
+- **9e41eaa** refactor(codegraph): split loadConfig (cyclo 21→4, cog 38→3) — _shared.ts cleared — 2026-05-04
 - **65c2c5c** refactor(codegraph): split mergeSqlSchemaResults (cyclo 21→1, cog 42→0) — drizzle-schema-detector.ts cleared — 2026-05-04
 - **725ecdf** refactor(runtime-graph): split grangerRuntime (cyclo 22→5, cog 41→4) — granger-runtime.ts cleared — 2026-05-04
 - **1bc0481** refactor(codegraph): split DbTableDetector.detect (cyclo 22→1, cog 47→0) — db-tables.ts cleared — 2026-05-04
@@ -92,4 +93,3 @@ Last update : 2026-05-03T23:33:11Z
 - **f4ee98f** refactor(toolkit): split typed-calls (cyclo 18+16→under) — typed-calls.ts ALL bombs cleared — 2026-05-03
 - **ac2b550** refactor(toolkit): split symbol-refs (cyclo 20+18→under) — symbol-refs.ts ALL bombs cleared — 2026-05-03
 - **c677082** refactor(toolkit): split compression-similarity (cyclo 18+16→under) — compression-similarity.ts ALL bombs cleared — 2026-05-03
-- **ba540e4** refactor(toolkit): split analyzeCycles + tarjanScc — cycles.ts ALL bombs cleared — 2026-05-03
