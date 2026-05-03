@@ -144,54 +144,65 @@ function findWriteSites(
   rootDir: string,
 ): FsmWriteSite[] {
   const sites: FsmWriteSite[] = []
-
   for (const sf of project.getSourceFiles()) {
-    const sfRelativePath = path.relative(rootDir, sf.getFilePath())
-
-    // Pass A — object literal writes : { status: 'X' }
-    for (const pa of sf.getDescendantsOfKind(SyntaxKind.PropertyAssignment)) {
-      const rawName = pa.getName()
-      // PropertyAssignment#getName() peut retourner avec quotes si key string
-      const name = rawName.replace(/^['"]|['"]$/g, '')
-      if (!FSM_PROPERTY_NAMES.has(name)) continue
-
-      const init = pa.getInitializer()
-      if (!init) continue
-      if (init.getKind() !== SyntaxKind.StringLiteral) continue
-
-      const value = init.asKindOrThrow(SyntaxKind.StringLiteral).getLiteralValue()
-      if (!fsmValues.has(value)) continue
-
-      sites.push({
-        file: sfRelativePath,
-        line: pa.getStartLineNumber(),
-        value,
-        trigger: enclosingFunctionName(pa) ?? undefined,
-      })
-    }
-
-    // Pass B — direct assignments : obj.status = 'X'
-    for (const ba of sf.getDescendantsOfKind(SyntaxKind.BinaryExpression)) {
-      if (ba.getOperatorToken().getKind() !== SyntaxKind.EqualsToken) continue
-      const left = ba.getLeft()
-      if (!Node.isPropertyAccessExpression(left)) continue
-      if (!FSM_PROPERTY_NAMES.has(left.getName())) continue
-
-      const right = ba.getRight()
-      if (right.getKind() !== SyntaxKind.StringLiteral) continue
-      const value = right.asKindOrThrow(SyntaxKind.StringLiteral).getLiteralValue()
-      if (!fsmValues.has(value)) continue
-
-      sites.push({
-        file: sfRelativePath,
-        line: ba.getStartLineNumber(),
-        value,
-        trigger: enclosingFunctionName(ba) ?? undefined,
-      })
-    }
+    const sfRel = path.relative(rootDir, sf.getFilePath())
+    scanPropertyAssignmentWrites(sf, sfRel, fsmValues, sites)
+    scanDirectAssignmentWrites(sf, sfRel, fsmValues, sites)
   }
-
   return sites
+}
+
+/** Pass A — object literal writes : { status: 'X' }. */
+function scanPropertyAssignmentWrites(
+  sf: import('ts-morph').SourceFile,
+  sfRel: string,
+  fsmValues: Set<string>,
+  sites: FsmWriteSite[],
+): void {
+  for (const pa of sf.getDescendantsOfKind(SyntaxKind.PropertyAssignment)) {
+    const rawName = pa.getName()
+    // PropertyAssignment#getName() peut retourner avec quotes si key string
+    const name = rawName.replace(/^['"]|['"]$/g, '')
+    if (!FSM_PROPERTY_NAMES.has(name)) continue
+    const init = pa.getInitializer()
+    if (!init) continue
+    const value = readStringLiteralValue(init)
+    if (value === null || !fsmValues.has(value)) continue
+    sites.push({
+      file: sfRel,
+      line: pa.getStartLineNumber(),
+      value,
+      trigger: enclosingFunctionName(pa) ?? undefined,
+    })
+  }
+}
+
+/** Pass B — direct assignments : obj.status = 'X'. */
+function scanDirectAssignmentWrites(
+  sf: import('ts-morph').SourceFile,
+  sfRel: string,
+  fsmValues: Set<string>,
+  sites: FsmWriteSite[],
+): void {
+  for (const ba of sf.getDescendantsOfKind(SyntaxKind.BinaryExpression)) {
+    if (ba.getOperatorToken().getKind() !== SyntaxKind.EqualsToken) continue
+    const left = ba.getLeft()
+    if (!Node.isPropertyAccessExpression(left)) continue
+    if (!FSM_PROPERTY_NAMES.has(left.getName())) continue
+    const value = readStringLiteralValue(ba.getRight())
+    if (value === null || !fsmValues.has(value)) continue
+    sites.push({
+      file: sfRel,
+      line: ba.getStartLineNumber(),
+      value,
+      trigger: enclosingFunctionName(ba) ?? undefined,
+    })
+  }
+}
+
+function readStringLiteralValue(node: Node): string | null {
+  if (node.getKind() !== SyntaxKind.StringLiteral) return null
+  return node.asKindOrThrow(SyntaxKind.StringLiteral).getLiteralValue()
 }
 
 /**

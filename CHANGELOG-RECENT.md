@@ -5,20 +5,20 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T23:56:04Z
+Last update : 2026-05-03T23:57:47Z
 
 ## By type
 
-### `perf` (4)
+### `perf` (3)
 
 - **101b1b5** perf(toolkit): Salsa-iso boolean-params — 35ms → 0ms warm — 2026-05-04
 - **20b9ace** perf(toolkit): Salsa-iso 5 taint chain detectors — 5×0ms warm — 2026-05-04
 - **231be93** perf(toolkit): Salsa-iso resource-balance detector — 82ms → 0ms warm — 2026-05-04
-- **c9e30bd** perf(toolkit): Salsa-iso magic-numbers detector — 539ms → 0ms warm (top hot detector eliminé) — 2026-05-04
 
 
-### `refactor` (46)
+### `refactor` (47)
 
+- **194452b** refactor(adr-toolkit): split detectFsmCandidates (cyclo 18→3, cog 29→1) — bootstrap-fsm.ts detectFsmCandidates cleared — 2026-05-04
 - **0e97abd** refactor(runtime-graph): split newmanGirvanRuntime (cyclo 20→2, cog 17→1) — runtime-disciplines.ts cleared — 2026-05-04
 - **de0af83** refactor(codegraph): split extractBooleanParamsFileBundle (cyclo 19→4, cog 19→4) — boolean-params.ts cleared — 2026-05-04
 - **1898604** refactor(codegraph-mcp): split codegraphDrift (cyclo 19→5, cog 28→1) — drift.ts cleared — 2026-05-04
@@ -38,11 +38,11 @@ Last update : 2026-05-03T23:56:04Z
 - **05adaa7** refactor(codegraph): split extractDeprecatedUsageFileBundle (cyclo 23→2, cog 31→1) — deprecated-usage.ts cleared — 2026-05-04
 - **1e46881** refactor(codegraph): split extractResourceBalanceFileBundle (cyclo 24→5, cog 27→5) — resource-balance.ts cleared — 2026-05-04
 - **3b34ca1** refactor(codegraph): split importEslintViolations (cyclo 24→4, cog 29→2) — eslint-import.ts cleared — 2026-05-04
-- **bd9fcb0** refactor(codegraph): split printDiffSummary (cyclo 24→4, cog 42→3) — diff.ts cleared — 2026-05-04
 
 
 ## Full history
 
+- **194452b** refactor(adr-toolkit): split detectFsmCandidates (cyclo 18→3, cog 29→1) — bootstrap-fsm.ts detectFsmCandidates cleared — 2026-05-04
 - **0e97abd** refactor(runtime-graph): split newmanGirvanRuntime (cyclo 20→2, cog 17→1) — runtime-disciplines.ts cleared — 2026-05-04
 - **de0af83** refactor(codegraph): split extractBooleanParamsFileBundle (cyclo 19→4, cog 19→4) — boolean-params.ts cleared — 2026-05-04
 - **1898604** refactor(codegraph-mcp): split codegraphDrift (cyclo 19→5, cog 28→1) — drift.ts cleared — 2026-05-04
@@ -92,4 +92,3 @@ Last update : 2026-05-03T23:56:04Z
 - **101b1b5** perf(toolkit): Salsa-iso boolean-params — 35ms → 0ms warm — 2026-05-04
 - **20b9ace** perf(toolkit): Salsa-iso 5 taint chain detectors — 5×0ms warm — 2026-05-04
 - **231be93** perf(toolkit): Salsa-iso resource-balance detector — 82ms → 0ms warm — 2026-05-04
-- **c9e30bd** perf(toolkit): Salsa-iso magic-numbers detector — 539ms → 0ms warm (top hot detector eliminé) — 2026-05-04
