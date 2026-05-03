@@ -188,6 +188,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+5f8d691 refactor(toolkit): split god-files + fix REDOS detector + tests hubs
 ee89730 docs(validation): self-analysis run #2 — toolkit voit 553 violations sur lui-même
 9a5d5ac docs(validation): run #1.5 — composite rules sur Sentinel — 33× signal-to-noise
 af41582 feat(toolkit): symbolic simplification facts + 5 composite rules cross-discipline
@@ -199,7 +200,6 @@ a191d61 docs(validation): full-chain run #1 — 4 bugs trouvés sur Hono
 0146402 fix(toolkit): close P0+P1+P2+P3 — review credibility gap part 2
 0485ce4 feat(toolkit): self-optim Niveau 2A + Niveau 4 — math cost predict + auto-synth Salsa
 3ca2f45 feat(toolkit): self-optim auto-loop — connect probe → diag → brief → scaffold
-ce4e6e8 perf(toolkit): deprecated-usage Salsa-isolation + math regression gate
 ```
 
 ## Comment contribuer à ce brief
