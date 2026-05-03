@@ -45,7 +45,7 @@
 
 import * as zlib from 'node:zlib'
 import * as path from 'node:path'
-import type { Project, SourceFile } from 'ts-morph'
+import type { Project, SourceFile, Node as TsMorphNode } from 'ts-morph'
 
 export interface NormalizedCompressionDistance {
   /** Premier symbole (a < b lexico, dedupe). */
@@ -90,12 +90,7 @@ function ncd(textA: string, textB: string, sizeA: number, sizeB: number): number
  * Pre-filter : taille comparable (ratio sizeA/sizeB ∈ [0.5, 2]) pour
  * éviter de comparer fonction triviale vs fonction massive.
  */
-export function computeNormalizedCompressionDistances(
-  snippets: FunctionTextSnippet[],
-): NormalizedCompressionDistance[] {
-  const out: NormalizedCompressionDistance[] = []
-
-  // Bucket par nom de symbole (= dernière section du symbol id "file:funcName")
+function bucketByName(snippets: FunctionTextSnippet[]): Map<string, FunctionTextSnippet[]> {
   const byName = new Map<string, FunctionTextSnippet[]>()
   for (const s of snippets) {
     const name = s.symbol.includes(':')
@@ -104,42 +99,64 @@ export function computeNormalizedCompressionDistances(
     if (!byName.has(name)) byName.set(name, [])
     byName.get(name)!.push(s)
   }
+  return byName
+}
 
-  // Pré-calc compressed sizes individuels
-  const sizeCache = new Map<string, number>()
-  const getSizeCached = (s: FunctionTextSnippet): number => {
-    let cached = sizeCache.get(s.symbol)
+function makeSizeCache(): (s: FunctionTextSnippet) => number {
+  const cache = new Map<string, number>()
+  return (s) => {
+    let cached = cache.get(s.symbol)
     if (cached === undefined) {
       cached = compressedSize(s.text)
-      sizeCache.set(s.symbol, cached)
+      cache.set(s.symbol, cached)
     }
     return cached
   }
+}
 
-  // Pour chaque bucket avec ≥2 fonctions, calculer NCD pairwise
+function tryEmitNcdPair(
+  a: FunctionTextSnippet,
+  b: FunctionTextSnippet,
+  getSize: (s: FunctionTextSnippet) => number,
+  out: NormalizedCompressionDistance[],
+): void {
+  // Pre-filter taille (ratio extreme = pas duplication probable).
+  const ratio = a.size / b.size
+  if (ratio < 0.4 || ratio > 2.5) return
+  const distance = ncd(a.text, b.text, getSize(a), getSize(b))
+  // Skip pairs tres differentes (NCD > 0.7) — pas signal utile.
+  if (distance > 0.7) return
+  const [first, second] = a.symbol < b.symbol ? [a, b] : [b, a]
+  out.push({
+    symbolA: first.symbol,
+    symbolB: second.symbol,
+    ncdX1000: Math.round(distance * 1000),
+  })
+}
+
+function pairwiseNcdInBucket(
+  bucket: FunctionTextSnippet[],
+  getSize: (s: FunctionTextSnippet) => number,
+  out: NormalizedCompressionDistance[],
+): void {
+  for (let i = 0; i < bucket.length; i++) {
+    for (let j = i + 1; j < bucket.length; j++) {
+      tryEmitNcdPair(bucket[i], bucket[j], getSize, out)
+    }
+  }
+}
+
+export function computeNormalizedCompressionDistances(
+  snippets: FunctionTextSnippet[],
+): NormalizedCompressionDistance[] {
+  const out: NormalizedCompressionDistance[] = []
+  const byName = bucketByName(snippets)
+  const getSize = makeSizeCache()
+
   for (const [, bucket] of byName) {
     if (bucket.length < 2) continue
     if (bucket.length > 20) continue // skip names ultra-communs (toString, etc.)
-    for (let i = 0; i < bucket.length; i++) {
-      for (let j = i + 1; j < bucket.length; j++) {
-        const a = bucket[i]
-        const b = bucket[j]
-        // Pré-filter taille
-        const ratio = a.size / b.size
-        if (ratio < 0.4 || ratio > 2.5) continue
-        const cA = getSizeCached(a)
-        const cB = getSizeCached(b)
-        const distance = ncd(a.text, b.text, cA, cB)
-        // Skip pairs très différentes (NCD > 0.7) — pas signal utile
-        if (distance > 0.7) continue
-        const [first, second] = a.symbol < b.symbol ? [a, b] : [b, a]
-        out.push({
-          symbolA: first.symbol,
-          symbolB: second.symbol,
-          ncdX1000: Math.round(distance * 1000),
-        })
-      }
-    }
+    pairwiseNcdInBucket(bucket, getSize, out)
   }
 
   // Sort par NCD ascending (= duplications les + probables en haut)
@@ -198,44 +215,49 @@ export async function analyzeCompressionSimilarity(
   return computeNormalizedCompressionDistances(snippets)
 }
 
+const FUNCTION_LIKE_KINDS = new Set([
+  'FunctionDeclaration',
+  'MethodDeclaration',
+  'ArrowFunction',
+  'FunctionExpression',
+])
+
+/**
+ * Resolve le nom d'1 fonction. Retourne '' si non-resoluble (anonymous
+ * arrow non-assigne par exemple).
+ *
+ * Pour Arrow/FunctionExpression : prend le nom du parent
+ * (VariableDeclaration ou PropertyAssignment).
+ */
+function resolveFunctionName(node: TsMorphNode): string {
+  const named = (node as unknown as { getName?: () => string | undefined }).getName?.()
+  if (named) return named
+
+  const parent = node.getParent()
+  const parentKind = parent?.getKindName() ?? ''
+  if (parentKind === 'VariableDeclaration') {
+    return (parent as unknown as { getName?: () => string | undefined }).getName?.() ?? ''
+  }
+  if (parentKind === 'PropertyAssignment') {
+    return (parent as unknown as { getName?: () => string | undefined }).getName?.() ?? ''
+  }
+  return ''
+}
+
 function extractFunctionSnippets(
   sf: SourceFile,
   relPath: string,
   out: FunctionTextSnippet[],
 ): void {
-  // Walk all function-like nodes : FunctionDeclaration, MethodDeclaration,
-  // ArrowFunction, FunctionExpression. Capture le body text + symbol name.
   sf.forEachDescendant((node) => {
-    const kind = node.getKindName()
-    if (
-      kind !== 'FunctionDeclaration' &&
-      kind !== 'MethodDeclaration' &&
-      kind !== 'ArrowFunction' &&
-      kind !== 'FunctionExpression'
-    ) {
-      return
-    }
+    if (!FUNCTION_LIKE_KINDS.has(node.getKindName())) return
+
     const body = (node as unknown as { getBody?: () => { getText: () => string } | undefined }).getBody?.()
     if (!body) return
     const bodyText = body.getText()
     if (bodyText.length < 80) return
 
-    // Symbol name : essayer plusieurs heuristiques
-    let name = ''
-    const nameNode = (node as unknown as { getName?: () => string | undefined }).getName?.()
-    if (nameNode) name = nameNode
-    if (!name) {
-      // ArrowFunction / FunctionExpression : prendre le nom du parent
-      const parent = node.getParent()
-      const parentKind = parent?.getKindName() ?? ''
-      if (parentKind === 'VariableDeclaration') {
-        const vname = (parent as unknown as { getName?: () => string | undefined }).getName?.()
-        if (vname) name = vname
-      } else if (parentKind === 'PropertyAssignment') {
-        const pname = (parent as unknown as { getName?: () => string | undefined }).getName?.()
-        if (pname) name = pname
-      }
-    }
+    const name = resolveFunctionName(node)
     if (!name) return
 
     const text = normalizeFunctionText(bodyText)
