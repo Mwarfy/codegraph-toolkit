@@ -350,44 +350,86 @@ export interface TestFilesIndex {
   fileImports: Record<string, string[]>
 }
 
+// Regex 1 : import statique
+const STATIC_IMPORT_RE = /import\s+(?:\{([^}]+)\}|(\w+))\s+from\s+['"]([^'"]+)['"]/g
+// Regex 2 : dynamic import (Fix M-006)
+const DYNAMIC_IMPORT_RE = /(?:const|let|var)\s+(?:\{([^}]+)\}|(\w+))\s*=\s*await\s+import\s*\(\s*['"]([^'"]+)['"]\s*\)/g
+
+interface ImportIndices {
+  symbolHits: Map<string, Set<string>>
+  fileImports: Map<string, Set<string>>
+}
+
+interface ProcessedImport {
+  namedImports: string | undefined
+  identifierImport: string | undefined
+  modulePath: string
+  testFile: string
+}
+
+function recordModuleBasename(modulePath: string, testFile: string, fileImports: Map<string, Set<string>>): void {
+  const basename = modulePath.split('/').pop()?.replace(/\.(js|ts|tsx)$/, '') || ''
+  if (!basename) return
+  let users = fileImports.get(basename)
+  if (!users) { users = new Set(); fileImports.set(basename, users) }
+  users.add(testFile)
+}
+
+function recordNamedImports(namedImports: string, testFile: string, symbolHits: Map<string, Set<string>>): void {
+  for (const part of namedImports.split(',')) {
+    const symbolName = part.trim().split(/\s*[:]|\s+as\s+/)[0].trim()
+    if (!symbolName) continue
+    let users = symbolHits.get(symbolName)
+    if (!users) { users = new Set(); symbolHits.set(symbolName, users) }
+    users.add(testFile)
+  }
+}
+
+function processImportMatch(p: ProcessedImport, indices: ImportIndices): void {
+  recordModuleBasename(p.modulePath, p.testFile, indices.fileImports)
+  if (p.namedImports) recordNamedImports(p.namedImports, p.testFile, indices.symbolHits)
+  if (p.identifierImport) {
+    let users = indices.symbolHits.get(p.identifierImport)
+    if (!users) { users = new Set(); indices.symbolHits.set(p.identifierImport, users) }
+    users.add(p.testFile)
+  }
+}
+
+function scanImportsInFile(content: string, testFile: string, indices: ImportIndices): void {
+  // Local regex pour eviter state lastIndex partage (paranoia).
+  const staticRe = new RegExp(STATIC_IMPORT_RE.source, STATIC_IMPORT_RE.flags)
+  let match
+  while ((match = staticRe.exec(content)) !== null) {
+    processImportMatch({ namedImports: match[1], identifierImport: match[2], modulePath: match[3], testFile }, indices)
+  }
+  const dynamicRe = new RegExp(DYNAMIC_IMPORT_RE.source, DYNAMIC_IMPORT_RE.flags)
+  while ((match = dynamicRe.exec(content)) !== null) {
+    processImportMatch({ namedImports: match[1], identifierImport: match[2], modulePath: match[3], testFile }, indices)
+  }
+}
+
+/**
+ * Convert Set → array sorte pour signature JSON stable (Sprint 11.2 :
+ * setInputIfChanged compare via JSON.stringify, l'ordre des entrees
+ * doit etre deterministe pour skip-set warm).
+ */
+function freezeIndex(indices: ImportIndices): { symbolHits: Record<string, string[]>; fileImports: Record<string, string[]> } {
+  const symbolHits: Record<string, string[]> = {}
+  for (const k of [...indices.symbolHits.keys()].sort()) {
+    symbolHits[k] = [...indices.symbolHits.get(k)!].sort()
+  }
+  const fileImports: Record<string, string[]> = {}
+  for (const k of [...indices.fileImports.keys()].sort()) {
+    fileImports[k] = [...indices.fileImports.get(k)!].sort()
+  }
+  return { symbolHits, fileImports }
+}
+
 export async function buildTestFilesIndex(rootDir: string): Promise<TestFilesIndex> {
   const testFiles = await discoverTestFiles(rootDir)
-  const symbolHits = new Map<string, Set<string>>()
-  const fileImports = new Map<string, Set<string>>()
-
-  // Regex 1 : import statique
-  const importRegex = /import\s+(?:\{([^}]+)\}|(\w+))\s+from\s+['"]([^'"]+)['"]/g
-  // Regex 2 : dynamic import (Fix M-006)
-  const dynamicImportRegex = /(?:const|let|var)\s+(?:\{([^}]+)\}|(\w+))\s*=\s*await\s+import\s*\(\s*['"]([^'"]+)['"]\s*\)/g
-
-  const processImportMatch = (
-    namedImports: string | undefined,
-    identifierImport: string | undefined,
-    modulePath: string,
-    testFile: string,
-  ) => {
-    const basename = modulePath.split('/').pop()?.replace(/\.(js|ts|tsx)$/, '') || ''
-    if (basename) {
-      let users = fileImports.get(basename)
-      if (!users) { users = new Set(); fileImports.set(basename, users) }
-      users.add(testFile)
-    }
-
-    if (namedImports) {
-      for (const part of namedImports.split(',')) {
-        const symbolName = part.trim().split(/\s*[:]|\s+as\s+/)[0].trim()
-        if (symbolName) {
-          let users = symbolHits.get(symbolName)
-          if (!users) { users = new Set(); symbolHits.set(symbolName, users) }
-          users.add(testFile)
-        }
-      }
-    }
-    if (identifierImport) {
-      let users = symbolHits.get(identifierImport)
-      if (!users) { users = new Set(); symbolHits.set(identifierImport, users) }
-      users.add(testFile)
-    }
+  const indices: ImportIndices = {
+    symbolHits: new Map(),
+    fileImports: new Map(),
   }
 
   // Lit N test files en parallèle (I/O fs indépendantes), parse séquentiel.
@@ -401,33 +443,10 @@ export async function buildTestFilesIndex(rootDir: string): Promise<TestFilesInd
   )
   for (const entry of testContents) {
     if (!entry) continue
-    const { testFile, content } = entry
-    let match
-    // Local regex pour éviter state lastIndex partagé (paranoïa).
-    const localRe = new RegExp(importRegex.source, importRegex.flags)
-    while ((match = localRe.exec(content)) !== null) {
-      processImportMatch(match[1], match[2], match[3], testFile)
-    }
-
-    dynamicImportRegex.lastIndex = 0
-    while ((match = dynamicImportRegex.exec(content)) !== null) {
-      processImportMatch(match[1], match[2], match[3], testFile)
-    }
+    scanImportsInFile(entry.content, entry.testFile, indices)
   }
 
-  // Convert Set → array, sorté pour signature JSON stable (Sprint 11.2 :
-  // setInputIfChanged compare via JSON.stringify, l'ordre des entrées
-  // doit être déterministe pour skip-set warm).
-  const symbolHitsRec: Record<string, string[]> = {}
-  for (const k of [...symbolHits.keys()].sort()) {
-    symbolHitsRec[k] = [...symbolHits.get(k)!].sort()
-  }
-  const fileImportsRec: Record<string, string[]> = {}
-  for (const k of [...fileImports.keys()].sort()) {
-    fileImportsRec[k] = [...fileImports.get(k)!].sort()
-  }
-
-  return { symbolHits: symbolHitsRec, fileImports: fileImportsRec }
+  return freezeIndex(indices)
 }
 
 /**
