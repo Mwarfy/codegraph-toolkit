@@ -460,7 +460,27 @@ async function main() {
   console.error('[codegraph-mcp] Server running on stdio')
 }
 
-main().catch((err) => {
-  console.error('[codegraph-mcp] Fatal error:', err)
-  process.exit(1)
-})
+// Guard auto-run : ne lance le server stdio QUE si ce fichier est
+// invoqué comme entry point (via npx ou bin script). Permet aux tests
+// d'importer le module sans démarrer l'IO stdio bloquante.
+async function isMainModule(): Promise<boolean> {
+  if (!process.argv[1]) return false
+  const { fileURLToPath } = await import('node:url')
+  const { realpathSync } = await import('node:fs')
+  try {
+    const here = realpathSync(fileURLToPath(import.meta.url))
+    const argv1 = realpathSync(process.argv[1])
+    return here === argv1
+  } catch {
+    return false
+  }
+}
+
+if (await isMainModule()) {
+  main().catch((err) => {
+    console.error('[codegraph-mcp] Fatal error:', err)
+    process.exit(1)
+  })
+}
+
+export { server, TOOLS }

@@ -200,6 +200,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+70afbdc fix(toolkit): clean 93 violations (534→441, −17.4%) sans bypass
 b0f2c9a refactor(toolkit): split cli/index.ts god-file (2190→1520 LOC, −30%)
 c613ac7 refactor(toolkit): split analyzer.ts:runDeterministicDetectors en 5 phases
 7151cfd perf(toolkit): Salsa-isolate 3 hot detectors (co-change, drift, const-expr)
@@ -211,7 +212,6 @@ af41582 feat(toolkit): symbolic simplification facts + 5 composite rules cross-d
 866eb25 fix(toolkit): bugs #1 #2 #3 #4 trouvés via test externe Hono
 a191d61 docs(validation): full-chain run #1 — 4 bugs trouvés sur Hono
 095661e docs(validation): run #1 — Hono framework (186 files, 3.5s, 0 crash, 0 hallucination)
-2067d1f chore(release): v0.3.0 consolidation — npm-publishable core, experimental gated
 ```
 
 ## Comment contribuer à ce brief

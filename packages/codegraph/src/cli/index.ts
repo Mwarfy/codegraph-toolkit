@@ -1517,4 +1517,28 @@ program
 
 // ─── Run ──────────────────────────────────────────────────────────────────
 
-program.parse()
+// Guard auto-run : ne parse les argv QUE si ce fichier est invoqué comme
+// entry point. Permet aux tests d'importer le module + inspecter les
+// commands enregistrées sans déclencher l'exécution CLI.
+//
+// Comparaison via realpath car npm/pnpm bin scripts utilisent des
+// symlinks (~/.npm/_npx/.../node_modules/.bin/codegraph → dist/cli/index.js)
+// qui ne matchent pas une simple égalité d'URL.
+async function isMainModule(): Promise<boolean> {
+  if (!process.argv[1]) return false
+  const { fileURLToPath } = await import('node:url')
+  const { realpathSync } = await import('node:fs')
+  try {
+    const here = realpathSync(fileURLToPath(import.meta.url))
+    const argv1 = realpathSync(process.argv[1])
+    return here === argv1
+  } catch {
+    return false
+  }
+}
+
+if (await isMainModule()) {
+  program.parse()
+}
+
+export { program }

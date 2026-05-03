@@ -5,11 +5,11 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T15:56:37Z
+Last update : 2026-05-03T16:21:08Z
 
 ## By type
 
-### `feat` (17)
+### `feat` (16)
 
 - **af41582** feat(toolkit): symbolic simplification facts + 5 composite rules cross-discipline — 2026-05-03
 - **2f84a70** feat(toolkit): Niveau 5 effect-analysis + roadmap defers Niveaux 6/7 — 2026-05-03
@@ -27,11 +27,11 @@ Last update : 2026-05-03T15:56:37Z
 - **691337e** feat(toolkit): 8e discipline Newman-Girvan + 4 méta-composites cross-disciplines — 2026-05-01
 - **443e072** feat(datalog): runFromDirs accepte rulesDir array (multi-dir loader) — 2026-05-01
 - **87f2ac1** feat(toolkit): Information Bottleneck (Tishby 1999) — 7e cross-discipline — 2026-05-01
-- **9ee3547** feat(toolkit): min-cut/max-flow — coût objectif de séparation packages — 2026-05-01
 
 
-### `fix` (7)
+### `fix` (8)
 
+- **70afbdc** fix(toolkit): clean 93 violations (534→441, −17.4%) sans bypass — 2026-05-03
 - **866eb25** fix(toolkit): bugs #1 #2 #3 #4 trouvés via test externe Hono — 2026-05-03
 - **0146402** fix(toolkit): close P0+P1+P2+P3 — review credibility gap part 2 — 2026-05-03
 - **81b8fb9** fix(toolkit): self-detected defects via codegraph + runtime-graph — 2026-05-03
@@ -89,6 +89,7 @@ Last update : 2026-05-03T15:56:37Z
 
 ## Full history
 
+- **70afbdc** fix(toolkit): clean 93 violations (534→441, −17.4%) sans bypass — 2026-05-03
 - **b0f2c9a** refactor(toolkit): split cli/index.ts god-file (2190→1520 LOC, −30%) — 2026-05-03
 - **c613ac7** refactor(toolkit): split analyzer.ts:runDeterministicDetectors en 5 phases — 2026-05-03
 - **7151cfd** perf(toolkit): Salsa-isolate 3 hot detectors (co-change, drift, const-expr) — 2026-05-03
@@ -138,4 +139,3 @@ Last update : 2026-05-03T15:56:37Z
 - **18a37a7** chore(toolkit): retire 3 exports dead code (UnusedExport.facts) — 2026-05-01
 - **87f2ac1** feat(toolkit): Information Bottleneck (Tishby 1999) — 7e cross-discipline — 2026-05-01
 - **3ecfa05** docs: cross-discipline metrics — synthese 6 disciplines portees — 2026-05-01
-- **9ee3547** feat(toolkit): min-cut/max-flow — coût objectif de séparation packages — 2026-05-01

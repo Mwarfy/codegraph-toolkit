@@ -201,10 +201,31 @@ program
     await runRulesAndPrint(projectRoot, factsDir)
   })
 
-program.parseAsync(process.argv).catch(err => {
-  console.error(chalk.red('liby-runtime-graph fatal:'), err)
-  process.exit(1)
-})
+// Guard auto-run : ne déclenche `parseAsync` QUE si ce fichier est invoqué
+// comme entry point (via `node cli.js` ou `liby-runtime-graph` bin).
+// Permet aux tests d'importer le module pour vérifier les commands
+// enregistrées sans démarrer le CLI.
+async function isMainModule(): Promise<boolean> {
+  if (!process.argv[1]) return false
+  const { fileURLToPath } = await import('node:url')
+  const { realpathSync } = await import('node:fs')
+  try {
+    const here = realpathSync(fileURLToPath(import.meta.url))
+    const argv1 = realpathSync(process.argv[1])
+    return here === argv1
+  } catch {
+    return false
+  }
+}
+
+if (await isMainModule()) {
+  program.parseAsync(process.argv).catch((err) => {
+    console.error(chalk.red('liby-runtime-graph fatal:'), err)
+    process.exit(1)
+  })
+}
+
+export { program }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 

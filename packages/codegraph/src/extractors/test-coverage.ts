@@ -45,6 +45,52 @@ export interface TestCoverageReport {
 }
 
 /**
+ * Suit les `export ... from '...'` re-export edges d'1 niveau pour
+ * propager la couverture test → barrel → cibles re-exportées.
+ *
+ * Pourquoi 1 niveau seulement : empêche les sur-attributions FP. Un test
+ * qui touche `package/src/index.ts` couvre ses re-exports directs (le
+ * barrel a une responsabilité d'API publique), mais pas les internes
+ * transitifs (qui devraient avoir leurs propres tests).
+ *
+ * Limité à `export * from` et `export { X } from` patterns. Les `import`
+ * réguliers ne propagent pas la coverage (un fichier qui importe un util
+ * ne le "teste" pas).
+ */
+async function applyTransitiveReexportCoverage(
+  rootDir: string,
+  coverage: Map<string, Map<string, Set<'naming' | 'import'>>>,
+  sourceSet: Set<string>,
+): Promise<void> {
+  const reexportRegex = /export\s+(?:\*|\{[^}]*\}|type\s+\{[^}]*\})\s+from\s+['"]([^'"]+)['"]/g
+  // Snapshot des barrels actuellement couverts (avant mutation).
+  const coveredBarrels = [...coverage.entries()].map(([file, tests]) => ({ file, tests }))
+
+  for (const { file: barrel, tests } of coveredBarrels) {
+    let content: string
+    try {
+      content = await fs.readFile(path.join(rootDir, barrel), 'utf-8')
+    } catch { continue }
+
+    reexportRegex.lastIndex = 0
+    let m: RegExpExecArray | null
+    while ((m = reexportRegex.exec(content)) !== null) {
+      const spec = m[1]
+      if (!spec.startsWith('.')) continue
+      const target = resolveRelative(barrel, spec, sourceSet)
+      if (!target) continue
+      // Propage tous les tests du barrel vers la cible re-exportée.
+      if (!coverage.has(target)) coverage.set(target, new Map())
+      const targetTests = coverage.get(target)!
+      for (const [testFile, methods] of tests) {
+        if (!targetTests.has(testFile)) targetTests.set(testFile, new Set())
+        for (const method of methods) targetTests.get(testFile)!.add(method)
+      }
+    }
+  }
+}
+
+/**
  * Discover test files in repo (independent of `files` array — tests are
  * souvent excluded from main analysis but on les veut ici).
  */
@@ -196,7 +242,12 @@ export async function analyzeTestCoverage(
   // Method 2b : scan regex secondaire sur les fichiers tests qui ne sont
   // pas dans `files` (cas le plus courant). Résout les imports relatifs
   // vers les sources.
-  const importRegex = /import\s+(?:(?:\{[^}]*\}|\w+|\*\s+as\s+\w+)\s+from\s+)?['"]([^'"]+)['"]/g
+  //
+  // Note : on doit matcher `import type { ... }` aussi — un test contract
+  // qui n'importe que des types depuis un fichier compte comme couvrant
+  // ce fichier (cf. core-types-contract.test.ts qui lock le schema de
+  // core/types.ts). Sans le `(?:type\s+)?`, ces tests étaient invisibles.
+  const importRegex = /import\s+(?:(?:type\s+)?(?:\{[^}]*\}|\w+|\*\s+as\s+\w+)\s+from\s+)?['"]([^'"]+)['"]/g
   for (const test of testFiles) {
     let content: string
     try {
@@ -215,6 +266,21 @@ export async function analyzeTestCoverage(
       coverage.get(resolved)!.get(test)!.add('import')
     }
   }
+
+  // Method 3 : transitive via re-exports.
+  //
+  // Quand un test importe un barrel (ex: `salsa/src/index.ts`) qui
+  // re-exporte des symbols depuis `database.ts`, le test couvre
+  // transitivement `database.ts`. Sans ce raffinement, les fichiers
+  // load-bearing accédés uniquement via barrels apparaissaient comme
+  // untested → faux positif systémique sur tous les packages avec une
+  // entry point en barrel.
+  //
+  // Heuristique : pour chaque file (le barrel) qui est déjà attribué
+  // comme couvert par un test, on regarde ses propres imports (edges
+  // sortantes) et on les marque aussi couverts par ce test. Limité à
+  // 1 niveau de re-export pour rester déterministe et borné.
+  await applyTransitiveReexportCoverage(rootDir, coverage, sourceSet)
 
   // Build report
   const entries: TestCoverageEntry[] = []

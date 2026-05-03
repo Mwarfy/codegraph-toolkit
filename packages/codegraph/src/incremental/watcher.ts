@@ -146,7 +146,7 @@ export class CodeGraphWatcher {
 
   private scheduleRecompute(rawPath: string): void {
     const rel = rawPath.replace(/\\/g, '/')
-    if (!this.shouldTrack(rel)) return
+    if (!this._shouldTrack(rel)) return
     this.pendingChanges.add(rel)
     if (this.pendingTimer) clearTimeout(this.pendingTimer)
     this.pendingTimer = setTimeout(() => {
@@ -224,7 +224,18 @@ export class CodeGraphWatcher {
     }
   }
 
-  private shouldTrack(relPath: string): boolean {
+  /**
+   * Decide si un path est tracké par ce watcher. Filtre :
+   *   - Fichiers cachés (`.foo`) sauf `.gitignore`
+   *   - Suffixes tempo (`~`, `.tmp`, `.swp`)
+   *   - Doit matcher un pattern `include`
+   *   - Doit NE PAS matcher un pattern `exclude`
+   *
+   * Exposé (préfixe `_`) pour tests unitaires — la sémantique du filter
+   * est cruciale pour éviter les false-positive recompute sur fs events
+   * de fichiers VCS, swap, ou hors-scope.
+   */
+  _shouldTrack(relPath: string): boolean {
     // Skip fichiers cachés / tempo
     const base = path.basename(relPath)
     if (base.startsWith('.') && base !== '.gitignore') return false
