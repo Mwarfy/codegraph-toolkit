@@ -140,7 +140,7 @@ export function extractDeprecatedUsageFileBundle(
 
 /**
  * Aggregator : 2 passes globales.
- *   Pass 1 : collect toutes les declarations @deprecated.
+ *   Pass 1 : collect toutes les declarations marquees deprecated par JSDoc.
  *   Pass 2 : avec le SET de noms deprecated, scanner les call-sites.
  */
 export async function analyzeDeprecatedUsage(

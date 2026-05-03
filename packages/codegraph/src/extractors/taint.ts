@@ -314,17 +314,21 @@ function extractAccessChain(node: Node): string[] | null {
     if (k === SyntaxKind.PropertyAccessExpression) {
       parts.unshift((cur as any).getName?.() ?? '')
       cur = (cur as any).getExpression?.()
-    } else if (k === SyntaxKind.ElementAccessExpression) {
+      continue
+    }
+    if (k === SyntaxKind.ElementAccessExpression) {
       cur = (cur as any).getExpression?.()
-    } else if (k === SyntaxKind.Identifier) {
+      continue
+    }
+    if (k === SyntaxKind.Identifier) {
       parts.unshift((cur as any).getText?.() ?? '')
       return parts
-    } else if (k === SyntaxKind.ThisKeyword) {
+    }
+    if (k === SyntaxKind.ThisKeyword) {
       parts.unshift('this')
       return parts
-    } else {
-      return null
     }
+    return null
   }
   return null
 }

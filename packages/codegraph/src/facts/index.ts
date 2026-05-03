@@ -1057,7 +1057,7 @@ function emitFunctionShapeFacts(snapshot: GraphSnapshot, relations: RelationDef[
 /**
  * Tier 3 — DeadCode + Deprecated (Decl + Usage).
  * - DeadCode : symbols inutilisés (dead-code detector AST + import graph).
- * - DeprecatedDecl/Usage : @deprecated tags + their call sites.
+ * - DeprecatedDecl/Usage : JSDoc deprecated tags + their call sites.
  */
 function emitDeprecatedAndDeadFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
   const deadCodeRel: RelationDef = {

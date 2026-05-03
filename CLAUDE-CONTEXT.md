@@ -203,6 +203,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+e19790b fix(toolkit): cochange-without-cotest filter to TS source — 5 FPs eliminated
 64b3dcd refactor(toolkit): split exportFacts batch 5 — eliminate ALL bombs in facts/index.ts (CrossDiscipline + Tier234)
 fe16098 refactor(toolkit): split exportFacts batch 4 — eliminate 3 helper-bombs (Cycle, Security, Package)
 cbc6a6b refactor(toolkit): split exportFacts batch 3 — exportFacts cyclo 84→4 (sous le seuil)
@@ -214,7 +215,6 @@ dcf47d4 perf(toolkit): split stat-from-read en prebuild + layered allDeprecatedU
 f55039d perf(toolkit): Salsa-iso compression-similarity (per-file snippets cached)
 c24fb16 refactor(toolkit): tame AWAIT-IN-LOOP batch 6 — 33→0, AWAIT-IN-LOOP éliminé
 2b4ebc0 refactor(toolkit): tame AWAIT-IN-LOOP batch 3+4+5 — detectors + extractors (58→33)
-9a86461 refactor(toolkit): tame AWAIT-IN-LOOP batch 2 — _shared, regenerate-anchors, drivers (70→58)
 ```
 
 ## Comment contribuer à ce brief

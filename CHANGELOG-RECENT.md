@@ -5,7 +5,7 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T19:01:49Z
+Last update : 2026-05-03T19:05:31Z
 
 ## By type
 
@@ -24,8 +24,9 @@ Last update : 2026-05-03T19:01:49Z
 - **e65ea40** feat(runtime-graph): Phase α — runtime observability framework with datalog query language — 2026-05-03
 
 
-### `fix` (9)
+### `fix` (10)
 
+- **e19790b** fix(toolkit): cochange-without-cotest filter to TS source — 5 FPs eliminated — 2026-05-03
 - **25fc296** fix(toolkit): kill META-CRITICAL (7→0) + 2 bugs détecteur + 6 tests — 2026-05-03
 - **70afbdc** fix(toolkit): clean 93 violations (534→441, −17.4%) sans bypass — 2026-05-03
 - **866eb25** fix(toolkit): bugs #1 #2 #3 #4 trouvés via test externe Hono — 2026-05-03
@@ -46,7 +47,7 @@ Last update : 2026-05-03T19:01:49Z
 - **afd0965** perf(toolkit): self-discovered Salsa optimizations — warm runtime −40% — 2026-05-03
 
 
-### `refactor` (17)
+### `refactor` (16)
 
 - **64b3dcd** refactor(toolkit): split exportFacts batch 5 — eliminate ALL bombs in facts/index.ts (CrossDiscipline + Tier234) — 2026-05-03
 - **fe16098** refactor(toolkit): split exportFacts batch 4 — eliminate 3 helper-bombs (Cycle, Security, Package) — 2026-05-03
@@ -64,7 +65,6 @@ Last update : 2026-05-03T19:01:49Z
 - **c613ac7** refactor(toolkit): split analyzer.ts:runDeterministicDetectors en 5 phases — 2026-05-03
 - **5f8d691** refactor(toolkit): split god-files + fix REDOS detector + tests hubs — 2026-05-03
 - **c484f1f** refactor(codegraph): runDeterministicDetectors 279→108 LOC + git-fixture determinism — 2026-05-03
-- **6eb35b2** refactor(toolkit): HotAllocation requires ModuleCentrality>200 (FP reduction) — 2026-05-02
 
 
 ### `chore` (4)
@@ -85,6 +85,7 @@ Last update : 2026-05-03T19:01:49Z
 
 ## Full history
 
+- **e19790b** fix(toolkit): cochange-without-cotest filter to TS source — 5 FPs eliminated — 2026-05-03
 - **64b3dcd** refactor(toolkit): split exportFacts batch 5 — eliminate ALL bombs in facts/index.ts (CrossDiscipline + Tier234) — 2026-05-03
 - **fe16098** refactor(toolkit): split exportFacts batch 4 — eliminate 3 helper-bombs (Cycle, Security, Package) — 2026-05-03
 - **cbc6a6b** refactor(toolkit): split exportFacts batch 3 — exportFacts cyclo 84→4 (sous le seuil) — 2026-05-03
@@ -134,4 +135,3 @@ Last update : 2026-05-03T19:01:49Z
 - **ca252d2** fix(runtime-graph): retire grandfathers + refine rules + self-probe E2E validated — 2026-05-03
 - **e65ea40** feat(runtime-graph): Phase α — runtime observability framework with datalog query language — 2026-05-03
 - **8c49ff7** fix(analyzer): factsOnly mode must populate TestedFile — 2026-05-03
-- **6eb35b2** refactor(toolkit): HotAllocation requires ModuleCentrality>200 (FP reduction) — 2026-05-02

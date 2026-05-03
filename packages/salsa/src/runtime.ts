@@ -300,6 +300,7 @@ function wakeUpDerivedDep(
     deps: [],
     inFlight: new Set(),
   }
+  // fire-and-forget: als.run is synchronous here (runDerived returns V, not Promise) ; detector matches `run` name collision with async run() in other modules.
   als.run(isolatedFrame, () => {
     runDerived(db, queryId, encodedKey, key, fn)
   })
