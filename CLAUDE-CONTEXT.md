@@ -186,6 +186,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+2f84a70 feat(toolkit): Niveau 5 effect-analysis + roadmap defers Niveaux 6/7
 0146402 fix(toolkit): close P0+P1+P2+P3 — review credibility gap part 2
 0485ce4 feat(toolkit): self-optim Niveau 2A + Niveau 4 — math cost predict + auto-synth Salsa
 3ca2f45 feat(toolkit): self-optim auto-loop — connect probe → diag → brief → scaffold
@@ -197,7 +198,6 @@ c484f1f refactor(codegraph): runDeterministicDetectors 279→108 LOC + git-fixtu
 03ef857 chore(runtime-graph): OSS launch prep — alpha.4 publish-ready
 79c4fed feat(runtime-graph): Phase γ.2c — TDA Persistent Homology dim-0
 fc1c79d feat(runtime-graph): Phase γ.2b — true time-series Lyapunov 1D
-5c78f3a feat(runtime-graph): Phase γ.2a — Granger causality runtime + time-series infra
 ```
 
 ## Comment contribuer à ce brief

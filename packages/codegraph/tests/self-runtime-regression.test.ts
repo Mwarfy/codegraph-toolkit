@@ -53,6 +53,13 @@ const EXEMPT_DETECTORS = new Map<string, string>([
       'Pas de per-file caching applicable — invalidation = "new snapshot ' +
       'created". Designed cost: ~300ms par run.',
   ],
+  [
+    'fact-stability',
+    'Lit l\'historique des snapshot-*.json pour calculer le coefficient ' +
+      'de stabilité de chaque fact relation cross-runs. Pattern ' +
+      'cross-snapshot temporal identique à persistent-cycles — pas de ' +
+      'per-file caching applicable.',
+  ],
 ])
 
 function percentile(values: number[], p: number): number {

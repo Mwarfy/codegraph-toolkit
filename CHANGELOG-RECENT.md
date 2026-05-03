@@ -5,12 +5,13 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T13:34:20Z
+Last update : 2026-05-03T13:39:33Z
 
 ## By type
 
 ### `feat` (27)
 
+- **2f84a70** feat(toolkit): Niveau 5 effect-analysis + roadmap defers Niveaux 6/7 — 2026-05-03
 - **0485ce4** feat(toolkit): self-optim Niveau 2A + Niveau 4 — math cost predict + auto-synth Salsa — 2026-05-03
 - **3ca2f45** feat(toolkit): self-optim auto-loop — connect probe → diag → brief → scaffold — 2026-05-03
 - **67c5581** feat(toolkit): mathematical self-governance — 100% load-bearing files governed — 2026-05-03
@@ -30,7 +31,6 @@ Last update : 2026-05-03T13:34:20Z
 - **375d5a2** feat(toolkit): cross-discipline rules — Fiedler λ₂ + Shannon entropy + Hamming dup — 2026-05-01
 - **bc4fce3** feat(invariants): 2 rules auto-decouvertes via pattern mining — 2026-05-01
 - **c3750da** feat(toolkit): Top-5 graph theory uplift — PageRank + complexity + perf + SCC — 2026-05-01
-- **f35acd1** feat(toolkit): self-audit — 5 quick-wins + 2 meta-fix + dogfood gate — 2026-05-01
 
 
 ### `fix` (6)
@@ -82,6 +82,7 @@ Last update : 2026-05-03T13:34:20Z
 
 ## Full history
 
+- **2f84a70** feat(toolkit): Niveau 5 effect-analysis + roadmap defers Niveaux 6/7 — 2026-05-03
 - **0146402** fix(toolkit): close P0+P1+P2+P3 — review credibility gap part 2 — 2026-05-03
 - **0485ce4** feat(toolkit): self-optim Niveau 2A + Niveau 4 — math cost predict + auto-synth Salsa — 2026-05-03
 - **3ca2f45** feat(toolkit): self-optim auto-loop — connect probe → diag → brief → scaffold — 2026-05-03
@@ -131,4 +132,3 @@ Last update : 2026-05-03T13:34:20Z
 - **50a01d9** feat(invariants): Tier 16 — 7 nouvelles rules library — 2026-05-01
 - **4418c90** feat(codegraph): Tier 16 extractors — crypto-algo + security-patterns + 2 sink kinds — 2026-05-01
 - **10f4bf9** feat(invariants): Tier 15 — 21 nouvelles rules library + PHASE-5 backlog — 2026-05-01
-- **ecc5303** feat(codegraph): tainted-vars supporte les destructurings (Tier 15) — 2026-05-01

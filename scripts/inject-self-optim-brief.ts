@@ -31,6 +31,7 @@ const NO_CACHE_LAMBDA_X1000_MAX = 1100                                       // 
  */
 const EXEMPT_DETECTORS = new Set([
   'persistent-cycles',                                                       // cross-snapshot history
+  'fact-stability',                                                          // cross-snapshot temporal
 ])
 
 interface CandidateRow {

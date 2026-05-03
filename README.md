@@ -42,19 +42,27 @@ science formelle.
 
 ## Packages
 
-Le toolkit est un monorepo de **7 packages** publiés sous le namespace `@liby-tools` :
+Le toolkit est un monorepo. Le **noyau publishable** (4 packages) :
 
-| Package | Version | Rôle |
+| Package | Version | Rôle | Status |
+|---|---|---|---|
+| [`@liby-tools/codegraph`](packages/codegraph/) | `0.3.0` | Static analyzer + 50+ extracteurs + synopsis builder déterministe | core |
+| [`@liby-tools/adr-toolkit`](packages/adr-toolkit/) | `0.3.0` | ADR governance (anchors, asserts ts-morph, boot brief, hooks) | core |
+| [`@liby-tools/datalog`](packages/datalog/) | `0.3.0` | Pure-TS Datalog interpreter — zero binary, multi-dir loader | core |
+| [`@liby-tools/salsa`](packages/salsa/) | `0.3.0` | Salsa-style incremental computation runtime (peer dep de codegraph) | core |
+
+Les **packages expérimentaux** (présents dans le monorepo, pas dans le quickstart) :
+
+| Package | Status | Pourquoi pas dans le quickstart |
 |---|---|---|
-| [`@liby-tools/codegraph`](packages/codegraph/) | `0.2.0` | Static analyzer + 50+ extracteurs + synopsis builder déterministe |
-| [`@liby-tools/adr-toolkit`](packages/adr-toolkit/) | `0.3.0` | ADR governance (anchors, asserts ts-morph, boot brief, hooks) |
-| [`@liby-tools/codegraph-mcp`](packages/codegraph-mcp/) | `0.2.0` | MCP server — 14 tools queryables depuis Claude Code (LSP-complement) |
-| [`@liby-tools/datalog`](packages/datalog/) | `0.2.0` | Pure-TS Datalog interpreter — zero binary, multi-dir loader |
-| [`@liby-tools/invariants-postgres-ts`](packages/invariants-postgres-ts/) | `0.1.0` | 91 rules Datalog packagées (mono + composites + CWE + cross-discipline) |
-| [`@liby-tools/salsa`](packages/salsa/) | `0.2.0` | Salsa-style incremental computation runtime |
-| [`@liby-tools/runtime-graph`](packages/runtime-graph/) | `0.1.0-alpha.4` | Runtime observability framework — OTel attach + 6 disciplines mathématiques runtime + composites cross-static×runtime |
+| [`@liby-tools/codegraph-mcp`](packages/codegraph-mcp/) | experimental | demande client MCP (Claude Code). Tests faibles (2). |
+| [`@liby-tools/invariants-postgres-ts`](packages/invariants-postgres-ts/) | WIP | rules `.dl` only, pas de code TS. Pack à valider sur ≥3 projets externes. |
+| [`@liby-tools/runtime-graph`](packages/runtime-graph/) | experimental | OTel attach, dépend du shape du projet observé. Pas validé sur projets externes. |
 
-**Tu n'as pas besoin de tout installer.** Le quickstart en haut de page installe les 5 packages "production" (codegraph + adr-toolkit + mcp + datalog + invariants). `salsa` est une dépendance interne (pulled transitively). `runtime-graph` est le package **expérimental OSS** qui vient en plus pour l'observabilité runtime — install-le séparément si tu veux capturer le call graph effectif via OTel.
+**Décision honnête (consolidation 2026-05)** : seuls les 4 packages "core"
+sont visés pour publication npm immédiate. Les 3 expérimentaux restent
+dogfoodés sur Sentinel + le toolkit lui-même mais ne sont pas annoncés
+comme "prêts à brancher" sur un projet sérieux.
 
 ---
 
