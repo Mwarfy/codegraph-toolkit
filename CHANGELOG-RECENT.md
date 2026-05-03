@@ -5,7 +5,7 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T19:05:31Z
+Last update : 2026-05-03T19:12:13Z
 
 ## By type
 
@@ -26,6 +26,7 @@ Last update : 2026-05-03T19:05:31Z
 
 ### `fix` (10)
 
+- **686fb09** fix(toolkit): quick-win violations — 4 fixes (1 floating-promise FP, 1 return-then-else, 2 deprecated FPs) — 2026-05-03
 - **e19790b** fix(toolkit): cochange-without-cotest filter to TS source — 5 FPs eliminated — 2026-05-03
 - **25fc296** fix(toolkit): kill META-CRITICAL (7→0) + 2 bugs détecteur + 6 tests — 2026-05-03
 - **70afbdc** fix(toolkit): clean 93 violations (534→441, −17.4%) sans bypass — 2026-05-03
@@ -35,7 +36,6 @@ Last update : 2026-05-03T19:05:31Z
 - **e73e85d** fix(codegraph): break direct cycle sql-helpers ↔ sql-schema via type extraction — 2026-05-03
 - **f642620** fix(runtime-graph): CLI rulesDir resolution via __dirname (no package.json export) — 2026-05-03
 - **ca252d2** fix(runtime-graph): retire grandfathers + refine rules + self-probe E2E validated — 2026-05-03
-- **8c49ff7** fix(analyzer): factsOnly mode must populate TestedFile — 2026-05-03
 
 
 ### `perf` (5)
@@ -85,6 +85,7 @@ Last update : 2026-05-03T19:05:31Z
 
 ## Full history
 
+- **686fb09** fix(toolkit): quick-win violations — 4 fixes (1 floating-promise FP, 1 return-then-else, 2 deprecated FPs) — 2026-05-03
 - **e19790b** fix(toolkit): cochange-without-cotest filter to TS source — 5 FPs eliminated — 2026-05-03
 - **64b3dcd** refactor(toolkit): split exportFacts batch 5 — eliminate ALL bombs in facts/index.ts (CrossDiscipline + Tier234) — 2026-05-03
 - **fe16098** refactor(toolkit): split exportFacts batch 4 — eliminate 3 helper-bombs (Cycle, Security, Package) — 2026-05-03
@@ -134,4 +135,3 @@ Last update : 2026-05-03T19:05:31Z
 - **cd9a769** feat(runtime-graph): Phase β — replay-tests + chaos + Express + MongoDB + config-driven — 2026-05-03
 - **ca252d2** fix(runtime-graph): retire grandfathers + refine rules + self-probe E2E validated — 2026-05-03
 - **e65ea40** feat(runtime-graph): Phase α — runtime observability framework with datalog query language — 2026-05-03
-- **8c49ff7** fix(analyzer): factsOnly mode must populate TestedFile — 2026-05-03

@@ -23,3 +23,13 @@ Violation("COMPOSITE-COPY-PASTE-FORK", A, 0,
 // Grandfather list — 2026-05-01 (cross-discipline auto-disco).
 CopyPasteForkGrandfathered("sentinel-core/src/api/webhooks/admin.ts:pauseProject", "sentinel-core/src/project-manager.ts:pauseProject").
 CopyPasteForkGrandfathered("sentinel-core/src/kernel/block-policies-cache.ts:_resetCacheForTest", "sentinel-core/src/kernel/measurable-metrics-cache.ts:_resetCacheForTest").
+
+// 2026-05-03 — toolkit `loadConfig` cross-package : shape signature
+// identique (1 string param, Promise return) mais semantiques distinctes.
+// adr-toolkit : `.adrtoolkit.json` simple Zod parse.
+// codegraph : `.json|.js` avec --config/--root flags + applyDefaults.
+// runtime-graph : multi-basenames probe avec applyDefaults.
+// Aucune extraction sensee — chaque package a son propre format.
+CopyPasteForkGrandfathered("packages/adr-toolkit/src/config.ts:loadConfig", "packages/codegraph/src/cli/_shared.ts:loadConfig").
+CopyPasteForkGrandfathered("packages/adr-toolkit/src/config.ts:loadConfig", "packages/runtime-graph/src/core/config-loader.ts:loadConfig").
+CopyPasteForkGrandfathered("packages/codegraph/src/cli/_shared.ts:loadConfig", "packages/runtime-graph/src/core/config-loader.ts:loadConfig").
