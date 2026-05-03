@@ -618,25 +618,27 @@ class Parser {
    * négé ou dans une contrainte est unsafe (l'évaluateur ne peut pas
    * l'instancier).
    */
-  private validateRule(
-    head: Atom, body: Atom[], constraints: Constraint[], pos: SourcePos,
-  ): void {
-    if (head.negated) {
-      this.err('parse.negatedHead', 'rule head cannot be negated', head.pos)
-    }
-    const positiveVars = new Set<string>()
+  private collectPositiveVars(body: Atom[]): Set<string> {
+    const out = new Set<string>()
     for (const ba of body) {
       if (ba.negated) continue
       for (const term of ba.args) {
-        if (term.kind === 'var') positiveVars.add(term.name)
+        if (term.kind === 'var') out.add(term.name)
       }
     }
+    return out
+  }
+
+  private validateHeadSafety(head: Atom, positiveVars: Set<string>): void {
     for (const t of head.args) {
       if (t.kind === 'var' && !positiveVars.has(t.name)) {
         this.err('parse.unsafeHeadVar',
           `head variable '${t.name}' does not appear in a positive body atom`, t.pos)
       }
     }
+  }
+
+  private validateNegatedAtomSafety(body: Atom[], positiveVars: Set<string>): void {
     for (const ba of body) {
       if (!ba.negated) continue
       for (const term of ba.args) {
@@ -646,6 +648,9 @@ class Parser {
         }
       }
     }
+  }
+
+  private validateConstraintSafety(constraints: Constraint[], positiveVars: Set<string>): void {
     for (const c of constraints) {
       for (const term of [c.left, c.right]) {
         if (term.kind === 'var' && !positiveVars.has(term.name)) {
@@ -659,6 +664,18 @@ class Parser {
         }
       }
     }
+  }
+
+  private validateRule(
+    head: Atom, body: Atom[], constraints: Constraint[], pos: SourcePos,
+  ): void {
+    if (head.negated) {
+      this.err('parse.negatedHead', 'rule head cannot be negated', head.pos)
+    }
+    const positiveVars = this.collectPositiveVars(body)
+    this.validateHeadSafety(head, positiveVars)
+    this.validateNegatedAtomSafety(body, positiveVars)
+    this.validateConstraintSafety(constraints, positiveVars)
     if (body.length === 0) {
       this.err('parse.emptyBody', 'rule body cannot be empty (use a fact instead)', pos)
     }

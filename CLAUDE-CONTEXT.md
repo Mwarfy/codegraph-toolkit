@@ -199,6 +199,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+1878143 refactor(toolkit): split analyzeDrizzleSchema (cyclo 20→3) — 4 helpers (3 cmp + 1 parse loop)
 4215f48 refactor(toolkit): split scanInlineSinks (cyclo 17→2, cog 63→3) — reuse trySink* helpers
 ce0b0a8 refactor(toolkit): split detectListenerEntries (cyclo 23→under) — 4 helpers
 47e3476 refactor(toolkit): split scanHttpOutboundSinks (cyclo 21→under) — 2 helpers
@@ -210,7 +211,6 @@ a5ac751 refactor(toolkit): split buildTestFilesIndex (cyclo 17→1) — 5 helper
 62de53a refactor(toolkit): split analyzeScope (cyclo 17→3) — extract per-kind handlers
 6cfd2fe refactor(toolkit): split analyzePackageDeps (cyclo 17→4) — 3 helpers
 69a032e refactor(toolkit): split runPostSnapshotMetrics (cyclo 20→4) — generic metric step + 3 metric runners
-3e30c42 refactor(toolkit): split buildTruthPointsFromSignals (cyclo 34→3) — 4 helpers per-table
 ```
 
 ## Comment contribuer à ce brief
