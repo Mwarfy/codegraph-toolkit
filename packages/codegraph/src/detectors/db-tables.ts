@@ -32,113 +32,141 @@ export class DbTableDetector implements Detector {
   description = 'Implicit coupling via shared database table access'
 
   async detect(ctx: DetectorContext): Promise<DetectedLink[]> {
-    const accesses: TableAccess[] = []
-
-    // SQL patterns to detect table access
-    const patterns: Array<{ regex: RegExp; operation: 'read' | 'write' }> = [
-      { regex: /\bFROM\s+(\w+)/gi, operation: 'read' },
-      { regex: /\bJOIN\s+(\w+)/gi, operation: 'read' },
-      { regex: /\bINSERT\s+INTO\s+(\w+)/gi, operation: 'write' },
-      { regex: /\bUPDATE\s+(\w+)\s+SET/gi, operation: 'write' },
-      { regex: /\bDELETE\s+FROM\s+(\w+)/gi, operation: 'write' },
-    ]
-
-    // Known system/meta tables to exclude
-    const excludeTables = new Set([
-      'information_schema', 'pg_catalog', 'pg_tables',
-      'set', 'select', 'where', 'and', 'or', 'not',
-      'true', 'false', 'null', 'values', 'returning',
-    ])
-
-    // Lit en parallèle les .ts files (I/O fs indépendantes), match séquentiel.
-    const tsFiles = ctx.files.filter((f) => f.endsWith('.ts'))
-    const fileContents = await Promise.all(
-      tsFiles.map(async (file) => ({ file, content: await ctx.readFile(file) })),
-    )
-    for (const { file, content } of fileContents) {
-      // Only scan files that contain SQL-like patterns
-      if (!content.includes('SELECT') && !content.includes('INSERT') &&
-          !content.includes('UPDATE') && !content.includes('DELETE') &&
-          !content.includes('query(') && !content.includes('query`')) {
-        continue
-      }
-
-      for (const { regex, operation } of patterns) {
-        // Local regex pour éviter race lastIndex partagé entre fichiers.
-        const localRe = new RegExp(regex.source, regex.flags)
-        let match: RegExpExecArray | null
-        while ((match = localRe.exec(content)) !== null) {
-          const tableName = match[1].toLowerCase()
-
-          // Filter out non-table matches
-          if (excludeTables.has(tableName)) continue
-          if (tableName.startsWith('$')) continue // SQL parameter
-          if (tableName.length < 2) continue
-          if (/^\d/.test(tableName)) continue // starts with number
-
-          accesses.push({
-            file,
-            table: tableName,
-            operation,
-            line: this.getLineNumber(content, match.index),
-          })
-        }
-      }
-    }
-
-    // Group accesses by table
-    const tableToFiles = new Map<string, TableAccess[]>()
-    for (const access of accesses) {
-      const existing = tableToFiles.get(access.table) || []
-      existing.push(access)
-      tableToFiles.set(access.table, existing)
-    }
-
-    // Create edges between files that share a table
-    const links: DetectedLink[] = []
-    const seen = new Set<string>()
-
-    for (const [table, fileAccesses] of tableToFiles) {
-      // Get unique files accessing this table
-      const uniqueFiles = [...new Set(fileAccesses.map(a => a.file))]
-
-      if (uniqueFiles.length < 2) continue // only coupled if 2+ files touch it
-
-      // Create edges: writers → readers (data flows from write to read)
-      const writers = fileAccesses.filter(a => a.operation === 'write')
-      const readers = fileAccesses.filter(a => a.operation === 'read')
-
-      for (const writer of writers) {
-        for (const reader of readers) {
-          if (writer.file === reader.file) continue
-
-          const key = `${writer.file}--db-table--${reader.file}--${table}`
-          if (seen.has(key)) continue
-          seen.add(key)
-
-          links.push({
-            from: writer.file,
-            to: reader.file,
-            type: 'db-table',
-            label: `table:${table}`,
-            resolved: true,
-            line: writer.line,
-            meta: {
-              table,
-              writerFile: writer.file,
-              writerLine: writer.line,
-              readerFile: reader.file,
-              readerLine: reader.line,
-            },
-          })
-        }
-      }
-    }
-
-    return links
+    const accesses = await collectTableAccesses(ctx)
+    const tableToFiles = groupAccessesByTable(accesses)
+    return buildSharedTableEdges(tableToFiles)
   }
+}
 
-  private getLineNumber(content: string, offset: number): number {
-    return content.substring(0, offset).split('\n').length
+// SQL patterns to detect table access
+const SQL_PATTERNS: ReadonlyArray<{ regex: RegExp; operation: 'read' | 'write' }> = [
+  { regex: /\bFROM\s+(\w+)/gi, operation: 'read' },
+  { regex: /\bJOIN\s+(\w+)/gi, operation: 'read' },
+  { regex: /\bINSERT\s+INTO\s+(\w+)/gi, operation: 'write' },
+  { regex: /\bUPDATE\s+(\w+)\s+SET/gi, operation: 'write' },
+  { regex: /\bDELETE\s+FROM\s+(\w+)/gi, operation: 'write' },
+]
+
+// Known system/meta tables to exclude (+ SQL keyword false-positives)
+const EXCLUDE_TABLES = new Set([
+  'information_schema', 'pg_catalog', 'pg_tables',
+  'set', 'select', 'where', 'and', 'or', 'not',
+  'true', 'false', 'null', 'values', 'returning',
+])
+
+/** Pour bypasser les fichiers sans aucune SQL signal. */
+function hasSqlSignal(content: string): boolean {
+  return content.includes('SELECT')
+    || content.includes('INSERT')
+    || content.includes('UPDATE')
+    || content.includes('DELETE')
+    || content.includes('query(')
+    || content.includes('query`')
+}
+
+/** Lit en parallèle les .ts files (I/O fs indépendantes), match séquentiel. */
+async function collectTableAccesses(ctx: DetectorContext): Promise<TableAccess[]> {
+  const tsFiles = ctx.files.filter((f) => f.endsWith('.ts'))
+  const fileContents = await Promise.all(
+    tsFiles.map(async (file) => ({ file, content: await ctx.readFile(file) })),
+  )
+  const accesses: TableAccess[] = []
+  for (const { file, content } of fileContents) {
+    if (!hasSqlSignal(content)) continue
+    extractAccessesFromContent(file, content, accesses)
   }
+  return accesses
+}
+
+function extractAccessesFromContent(
+  file: string,
+  content: string,
+  accesses: TableAccess[],
+): void {
+  for (const { regex, operation } of SQL_PATTERNS) {
+    // Local regex pour éviter race lastIndex partagé entre fichiers.
+    const localRe = new RegExp(regex.source, regex.flags)
+    let match: RegExpExecArray | null
+    while ((match = localRe.exec(content)) !== null) {
+      const tableName = match[1].toLowerCase()
+      if (!isLikelyTableName(tableName)) continue
+      accesses.push({
+        file,
+        table: tableName,
+        operation,
+        line: getLineNumber(content, match.index),
+      })
+    }
+  }
+}
+
+function isLikelyTableName(name: string): boolean {
+  if (EXCLUDE_TABLES.has(name)) return false
+  if (name.startsWith('$')) return false      // SQL parameter
+  if (name.length < 2) return false
+  if (/^\d/.test(name)) return false          // starts with number
+  return true
+}
+
+function getLineNumber(content: string, offset: number): number {
+  return content.substring(0, offset).split('\n').length
+}
+
+function groupAccessesByTable(accesses: TableAccess[]): Map<string, TableAccess[]> {
+  const tableToFiles = new Map<string, TableAccess[]>()
+  for (const access of accesses) {
+    const existing = tableToFiles.get(access.table) || []
+    existing.push(access)
+    tableToFiles.set(access.table, existing)
+  }
+  return tableToFiles
+}
+
+/**
+ * Pour chaque table partagée, génère 1 edge writer → reader (data flows from
+ * write to read). Skip si moins de 2 fichiers distincts touchent la table.
+ */
+function buildSharedTableEdges(tableToFiles: Map<string, TableAccess[]>): DetectedLink[] {
+  const links: DetectedLink[] = []
+  const seen = new Set<string>()
+  for (const [table, fileAccesses] of tableToFiles) {
+    const uniqueFiles = [...new Set(fileAccesses.map((a) => a.file))]
+    if (uniqueFiles.length < 2) continue
+    const writers = fileAccesses.filter((a) => a.operation === 'write')
+    const readers = fileAccesses.filter((a) => a.operation === 'read')
+    for (const writer of writers) {
+      for (const reader of readers) {
+        emitWriterReaderEdge(writer, reader, table, seen, links)
+      }
+    }
+  }
+  return links
+}
+
+function emitWriterReaderEdge(
+  writer: TableAccess,
+  reader: TableAccess,
+  table: string,
+  seen: Set<string>,
+  links: DetectedLink[],
+): void {
+  if (writer.file === reader.file) return
+  const key = `${writer.file}--db-table--${reader.file}--${table}`
+  if (seen.has(key)) return
+  seen.add(key)
+  links.push({
+    from: writer.file,
+    to: reader.file,
+    type: 'db-table',
+    label: `table:${table}`,
+    resolved: true,
+    line: writer.line,
+    meta: {
+      table,
+      writerFile: writer.file,
+      writerLine: writer.line,
+      readerFile: reader.file,
+      readerLine: reader.line,
+    },
+  })
 }
