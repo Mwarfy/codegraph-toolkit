@@ -5,11 +5,11 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T19:26:01Z
+Last update : 2026-05-03T19:28:00Z
 
 ## By type
 
-### `feat` (9)
+### `feat` (8)
 
 - **af41582** feat(toolkit): symbolic simplification facts + 5 composite rules cross-discipline — 2026-05-03
 - **2f84a70** feat(toolkit): Niveau 5 effect-analysis + roadmap defers Niveaux 6/7 — 2026-05-03
@@ -19,7 +19,6 @@ Last update : 2026-05-03T19:26:01Z
 - **79c4fed** feat(runtime-graph): Phase γ.2c — TDA Persistent Homology dim-0 — 2026-05-03
 - **fc1c79d** feat(runtime-graph): Phase γ.2b — true time-series Lyapunov 1D — 2026-05-03
 - **5c78f3a** feat(runtime-graph): Phase γ.2a — Granger causality runtime + time-series infra — 2026-05-03
-- **e9a2b44** feat(runtime-graph): Phase γ — 4 mathematical disciplines runtime + composite rules — 2026-05-03
 
 
 ### `fix` (11)
@@ -46,8 +45,9 @@ Last update : 2026-05-03T19:26:01Z
 - **afd0965** perf(toolkit): self-discovered Salsa optimizations — warm runtime −40% — 2026-05-03
 
 
-### `refactor` (17)
+### `refactor` (18)
 
+- **020e949** refactor(toolkit): split renderModules (cyclo 35→12) — 4 helpers index builders — 2026-05-03
 - **df1ee8c** refactor(toolkit): split renderEventFlows (cyclo 25→5, cog 63→4) — 5 helpers extraits — 2026-05-03
 - **64b3dcd** refactor(toolkit): split exportFacts batch 5 — eliminate ALL bombs in facts/index.ts (CrossDiscipline + Tier234) — 2026-05-03
 - **fe16098** refactor(toolkit): split exportFacts batch 4 — eliminate 3 helper-bombs (Cycle, Security, Package) — 2026-05-03
@@ -85,6 +85,7 @@ Last update : 2026-05-03T19:26:01Z
 
 ## Full history
 
+- **020e949** refactor(toolkit): split renderModules (cyclo 35→12) — 4 helpers index builders — 2026-05-03
 - **df1ee8c** refactor(toolkit): split renderEventFlows (cyclo 25→5, cog 63→4) — 5 helpers extraits — 2026-05-03
 - **50eb1f8** fix(toolkit): articulation-point rule — exclure package entry points (FP systemique) — 2026-05-03
 - **8844d31** fix(toolkit): FSM-ORPHAN 3→0 — fixture skip + Attribute API + satisfies unwrap — 2026-05-03
@@ -134,4 +135,3 @@ Last update : 2026-05-03T19:26:01Z
 - **5c78f3a** feat(runtime-graph): Phase γ.2a — Granger causality runtime + time-series infra — 2026-05-03
 - **81b8fb9** fix(toolkit): self-detected defects via codegraph + runtime-graph — 2026-05-03
 - **e73e85d** fix(codegraph): break direct cycle sql-helpers ↔ sql-schema via type extraction — 2026-05-03
-- **e9a2b44** feat(runtime-graph): Phase γ — 4 mathematical disciplines runtime + composite rules — 2026-05-03

@@ -169,9 +169,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 > pas verdict. Une tension non explorée n'est pas un bug — c'est un saut
 > latéral possible que le sol stable rend testable.
 
-- **ORPHELIN** `packages/datalog/src/cli.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/datalog/src/cli.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
@@ -199,6 +199,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+020e949 refactor(toolkit): split renderModules (cyclo 35→12) — 4 helpers index builders
 df1ee8c refactor(toolkit): split renderEventFlows (cyclo 25→5, cog 63→4) — 5 helpers extraits
 50eb1f8 fix(toolkit): articulation-point rule — exclure package entry points (FP systemique)
 8844d31 fix(toolkit): FSM-ORPHAN 3→0 — fixture skip + Attribute API + satisfies unwrap
@@ -210,7 +211,6 @@ fe16098 refactor(toolkit): split exportFacts batch 4 — eliminate 3 helper-bomb
 cbc6a6b refactor(toolkit): split exportFacts batch 3 — exportFacts cyclo 84→4 (sous le seuil)
 5888c3e refactor(toolkit): split exportFacts batch 2 — extract graph metrics + listeners (cyclomatic 102→84)
 f8e2fdd refactor(toolkit): split exportFacts en 5 emit helpers (cyclomatic 142→102)
-7c6668c refactor(toolkit): kill LONG-FN-BY-PARAMS (5→0) + fix CHAOS-AMPLIFIER FP (6→3)
 ```
 
 ## Comment contribuer à ce brief

@@ -967,103 +967,104 @@ interface RenderModuleFicheArgs {
   opts: Required<MapBuilderOptions>
 }
 
+function renderFicheSignatures(sigs: TypedSignature[], opts: Required<MapBuilderOptions>): string[] {
+  if (sigs.length === 0) return []
+  const out: string[] = [`**Exports** (${sigs.length})`]
+  const slice = [...sigs].sort((a, b) => a.line - b.line).slice(0, opts.signaturesPerFile)
+  for (const sig of slice) {
+    const params = sig.params.map((p) => `${p.name}${p.optional ? '?' : ''}: ${truncate(p.type, 40)}`).join(', ')
+    out.push(`- L${sig.line} \`[${sig.kind}] ${sig.exportName}(${params}): ${truncate(sig.returnType, 60)}\``)
+  }
+  if (sigs.length > slice.length) out.push(`- … ${sigs.length - slice.length} de plus`)
+  out.push('')
+  return out
+}
+
+function renderFicheCallsOut(callsOut: TypedCallEdge[], opts: Required<MapBuilderOptions>): string[] {
+  if (callsOut.length === 0) return []
+  const byTarget = new Map<string, number>()
+  for (const e of callsOut) byTarget.set(e.to, (byTarget.get(e.to) ?? 0) + 1)
+  const sorted = [...byTarget.entries()]
+    .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
+    .slice(0, opts.callEdgesPerFile)
+  const rendered = sorted
+    .map(([target, n]) => `\`${path_basename_with_symbol(target)}\`${n > 1 ? ` ×${n}` : ''}`)
+    .join(', ')
+  const extra = byTarget.size > sorted.length ? ` • +${byTarget.size - sorted.length}` : ''
+  return [`**Calls out** : ${rendered}${extra}`, '']
+}
+
+function renderFicheDb(reads: GraphEdge[], writes: GraphEdge[]): string[] {
+  const readTables = uniqueTableLabels(reads)
+  const writeTables = uniqueTableLabels(writes)
+  if (readTables.length === 0 && writeTables.length === 0) return []
+  const parts: string[] = []
+  if (writeTables.length > 0) parts.push(`writes \`${writeTables.join('`, `')}\``)
+  if (readTables.length > 0) parts.push(`reads \`${readTables.join('`, `')}\``)
+  return [`**DB** : ${parts.join(' • ')}`, '']
+}
+
+function renderFicheCycles(cycles: Cycle[]): string[] {
+  if (cycles.length === 0) return []
+  const summary = cycles
+    .map((c) => `\`${c.gated ? 'gated' : 'non-gated'}\` ${c.nodes.map(path_basename).join('→')}`)
+    .slice(0, 2)
+    .join(' • ')
+  return [`**Cycles** : ${summary}${cycles.length > 2 ? ` +${cycles.length - 2}` : ''}`, '']
+}
+
+function renderFicheTruthRoles(
+  tpRoles: Array<{ role: 'writer' | 'reader' | 'canonical' | 'mirror'; tp: TruthPoint }>,
+): string[] {
+  if (tpRoles.length === 0) return []
+  const seen = new Set<string>()
+  const byRole: Record<string, string[]> = {}
+  for (const r of tpRoles) {
+    const k = `${r.role}|${r.tp.concept}`
+    if (seen.has(k)) continue
+    seen.add(k)
+    if (!byRole[r.role]) byRole[r.role] = []
+    byRole[r.role].push(r.tp.concept)
+  }
+  const bits: string[] = []
+  for (const role of ['canonical', 'writer', 'reader', 'mirror']) {
+    const arr = byRole[role]
+    if (!arr || arr.length === 0) continue
+    bits.push(`${role} of \`${arr.slice(0, 4).join('`, `')}\`${arr.length > 4 ? ` +${arr.length - 4}` : ''}`)
+  }
+  if (bits.length === 0) return []
+  return [`**Truth** : ${bits.join(' • ')}`, '']
+}
+
 function renderModuleFiche(args: RenderModuleFicheArgs): string {
   const {
     file, sigs, callsOut, listens, emits, reads, writes,
     cycles, tpRoles, sms, opts,
   } = args
   const anchor = anchorFor(file)
-  const out: string[] = []
-  out.push(`### ${file}  <a id="${anchor}"></a>`)
-  out.push('')
+  const out: string[] = [`### ${file}  <a id="${anchor}"></a>`, '']
 
-  if (sigs.length > 0) {
-    out.push(`**Exports** (${sigs.length})`)
-    const slice = [...sigs].sort((a, b) => a.line - b.line).slice(0, opts.signaturesPerFile)
-    for (const sig of slice) {
-      const params = sig.params.map((p) => `${p.name}${p.optional ? '?' : ''}: ${truncate(p.type, 40)}`).join(', ')
-      out.push(`- L${sig.line} \`[${sig.kind}] ${sig.exportName}(${params}): ${truncate(sig.returnType, 60)}\``)
-    }
-    if (sigs.length > slice.length) out.push(`- … ${sigs.length - slice.length} de plus`)
-    out.push('')
-  }
-
-  if (callsOut.length > 0) {
-    const byTarget = new Map<string, number>()
-    for (const e of callsOut) byTarget.set(e.to, (byTarget.get(e.to) ?? 0) + 1)
-    const sorted = [...byTarget.entries()]
-      .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
-      .slice(0, opts.callEdgesPerFile)
-    const rendered = sorted
-      .map(([target, n]) => `\`${path_basename_with_symbol(target)}\`${n > 1 ? ` ×${n}` : ''}`)
-      .join(', ')
-    const extra = byTarget.size > sorted.length ? ` • +${byTarget.size - sorted.length}` : ''
-    out.push(`**Calls out** : ${rendered}${extra}`)
-    out.push('')
-  }
+  out.push(...renderFicheSignatures(sigs, opts))
+  out.push(...renderFicheCallsOut(callsOut, opts))
 
   const emitNames = uniqueLabels(emits)
   if (emitNames.length > 0) {
-    out.push(`**Emits** : ${emitNames.map((e) => `\`${e}\``).join(', ')}`)
-    out.push('')
+    out.push(`**Emits** : ${emitNames.map((e) => `\`${e}\``).join(', ')}`, '')
   }
   const listenNames = uniqueLabels(listens)
   if (listenNames.length > 0) {
-    out.push(`**Listens** : ${listenNames.map((e) => `\`${e}\``).join(', ')}`)
-    out.push('')
+    out.push(`**Listens** : ${listenNames.map((e) => `\`${e}\``).join(', ')}`, '')
   }
 
-  const readTables = uniqueTableLabels(reads)
-  const writeTables = uniqueTableLabels(writes)
-  if (readTables.length > 0 || writeTables.length > 0) {
-    const parts: string[] = []
-    if (writeTables.length > 0) parts.push(`writes \`${writeTables.join('`, `')}\``)
-    if (readTables.length > 0) parts.push(`reads \`${readTables.join('`, `')}\``)
-    out.push(`**DB** : ${parts.join(' • ')}`)
-    out.push('')
-  }
+  out.push(...renderFicheDb(reads, writes))
 
   if (sms.length > 0) {
     const concepts = sms.map((m) => `\`${m.concept}\``).join(', ')
-    out.push(`**State** : writes transitions de ${concepts}`)
-    out.push('')
+    out.push(`**State** : writes transitions de ${concepts}`, '')
   }
 
-  if (cycles.length > 0) {
-    const summary = cycles
-      .map((c) => `\`${c.gated ? 'gated' : 'non-gated'}\` ${c.nodes.map(path_basename).join('→')}`)
-      .slice(0, 2)
-      .join(' • ')
-    out.push(`**Cycles** : ${summary}${cycles.length > 2 ? ` +${cycles.length - 2}` : ''}`)
-    out.push('')
-  }
-
-  if (tpRoles.length > 0) {
-    // Dédupliquer par (role, tp.concept).
-    const seen = new Set<string>()
-    const dedup: Array<{ role: string; concept: string }> = []
-    for (const r of tpRoles) {
-      const k = `${r.role}|${r.tp.concept}`
-      if (seen.has(k)) continue
-      seen.add(k)
-      dedup.push({ role: r.role, concept: r.tp.concept })
-    }
-    const byRole: Record<string, string[]> = {}
-    for (const r of dedup) {
-      if (!byRole[r.role]) byRole[r.role] = []
-      byRole[r.role].push(r.concept)
-    }
-    const bits: string[] = []
-    for (const role of ['canonical', 'writer', 'reader', 'mirror']) {
-      const arr = byRole[role]
-      if (!arr || arr.length === 0) continue
-      bits.push(`${role} of \`${arr.slice(0, 4).join('`, `')}\`${arr.length > 4 ? ` +${arr.length - 4}` : ''}`)
-    }
-    if (bits.length > 0) {
-      out.push(`**Truth** : ${bits.join(' • ')}`)
-      out.push('')
-    }
-  }
+  out.push(...renderFicheCycles(cycles))
+  out.push(...renderFicheTruthRoles(tpRoles))
 
   return out.join('\n')
 }
