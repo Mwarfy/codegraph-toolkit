@@ -128,14 +128,17 @@ async function resolveDiffSnapshots(
 }
 
 function printDiffSummary(diff: SnapshotDiff, opts: { extended?: boolean } = {}): void {
-  const { extended } = opts
   console.log(chalk.bold('\n  CodeGraph Diff\n'))
   console.log(`  ${chalk.dim('from')} ${diff.fromCommit || '?'}  ${chalk.dim('→')}  ${diff.toCommit || '?'}`)
   console.log()
 
-  const s = diff.summary
+  printCompactSummary(diff.summary)
+  if (opts.extended) printExtendedSections(diff)
+  printOrphanChanges(diff)
+  printHealthLine(diff.summary)
+}
 
-  // Compact summary line
+function printCompactSummary(s: SnapshotDiff['summary']): void {
   const parts: string[] = []
   if (s.addedFiles > 0) parts.push(chalk.green(`+${s.addedFiles} files`))
   if (s.removedFiles > 0) parts.push(chalk.red(`-${s.removedFiles} files`))
@@ -144,38 +147,54 @@ function printDiffSummary(diff: SnapshotDiff, opts: { extended?: boolean } = {})
   if (parts.length > 0) console.log(`  ${parts.join('  ')}`)
   else console.log(chalk.dim('  No changes'))
   console.log()
+}
 
-  if (extended) {
-    if (diff.addedNodes.length > 0) {
-      console.log(chalk.green('  Added files:'))
-      for (const n of diff.addedNodes) {
-        const tags = n.tags.length ? chalk.dim(` [${n.tags.join(',')}]`) : ''
-        console.log(`    ${chalk.green('+')} ${n.id}${tags}`)
-      }
-      console.log()
-    }
-    if (diff.removedNodes.length > 0) {
-      console.log(chalk.red('  Removed files:'))
-      for (const n of diff.removedNodes) {
-        console.log(`    ${chalk.red('-')} ${n.id}`)
-      }
-      console.log()
-    }
-    if (diff.addedEdges.length > 0) {
-      console.log(chalk.green('  New connections:'))
-      const shown = diff.addedEdges.filter((e) => e.type !== 'import').slice(0, 20)
-      for (const e of shown) {
-        console.log(`    ${chalk.dim(e.type.padEnd(13))} ${e.from} → ${e.to}`)
-      }
-      const importCount = diff.addedEdges.filter((e) => e.type === 'import').length
-      if (importCount > 0) console.log(chalk.dim(`    + ${importCount} import edges`))
-      if (diff.addedEdges.length > shown.length + importCount) {
-        console.log(chalk.dim(`    + ${diff.addedEdges.length - shown.length - importCount} more...`))
-      }
-      console.log()
-    }
+function printExtendedSections(diff: SnapshotDiff): void {
+  printAddedNodes(diff.addedNodes)
+  printRemovedNodes(diff.removedNodes)
+  printAddedEdges(diff.addedEdges)
+}
+
+function printAddedNodes(addedNodes: SnapshotDiff['addedNodes']): void {
+  if (addedNodes.length === 0) return
+  console.log(chalk.green('  Added files:'))
+  for (const n of addedNodes) {
+    const tags = n.tags.length ? chalk.dim(` [${n.tags.join(',')}]`) : ''
+    console.log(`    ${chalk.green('+')} ${n.id}${tags}`)
   }
+  console.log()
+}
 
+function printRemovedNodes(removedNodes: SnapshotDiff['removedNodes']): void {
+  if (removedNodes.length === 0) return
+  console.log(chalk.red('  Removed files:'))
+  for (const n of removedNodes) {
+    console.log(`    ${chalk.red('-')} ${n.id}`)
+  }
+  console.log()
+}
+
+/**
+ * "New connections" : montre les non-import edges en détail (max 20), puis
+ * agrège le count des import edges (qui sont la majorité — pas pertinent
+ * d'afficher chacun).
+ */
+function printAddedEdges(addedEdges: SnapshotDiff['addedEdges']): void {
+  if (addedEdges.length === 0) return
+  console.log(chalk.green('  New connections:'))
+  const shown = addedEdges.filter((e) => e.type !== 'import').slice(0, 20)
+  for (const e of shown) {
+    console.log(`    ${chalk.dim(e.type.padEnd(13))} ${e.from} → ${e.to}`)
+  }
+  const importCount = addedEdges.filter((e) => e.type === 'import').length
+  if (importCount > 0) console.log(chalk.dim(`    + ${importCount} import edges`))
+  if (addedEdges.length > shown.length + importCount) {
+    console.log(chalk.dim(`    + ${addedEdges.length - shown.length - importCount} more...`))
+  }
+  console.log()
+}
+
+function printOrphanChanges(diff: SnapshotDiff): void {
   if (diff.newOrphans.length > 0) {
     console.log(chalk.yellow(`  ⚠ ${diff.newOrphans.length} new orphan(s):`))
     for (const id of diff.newOrphans) {
@@ -183,7 +202,6 @@ function printDiffSummary(diff: SnapshotDiff, opts: { extended?: boolean } = {})
     }
     console.log()
   }
-
   if (diff.resolvedOrphans.length > 0) {
     console.log(chalk.green(`  ✓ ${diff.resolvedOrphans.length} orphan(s) resolved:`))
     for (const id of diff.resolvedOrphans) {
@@ -191,7 +209,9 @@ function printDiffSummary(diff: SnapshotDiff, opts: { extended?: boolean } = {})
     }
     console.log()
   }
+}
 
+function printHealthLine(s: SnapshotDiff['summary']): void {
   const healthDelta = s.healthAfter - s.healthBefore
   const arrow = healthDelta > 0 ? chalk.green('▲') : healthDelta < 0 ? chalk.red('▼') : '='
   console.log(`  Health: ${formatHealth(s.healthBefore)} → ${formatHealth(s.healthAfter)} ${arrow}`)

@@ -208,6 +208,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+dc507d3 refactor(codegraph): split findArticulationPoints (cyclo 23→2, cog 46→0) — articulation-points.ts cleared
 df37db7 refactor(codegraph): split diffTypedCalls (cyclo 25→5, cog 30→0) — diff/typed-calls.ts cleared
 3814233 refactor(codegraph): split findSqlNamingViolations (cyclo 26→3, cog 42→3) — sql-naming.ts bomb-free
 024b628 refactor(codegraph): split computeModuleMetrics (cyclo 27→4, cog 22→0) — module-metrics.ts bomb-free
@@ -219,7 +220,6 @@ df37db7 refactor(codegraph): split diffTypedCalls (cyclo 25→5, cog 30→0) —
 2afff33 refactor(codegraph): split tarjanScc (cyclo 13→3, cog 37→3) — dsm.ts FULLY bomb-free
 5e798f4 refactor(codegraph): split computeDsm (cyclo 29→1, cog 45→0) — top-level orchestrator clean
 aa09cb1 refactor(codegraph): split runCrossDisciplineDetectors (cyclo 30→9, cog 43→6) — cross-discipline-orchestrator.ts bomb-free
-798d038 refactor(codegraph): split scanEmitSitesInSourceFile (cyclo 31→3, cog 39→2) — event-emit-sites.ts bomb-free
 ```
 
 ## Comment contribuer à ce brief

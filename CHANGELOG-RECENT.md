@@ -5,7 +5,7 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T23:20:23Z
+Last update : 2026-05-03T23:22:03Z
 
 ## By type
 
@@ -19,6 +19,7 @@ Last update : 2026-05-03T23:20:23Z
 
 ### `refactor` (46)
 
+- **dc507d3** refactor(codegraph): split findArticulationPoints (cyclo 23→2, cog 46→0) — articulation-points.ts cleared — 2026-05-04
 - **df37db7** refactor(codegraph): split diffTypedCalls (cyclo 25→5, cog 30→0) — diff/typed-calls.ts cleared — 2026-05-04
 - **3814233** refactor(codegraph): split findSqlNamingViolations (cyclo 26→3, cog 42→3) — sql-naming.ts bomb-free — 2026-05-04
 - **024b628** refactor(codegraph): split computeModuleMetrics (cyclo 27→4, cog 22→0) — module-metrics.ts bomb-free — 2026-05-04
@@ -38,11 +39,11 @@ Last update : 2026-05-03T23:20:23Z
 - **1d0518d** refactor(codegraph): split extractTensions (cyclo 34→10, cog 52→7) — tensions.ts bomb-free — 2026-05-04
 - **8ae0127** refactor(codegraph): split computeCommunityDetection (cyclo 36→7, cog 43→6) — community-detection.ts bomb-free — 2026-05-04
 - **e02af8d** refactor(codegraph): split computeComponentMetrics (cyclo 36→4, cog 44→0) — component-metrics.ts bomb-free — 2026-05-04
-- **13162d1** refactor(codegraph): split extractTaintedVarsFileBundle (cyclo 37→6, cog 62→7) — tainted-vars.ts bomb-free — 2026-05-04
 
 
 ## Full history
 
+- **dc507d3** refactor(codegraph): split findArticulationPoints (cyclo 23→2, cog 46→0) — articulation-points.ts cleared — 2026-05-04
 - **df37db7** refactor(codegraph): split diffTypedCalls (cyclo 25→5, cog 30→0) — diff/typed-calls.ts cleared — 2026-05-04
 - **3814233** refactor(codegraph): split findSqlNamingViolations (cyclo 26→3, cog 42→3) — sql-naming.ts bomb-free — 2026-05-04
 - **024b628** refactor(codegraph): split computeModuleMetrics (cyclo 27→4, cog 22→0) — module-metrics.ts bomb-free — 2026-05-04
@@ -92,4 +93,3 @@ Last update : 2026-05-03T23:20:23Z
 - **377916d** refactor(toolkit): split parseIndexFunction (cyclo 23→3) — 2 helpers (body-unwrap + chain-parse) — 2026-05-03
 - **23de1a8** refactor(toolkit): split parseDrizzleFile (cyclo 26→3) — 4 helpers + iteratePgTables generator — 2026-05-03
 - **bdec532** refactor(toolkit): split collectOrmSignals (cyclo 28→3) — truth-points.ts ALL bombs cleared — 2026-05-03
-- **1bdb707** refactor(toolkit): split collectAstSignals (cyclo 29→3) — 3 per-domain collectors — 2026-05-03
