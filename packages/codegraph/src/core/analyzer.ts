@@ -110,6 +110,7 @@ import { allTsImports as incAllTsImports } from '../incremental/ts-imports.js'
 import { allCodeQualityPatterns as incAllCodeQualityPatterns } from '../incremental/code-quality-patterns.js'
 import { allSecurityPatterns as incAllSecurityPatterns } from '../incremental/security-patterns.js'
 import { allDeadCode as incAllDeadCode } from '../incremental/dead-code.js'
+import { allDeprecatedUsage as incAllDeprecatedUsage } from '../incremental/deprecated-usage.js'
 import { setTsImportPrebuiltProject } from '../detectors/ts-imports.js'
 import {
   allModuleMetrics as incAllModuleMetrics,
@@ -668,7 +669,9 @@ async function runDeterministicDetectors(
   const floatingPromises = await runDetectorTimed(timing, 'floating-promises',
     () => analyzeFloatingPromises(config.rootDir, files, sharedProject, snapshot.typedCalls))
   const deprecatedUsage = await runDetectorTimed(timing, 'deprecated-usage',
-    () => analyzeDeprecatedUsage(config.rootDir, files, sharedProject))
+    () => incremental
+      ? Promise.resolve(incAllDeprecatedUsage.get('all'))
+      : analyzeDeprecatedUsage(config.rootDir, files, sharedProject))
   const articulationPoints = await runDetectorTimed(timing, 'articulation-points',
     () => analyzeArticulationPoints(snapshot))
 
