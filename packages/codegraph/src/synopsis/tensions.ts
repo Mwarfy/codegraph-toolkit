@@ -55,111 +55,145 @@ export function extractTensions(
   const skip = new Set<TensionKind>(options.skip ?? [])
   const out: Tension[] = []
 
-  // ─── Cycles non-gated (les gated sont intentionnels) ────────────────
-  if (!skip.has('cycle')) {
-    const cycles = (snapshot.cycles ?? []).filter(c => !c.gated).slice(0, maxPerKind)
-    for (const c of cycles) {
-      const path = c.nodes.slice(0, -1).join(' → ')
-      out.push({
-        kind: 'cycle',
-        coordinates: path,
-        note: c.size === 2 ? 'boucle directe (2 fichiers)' : `boucle de ${c.size} fichiers`,
-        testHint: 'inverser l\'import OU extraire dans un 3e fichier',
-      })
-    }
-  }
-
-  // ─── Orphelins (fichiers sans importeur) ────────────────────────────
-  if (!skip.has('orphan')) {
-    const orphans = (snapshot.nodes ?? [])
-      .filter(n => n.status === 'orphan' && n.type === 'file')
-      .slice(0, maxPerKind)
-    for (const n of orphans) {
-      out.push({
-        kind: 'orphan',
-        coordinates: n.id,
-        note: 'aucun importeur',
-        testHint: 'supprimer + npm test : si vert → mort, si rouge → entry-point caché',
-      })
-    }
-  }
-
-  // ─── FSM dead states (cible mais jamais source) ─────────────────────
-  // ─── FSM orphan states (déclarés mais jamais écrits) ────────────────
+  if (!skip.has('cycle')) extractCycleTensions(snapshot, maxPerKind, out)
+  if (!skip.has('orphan')) extractOrphanTensions(snapshot, maxPerKind, out)
   if (!skip.has('fsm-dead') || !skip.has('fsm-orphan')) {
-    const fsms = snapshot.stateMachines ?? []
-    let deadCount = 0
-    let orphanCount = 0
-    for (const fsm of fsms) {
-      if (!skip.has('fsm-dead')) {
-        for (const state of fsm.deadStates ?? []) {
-          if (deadCount >= maxPerKind) break
-          out.push({
-            kind: 'fsm-dead',
-            coordinates: `${fsm.concept}#${state}`,
-            note: 'état atteignable mais sans transition sortante',
-            testHint: 'ajouter la transition sortante OU retirer l\'état',
-          })
-          deadCount++
-        }
-      }
-      if (!skip.has('fsm-orphan')) {
-        for (const state of fsm.orphanStates ?? []) {
-          if (orphanCount >= maxPerKind) break
-          out.push({
-            kind: 'fsm-orphan',
-            coordinates: `${fsm.concept}#${state}`,
-            note: 'état déclaré mais jamais écrit dans le code',
-            testHint: 'supprimer l\'état OU ajouter la transition manquante',
-          })
-          orphanCount++
-        }
-      }
-    }
+    extractFsmTensions(snapshot, skip, maxPerKind, out)
   }
-
-  // ─── Deps déclarées inutilisées ──────────────────────────────────────
-  if (!skip.has('dep-unused')) {
-    const issues = snapshot.packageDeps ?? []
-    const unused = issues.filter(i => i.kind === 'declared-unused').slice(0, maxPerKind)
-    for (const i of unused) {
-      out.push({
-        kind: 'dep-unused',
-        coordinates: i.packageName,
-        note: `déclaré dans ${i.packageJson}, jamais importé`,
-        testHint: `npm uninstall ${i.packageName} + npm test`,
-      })
-    }
-  }
-
-  // ─── Barrels low-value (1-2 re-exports — friction inutile) ──────────
-  if (!skip.has('barrel-low')) {
-    const lows = (snapshot.barrels ?? []).filter(b => b.lowValue).slice(0, maxPerKind)
-    for (const b of lows) {
-      out.push({
-        kind: 'barrel-low',
-        coordinates: b.file,
-        note: `barrel à ${b.reExportCount} re-export(s) pour ${b.consumerCount} consumer(s)`,
-        testHint: 'inline les imports + supprimer le barrel',
-      })
-    }
-  }
-
-  // ─── Cross-container back-edges (frontend → backend, etc.) ───────────
-  if (!skip.has('back-edge')) {
-    const dsm = snapshot.dsm
-    if (dsm && dsm.backEdges && dsm.backEdges.length > 0) {
-      for (const be of dsm.backEdges.slice(0, maxPerKind)) {
-        out.push({
-          kind: 'back-edge',
-          coordinates: `${be.from} → ${be.to}`,
-          note: 'edge inverse l\'ordre architectural attendu',
-          testHint: 'inverser la dépendance OU extraire un module partagé',
-        })
-      }
-    }
-  }
+  if (!skip.has('dep-unused')) extractDepUnusedTensions(snapshot, maxPerKind, out)
+  if (!skip.has('barrel-low')) extractBarrelLowTensions(snapshot, maxPerKind, out)
+  if (!skip.has('back-edge')) extractBackEdgeTensions(snapshot, maxPerKind, out)
 
   return out
+}
+
+// ─── Cycles non-gated (les gated sont intentionnels) ───────────────────────
+
+function extractCycleTensions(snapshot: GraphSnapshot, max: number, out: Tension[]): void {
+  const cycles = (snapshot.cycles ?? []).filter((c) => !c.gated).slice(0, max)
+  for (const c of cycles) {
+    out.push({
+      kind: 'cycle',
+      coordinates: c.nodes.slice(0, -1).join(' → '),
+      note: c.size === 2 ? 'boucle directe (2 fichiers)' : `boucle de ${c.size} fichiers`,
+      testHint: 'inverser l\'import OU extraire dans un 3e fichier',
+    })
+  }
+}
+
+// ─── Orphelins (fichiers sans importeur) ───────────────────────────────────
+
+function extractOrphanTensions(snapshot: GraphSnapshot, max: number, out: Tension[]): void {
+  const orphans = (snapshot.nodes ?? [])
+    .filter((n) => n.status === 'orphan' && n.type === 'file')
+    .slice(0, max)
+  for (const n of orphans) {
+    out.push({
+      kind: 'orphan',
+      coordinates: n.id,
+      note: 'aucun importeur',
+      testHint: 'supprimer + npm test : si vert → mort, si rouge → entry-point caché',
+    })
+  }
+}
+
+// ─── FSM dead states + orphan states (1 seule itération sur snapshot.stateMachines) ───
+
+function extractFsmTensions(
+  snapshot: GraphSnapshot,
+  skip: Set<TensionKind>,
+  max: number,
+  out: Tension[],
+): void {
+  const fsms = snapshot.stateMachines ?? []
+  let deadCount = 0
+  let orphanCount = 0
+  for (const fsm of fsms) {
+    if (!skip.has('fsm-dead')) {
+      deadCount += pushFsmStates(
+        fsm.deadStates ?? [],
+        fsm.concept,
+        max - deadCount,
+        'fsm-dead',
+        'état atteignable mais sans transition sortante',
+        'ajouter la transition sortante OU retirer l\'état',
+        out,
+      )
+    }
+    if (!skip.has('fsm-orphan')) {
+      orphanCount += pushFsmStates(
+        fsm.orphanStates ?? [],
+        fsm.concept,
+        max - orphanCount,
+        'fsm-orphan',
+        'état déclaré mais jamais écrit dans le code',
+        'supprimer l\'état OU ajouter la transition manquante',
+        out,
+      )
+    }
+  }
+}
+
+/** Push jusqu'à `budget` tensions de ce kind, return nb effectivement poussé. */
+function pushFsmStates(
+  states: readonly string[],
+  concept: string,
+  budget: number,
+  kind: 'fsm-dead' | 'fsm-orphan',
+  note: string,
+  testHint: string,
+  out: Tension[],
+): number {
+  if (budget <= 0) return 0
+  const slice = states.slice(0, budget)
+  for (const state of slice) {
+    out.push({ kind, coordinates: `${concept}#${state}`, note, testHint })
+  }
+  return slice.length
+}
+
+// ─── Deps déclarées inutilisées ────────────────────────────────────────────
+
+function extractDepUnusedTensions(snapshot: GraphSnapshot, max: number, out: Tension[]): void {
+  const unused = (snapshot.packageDeps ?? [])
+    .filter((i) => i.kind === 'declared-unused')
+    .slice(0, max)
+  for (const i of unused) {
+    out.push({
+      kind: 'dep-unused',
+      coordinates: i.packageName,
+      note: `déclaré dans ${i.packageJson}, jamais importé`,
+      testHint: `npm uninstall ${i.packageName} + npm test`,
+    })
+  }
+}
+
+// ─── Barrels low-value (1-2 re-exports — friction inutile) ─────────────────
+
+function extractBarrelLowTensions(snapshot: GraphSnapshot, max: number, out: Tension[]): void {
+  const lows = (snapshot.barrels ?? []).filter((b) => b.lowValue).slice(0, max)
+  for (const b of lows) {
+    out.push({
+      kind: 'barrel-low',
+      coordinates: b.file,
+      note: `barrel à ${b.reExportCount} re-export(s) pour ${b.consumerCount} consumer(s)`,
+      testHint: 'inline les imports + supprimer le barrel',
+    })
+  }
+}
+
+// ─── Cross-container back-edges (frontend → backend, etc.) ─────────────────
+
+function extractBackEdgeTensions(snapshot: GraphSnapshot, max: number, out: Tension[]): void {
+  const dsm = snapshot.dsm
+  if (!dsm?.backEdges || dsm.backEdges.length === 0) return
+  for (const be of dsm.backEdges.slice(0, max)) {
+    out.push({
+      kind: 'back-edge',
+      coordinates: `${be.from} → ${be.to}`,
+      note: 'edge inverse l\'ordre architectural attendu',
+      testHint: 'inverser la dépendance OU extraire un module partagé',
+    })
+  }
 }
 
