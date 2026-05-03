@@ -583,11 +583,69 @@ interface DetectListenerEntriesArgs {
   inlineSinks: Map<string, DataFlowSink[]>
 }
 
+const LISTENER_BUS_NAME_RE = /bus|events?|emit|listen|signal/
+
+/**
+ * Heuristique : exclure les `.on(` sur des objets qui ne sont pas des
+ * event buses. PropertyAccess accepte uniquement si left = Identifier
+ * dont le nom matche bus/events/emit/listen/signal.
+ */
+function isListenerCallShape(expr: any): boolean {
+  if (expr.getKind() !== SyntaxKind.PropertyAccessExpression) return true
+  const left = expr.getExpression?.()
+  if (!left || left.getKind() !== SyntaxKind.Identifier) return false
+  const leftName = left.getText().toLowerCase()
+  return LISTENER_BUS_NAME_RE.test(leftName)
+}
+
+/**
+ * Unwrap `handler as Type` / `<Type>handler` — TS cast wrappers que
+ * la detection ne doit pas rater.
+ */
+function unwrapHandlerArg(handlerArg: any): { node: any; kind: number } {
+  let h = handlerArg
+  let k = h.getKind?.()
+  if (k === SyntaxKind.AsExpression || k === SyntaxKind.TypeAssertionExpression) {
+    h = h.getExpression?.() ?? h
+    k = h.getKind?.()
+  }
+  return { node: h, kind: k }
+}
+
+interface ListenerArrowCtx {
+  args: DetectListenerEntriesArgs
+  eventName: string
+  line: number
+  file: string
+  handlerArg: any
+  entries: DataFlowEntry[]
+  inlineSinks: Map<string, DataFlowSink[]>
+}
+
+function recordArrowListener(ctx: ListenerArrowCtx): void {
+  const { args, eventName, line, file, handlerArg, entries, inlineSinks } = ctx
+  const entryId = `${file}:<anon@${line}>`
+  entries.push({
+    kind: 'event-listener',
+    id: `event:${eventName}`,
+    file, line,
+    handler: entryId,
+  })
+  const body = handlerArg.getBody?.()
+  if (!body) return
+  const sinks: DataFlowSink[] = []
+  const fakeRange: FnRange = { start: line, end: (body as any).getEndLineNumber?.() ?? line, name: `<anon@${line}>` }
+  scanInlineSinks({
+    body, file, fakeRange,
+    queryFns: args.queryFns, emitFns: args.emitFns,
+    httpRespFns: args.httpRespFns, bullmqFns: args.bullmqFns,
+    out: sinks,
+  })
+  if (sinks.length > 0) inlineSinks.set(entryId, sinks)
+}
+
 function detectListenerEntries(args: DetectListenerEntriesArgs): void {
-  const {
-    sf, file, ranges, listenFns, queryFns, emitFns, httpRespFns, bullmqFns,
-    entries, inlineSinks,
-  } = args
+  const { sf, file, ranges, listenFns, entries, inlineSinks } = args
   sf.forEachDescendant((node) => {
     if (node.getKind() !== SyntaxKind.CallExpression) return
     const call = node as any
@@ -596,80 +654,32 @@ function detectListenerEntries(args: DetectListenerEntriesArgs): void {
 
     const method = getCalleeMethodName(expr)
     if (!method || !listenFns.has(method)) return
+    if (!isListenerCallShape(expr)) return
 
-    // Exclure les `.on(` sur des objets qui ne sont pas des event buses :
-    // heuristique — si le left side ressemble à un name DOM (element, socket,
-    // stream), on skip. Pour v1 on garde le filtre minimal : si c'est un
-    // PropertyAccess, on accepte uniquement si le left est un Identifier
-    // (bus, events, emitter, etc.) — les chaînes `foo.bar.on()` sont ignorées.
-    if (expr.getKind() === SyntaxKind.PropertyAccessExpression) {
-      const left = (expr as any).getExpression?.()
-      if (!left || left.getKind() !== SyntaxKind.Identifier) return
-      const leftName = left.getText().toLowerCase()
-      if (!/bus|events?|emit|listen|signal/.test(leftName)) return
-    }
-
-    const args = call.getArguments?.() ?? []
-    const eventName = extractLiteralString(args[0])
+    const callArgs = call.getArguments?.() ?? []
+    const eventName = extractLiteralString(callArgs[0])
     if (!eventName) return
+    if (!callArgs[1]) return
 
     const line = call.getStartLineNumber?.() ?? 0
-    let handlerArg = args[1]
-    if (!handlerArg) return
+    const { node: handlerNode, kind: handlerKind } = unwrapHandlerArg(callArgs[1])
 
-    // Unwrap `handler as Type` / `<Type>handler` — tc `as` cast pour types.
-    let hk = handlerArg.getKind?.()
-    if (hk === SyntaxKind.AsExpression || hk === SyntaxKind.TypeAssertionExpression) {
-      handlerArg = handlerArg.getExpression?.() ?? handlerArg
-      hk = handlerArg.getKind?.()
-    }
-
-    const handlerKind = hk
-
-    // Handler = Identifier (fonction nommée).
     if (handlerKind === SyntaxKind.Identifier) {
-      const handlerName = handlerArg.getText()
-      // Vérifier que handlerName correspond à une fonction locale.
-      const matchRange = ranges.find((r) => r.name === handlerName)
-      const entry: DataFlowEntry = {
+      const handlerName = handlerNode.getText()
+      // matchRange determine si le handler est local — on emet dans
+      // les 2 cas, le BFS tentera le lookup sur "file:handlerName".
+      void ranges.find((r) => r.name === handlerName)
+      entries.push({
         kind: 'event-listener',
         id: `event:${eventName}`,
-        file,
-        line,
+        file, line,
         handler: `${file}:${handlerName}`,
-      }
-      if (matchRange) {
-        entries.push(entry)
-      } else {
-        // Handler importé — on émet l'entry avec handler non-résolu, le BFS
-        // tentera quand même un lookup sur "file:handlerName".
-        entries.push(entry)
-      }
+      })
       return
     }
 
-    // Handler = arrow/function inline → scanner ses sinks directement.
     if (handlerKind === SyntaxKind.ArrowFunction || handlerKind === SyntaxKind.FunctionExpression) {
-      const entryId = `${file}:<anon@${line}>`
-      const entry: DataFlowEntry = {
-        kind: 'event-listener',
-        id: `event:${eventName}`,
-        file,
-        line,
-        handler: entryId,
-      }
-      entries.push(entry)
-      // Scan sinks dans le body de l'arrow.
-      const body = handlerArg.getBody?.()
-      if (body) {
-        const sinks: DataFlowSink[] = []
-        const fakeRange: FnRange = { start: line, end: (body as any).getEndLineNumber?.() ?? line, name: `<anon@${line}>` }
-        scanInlineSinks({
-          body, file, fakeRange,
-          queryFns, emitFns, httpRespFns, bullmqFns, out: sinks,
-        })
-        if (sinks.length > 0) inlineSinks.set(entryId, sinks)
-      }
+      recordArrowListener({ args, eventName, line, file, handlerArg: handlerNode, entries, inlineSinks })
     }
   })
 }
