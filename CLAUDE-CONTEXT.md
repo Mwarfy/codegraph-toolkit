@@ -199,6 +199,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+7369852 refactor(toolkit): split extractDeadCodeFileBundle (cyclo 50→3, cog 78→0) — dead-code.ts ALL bombs cleared
 8caddca refactor(toolkit): split computeAffectedFromCli + scanTestsImportingAffected — cli/index.ts ALL bombs cleared
 e27c2be refactor(toolkit): split codegraphAffected + dedup computeAffected — affected.ts ALL bombs cleared
 66cbcd7 refactor(toolkit): split findContainingSymbol + buildLineToSymbol — _shared/ast-helpers.ts ALL bombs cleared
@@ -210,7 +211,6 @@ f4ee98f refactor(toolkit): split typed-calls (cyclo 18+16→under) — typed-cal
 ac2b550 refactor(toolkit): split symbol-refs (cyclo 20+18→under) — symbol-refs.ts ALL bombs cleared
 c677082 refactor(toolkit): split compression-similarity (cyclo 18+16→under) — compression-similarity.ts ALL bombs cleared
 ba540e4 refactor(toolkit): split analyzeCycles + tarjanScc — cycles.ts ALL bombs cleared
-321cd83 refactor(toolkit): split classifyExportsFromBundles (cyclo 25→3) — unused-exports.ts ALL bombs cleared
 ```
 
 ## Comment contribuer à ce brief
