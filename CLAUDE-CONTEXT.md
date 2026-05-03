@@ -137,7 +137,7 @@
 - `packages/codegraph/src/incremental/database.ts` (in: 24) · gov by ADR-007
 - `packages/salsa/dist/index.d.ts` (in: 23)
 - `packages/codegraph/src/core/detector-registry.ts` (in: 18) · gov by ADR-008
-- `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 14) · gov by ADR-012
+- `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 16) · gov by ADR-012
 - `packages/runtime-graph/src/core/types.ts` (in: 13) · gov by ADR-009
 - `packages/adr-toolkit/src/config.ts` (in: 10) · gov by ADR-002
 
@@ -188,6 +188,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+ee89730 docs(validation): self-analysis run #2 — toolkit voit 553 violations sur lui-même
 9a5d5ac docs(validation): run #1.5 — composite rules sur Sentinel — 33× signal-to-noise
 af41582 feat(toolkit): symbolic simplification facts + 5 composite rules cross-discipline
 866eb25 fix(toolkit): bugs #1 #2 #3 #4 trouvés via test externe Hono
@@ -199,7 +200,6 @@ a191d61 docs(validation): full-chain run #1 — 4 bugs trouvés sur Hono
 0485ce4 feat(toolkit): self-optim Niveau 2A + Niveau 4 — math cost predict + auto-synth Salsa
 3ca2f45 feat(toolkit): self-optim auto-loop — connect probe → diag → brief → scaffold
 ce4e6e8 perf(toolkit): deprecated-usage Salsa-isolation + math regression gate
-afd0965 perf(toolkit): self-discovered Salsa optimizations — warm runtime −40%
 ```
 
 ## Comment contribuer à ce brief

@@ -34,10 +34,17 @@ export interface EvalCallsFileBundle {
 /**
  * Bundle per-file : extrait les calls eval / new Function du fichier.
  */
+const TEST_FIXTURE_RE = /(\.test\.tsx?|\.spec\.tsx?|(^|\/)tests?\/|(^|\/)__tests__\/|(^|\/)fixtures?\/)/
+
 export function extractEvalCallsFileBundle(
   sf: SourceFile,
   relPath: string,
 ): EvalCallsFileBundle {
+  // Skip test fixtures — eval() est intentionnel dans les inputs
+  // synthétiques destinés à tester les détecteurs taint / no-eval
+  // eux-mêmes. Sans ce skip, le toolkit auto-flag ses propres
+  // fixtures comme dette.
+  if (TEST_FIXTURE_RE.test(relPath)) return { calls: [] }
   const calls: EvalCall[] = []
 
   // 1. eval(...) — CallExpression dont le callee est l'identifier 'eval'.

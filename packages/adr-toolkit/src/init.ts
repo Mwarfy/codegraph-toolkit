@@ -3,14 +3,18 @@
  *
  * Idempotent : ne réécrit pas un fichier existant.
  *
- * Étapes :
+ * Étapes orchestrées par `initProject` :
  *   1. Détecte le layout (simple src/, monorepo backend+frontend, apps/*, packages/*)
  *   2. Écrit `.codegraph-toolkit.json` (config adr-toolkit)
  *   3. Écrit `codegraph.config.json` (config codegraph) avec les bons paths
  *   4. Crée `<adrDir>/_TEMPLATE.md` + `INDEX.md`
  *   5. Crée `scripts/git-hooks/{pre,post}-commit` + `adr-hook.sh`
  *   6. Set `git config core.hooksPath` + chmod +x
- *   7. Optionnel : `.claude/settings.json` (avec confirmation, voir options)
+ *   7. Optionnel : invariants Datalog + Claude hooks PostToolUse
+ *   8. Optionnel : `.claude/settings.json`
+ *
+ * Refonte mai 2026 : split de `initProject` (130+ LOC) et `wireClaudeHooks`
+ * (115 LOC) en helpers nommés, un par étape. Cyclomatic complexity réduite.
  */
 
 import { readFile, writeFile, mkdir, copyFile, chmod, stat } from 'node:fs/promises'
@@ -86,7 +90,6 @@ async function detectStack(rootDir: string): Promise<DetectedStack> {
     hasPrisma: false,
   }
 
-  // 1. Cherche les package.json (root + sub-packages communs)
   const candidates = [
     'package.json',
     'backend/package.json',
@@ -110,7 +113,6 @@ async function detectStack(rootDir: string): Promise<DetectedStack> {
     } catch { /* malformed package.json, skip */ }
   }
 
-  // 2. Cherche des fichiers .sql dans les emplacements typiques
   const sqlPaths = [
     'migrations',
     'db/migrations',
@@ -120,8 +122,7 @@ async function detectStack(rootDir: string): Promise<DetectedStack> {
     'src/db/migrations',
   ]
   for (const rel of sqlPaths) {
-    const p = path.join(rootDir, rel)
-    if (await exists(p)) {
+    if (await exists(path.join(rootDir, rel))) {
       stack.hasRawSqlMigrations = true
       break
     }
@@ -134,7 +135,6 @@ async function detectLayout(rootDir: string): Promise<DetectedLayout> {
   const has = (p: string) => exists(path.join(rootDir, p))
   const hasGit = await has('.git')
 
-  // Cas 1 : monorepo "fullstack" (backend/ + frontend/ + éventuellement shared/)
   if ((await has('backend/src')) && (await has('frontend'))) {
     const srcDirs = ['backend/src']
     if (await has('shared/src')) srcDirs.push('shared/src')
@@ -160,7 +160,6 @@ async function detectLayout(rootDir: string): Promise<DetectedLayout> {
     }
   }
 
-  // Cas 2 : monorepo "workspaces" (apps/* ou packages/*)
   if ((await has('apps')) || (await has('packages'))) {
     const srcDirs: string[] = []
     if (await has('apps')) srcDirs.push('apps')
@@ -186,7 +185,6 @@ async function detectLayout(rootDir: string): Promise<DetectedLayout> {
     }
   }
 
-  // Cas 3 : projet simple (src/)
   if (await has('src')) {
     let tsconfigPath = 'tsconfig.json'
     if (!(await has(tsconfigPath)) && (await has('src/tsconfig.json'))) {
@@ -202,7 +200,6 @@ async function detectLayout(rootDir: string): Promise<DetectedLayout> {
     }
   }
 
-  // Cas 4 : flat (rien à la racine — fallback minimal)
   return {
     kind: 'flat',
     srcDirs: ['.'],
@@ -229,6 +226,16 @@ const CLAUDE_SETTINGS_TEMPLATE = {
   },
 }
 
+const POST_TOOL_USE_HOOK = {
+  matcher: 'Edit|Write|MultiEdit',
+  hooks: [
+    {
+      type: 'command',
+      command: 'scripts/git-hooks/codegraph-feedback.sh',
+    },
+  ],
+}
+
 export async function initProject(
   rootDir: string,
   opts: InitOptions = {},
@@ -237,67 +244,108 @@ export async function initProject(
   const layout = await detectLayout(rootDir)
   const stack = await detectStack(rootDir)
   result.layout = layout.kind
-  if (stack.hasDrizzle) result.warnings.push('Drizzle ORM détecté → drizzle-schema detector activé')
-  if (stack.hasRawSqlMigrations) result.warnings.push('Migrations .sql détectées → sql-schema detector activé')
-  if (stack.hasPrisma) result.warnings.push('Prisma détecté → pas encore supporté (FK invariants seulement raw SQL + Drizzle pour l\'instant)')
+  warnAboutStack(stack, result)
 
-  // 1. .codegraph-toolkit.json
+  await writeAdrToolkitConfig(rootDir, layout, result)
+  await writeCodegraphConfig(rootDir, layout, stack, result)
+  await writeAdrTemplates(rootDir, result)
+  await writeGitHooks(rootDir, result)
+  await setGitHooksPath(rootDir, layout.hasGit, result)
+
+  if (opts.withInvariants) {
+    await wireInvariantsPackage(rootDir, opts.withInvariants, result)
+  }
+  if (opts.withClaudeHooks) {
+    await wireClaudeHooks(rootDir, layout, result)
+  }
+  if (opts.withClaudeSettings) {
+    await writeClaudePreToolUseSettings(rootDir, result)
+  }
+
+  return result
+}
+
+function warnAboutStack(stack: DetectedStack, result: InitResult): void {
+  if (stack.hasDrizzle) {
+    result.warnings.push('Drizzle ORM détecté → drizzle-schema detector activé')
+  }
+  if (stack.hasRawSqlMigrations) {
+    result.warnings.push('Migrations .sql détectées → sql-schema detector activé')
+  }
+  if (stack.hasPrisma) {
+    result.warnings.push(
+      'Prisma détecté → pas encore supporté (FK invariants seulement raw SQL + Drizzle pour l\'instant)',
+    )
+  }
+}
+
+async function writeAdrToolkitConfig(
+  rootDir: string,
+  layout: DetectedLayout,
+  result: InitResult,
+): Promise<void> {
   const adrConfigPath = path.join(rootDir, CONFIG_FILENAME)
   if (await exists(adrConfigPath)) {
     result.skipped.push(CONFIG_FILENAME)
-  } else {
-    const config = {
-      rootDir: '.',
-      adrDir: 'docs/adr',
-      srcDirs: layout.srcDirs,
-      tsconfigPath: layout.tsconfigPath,
-      briefPath: 'CLAUDE-CONTEXT.md',
-      anchorMarkerExtensions: ['ts', 'tsx', 'sh', 'sql'],
-      skipDirs: ['node_modules', 'dist', '.next', '.codegraph', 'coverage', '.git'],
-      hubThreshold: 15,
-      invariantTestPaths: [],
-    }
-    await writeFile(adrConfigPath, JSON.stringify(config, null, 2) + '\n', 'utf-8')
-    result.created.push(CONFIG_FILENAME)
+    return
   }
+  const config = {
+    rootDir: '.',
+    adrDir: 'docs/adr',
+    srcDirs: layout.srcDirs,
+    tsconfigPath: layout.tsconfigPath,
+    briefPath: 'CLAUDE-CONTEXT.md',
+    anchorMarkerExtensions: ['ts', 'tsx', 'sh', 'sql'],
+    skipDirs: ['node_modules', 'dist', '.next', '.codegraph', 'coverage', '.git'],
+    hubThreshold: 15,
+    invariantTestPaths: [],
+  }
+  await writeFile(adrConfigPath, JSON.stringify(config, null, 2) + '\n', 'utf-8')
+  result.created.push(CONFIG_FILENAME)
+}
 
-  // 2. codegraph.config.json
+async function writeCodegraphConfig(
+  rootDir: string,
+  layout: DetectedLayout,
+  stack: DetectedStack,
+  result: InitResult,
+): Promise<void> {
   const codegraphConfigPath = path.join(rootDir, 'codegraph.config.json')
   if (await exists(codegraphConfigPath)) {
     result.skipped.push('codegraph.config.json')
-  } else {
-    // Détecteurs SQL/Drizzle activés selon stack détectée. Si la stack
-    // n'a pas de DB, le détecteur tournera quand même mais retournera
-    // tables.length === 0 (overhead minime ~50ms, OK).
-    const detectorOptions: Record<string, Record<string, unknown>> = {}
-    detectorOptions.sqlSchema = { enabled: stack.hasRawSqlMigrations }
-    detectorOptions.drizzleSchema = { enabled: stack.hasDrizzle }
-
-    const codegraphConfig = {
-      rootDir: '.',
-      include: layout.codegraphInclude,
-      exclude: [
-        '**/node_modules/**',
-        '**/dist/**',
-        '**/.next/**',
-        '**/coverage/**',
-        '**/__tests__/**',
-        '**/*.test.ts',
-        '**/*.spec.ts',
-        '**/*.d.ts',
-      ],
-      entryPoints: layout.codegraphEntryPoints,
-      detectors: ['ts-imports', 'event-bus', 'http-routes', 'bullmq-queues', 'db-tables'],
-      detectorOptions,
-      snapshotDir: '.codegraph',
-      maxSnapshots: 50,
-      tsconfigPath: layout.tsconfigPath,
-    }
-    await writeFile(codegraphConfigPath, JSON.stringify(codegraphConfig, null, 2) + '\n', 'utf-8')
-    result.created.push('codegraph.config.json')
+    return
   }
+  // Détecteurs SQL/Drizzle activés selon stack détectée. Si absente,
+  // overhead minime (~50ms) à retourner tables.length === 0.
+  const detectorOptions: Record<string, Record<string, unknown>> = {
+    sqlSchema: { enabled: stack.hasRawSqlMigrations },
+    drizzleSchema: { enabled: stack.hasDrizzle },
+  }
+  const codegraphConfig = {
+    rootDir: '.',
+    include: layout.codegraphInclude,
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/.next/**',
+      '**/coverage/**',
+      '**/__tests__/**',
+      '**/*.test.ts',
+      '**/*.spec.ts',
+      '**/*.d.ts',
+    ],
+    entryPoints: layout.codegraphEntryPoints,
+    detectors: ['ts-imports', 'event-bus', 'http-routes', 'bullmq-queues', 'db-tables'],
+    detectorOptions,
+    snapshotDir: '.codegraph',
+    maxSnapshots: 50,
+    tsconfigPath: layout.tsconfigPath,
+  }
+  await writeFile(codegraphConfigPath, JSON.stringify(codegraphConfig, null, 2) + '\n', 'utf-8')
+  result.created.push('codegraph.config.json')
+}
 
-  // 3. ADR dir + templates
+async function writeAdrTemplates(rootDir: string, result: InitResult): Promise<void> {
   const adrDir = path.join(rootDir, 'docs/adr')
   await mkdir(adrDir, { recursive: true })
 
@@ -316,8 +364,9 @@ export async function initProject(
     await copyFile(path.join(TEMPLATES_DIR, 'INDEX.md.tmpl'), indexPath)
     result.created.push('docs/adr/INDEX.md')
   }
+}
 
-  // 4. Hooks
+async function writeGitHooks(rootDir: string, result: InitResult): Promise<void> {
   const hooksDir = path.join(rootDir, 'scripts/git-hooks')
   await mkdir(hooksDir, { recursive: true })
 
@@ -338,61 +387,57 @@ export async function initProject(
     await chmod(target, 0o755)
     result.created.push(`scripts/git-hooks/${targetName}`)
   }
+}
 
-  // 5. git config core.hooksPath
-  if (layout.hasGit) {
-    try {
-      execSync('git config core.hooksPath scripts/git-hooks', { cwd: rootDir, stdio: 'pipe' })
-      result.created.push('git config core.hooksPath')
-    } catch (err) {
-      result.warnings.push(`git config core.hooksPath échoué : ${(err as Error).message}`)
-    }
-  } else {
+async function setGitHooksPath(
+  rootDir: string,
+  hasGit: boolean,
+  result: InitResult,
+): Promise<void> {
+  if (!hasGit) {
     result.warnings.push('Pas de .git/ — set core.hooksPath manuellement après git init')
+    return
+  }
+  try {
+    execSync('git config core.hooksPath scripts/git-hooks', { cwd: rootDir, stdio: 'pipe' })
+    result.created.push('git config core.hooksPath')
+  } catch (err) {
+    result.warnings.push(`git config core.hooksPath échoué : ${(err as Error).message}`)
+  }
+}
+
+async function writeClaudePreToolUseSettings(
+  rootDir: string,
+  result: InitResult,
+): Promise<void> {
+  const claudeDir = path.join(rootDir, '.claude')
+  const claudeSettingsPath = path.join(claudeDir, 'settings.json')
+  await mkdir(claudeDir, { recursive: true })
+
+  if (!(await exists(claudeSettingsPath))) {
+    await writeFile(
+      claudeSettingsPath,
+      JSON.stringify(CLAUDE_SETTINGS_TEMPLATE, null, 2) + '\n',
+      'utf-8',
+    )
+    result.created.push('.claude/settings.json')
+    return
   }
 
-  // 5b. Invariants standards (optionnel)
-  if (opts.withInvariants) {
-    await wireInvariantsPackage(rootDir, opts.withInvariants, result)
-  }
-
-  // 5c. Claude hooks PostToolUse (Tier 9 — live datalog gate)
-  if (opts.withClaudeHooks) {
-    await wireClaudeHooks(rootDir, layout, result)
-  }
-
-  // 6. .claude/settings.json (optionnel)
-  if (opts.withClaudeSettings) {
-    const claudeDir = path.join(rootDir, '.claude')
-    const claudeSettingsPath = path.join(claudeDir, 'settings.json')
-    await mkdir(claudeDir, { recursive: true })
-    if (await exists(claudeSettingsPath)) {
-      // Merge si possible : on n'écrase pas, mais on log un warning si
-      // notre hook PreToolUse n'est pas présent.
-      try {
-        const existing = JSON.parse(await readFile(claudeSettingsPath, 'utf-8'))
-        const hasOurHook = JSON.stringify(existing).includes('adr-hook.sh')
-        if (hasOurHook) {
-          result.skipped.push('.claude/settings.json (adr-hook déjà wired)')
-        } else {
-          result.warnings.push(
-            '.claude/settings.json existe sans adr-hook — ajoute manuellement le hook PreToolUse (cf. README)',
-          )
-        }
-      } catch {
-        result.warnings.push('.claude/settings.json existe mais invalide JSON — non modifié')
-      }
+  // Existing settings — on n'écrase pas, mais on log si notre hook absent.
+  try {
+    const existing = JSON.parse(await readFile(claudeSettingsPath, 'utf-8'))
+    const hasOurHook = JSON.stringify(existing).includes('adr-hook.sh')
+    if (hasOurHook) {
+      result.skipped.push('.claude/settings.json (adr-hook déjà wired)')
     } else {
-      await writeFile(
-        claudeSettingsPath,
-        JSON.stringify(CLAUDE_SETTINGS_TEMPLATE, null, 2) + '\n',
-        'utf-8',
+      result.warnings.push(
+        '.claude/settings.json existe sans adr-hook — ajoute manuellement le hook PreToolUse (cf. README)',
       )
-      result.created.push('.claude/settings.json')
     }
+  } catch {
+    result.warnings.push('.claude/settings.json existe mais invalide JSON — non modifié')
   }
-
-  return result
 }
 
 /**
@@ -410,8 +455,7 @@ async function wireInvariantsPackage(
   result: InitResult,
 ): Promise<void> {
   const pkgName = `@liby-tools/invariants-${flavor}-ts`
-  const pkgDir = path.join(rootDir, 'node_modules', pkgName)
-  const pkgInvariants = path.join(pkgDir, 'invariants')
+  const pkgInvariants = path.join(rootDir, 'node_modules', pkgName, 'invariants')
 
   if (!(await exists(pkgInvariants))) {
     result.warnings.push(
@@ -423,7 +467,6 @@ async function wireInvariantsPackage(
   const targetDir = path.join(rootDir, 'invariants')
   await mkdir(targetDir, { recursive: true })
 
-  // Copier les rules .dl du package, sauf schema-subset.dl.
   const { readdir } = await import('node:fs/promises')
   const ruleFiles = (await readdir(pkgInvariants)).filter(
     (f) => f.endsWith('.dl') && f !== 'schema-subset.dl',
@@ -459,75 +502,57 @@ async function wireInvariantsPackage(
 /**
  * Wire Tier 9 — Claude Code hooks PostToolUse + test runner Datalog.
  *
- *   1. Copie `codegraph-feedback.sh` (templated, paths dynamiques) dans
- *      `<rootDir>/scripts/git-hooks/codegraph-feedback.sh` (chmod +x).
+ *   1. Copie `codegraph-feedback.sh` (templated) dans `scripts/git-hooks/`.
  *   2. Wire dans `.claude/settings.json` : ajoute hook PostToolUse pour
  *      `Edit|Write|MultiEdit` qui appelle ce script.
- *   3. Copie le template `datalog-invariants.test.ts` dans le test dir
- *      du projet (best-effort detect du layout : `tests/unit/`,
- *      `__tests__/`, ou `<srcDirs[0]>/tests/unit/`).
+ *   3. Copie le test runner Datalog dans le test dir détecté.
  *
- *   Demande que `@liby-tools/codegraph` soit installe (le hook l'utilise
- *   via `require.resolve` au runtime).
+ * Demande que `@liby-tools/codegraph` soit installé.
  */
 async function wireClaudeHooks(
   rootDir: string,
   layout: DetectedLayout,
   result: InitResult,
 ): Promise<void> {
-  // 1. Copie codegraph-feedback.sh
+  const copied = await copyCodegraphFeedbackHook(rootDir, result)
+  if (!copied) return // source absent — abandon (warning déjà logué)
+  await mergeClaudeSettingsForPostHook(rootDir, result)
+  await copyDatalogTestRunner(rootDir, layout, result)
+}
+
+/** Copie codegraph-feedback.sh dans scripts/git-hooks/. Retourne false si source absente. */
+async function copyCodegraphFeedbackHook(
+  rootDir: string,
+  result: InitResult,
+): Promise<boolean> {
   const hooksDir = path.join(rootDir, 'scripts', 'git-hooks')
   await mkdir(hooksDir, { recursive: true })
   const target = path.join(hooksDir, 'codegraph-feedback.sh')
   if (await exists(target)) {
     result.skipped.push('scripts/git-hooks/codegraph-feedback.sh')
-  } else {
-    const source = path.join(HOOKS_TEMPLATES_DIR, 'codegraph-feedback.sh')
-    if (await exists(source)) {
-      await copyFile(source, target)
-      await chmod(target, 0o755)
-      result.created.push('scripts/git-hooks/codegraph-feedback.sh')
-    } else {
-      result.warnings.push(`hook source absent: ${source}`)
-      return
-    }
+    return true
   }
+  const source = path.join(HOOKS_TEMPLATES_DIR, 'codegraph-feedback.sh')
+  if (!(await exists(source))) {
+    result.warnings.push(`hook source absent: ${source}`)
+    return false
+  }
+  await copyFile(source, target)
+  await chmod(target, 0o755)
+  result.created.push('scripts/git-hooks/codegraph-feedback.sh')
+  return true
+}
 
-  // 2. Wire dans .claude/settings.json
+/** Merge POST_TOOL_USE_HOOK dans .claude/settings.json (créé si absent). */
+async function mergeClaudeSettingsForPostHook(
+  rootDir: string,
+  result: InitResult,
+): Promise<void> {
   const claudeDir = path.join(rootDir, '.claude')
   const claudeSettingsPath = path.join(claudeDir, 'settings.json')
   await mkdir(claudeDir, { recursive: true })
-  const POST_TOOL_USE_HOOK = {
-    matcher: 'Edit|Write|MultiEdit',
-    hooks: [
-      {
-        type: 'command',
-        command: 'scripts/git-hooks/codegraph-feedback.sh',
-      },
-    ],
-  }
-  if (await exists(claudeSettingsPath)) {
-    try {
-      const existing = JSON.parse(await readFile(claudeSettingsPath, 'utf-8'))
-      const hasOurPostHook = JSON.stringify(existing).includes('codegraph-feedback.sh')
-      if (hasOurPostHook) {
-        result.skipped.push('.claude/settings.json (codegraph-feedback déjà wired)')
-      } else {
-        // Merge minimal : ajoute notre PostToolUse à existing.hooks
-        existing.hooks = existing.hooks ?? {}
-        existing.hooks.PostToolUse = existing.hooks.PostToolUse ?? []
-        existing.hooks.PostToolUse.push(POST_TOOL_USE_HOOK)
-        await writeFile(
-          claudeSettingsPath,
-          JSON.stringify(existing, null, 2) + '\n',
-          'utf-8',
-        )
-        result.created.push('.claude/settings.json (codegraph-feedback merged)')
-      }
-    } catch {
-      result.warnings.push('.claude/settings.json existe mais invalide JSON — non modifié')
-    }
-  } else {
+
+  if (!(await exists(claudeSettingsPath))) {
     const merged = {
       hooks: {
         PreToolUse: [
@@ -541,9 +566,31 @@ async function wireClaudeHooks(
     }
     await writeFile(claudeSettingsPath, JSON.stringify(merged, null, 2) + '\n', 'utf-8')
     result.created.push('.claude/settings.json')
+    return
   }
 
-  // 3. Copie le test runner Datalog dans le test dir détecté.
+  try {
+    const existing = JSON.parse(await readFile(claudeSettingsPath, 'utf-8'))
+    if (JSON.stringify(existing).includes('codegraph-feedback.sh')) {
+      result.skipped.push('.claude/settings.json (codegraph-feedback déjà wired)')
+      return
+    }
+    existing.hooks = existing.hooks ?? {}
+    existing.hooks.PostToolUse = existing.hooks.PostToolUse ?? []
+    existing.hooks.PostToolUse.push(POST_TOOL_USE_HOOK)
+    await writeFile(claudeSettingsPath, JSON.stringify(existing, null, 2) + '\n', 'utf-8')
+    result.created.push('.claude/settings.json (codegraph-feedback merged)')
+  } catch {
+    result.warnings.push('.claude/settings.json existe mais invalide JSON — non modifié')
+  }
+}
+
+/** Copie le test runner Datalog templated dans le test dir détecté. */
+async function copyDatalogTestRunner(
+  rootDir: string,
+  layout: DetectedLayout,
+  result: InitResult,
+): Promise<void> {
   const testDirCandidates = [
     'tests/unit',
     '__tests__',
@@ -551,8 +598,7 @@ async function wireClaudeHooks(
   ]
   let testDir: string | null = null
   for (const candidate of testDirCandidates) {
-    const abs = path.join(rootDir, candidate)
-    if (await exists(abs)) {
+    if (await exists(path.join(rootDir, candidate))) {
       testDir = candidate
       break
     }
@@ -561,27 +607,24 @@ async function wireClaudeHooks(
     testDir = 'tests/unit'
     await mkdir(path.join(rootDir, testDir), { recursive: true })
   }
+
   const testTarget = path.join(rootDir, testDir, 'datalog-invariants.test.ts')
   if (await exists(testTarget)) {
     result.skipped.push(`${testDir}/datalog-invariants.test.ts`)
-  } else {
-    const tmplSource = path.join(TEMPLATES_DIR, 'datalog-invariants.test.ts.tmpl')
-    if (await exists(tmplSource)) {
-      const tmpl = await readFile(tmplSource, 'utf-8')
-      // Compute relative path from test file to repo root.
-      // ex: tests/unit/datalog-invariants.test.ts → ../..
-      const depth = testDir.split('/').filter(Boolean).length
-      const relToRoot = depth === 0 ? '.' : new Array(depth).fill('..').join('/')
-      // invariants dir : detected via wireInvariantsPackage si appele,
-      // sinon on suppose 'invariants/' standard.
-      const invariantsDir = (await exists(path.join(rootDir, 'invariants'))) ? 'invariants' : 'invariants'
-      const rendered = tmpl
-        .replaceAll('__TESTFILE_TO_REPO__', relToRoot)
-        .replaceAll('__INVARIANTS_DIR__', invariantsDir)
-      await writeFile(testTarget, rendered, 'utf-8')
-      result.created.push(`${testDir}/datalog-invariants.test.ts`)
-    } else {
-      result.warnings.push(`template absent: ${tmplSource}`)
-    }
+    return
   }
+  const tmplSource = path.join(TEMPLATES_DIR, 'datalog-invariants.test.ts.tmpl')
+  if (!(await exists(tmplSource))) {
+    result.warnings.push(`template absent: ${tmplSource}`)
+    return
+  }
+  const tmpl = await readFile(tmplSource, 'utf-8')
+  // Compute relative path from test file to repo root (e.g. tests/unit → ../..).
+  const depth = testDir.split('/').filter(Boolean).length
+  const relToRoot = depth === 0 ? '.' : new Array(depth).fill('..').join('/')
+  const rendered = tmpl
+    .replaceAll('__TESTFILE_TO_REPO__', relToRoot)
+    .replaceAll('__INVARIANTS_DIR__', 'invariants')
+  await writeFile(testTarget, rendered, 'utf-8')
+  result.created.push(`${testDir}/datalog-invariants.test.ts`)
 }

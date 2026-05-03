@@ -5,12 +5,13 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T14:16:41Z
+Last update : 2026-05-03T14:55:43Z
 
 ## By type
 
-### `feat` (23)
+### `feat` (21)
 
+- **af41582** feat(toolkit): symbolic simplification facts + 5 composite rules cross-discipline — 2026-05-03
 - **2f84a70** feat(toolkit): Niveau 5 effect-analysis + roadmap defers Niveaux 6/7 — 2026-05-03
 - **0485ce4** feat(toolkit): self-optim Niveau 2A + Niveau 4 — math cost predict + auto-synth Salsa — 2026-05-03
 - **3ca2f45** feat(toolkit): self-optim auto-loop — connect probe → diag → brief → scaffold — 2026-05-03
@@ -30,7 +31,6 @@ Last update : 2026-05-03T14:16:41Z
 - **4cb7ffa** feat(toolkit): TDA + Lyapunov — cycles structurels + chaos detection — 2026-05-01
 - **375d5a2** feat(toolkit): cross-discipline rules — Fiedler λ₂ + Shannon entropy + Hamming dup — 2026-05-01
 - **bc4fce3** feat(invariants): 2 rules auto-decouvertes via pattern mining — 2026-05-01
-- **c3750da** feat(toolkit): Top-5 graph theory uplift — PageRank + complexity + perf + SCC — 2026-05-01
 
 
 ### `fix` (7)
@@ -71,8 +71,10 @@ Last update : 2026-05-03T14:16:41Z
 - **18a37a7** chore(toolkit): retire 3 exports dead code (UnusedExport.facts) — 2026-05-01
 
 
-### `docs` (4)
+### `docs` (6)
 
+- **ee89730** docs(validation): self-analysis run #2 — toolkit voit 553 violations sur lui-même — 2026-05-03
+- **9a5d5ac** docs(validation): run #1.5 — composite rules sur Sentinel — 33× signal-to-noise — 2026-05-03
 - **a191d61** docs(validation): full-chain run #1 — 4 bugs trouvés sur Hono — 2026-05-03
 - **095661e** docs(validation): run #1 — Hono framework (186 files, 3.5s, 0 crash, 0 hallucination) — 2026-05-03
 - **c003043** docs: update READMEs for v0.5.0 — 91 rules, multi-dir, 7 cross-discipline — 2026-05-01
@@ -86,6 +88,9 @@ Last update : 2026-05-03T14:16:41Z
 
 ## Full history
 
+- **ee89730** docs(validation): self-analysis run #2 — toolkit voit 553 violations sur lui-même — 2026-05-03
+- **9a5d5ac** docs(validation): run #1.5 — composite rules sur Sentinel — 33× signal-to-noise — 2026-05-03
+- **af41582** feat(toolkit): symbolic simplification facts + 5 composite rules cross-discipline — 2026-05-03
 - **866eb25** fix(toolkit): bugs #1 #2 #3 #4 trouvés via test externe Hono — 2026-05-03
 - **a191d61** docs(validation): full-chain run #1 — 4 bugs trouvés sur Hono — 2026-05-03
 - **095661e** docs(validation): run #1 — Hono framework (186 files, 3.5s, 0 crash, 0 hallucination) — 2026-05-03
@@ -133,6 +138,3 @@ Last update : 2026-05-03T14:16:41Z
 - **bc4fce3** feat(invariants): 2 rules auto-decouvertes via pattern mining — 2026-05-01
 - **1cc41ea** refactor(facts): extract 3 emit helpers + fix File/FileTag regression — 2026-05-01
 - **c3750da** feat(toolkit): Top-5 graph theory uplift — PageRank + complexity + perf + SCC — 2026-05-01
-- **f35acd1** feat(toolkit): self-audit — 5 quick-wins + 2 meta-fix + dogfood gate — 2026-05-01
-- **9a62387** feat(invariants): Tier 18 — event-payload-cross-block-taint + closure backlog — 2026-05-01
-- **fa4032f** feat(invariants): Tier 17 — 11 nouvelles rules library + grandfathers — 2026-05-01
