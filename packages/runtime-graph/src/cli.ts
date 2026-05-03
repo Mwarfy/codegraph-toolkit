@@ -242,60 +242,77 @@ export { program }
  * et merge le contenu de tous les pid-* dans dstDir.
  */
 async function mergeFactsDirs(srcDir: string, dstDir: string): Promise<void> {
+  const sourceDirs = await listSourceDirs(srcDir)
+  // CLI one-shot fact merge — séquentiel acceptable (<100ms total).
+  // Promise.all sur la double boucle nested rendrait le code dur à lire pour
+  // gain négligeable côté CLI tool.
+  for (const sd of sourceDirs) {
+    await mergeOneSourceDir(sd, dstDir)
+  }
+}
+
+/** Sources : sub-dirs pid-* + le srcDir lui-même (cas legacy ou direct write). */
+async function listSourceDirs(srcDir: string): Promise<string[]> {
   const entries = await fs.readdir(srcDir, { withFileTypes: true })
-  // Sources : sub-dirs pid-* + le srcDir lui-même (cas legacy ou direct write)
   const sourceDirs: string[] = [srcDir]
   for (const e of entries) {
     if (e.isDirectory() && e.name.startsWith('pid-')) {
       sourceDirs.push(path.join(srcDir, e.name))
     }
   }
+  return sourceDirs
+}
 
-  // CLI one-shot fact merge — séquentiel acceptable (<100ms total even sur
-  // gros corpus). Promise.all sur la double boucle nested rendrait le code
-  // dur à lire pour gain négligeable côté CLI tool.
-  for (const sd of sourceDirs) {
-    let files: string[]
-    // await-ok: CLI fact-merge one-shot, séquentiel délibéré
-    try { files = await fs.readdir(sd) } catch { continue }
+async function mergeOneSourceDir(sd: string, dstDir: string): Promise<void> {
+  let files: string[]
+  // await-ok: CLI fact-merge one-shot, séquentiel délibéré
+  try { files = await fs.readdir(sd) } catch { return }
 
-    for (const f of files) {
-      if (!f.endsWith('.facts')) continue
-      const srcPath = path.join(sd, f)
-      // skip if not a regular file (could be sub-dir with same suffix — unlikely)
-      try {
-        // await-ok: CLI fact-merge one-shot, séquentiel délibéré
-        const stat = await fs.stat(srcPath)
-        if (!stat.isFile()) continue
-      } catch { continue }
-
-      const dstPath = path.join(dstDir, f)
-      // await-ok: CLI fact-merge one-shot, séquentiel délibéré
-      const srcContent = await fs.readFile(srcPath, 'utf-8')
-
-      if (f === 'RuntimeRunMeta.facts') {
-        // Overwrite sur 1ère meta non-vide, ignore subsequent (peuvent venir
-        // de plusieurs PIDs — on garde la 1ère pour réduire à 1 row).
-        if (srcContent.trim().length > 0) {
-          // await-ok: CLI fact-merge one-shot, séquentiel délibéré
-          await fs.writeFile(dstPath, srcContent, 'utf-8')
-        }
-        continue
-      }
-
-      let dstContent = ''
-      // await-ok: CLI fact-merge one-shot, séquentiel délibéré
-      try { dstContent = await fs.readFile(dstPath, 'utf-8') } catch { /* dst absent */ }
-
-      const merged = new Set<string>()
-      for (const l of dstContent.split('\n')) if (l.trim()) merged.add(l)
-      for (const l of srcContent.split('\n')) if (l.trim()) merged.add(l)
-
-      const sorted = [...merged].sort()
-      // await-ok: CLI fact-merge one-shot, séquentiel délibéré
-      await fs.writeFile(dstPath, sorted.length > 0 ? sorted.join('\n') + '\n' : '', 'utf-8')
-    }
+  for (const f of files) {
+    if (!f.endsWith('.facts')) continue
+    const srcPath = path.join(sd, f)
+    if (!(await isRegularFile(srcPath))) continue
+    await mergeOneFactsFile(srcPath, path.join(dstDir, f), f)
   }
+}
+
+async function isRegularFile(p: string): Promise<boolean> {
+  try {
+    // await-ok: CLI fact-merge one-shot, séquentiel délibéré
+    const stat = await fs.stat(p)
+    return stat.isFile()
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Merge `srcPath` content into `dstPath` :
+ *   - RuntimeRunMeta.facts : overwrite (premier non-vide gagne, ignore subsequent
+ *     pour réduire à 1 row même avec plusieurs PIDs).
+ *   - autres .facts : union dédupliquée + sort lex.
+ */
+async function mergeOneFactsFile(srcPath: string, dstPath: string, filename: string): Promise<void> {
+  // await-ok: CLI fact-merge one-shot, séquentiel délibéré
+  const srcContent = await fs.readFile(srcPath, 'utf-8')
+
+  if (filename === 'RuntimeRunMeta.facts') {
+    if (srcContent.trim().length > 0) {
+      await fs.writeFile(dstPath, srcContent, 'utf-8')
+    }
+    return
+  }
+
+  let dstContent = ''
+  // await-ok: CLI fact-merge one-shot, séquentiel délibéré
+  try { dstContent = await fs.readFile(dstPath, 'utf-8') } catch { /* dst absent */ }
+
+  const merged = new Set<string>()
+  for (const l of dstContent.split('\n')) if (l.trim()) merged.add(l)
+  for (const l of srcContent.split('\n')) if (l.trim()) merged.add(l)
+
+  const sorted = [...merged].sort()
+  await fs.writeFile(dstPath, sorted.length > 0 ? sorted.join('\n') + '\n' : '', 'utf-8')
 }
 
 /**
