@@ -45,7 +45,7 @@ import type {
   SqlSchemaResult,
 } from './sql-schema.js'
 import { derivePrimaryKeys } from './sql-schema.js'
-import { computeFkWithoutIndex } from './_shared/sql-helpers.js'
+import { computeFkWithoutIndex, cmpSqlFileLine, cmpSqlFromTableColumn, cmpSqlTableColumn } from './_shared/sql-helpers.js'
 
 export type { SqlSchemaResult } from './sql-schema.js'
 
@@ -68,23 +68,6 @@ const DRIZZLE_COLUMN_TYPES = new Set([
  *                  ceux qui contiennent `pgTable` import)
  * @param project   Shared ts-morph Project (réutilisé)
  */
-function cmpFileLine<T extends { file: string; line: number }>(a: T, b: T): number {
-  if (a.file !== b.file) return a.file < b.file ? -1 : 1
-  return a.line - b.line
-}
-
-function cmpFromTableColumn<T extends { fromTable: string; fromColumn: string }>(a: T, b: T): number {
-  if (a.fromTable !== b.fromTable) return a.fromTable < b.fromTable ? -1 : 1
-  if (a.fromColumn !== b.fromColumn) return a.fromColumn < b.fromColumn ? -1 : 1
-  return 0
-}
-
-function cmpTableColumn<T extends { table: string; column: string }>(a: T, b: T): number {
-  if (a.table !== b.table) return a.table < b.table ? -1 : 1
-  if (a.column !== b.column) return a.column < b.column ? -1 : 1
-  return 0
-}
-
 interface DrizzleAggregated {
   tables: SqlTable[]
   indexes: SqlIndex[]
@@ -117,11 +100,11 @@ export async function analyzeDrizzleSchema(
   const fkWithoutIndex = computeFkWithoutIndex(foreignKeys, indexes)
   const primaryKeys = derivePrimaryKeys(tables, indexes)
 
-  tables.sort(cmpFileLine)
-  indexes.sort(cmpFileLine)
-  foreignKeys.sort(cmpFromTableColumn)
-  fkWithoutIndex.sort(cmpFromTableColumn)
-  primaryKeys.sort(cmpTableColumn)
+  tables.sort(cmpSqlFileLine)
+  indexes.sort(cmpSqlFileLine)
+  foreignKeys.sort(cmpSqlFromTableColumn)
+  fkWithoutIndex.sort(cmpSqlFromTableColumn)
+  primaryKeys.sort(cmpSqlTableColumn)
 
   return { tables, indexes, foreignKeys, fkWithoutIndex, primaryKeys }
 }

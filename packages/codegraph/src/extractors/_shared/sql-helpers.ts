@@ -10,6 +10,27 @@
 import type { SqlForeignKey, SqlIndex, SqlFkWithoutIndex } from './sql-types.js'
 
 /**
+ * Comparators reutilises entre sql-schema + drizzle-schema pour le tri
+ * stable des resultats. Extraits ici pour eliminer la duplication NCD.
+ */
+export function cmpSqlFileLine<T extends { file: string; line: number }>(a: T, b: T): number {
+  if (a.file !== b.file) return a.file < b.file ? -1 : 1
+  return a.line - b.line
+}
+
+export function cmpSqlFromTableColumn<T extends { fromTable: string; fromColumn: string }>(a: T, b: T): number {
+  if (a.fromTable !== b.fromTable) return a.fromTable < b.fromTable ? -1 : 1
+  if (a.fromColumn !== b.fromColumn) return a.fromColumn < b.fromColumn ? -1 : 1
+  return 0
+}
+
+export function cmpSqlTableColumn<T extends { table: string; column: string }>(a: T, b: T): number {
+  if (a.table !== b.table) return a.table < b.table ? -1 : 1
+  if (a.column !== b.column) return a.column < b.column ? -1 : 1
+  return 0
+}
+
+/**
  * Calcule l'ensemble des FK sans index correspondant sur leur source
  * column. Implémentation O(F + I) via un Set des `table\x00firstCol`
  * indexés. Critique pour la rule sql-fk-needs-index — révèle les

@@ -28,7 +28,7 @@
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
 import { minimatch } from 'minimatch'
-import { computeFkWithoutIndex } from './_shared/sql-helpers.js'
+import { computeFkWithoutIndex, cmpSqlFileLine, cmpSqlFromTableColumn, cmpSqlTableColumn } from './_shared/sql-helpers.js'
 
 // ═════════════════════════════════════════════════════════════════════
 // Types
@@ -135,20 +135,21 @@ async function walk(dir: string, rootDir: string, acc: string[]): Promise<void> 
 // Public API
 // ═════════════════════════════════════════════════════════════════════
 
-export async function analyzeSqlSchema(
-  rootDir: string,
-  globs: string[] = DEFAULT_GLOBS,
-): Promise<SqlSchemaResult> {
-  const sqlFiles = await discoverSqlFiles(rootDir, globs)
+interface SqlAggregated {
+  tables: SqlTable[]
+  indexes: SqlIndex[]
+  foreignKeys: SqlForeignKey[]
+  addedColumns: AddedColumn[]
+  renamedColumns: RenamedColumn[]
+  droppedTables: DroppedTable[]
+}
 
-  const tables: SqlTable[] = []
-  const indexes: SqlIndex[] = []
-  const foreignKeys: SqlForeignKey[] = []
-  const addedColumns: AddedColumn[] = []
-  const renamedColumns: RenamedColumn[] = []
-  const droppedTables: DroppedTable[] = []
-
-  // Lit N SQL files en parallèle (I/O indépendantes), parse séquentiel.
+async function readAndParseSqlFiles(rootDir: string, sqlFiles: string[]): Promise<SqlAggregated> {
+  const agg: SqlAggregated = {
+    tables: [], indexes: [], foreignKeys: [],
+    addedColumns: [], renamedColumns: [], droppedTables: [],
+  }
+  // Lit N SQL files en parallele (I/O independantes), parse sequentiel.
   const sqlContents = await Promise.all(
     sqlFiles.map(async (file) => {
       try {
@@ -158,77 +159,75 @@ export async function analyzeSqlSchema(
   )
   for (const entry of sqlContents) {
     if (!entry) continue
-    const fileResult = parseSqlFile(entry.content, entry.file)
-    tables.push(...fileResult.tables)
-    indexes.push(...fileResult.indexes)
-    foreignKeys.push(...fileResult.foreignKeys)
-    addedColumns.push(...fileResult.addedColumns)
-    renamedColumns.push(...fileResult.renamedColumns)
-    droppedTables.push(...fileResult.droppedTables)
+    const r = parseSqlFile(entry.content, entry.file)
+    agg.tables.push(...r.tables)
+    agg.indexes.push(...r.indexes)
+    agg.foreignKeys.push(...r.foreignKeys)
+    agg.addedColumns.push(...r.addedColumns)
+    agg.renamedColumns.push(...r.renamedColumns)
+    agg.droppedTables.push(...r.droppedTables)
   }
+  return agg
+}
 
-  // Timeline DROP TABLE : retire les tables droppées du résultat final.
-  // Heuristique : une table est considérée "réellement droppée" si elle
-  // n'apparaît PAS dans `schema.sql` (canonical post-state). Si schema.sql
-  // la contient, c'est qu'elle a été re-créée OU droppée par accident
-  // historique mais re-existe — on garde.
-  //
-  // Rationale : `db/schema.sql` est typiquement régénéré post-migrations
-  // comme snapshot du schema courant. C'est notre source de vérité pour
-  // "ce qui existe en prod" vs "ce qui a existé un jour".
-  if (droppedTables.length > 0) {
-    // Match basename exact `schema.sql` — pas `000_initial_schema.sql` etc.
-    // Le canonical schema (post-migrations snapshot) est typiquement
-    // `db/schema.sql`. Les migrations historiques ne comptent pas comme
-    // "table vivante" — sinon une table créée en mig 000 puis droppée
-    // en mig 039 serait considérée vivante par sa présence dans 000.
-    const isCanonicalSchema = (file: string): boolean =>
-      path.basename(file) === 'schema.sql' && !file.includes('rollbacks/')
+/**
+ * Match basename exact `schema.sql` — pas `000_initial_schema.sql` etc.
+ * Le canonical schema (post-migrations snapshot) est typiquement
+ * `db/schema.sql`. Les migrations historiques ne comptent pas comme
+ * "table vivante" — sinon une table creee en mig 000 puis droppee
+ * en mig 039 serait consideree vivante par sa presence dans 000.
+ */
+function isCanonicalSchemaFile(file: string): boolean {
+  return path.basename(file) === 'schema.sql' && !file.includes('rollbacks/')
+}
 
-    const livingTablesInSchemaSql = new Set<string>()
-    for (const t of tables) {
-      if (isCanonicalSchema(t.file)) {
-        livingTablesInSchemaSql.add(t.name)
-      }
-    }
-    const droppedNames = new Set(
-      droppedTables
-        .map((d) => d.table)
-        .filter((name) => !livingTablesInSchemaSql.has(name)),
-    )
-    if (droppedNames.size > 0) {
-      // Filter out toutes les entrées (CREATE TABLE + indexes + FKs)
-      // qui pointent vers des tables effectivement droppées.
-      for (let i = tables.length - 1; i >= 0; i--) {
-        if (droppedNames.has(tables[i].name)) tables.splice(i, 1)
-      }
-      for (let i = indexes.length - 1; i >= 0; i--) {
-        if (droppedNames.has(indexes[i].table)) indexes.splice(i, 1)
-      }
-      for (let i = foreignKeys.length - 1; i >= 0; i--) {
-        if (droppedNames.has(foreignKeys[i].fromTable) ||
-            droppedNames.has(foreignKeys[i].toTable)) {
-          foreignKeys.splice(i, 1)
-        }
-      }
+function applyDropTableTimeline(agg: SqlAggregated): void {
+  if (agg.droppedTables.length === 0) return
+
+  const livingTablesInSchemaSql = new Set<string>()
+  for (const t of agg.tables) {
+    if (isCanonicalSchemaFile(t.file)) {
+      livingTablesInSchemaSql.add(t.name)
     }
   }
+  const droppedNames = new Set(
+    agg.droppedTables
+      .map((d) => d.table)
+      .filter((name) => !livingTablesInSchemaSql.has(name)),
+  )
+  if (droppedNames.size === 0) return
 
-  // Cross-file merge : ALTER TABLE ADD COLUMN extend les tables existantes.
-  // Sans ça, une table créée en migration 023 + colonne ajoutée en migration
-  // 073 apparaît comme "manquant la colonne" dans les rules sql-audit-columns.
-  //
-  // Note : une même table peut apparaître plusieurs fois (000_initial_schema.sql
-  // + schema.sql consolidé). On applique le merge à TOUTES les entrées
-  // matchant le nom (filter, pas find).
-  //
-  // ADD COLUMN doit s'appliquer AVANT RENAME — sinon une colonne ajoutée par
-  // ALTER puis renommée en migration ultérieure rate son rename (la col
-  // n'existe pas encore au moment du rename merge).
-  for (const ac of addedColumns) {
-    const targets = tables.filter((t) => t.name === ac.table)
+  // Filter out toutes les entrees (CREATE TABLE + indexes + FKs) qui
+  // pointent vers des tables effectivement droppees.
+  for (let i = agg.tables.length - 1; i >= 0; i--) {
+    if (droppedNames.has(agg.tables[i].name)) agg.tables.splice(i, 1)
+  }
+  for (let i = agg.indexes.length - 1; i >= 0; i--) {
+    if (droppedNames.has(agg.indexes[i].table)) agg.indexes.splice(i, 1)
+  }
+  for (let i = agg.foreignKeys.length - 1; i >= 0; i--) {
+    if (droppedNames.has(agg.foreignKeys[i].fromTable) ||
+        droppedNames.has(agg.foreignKeys[i].toTable)) {
+      agg.foreignKeys.splice(i, 1)
+    }
+  }
+}
+
+/**
+ * Cross-file merge ALTER TABLE.
+ * - ADD COLUMN : extend existing tables. Sans ca, table creee en mig 023
+ *   + colonne ajoutee en mig 073 apparait comme "manquant la colonne".
+ * - RENAME COLUMN : renomme les cols existantes. ADD doit s'appliquer
+ *   AVANT RENAME — sinon une col ajoutee puis renommee rate son rename.
+ *
+ * Une meme table peut apparaitre plusieurs fois (000_initial + schema.sql
+ * consolide). On applique a TOUTES les entrees matchant (filter, pas find).
+ */
+function applyAlterTableMerges(agg: SqlAggregated): void {
+  for (const ac of agg.addedColumns) {
+    const targets = agg.tables.filter((t) => t.name === ac.table)
     for (const target of targets) {
-      // Skip si la colonne existe déjà (idempotence — ALTER TABLE IF NOT EXISTS)
+      // Skip si col existe deja (idempotence — ALTER TABLE IF NOT EXISTS).
       if (target.columns.some((c) => c.name === ac.column)) continue
       target.columns.push({
         name: ac.column,
@@ -240,40 +239,42 @@ export async function analyzeSqlSchema(
       })
     }
   }
-
-  // Cross-file merge : ALTER TABLE RENAME COLUMN renomme les colonnes
-  // existantes. Applique à toutes les entrées matchant le nom de table
-  // (multiple CREATE TABLE équivalents dans schema.sql + migrations).
-  for (const rc of renamedColumns) {
-    const targets = tables.filter((t) => t.name === rc.table)
+  for (const rc of agg.renamedColumns) {
+    const targets = agg.tables.filter((t) => t.name === rc.table)
     for (const target of targets) {
       const col = target.columns.find((c) => c.name === rc.fromName)
       if (!col) continue
       col.name = rc.toName
     }
   }
+}
 
-  // Cross-FK + index match
-  const fkWithoutIndex = computeFkWithoutIndex(foreignKeys, indexes)
-  void tables
+export async function analyzeSqlSchema(
+  rootDir: string,
+  globs: string[] = DEFAULT_GLOBS,
+): Promise<SqlSchemaResult> {
+  const sqlFiles = await discoverSqlFiles(rootDir, globs)
+  const agg = await readAndParseSqlFiles(rootDir, sqlFiles)
 
-  // Dérive primaryKeys depuis tables[].columns + table-level indexes _pkey.
-  const primaryKeys = derivePrimaryKeys(tables, indexes)
+  applyDropTableTimeline(agg)
+  applyAlterTableMerges(agg)
 
-  // Tri stable
-  tables.sort((a, b) => a.file < b.file ? -1 : a.file > b.file ? 1 : a.line - b.line)
-  indexes.sort((a, b) => a.file < b.file ? -1 : a.file > b.file ? 1 : a.line - b.line)
-  foreignKeys.sort((a, b) =>
-    a.fromTable < b.fromTable ? -1 : a.fromTable > b.fromTable ? 1 :
-    a.fromColumn < b.fromColumn ? -1 : a.fromColumn > b.fromColumn ? 1 : 0)
-  fkWithoutIndex.sort((a, b) =>
-    a.fromTable < b.fromTable ? -1 : a.fromTable > b.fromTable ? 1 :
-    a.fromColumn < b.fromColumn ? -1 : a.fromColumn > b.fromColumn ? 1 : 0)
-  primaryKeys.sort((a, b) =>
-    a.table < b.table ? -1 : a.table > b.table ? 1 :
-    a.column < b.column ? -1 : a.column > b.column ? 1 : 0)
+  const fkWithoutIndex = computeFkWithoutIndex(agg.foreignKeys, agg.indexes)
+  const primaryKeys = derivePrimaryKeys(agg.tables, agg.indexes)
 
-  return { tables, indexes, foreignKeys, fkWithoutIndex, primaryKeys }
+  agg.tables.sort(cmpSqlFileLine)
+  agg.indexes.sort(cmpSqlFileLine)
+  agg.foreignKeys.sort(cmpSqlFromTableColumn)
+  fkWithoutIndex.sort(cmpSqlFromTableColumn)
+  primaryKeys.sort(cmpSqlTableColumn)
+
+  return {
+    tables: agg.tables,
+    indexes: agg.indexes,
+    foreignKeys: agg.foreignKeys,
+    fkWithoutIndex,
+    primaryKeys,
+  }
 }
 
 /**
