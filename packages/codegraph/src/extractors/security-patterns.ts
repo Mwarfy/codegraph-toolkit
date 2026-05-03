@@ -77,6 +77,12 @@ function detectSecretKind(name: string): string {
   return m ? m[0].toLowerCase() : ''
 }
 
+interface SecCtx {
+  relPath: string
+  isExempt: (line: number) => boolean
+  out: SecurityPatternsFileBundle
+}
+
 export function extractSecurityPatternsFileBundle(
   sf: SourceFile,
   relPath: string,
@@ -86,105 +92,153 @@ export function extractSecurityPatternsFileBundle(
   }
   if (TEST_FILE_RE.test(relPath)) return out
 
-  const isExempt = makeIsExemptForMarker(sf, 'security-ok')
+  const ctx: SecCtx = {
+    relPath,
+    isExempt: makeIsExemptForMarker(sf, 'security-ok'),
+    out,
+  }
 
-  // Pass 1 : CallExpression — secretRef args + Math.random + cors() + https opts.
+  scanCallExpressions(sf, ctx)
+  scanVariableDeclarationsForWeakRandom(sf, ctx)
+  scanObjectLiteralsForTlsUnsafe(sf, ctx)
+  return out
+}
+
+// ─── Pass 1: CallExpression ─────────────────────────────────────────────────
+//
+// Cherche : cors({ origin: ... }) + secretVarRef en argument.
+
+function scanCallExpressions(sf: SourceFile, ctx: SecCtx): void {
   for (const call of sf.getDescendantsOfKind(SyntaxKind.CallExpression)) {
     const line = call.getStartLineNumber()
-    if (isExempt(line)) continue
-    const callee = call.getExpression()
+    if (ctx.isExempt(line)) continue
+    detectCorsConfig(call, line, ctx)
+    detectSecretRefArgs(call, line, ctx)
+  }
+}
 
-    // 1. Math.random() usage tracking — captured here, secret-naming check happens later
-    //    when we walk VariableDeclaration (Pass 2).
+function detectCorsConfig(
+  call: ReturnType<SourceFile['getDescendantsOfKind']>[number] & { getExpression(): Node; getArguments(): Node[] },
+  line: number,
+  ctx: SecCtx,
+): void {
+  const callee = call.getExpression()
+  if (!Node.isIdentifier(callee) || callee.getText() !== 'cors') return
+  const args = call.getArguments()
+  if (args.length === 0 || !Node.isObjectLiteralExpression(args[0])) return
+  const originProp = args[0].getProperty('origin')
+  if (!originProp || !Node.isPropertyAssignment(originProp)) return
+  ctx.out.corsConfigs.push({
+    file: ctx.relPath,
+    line,
+    originKind: classifyCorsOriginKind(originProp.getInitializer()),
+    containingSymbol: findContainingSymbol(call as unknown as Node),
+  })
+}
 
-    // 2. cors({ origin: ... }) detection
-    if (Node.isIdentifier(callee) && callee.getText() === 'cors') {
-      const args = call.getArguments()
-      if (args.length > 0 && Node.isObjectLiteralExpression(args[0])) {
-        const originProp = args[0].getProperty('origin')
-        if (originProp && Node.isPropertyAssignment(originProp)) {
-          const init = originProp.getInitializer()
-          let originKind = 'dynamic'
-          if (init) {
-            if (Node.isStringLiteral(init)) {
-              originKind = init.getLiteralValue() === '*' ? 'wildcard' : 'literal'
-            } else if (Node.isPropertyAccessExpression(init)
-              && /req\.headers\.|request\.headers\./.test(init.getText())) {
-              originKind = 'reflective'
-            }
-          }
-          out.corsConfigs.push({
-            file: relPath, line, originKind,
-            containingSymbol: findContainingSymbol(call),
-          })
-        }
-      }
-    }
+function classifyCorsOriginKind(init: Node | undefined): string {
+  if (!init) return 'dynamic'
+  if (Node.isStringLiteral(init)) {
+    return init.getLiteralValue() === '*' ? 'wildcard' : 'literal'
+  }
+  if (Node.isPropertyAccessExpression(init)
+    && /req\.headers\.|request\.headers\./.test(init.getText())) {
+    return 'reflective'
+  }
+  return 'dynamic'
+}
 
-    // 3. SecretVarRef : un argument du call est un identifier dont le nom matche SECRET_NAME_RE.
-    let calleeText = ''
-    if (Node.isIdentifier(callee)) calleeText = callee.getText()
-    else if (Node.isPropertyAccessExpression(callee)) calleeText = callee.getText()
-    if (calleeText) {
-      for (const arg of call.getArguments()) {
-        if (Node.isIdentifier(arg)) {
-          const name = arg.getText()
-          const kind = detectSecretKind(name)
-          if (kind) {
-            out.secretRefs.push({
-              file: relPath, line, varName: name, kind,
-              callee: calleeText,
-              containingSymbol: findContainingSymbol(call),
-            })
-          }
-        } else if (Node.isObjectLiteralExpression(arg)) {
-          // logger.info({ password, apiKey }) — shorthand prop names matching secret pattern
-          for (const prop of arg.getProperties()) {
-            if (Node.isShorthandPropertyAssignment(prop)) {
-              const name = prop.getName()
-              const kind = detectSecretKind(name)
-              if (kind) {
-                out.secretRefs.push({
-                  file: relPath, line, varName: name, kind,
-                  callee: calleeText,
-                  containingSymbol: findContainingSymbol(call),
-                })
-              }
-            }
-          }
-        }
-      }
+function detectSecretRefArgs(
+  call: ReturnType<SourceFile['getDescendantsOfKind']>[number] & { getExpression(): Node; getArguments(): Node[] },
+  line: number,
+  ctx: SecCtx,
+): void {
+  const callee = call.getExpression()
+  let calleeText = ''
+  if (Node.isIdentifier(callee)) calleeText = callee.getText()
+  else if (Node.isPropertyAccessExpression(callee)) calleeText = callee.getText()
+  if (!calleeText) return
+
+  const callNode = call as unknown as Node
+  for (const arg of call.getArguments()) {
+    if (Node.isIdentifier(arg)) {
+      pushSecretRefIfNamed(arg.getText(), line, calleeText, callNode, ctx)
+    } else if (Node.isObjectLiteralExpression(arg)) {
+      collectShorthandSecretRefs(arg, line, calleeText, callNode, ctx)
     }
   }
+}
 
-  // Pass 2 : VariableDeclaration — Math.random() bind to secret-named var + TLS unsafe.
+function collectShorthandSecretRefs(
+  obj: Node,
+  line: number,
+  calleeText: string,
+  callNode: Node,
+  ctx: SecCtx,
+): void {
+  // logger.info({ password, apiKey }) — shorthand prop names matching secret pattern
+  if (!Node.isObjectLiteralExpression(obj)) return
+  for (const prop of obj.getProperties()) {
+    if (Node.isShorthandPropertyAssignment(prop)) {
+      pushSecretRefIfNamed(prop.getName(), line, calleeText, callNode, ctx)
+    }
+  }
+}
+
+function pushSecretRefIfNamed(
+  name: string,
+  line: number,
+  calleeText: string,
+  callNode: Node,
+  ctx: SecCtx,
+): void {
+  const kind = detectSecretKind(name)
+  if (!kind) return
+  ctx.out.secretRefs.push({
+    file: ctx.relPath,
+    line,
+    varName: name,
+    kind,
+    callee: calleeText,
+    containingSymbol: findContainingSymbol(callNode),
+  })
+}
+
+// ─── Pass 2: VariableDeclaration — `const x = Math.random()` ────────────────
+
+function scanVariableDeclarationsForWeakRandom(sf: SourceFile, ctx: SecCtx): void {
   for (const v of sf.getDescendantsOfKind(SyntaxKind.VariableDeclaration)) {
     const init = v.getInitializer()
-    if (!init) continue
+    if (!init || !Node.isCallExpression(init)) continue
     const line = v.getStartLineNumber()
-    if (isExempt(line)) continue
-
-    // WeakRandom : `const x = Math.random()` (and x matches secret pattern)
-    if (Node.isCallExpression(init)) {
-      const callee = init.getExpression()
-      if (Node.isPropertyAccessExpression(callee)
-        && callee.getExpression().getText() === 'Math'
-        && callee.getName() === 'random') {
-        const nameNode = v.getNameNode()
-        const varName = Node.isIdentifier(nameNode) ? nameNode.getText() : ''
-        out.weakRandoms.push({
-          file: relPath, line, varName,
-          secretKind: detectSecretKind(varName),
-          containingSymbol: findContainingSymbol(v),
-        })
-      }
-    }
+    if (ctx.isExempt(line)) continue
+    if (!isMathRandomCall(init)) continue
+    const nameNode = v.getNameNode()
+    const varName = Node.isIdentifier(nameNode) ? nameNode.getText() : ''
+    ctx.out.weakRandoms.push({
+      file: ctx.relPath,
+      line,
+      varName,
+      secretKind: detectSecretKind(varName),
+      containingSymbol: findContainingSymbol(v),
+    })
   }
+}
 
-  // Pass 3 : ObjectLiteral — TLS unsafe options.
+function isMathRandomCall(call: Node): boolean {
+  if (!Node.isCallExpression(call)) return false
+  const callee = call.getExpression()
+  return Node.isPropertyAccessExpression(callee)
+    && callee.getExpression().getText() === 'Math'
+    && callee.getName() === 'random'
+}
+
+// ─── Pass 3: ObjectLiteral — TLS unsafe options ─────────────────────────────
+
+function scanObjectLiteralsForTlsUnsafe(sf: SourceFile, ctx: SecCtx): void {
   for (const obj of sf.getDescendantsOfKind(SyntaxKind.ObjectLiteralExpression)) {
     const line = obj.getStartLineNumber()
-    if (isExempt(line)) continue
+    if (ctx.isExempt(line)) continue
     for (const prop of obj.getProperties()) {
       if (!Node.isPropertyAssignment(prop)) continue
       const name = prop.getName()
@@ -193,15 +247,15 @@ export function extractSecurityPatternsFileBundle(
       // rejectUnauthorized: false / strictSSL: false
       if ((name === 'rejectUnauthorized' || name === 'strictSSL')
         && init.getText() === 'false') {
-        out.tlsUnsafe.push({
-          file: relPath, line, key: name,
+        ctx.out.tlsUnsafe.push({
+          file: ctx.relPath,
+          line,
+          key: name,
           containingSymbol: findContainingSymbol(obj),
         })
       }
     }
   }
-
-  return out
 }
 
 export interface SecurityPatternsAggregated {
