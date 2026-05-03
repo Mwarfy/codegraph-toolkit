@@ -168,13 +168,17 @@ export async function analyzeStateMachines(
   if (options.sqlGlobs !== null) {
     const sqlGlobs = options.sqlGlobs ?? ['**/*.sql']
     const sqlFiles = await discoverSqlFiles(rootDir, sqlGlobs)
-    for (const sqlFile of sqlFiles) {
-      try {
-        const content = await fs.readFile(path.join(rootDir, sqlFile), 'utf-8')
-        scanSqlColumnDefaults(content, sqlFile, writes)
-      } catch {
-        // Fichier illisible — skip silencieux (pas bloquant).
-      }
+    // Lit N SQL files en parallèle (indépendants), scan séquentiel.
+    const sqlContents = await Promise.all(
+      sqlFiles.map(async (sqlFile) => {
+        try {
+          return { sqlFile, content: await fs.readFile(path.join(rootDir, sqlFile), 'utf-8') }
+        } catch { return null /* skip silencieux */ }
+      }),
+    )
+    for (const entry of sqlContents) {
+      if (!entry) continue
+      scanSqlColumnDefaults(entry.content, entry.sqlFile, writes)
     }
   }
 
@@ -557,12 +561,14 @@ async function discoverSqlFiles(rootDir: string, globs: string[]): Promise<strin
     } catch {
       return
     }
+    // Files matchent localement, dirs récursés en parallèle (push partagé OK).
+    const subdirs: Array<[string, string]> = []
     for (const ent of entries) {
       if (SKIP_DIRS.has(ent.name)) continue
       const full = path.join(dir, ent.name)
       const relPath = rel ? `${rel}/${ent.name}` : ent.name
       if (ent.isDirectory()) {
-        await walk(full, relPath)
+        subdirs.push([full, relPath])
       } else if (ent.isFile() && ent.name.endsWith('.sql')) {
         // Pour l'instant les globs sont juste utilisés pour allumer/éteindre
         // le scan ; tout fichier .sql est accepté. Si besoin, étendre plus
@@ -571,6 +577,7 @@ async function discoverSqlFiles(rootDir: string, globs: string[]): Promise<strin
         out.push(relPath)
       }
     }
+    await Promise.all(subdirs.map(([full, relPath]) => walk(full, relPath)))
   }
 
   await walk(rootDir, '')

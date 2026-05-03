@@ -33,14 +33,18 @@ export class BlockLoaderDetector implements Detector {
     const constructorMapPattern = /(?:const|let)\s+(\w+)\s*:\s*Record<string,\s*(?:new\s*\([^)]*\)\s*=>\s*\w+|typeof\s+\w+)>\s*=\s*\{([^}]+)\}/gs
     const entryPattern = /['"]([^'"]+)['"]\s*:\s*(\w+)/g
 
-    for (const file of ctx.files) {
-      if (!file.endsWith('.ts')) continue
-
-      const content = await ctx.readFile(file)
+    // Lit en parallèle les .ts files (I/O fs indépendantes), match séquentiel.
+    const tsFiles = ctx.files.filter((f) => f.endsWith('.ts'))
+    const fileContents = await Promise.all(
+      tsFiles.map(async (file) => ({ file, content: await ctx.readFile(file) })),
+    )
+    for (const { file, content } of fileContents) {
       let mapMatch: RegExpExecArray | null
 
-      constructorMapPattern.lastIndex = 0
-      while ((mapMatch = constructorMapPattern.exec(content)) !== null) {
+      // Local regex pour éviter race state lastIndex entre fichiers.
+      const constructorMapRe = new RegExp(constructorMapPattern.source, constructorMapPattern.flags)
+      constructorMapRe.lastIndex = 0
+      while ((mapMatch = constructorMapRe.exec(content)) !== null) {
         const mapName = mapMatch[1]
         const mapBody = mapMatch[2]
         const mapLine = this.getLineNumber(content, mapMatch.index)
@@ -74,17 +78,18 @@ export class BlockLoaderDetector implements Detector {
       }
     }
 
-    // Also detect dynamic import() patterns with variable paths
+    // Also detect dynamic import() patterns with variable paths.
+    // Réutilise le tsFiles déjà filtré + lit en parallèle.
     const dynamicImportPattern = /import\(\s*`([^`]*\$\{[^}]+\}[^`]*)`\s*\)/g
 
-    for (const file of ctx.files) {
-      if (!file.endsWith('.ts')) continue
-
-      const content = await ctx.readFile(file)
+    const fileContents2 = await Promise.all(
+      tsFiles.map(async (file) => ({ file, content: await ctx.readFile(file) })),
+    )
+    for (const { file, content } of fileContents2) {
       let match: RegExpExecArray | null
 
-      dynamicImportPattern.lastIndex = 0
-      while ((match = dynamicImportPattern.exec(content)) !== null) {
+      const dynImportRe = new RegExp(dynamicImportPattern.source, dynamicImportPattern.flags)
+      while ((match = dynImportRe.exec(content)) !== null) {
         const template = match[1]
         const line = this.getLineNumber(content, match.index)
 

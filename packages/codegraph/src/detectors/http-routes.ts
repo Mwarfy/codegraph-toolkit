@@ -55,15 +55,21 @@ export class HttpRouteDetector implements Detector {
     // Handler mount patterns: handleXxxRoutes
     const handlerMountPattern = /await\s+(handle\w+Routes)\s*\(/g
 
-    for (const file of ctx.files) {
-      if (!file.includes('api/') && !file.includes('server')) continue
-      if (!file.endsWith('.ts')) continue
-
-      const content = await ctx.readFile(file)
+    // Lit en parallèle les .ts api/server files (I/O fs indépendantes).
+    const apiFiles = ctx.files.filter((f) =>
+      f.endsWith('.ts') && (f.includes('api/') || f.includes('server')),
+    )
+    const fileContents = await Promise.all(
+      apiFiles.map(async (file) => ({ file, content: await ctx.readFile(file) })),
+    )
+    for (const { file, content } of fileContents) {
       let match: RegExpExecArray | null
 
-      regexRoutePattern.lastIndex = 0
-      while ((match = regexRoutePattern.exec(content)) !== null) {
+      // Local regexes pour éviter race lastIndex partagé entre fichiers.
+      const regexRouteRe = new RegExp(regexRoutePattern.source, regexRoutePattern.flags)
+      const exactRouteRe = new RegExp(exactRoutePattern.source, exactRoutePattern.flags)
+      const handlerMountRe = new RegExp(handlerMountPattern.source, handlerMountPattern.flags)
+      while ((match = regexRouteRe.exec(content)) !== null) {
         const routePath = match[1]
           .replace(/\\\//g, '/')
           .replace(/\(\[\^\/\]\+\)/g, ':param')
@@ -76,8 +82,7 @@ export class HttpRouteDetector implements Detector {
         })
       }
 
-      exactRoutePattern.lastIndex = 0
-      while ((match = exactRoutePattern.exec(content)) !== null) {
+      while ((match = exactRouteRe.exec(content)) !== null) {
         routes.push({
           file,
           path: match[1],
@@ -87,8 +92,7 @@ export class HttpRouteDetector implements Detector {
       }
 
       // Handler mounts in server.ts → link to route files
-      handlerMountPattern.lastIndex = 0
-      while ((match = handlerMountPattern.exec(content)) !== null) {
+      while ((match = handlerMountRe.exec(content)) !== null) {
         routes.push({
           file,
           path: match[1],
@@ -109,20 +113,29 @@ export class HttpRouteDetector implements Detector {
     // Direct fetch with API_BASE
     const directFetchPattern = /fetch\(\s*`\$\{API_BASE\}(\/api[^`]*)`/g
 
-    for (const file of ctx.files) {
+    // Filtre frontend files puis lit en parallèle.
+    const frontendFiles = ctx.files.filter((file) => {
       // Heuristique frontend : .tsx OU dans un dir typiquement frontend
       // (app/, hooks/, components/, frontend/). Évite de scanner inutilement
       // tous les fichiers backend.
       const isFrontendDir = /(?:^|\/)(?:app|hooks|components|frontend|src\/app|src\/components|src\/hooks)\//.test(file)
       const isTsx = file.endsWith('.tsx')
-      if (!isTsx && !isFrontendDir) continue
-      if (!file.endsWith('.ts') && !file.endsWith('.tsx')) continue
-
-      const content = await ctx.readFile(file)
+      if (!isTsx && !isFrontendDir) return false
+      return file.endsWith('.ts') || file.endsWith('.tsx')
+    })
+    const frontendContents = await Promise.all(
+      frontendFiles.map(async (file) => ({ file, content: await ctx.readFile(file) })),
+    )
+    for (const { file, content } of frontendContents) {
       let match: RegExpExecArray | null
 
-      apiFetchPattern.lastIndex = 0
-      while ((match = apiFetchPattern.exec(content)) !== null) {
+      // Local regexes pour éviter race lastIndex partagé.
+      const apiFetchRe = new RegExp(apiFetchPattern.source, apiFetchPattern.flags)
+      const templateFetchRe = new RegExp(templateFetchPattern.source, templateFetchPattern.flags)
+      const directFetchRe = new RegExp(directFetchPattern.source, directFetchPattern.flags)
+      void apiFetchPattern; void templateFetchPattern; void directFetchPattern  // markers — used via local copies below
+
+      while ((match = apiFetchRe.exec(content)) !== null) {
         apiCalls.push({
           file,
           path: match[1],
@@ -131,8 +144,7 @@ export class HttpRouteDetector implements Detector {
         })
       }
 
-      templateFetchPattern.lastIndex = 0
-      while ((match = templateFetchPattern.exec(content)) !== null) {
+      while ((match = templateFetchRe.exec(content)) !== null) {
         const apiPath = match[1].replace(/\$\{[^}]+\}/g, ':param')
         apiCalls.push({
           file,
@@ -142,8 +154,7 @@ export class HttpRouteDetector implements Detector {
         })
       }
 
-      directFetchPattern.lastIndex = 0
-      while ((match = directFetchPattern.exec(content)) !== null) {
+      while ((match = directFetchRe.exec(content)) !== null) {
         const apiPath = match[1].replace(/\$\{[^}]+\}/g, ':param')
         apiCalls.push({
           file,

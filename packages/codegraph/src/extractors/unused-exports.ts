@@ -390,16 +390,22 @@ export async function buildTestFilesIndex(rootDir: string): Promise<TestFilesInd
     }
   }
 
-  for (const testFile of testFiles) {
-    const absPath = path.join(rootDir, testFile)
-    let content: string
-    try {
-      content = await fs.readFile(absPath, 'utf-8')
-    } catch { continue }
-
+  // Lit N test files en parallèle (I/O fs indépendantes), parse séquentiel.
+  const testContents = await Promise.all(
+    testFiles.map(async (testFile) => {
+      const absPath = path.join(rootDir, testFile)
+      try {
+        return { testFile, content: await fs.readFile(absPath, 'utf-8') }
+      } catch { return null }
+    }),
+  )
+  for (const entry of testContents) {
+    if (!entry) continue
+    const { testFile, content } = entry
     let match
-    importRegex.lastIndex = 0
-    while ((match = importRegex.exec(content)) !== null) {
+    // Local regex pour éviter state lastIndex partagé (paranoïa).
+    const localRe = new RegExp(importRegex.source, importRegex.flags)
+    while ((match = localRe.exec(content)) !== null) {
       processImportMatch(match[1], match[2], match[3], testFile)
     }
 
@@ -550,10 +556,12 @@ async function walkForTests(dir: string, rootDir: string, result: string[]): Pro
     return
   }
 
+  // Files matchent localement, dirs récursés en parallèle (push partagé OK).
+  const subdirs: string[] = []
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name)
     if (entry.isDirectory()) {
-      await walkForTests(fullPath, rootDir, result)
+      subdirs.push(fullPath)
     } else if (entry.isFile()) {
       const relativePath = path.relative(rootDir, fullPath).replace(/\\/g, '/')
       if (isTestFile(relativePath)) {
@@ -561,6 +569,7 @@ async function walkForTests(dir: string, rootDir: string, result: string[]): Pro
       }
     }
   }
+  await Promise.all(subdirs.map((sd) => walkForTests(sd, rootDir, result)))
 }
 
 /**

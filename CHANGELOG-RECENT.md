@@ -5,11 +5,11 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T17:09:08Z
+Last update : 2026-05-03T17:14:17Z
 
 ## By type
 
-### `feat` (15)
+### `feat` (14)
 
 - **af41582** feat(toolkit): symbolic simplification facts + 5 composite rules cross-discipline — 2026-05-03
 - **2f84a70** feat(toolkit): Niveau 5 effect-analysis + roadmap defers Niveaux 6/7 — 2026-05-03
@@ -25,7 +25,6 @@ Last update : 2026-05-03T17:09:08Z
 - **bbfa9d6** feat(toolkit): SQL ALTER TABLE tracking + CrossDisciplineDetector POC — 2026-05-01
 - **dc48f25** feat(toolkit): 4 nouvelles disciplines mathématiques (8e→11e) — 2026-05-01
 - **691337e** feat(toolkit): 8e discipline Newman-Girvan + 4 méta-composites cross-disciplines — 2026-05-01
-- **443e072** feat(datalog): runFromDirs accepte rulesDir array (multi-dir loader) — 2026-05-01
 
 
 ### `fix` (9)
@@ -48,8 +47,9 @@ Last update : 2026-05-03T17:09:08Z
 - **afd0965** perf(toolkit): self-discovered Salsa optimizations — warm runtime −40% — 2026-05-03
 
 
-### `refactor` (13)
+### `refactor` (14)
 
+- **9a86461** refactor(toolkit): tame AWAIT-IN-LOOP batch 2 — _shared, regenerate-anchors, drivers (70→58) — 2026-05-03
 - **5933423** refactor(toolkit): tame AWAIT-IN-LOOP — parallelize hot paths + mark scaffold (105→70) — 2026-05-03
 - **fbebea4** refactor(toolkit): extract makeIsExempt helper (NCD: 25→16, total 434→422) — 2026-05-03
 - **b0f2c9a** refactor(toolkit): split cli/index.ts god-file (2190→1520 LOC, −30%) — 2026-05-03
@@ -89,6 +89,7 @@ Last update : 2026-05-03T17:09:08Z
 
 ## Full history
 
+- **9a86461** refactor(toolkit): tame AWAIT-IN-LOOP batch 2 — _shared, regenerate-anchors, drivers (70→58) — 2026-05-03
 - **5933423** refactor(toolkit): tame AWAIT-IN-LOOP — parallelize hot paths + mark scaffold (105→70) — 2026-05-03
 - **fbebea4** refactor(toolkit): extract makeIsExempt helper (NCD: 25→16, total 434→422) — 2026-05-03
 - **25fc296** fix(toolkit): kill META-CRITICAL (7→0) + 2 bugs détecteur + 6 tests — 2026-05-03
@@ -138,4 +139,3 @@ Last update : 2026-05-03T17:09:08Z
 - **dc48f25** feat(toolkit): 4 nouvelles disciplines mathématiques (8e→11e) — 2026-05-01
 - **691337e** feat(toolkit): 8e discipline Newman-Girvan + 4 méta-composites cross-disciplines — 2026-05-01
 - **c003043** docs: update READMEs for v0.5.0 — 91 rules, multi-dir, 7 cross-discipline — 2026-05-01
-- **443e072** feat(datalog): runFromDirs accepte rulesDir array (multi-dir loader) — 2026-05-01

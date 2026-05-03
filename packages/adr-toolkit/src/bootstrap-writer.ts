@@ -108,24 +108,31 @@ export async function applyDrafts(opts: ApplyOptions): Promise<ApplyResult> {
     const fileName = `${num}-${slug}.md`
     const filePath = path.join(adrDir, fileName)
     const md = formatAdrMarkdown(draft, num)
+    // await-ok: ADR scaffold writes — séquentiel par draft (numbering nextNum++)
     await writeFile(filePath, md, 'utf-8')
     result.written.push(path.relative(config.rootDir, filePath))
 
-    // Ajout des marqueurs `// ADR-NNN` aux anchors
+    // Ajout des marqueurs `// ADR-NNN` aux anchors — process en parallèle
+    // (anchors de 1 draft sont des fichiers distincts, write idempotente
+    // car content guard sur `marker` already present).
     if (opts.applyMarkers !== false) {
-      for (const anchor of draft.anchors ?? [draft.primaryAnchor]) {
-        const fullAnchor = path.join(config.rootDir, anchor)
-        try {
-          const content = await readFile(fullAnchor, 'utf-8')
-          const marker = `// ADR-${num}`
-          if (content.includes(marker)) continue // déjà présent
-          // Insert au début du fichier
-          const newContent = `${marker}\n${content}`
-          await writeFile(fullAnchor, newContent, 'utf-8')
-          result.markersAdded.push({ file: anchor, adrNum: num })
-        } catch {
-          // Anchor introuvable — silent
-        }
+      const anchorResults = await Promise.all(
+        (draft.anchors ?? [draft.primaryAnchor]).map(async (anchor) => {
+          const fullAnchor = path.join(config.rootDir, anchor)
+          try {
+            const content = await readFile(fullAnchor, 'utf-8')
+            const marker = `// ADR-${num}`
+            if (content.includes(marker)) return null // déjà présent
+            const newContent = `${marker}\n${content}`
+            await writeFile(fullAnchor, newContent, 'utf-8')
+            return { file: anchor, adrNum: num }
+          } catch {
+            return null /* Anchor introuvable — silent */
+          }
+        }),
+      )
+      for (const r of anchorResults) {
+        if (r) result.markersAdded.push(r)
       }
     }
   }

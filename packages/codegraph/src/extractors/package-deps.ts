@@ -165,10 +165,14 @@ async function walkForManifests(
     return
   }
 
+  // Process package.json files séquentiellement (peu nombreux par dir),
+  // récurse sub-dirs en parallèle (push partagé OK en JS single-thread).
+  const subdirs: string[] = []
   for (const entry of entries) {
     const full = path.join(dir, entry.name)
     if (entry.isFile() && entry.name === 'package.json') {
       try {
+        // await-ok: 1 package.json par dir typiquement, séquentiel acceptable
         const raw = JSON.parse(await fs.readFile(full, 'utf-8'))
         const declared = new Map<string, DepBlock>()
         for (const name of Object.keys(raw.dependencies ?? {})) {
@@ -194,9 +198,10 @@ async function walkForManifests(
         // JSON invalide — skip silencieusement.
       }
     } else if (entry.isDirectory()) {
-      await walkForManifests(full, rootDir, acc)
+      subdirs.push(full)
     }
   }
+  await Promise.all(subdirs.map((sd) => walkForManifests(sd, rootDir, acc)))
 }
 
 function findClosestManifest(

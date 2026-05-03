@@ -553,6 +553,7 @@ async function scanTestsImportingAffected(
         const full = path.join(dir, e.name)
         if (e.isDirectory()) {
           if (e.name === 'node_modules' || e.name === 'dist' || e.name === '.git') continue
+          // await-ok: walk récursif tests-discovery — séquentiel acceptable, perf non-critique CLI affected
           await walk(full)
         } else {
           const rel = path.relative(cwd, full).replace(/\\/g, '/')
@@ -563,12 +564,20 @@ async function scanTestsImportingAffected(
   }
   await walk(cwd)
 
-  // Pour chaque test, parse imports + résout
+  // Pour chaque test, parse imports + résout. Lit en parallèle (N test files
+  // indépendants), parse séquentiellement après.
   const importsRe = /^\s*(?:import|export)\s+(?:[^'"]+from\s+)?['"]([^'"]+)['"]/gm
   const matchingTests: string[] = []
-  for (const test of candidates) {
-    let content: string
-    try { content = await fastGlob.readFile(path.join(cwd, test), 'utf-8') } catch { continue }
+  const testContents = await Promise.all(
+    candidates.map(async (test) => {
+      try {
+        return { test, content: await fastGlob.readFile(path.join(cwd, test), 'utf-8') }
+      } catch { return null }
+    }),
+  )
+  for (const entry of testContents) {
+    if (!entry) continue
+    const { test, content } = entry
     const importPaths = new Set<string>()
     let m: RegExpExecArray | null
     importsRe.lastIndex = 0
@@ -1262,7 +1271,8 @@ memoryCmd
       console.log(chalk.dim('  No obsolete entries to prune.'))
       return
     }
-    for (const id of obsoleteIds) await deleteEntry(root, id)
+    // Delete N obsolete entries en parallèle (mutations file-store indépendantes).
+    await Promise.all(obsoleteIds.map((id) => deleteEntry(root, id)))
     console.log(chalk.green(`  ✓ pruned ${obsoleteIds.length} obsolete entr${obsoleteIds.length === 1 ? 'y' : 'ies'}`))
   })
 

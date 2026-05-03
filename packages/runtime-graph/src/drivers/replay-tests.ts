@@ -143,6 +143,7 @@ async function resolveBootstrapPath(projectRoot: string): Promise<string | null>
   ]
   for (const c of candidates) {
     try {
+      // await-ok: probe avec return on first match, séquentiel requis
       await fs.access(c)
       return c
     } catch { /* next */ }
@@ -167,16 +168,23 @@ async function readBootstrapMetaSpans(factsDir: string): Promise<number> {
   let total = 0
   try {
     const entries = await fs.readdir(factsDir, { withFileTypes: true })
-    for (const entry of entries) {
-      if (!entry.isDirectory() || !entry.name.startsWith('pid-')) continue
-      try {
-        const metaFile = path.join(factsDir, entry.name, 'RuntimeRunMeta.facts')
-        const content = await fs.readFile(metaFile, 'utf-8')
-        const line = content.trim().split('\n')[0]
-        if (!line) continue
-        const cols = line.split('\t')
-        total += parseInt(cols[3] ?? '0', 10) || 0
-      } catch { /* skip */ }
+    // Lit les meta files de tous les pid-* en parallèle (indépendants).
+    const metaContents = await Promise.all(
+      entries
+        .filter((entry) => entry.isDirectory() && entry.name.startsWith('pid-'))
+        .map(async (entry) => {
+          try {
+            const metaFile = path.join(factsDir, entry.name, 'RuntimeRunMeta.facts')
+            return await fs.readFile(metaFile, 'utf-8')
+          } catch { return null /* skip */ }
+        }),
+    )
+    for (const content of metaContents) {
+      if (!content) continue
+      const line = content.trim().split('\n')[0]
+      if (!line) continue
+      const cols = line.split('\t')
+      total += parseInt(cols[3] ?? '0', 10) || 0
     }
   } catch { /* dir absent */ }
   return total
@@ -189,10 +197,10 @@ async function readBootstrapMetaSpans(factsDir: string): Promise<number> {
 export async function importBootstrapFacts(srcDir: string, dstDir: string): Promise<void> {
   await fs.mkdir(dstDir, { recursive: true })
   const files = await fs.readdir(srcDir)
-  for (const f of files) {
-    if (!f.endsWith('.facts')) continue
-    const src = path.join(srcDir, f)
-    const dst = path.join(dstDir, f)
-    await fs.copyFile(src, dst)
-  }
+  // Copy facts files en parallèle (indépendants).
+  await Promise.all(
+    files
+      .filter((f) => f.endsWith('.facts'))
+      .map((f) => fs.copyFile(path.join(srcDir, f), path.join(dstDir, f))),
+  )
 }

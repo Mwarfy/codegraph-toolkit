@@ -182,14 +182,18 @@ program
 
     // Walk les srcDirs pour trouver les fichiers .ts/.tsx
     const allFiles: string[] = []
-    for (const dir of config.srcDirs) {
-      const fullDir = path.join(config.rootDir, dir)
-      try {
-        await walkTsFiles(fullDir, config.rootDir, allFiles)
-      } catch {
-        // dir absent
-      }
-    }
+    // Walk les srcDirs en parallèle (dirs indépendants, push partagé OK
+    // en JS single-thread).
+    await Promise.all(
+      config.srcDirs.map(async (dir) => {
+        const fullDir = path.join(config.rootDir, dir)
+        try {
+          await walkTsFiles(fullDir, config.rootDir, allFiles)
+        } catch {
+          // dir absent
+        }
+      }),
+    )
 
     const candidates = await detectSingletonCandidates(config, allFiles)
     console.log(chalk.dim(`   ${candidates.length} singleton candidate(s) found`))
@@ -278,14 +282,19 @@ async function walkTsFiles(dir: string, rootDir: string, out: string[]): Promise
   if (skip.has(base)) return
   let entries
   try { entries = await readdir(dir, { withFileTypes: true }) } catch { return }
+  // Files matchent localement, dirs récursés en parallèle (push partagé
+  // sur out[] sécurisé par le single-thread JS).
+  const subdirs: string[] = []
   for (const e of entries) {
     const full = path.join(dir, e.name)
-    if (e.isDirectory()) await walkTsFiles(full, rootDir, out)
-    else if (e.isFile() && (e.name.endsWith('.ts') || e.name.endsWith('.tsx'))) {
+    if (e.isDirectory()) {
+      subdirs.push(full)
+    } else if (e.isFile() && (e.name.endsWith('.ts') || e.name.endsWith('.tsx'))) {
       if (e.name.endsWith('.test.ts') || e.name.endsWith('.spec.ts') || e.name.endsWith('.d.ts')) continue
       out.push(path.relative(rootDir, full))
     }
   }
+  await Promise.all(subdirs.map((sd) => walkTsFiles(sd, rootDir, out)))
 }
 
 program
@@ -303,9 +312,8 @@ program
     }
     try {
       const entries = await readdir(hooksDir)
-      for (const e of entries) {
-        await chmod(path.join(hooksDir, e), 0o755)
-      }
+      // chmod en parallèle (fichiers indépendants, op idempotente).
+      await Promise.all(entries.map((e) => chmod(path.join(hooksDir, e), 0o755)))
       console.log(chalk.green(`✓ chmod +x sur ${entries.length} hook(s)`))
     } catch (err) {
       console.error(chalk.yellow(`⚠ chmod échoué (hooksDir absent ?) : ${(err as Error).message}`))

@@ -34,15 +34,22 @@ export class BullmqQueueDetector implements Detector {
     const workerPattern = /new\s+Worker\s*\(\s*['"]([^'"]+)['"]/g
     const addJobPattern = /(?:queue|schedulerQueue)\s*\.?\s*add\s*\(\s*['"]([^'"]+)['"]/g
 
-    for (const file of ctx.files) {
-      if (!file.endsWith('.ts')) continue
-
-      const content = await ctx.readFile(file)
+    // Lit en parallèle les .ts files (I/O fs indépendantes), match séquentiel.
+    const tsFiles = ctx.files.filter((f) => f.endsWith('.ts'))
+    const fileContents = await Promise.all(
+      tsFiles.map(async (file) => ({ file, content: await ctx.readFile(file) })),
+    )
+    for (const { file, content } of fileContents) {
       let match: RegExpExecArray | null
 
+      // Local regexes pour éviter race lastIndex partagé entre fichiers
+      // (sinon parallélisation casserait le state global de la regex).
+      const queueRe = new RegExp(queuePattern.source, queuePattern.flags)
+      const workerRe = new RegExp(workerPattern.source, workerPattern.flags)
+      const addJobRe = new RegExp(addJobPattern.source, addJobPattern.flags)
+
       // Queue instantiation (producer side)
-      queuePattern.lastIndex = 0
-      while ((match = queuePattern.exec(content)) !== null) {
+      while ((match = queueRe.exec(content)) !== null) {
         usages.push({
           file,
           queueName: match[1],
@@ -52,8 +59,7 @@ export class BullmqQueueDetector implements Detector {
       }
 
       // Worker instantiation (consumer side)
-      workerPattern.lastIndex = 0
-      while ((match = workerPattern.exec(content)) !== null) {
+      while ((match = workerRe.exec(content)) !== null) {
         usages.push({
           file,
           queueName: match[1],
@@ -64,8 +70,7 @@ export class BullmqQueueDetector implements Detector {
 
       // Job additions — track which file adds which jobs
       const jobNames: string[] = []
-      addJobPattern.lastIndex = 0
-      while ((match = addJobPattern.exec(content)) !== null) {
+      while ((match = addJobRe.exec(content)) !== null) {
         jobNames.push(match[1])
       }
 
@@ -105,15 +110,16 @@ export class BullmqQueueDetector implements Detector {
     }
 
     // Also detect setInterval/setTimeout fallback patterns
-    // (Sentinel falls back to setInterval when Redis is down)
+    // (Sentinel falls back to setInterval when Redis is down).
+    // Réutilise tsFiles + lecture parallèle.
     const intervalPattern = /setInterval\s*\(\s*(\w+)/g
-    for (const file of ctx.files) {
-      if (!file.endsWith('.ts')) continue
-      const content = await ctx.readFile(file)
-
-      intervalPattern.lastIndex = 0
+    const fileContents2 = await Promise.all(
+      tsFiles.map(async (file) => ({ file, content: await ctx.readFile(file) })),
+    )
+    for (const { file, content } of fileContents2) {
+      const intervalRe = new RegExp(intervalPattern.source, intervalPattern.flags)
       let match: RegExpExecArray | null
-      while ((match = intervalPattern.exec(content)) !== null) {
+      while ((match = intervalRe.exec(content)) !== null) {
         // Skip mentions in comments / docstrings (audit codegraph-on-codegraph
         // a révélé le faux positif sur core/types.ts qui décrit les
         // patterns détectés dans des JSDoc).

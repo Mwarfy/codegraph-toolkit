@@ -118,14 +118,17 @@ async function walk(dir: string, rootDir: string, acc: string[]): Promise<void> 
   if (SKIP_DIRS.has(dirName) && dir !== rootDir) return
   let entries
   try { entries = await fs.readdir(dir, { withFileTypes: true }) } catch { return }
+  // Files matchent localement, dirs récursés en parallèle (push partagé OK).
+  const subdirs: string[] = []
   for (const e of entries) {
     const full = path.join(dir, e.name)
     if (e.isDirectory()) {
-      await walk(full, rootDir, acc)
+      subdirs.push(full)
     } else if (e.isFile() && e.name.endsWith('.sql')) {
       acc.push(path.relative(rootDir, full).replace(/\\/g, '/'))
     }
   }
+  await Promise.all(subdirs.map((sd) => walk(sd, rootDir, acc)))
 }
 
 // ═════════════════════════════════════════════════════════════════════
@@ -145,10 +148,17 @@ export async function analyzeSqlSchema(
   const renamedColumns: RenamedColumn[] = []
   const droppedTables: DroppedTable[] = []
 
-  for (const file of sqlFiles) {
-    let content: string
-    try { content = await fs.readFile(path.join(rootDir, file), 'utf-8') } catch { continue }
-    const fileResult = parseSqlFile(content, file)
+  // Lit N SQL files en parallèle (I/O indépendantes), parse séquentiel.
+  const sqlContents = await Promise.all(
+    sqlFiles.map(async (file) => {
+      try {
+        return { file, content: await fs.readFile(path.join(rootDir, file), 'utf-8') }
+      } catch { return null }
+    }),
+  )
+  for (const entry of sqlContents) {
+    if (!entry) continue
+    const fileResult = parseSqlFile(entry.content, entry.file)
     tables.push(...fileResult.tables)
     indexes.push(...fileResult.indexes)
     foreignKeys.push(...fileResult.foreignKeys)
