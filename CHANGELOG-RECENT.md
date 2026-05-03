@@ -5,7 +5,7 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T19:52:25Z
+Last update : 2026-05-03T19:55:39Z
 
 ## By type
 
@@ -30,17 +30,17 @@ Last update : 2026-05-03T19:52:25Z
 - **0146402** fix(toolkit): close P0+P1+P2+P3 — review credibility gap part 2 — 2026-05-03
 
 
-### `perf` (5)
+### `perf` (4)
 
 - **dcf47d4** perf(toolkit): split stat-from-read en prebuild + layered allDeprecatedUsage — 2026-05-03
 - **f55039d** perf(toolkit): Salsa-iso compression-similarity (per-file snippets cached) — 2026-05-03
 - **7151cfd** perf(toolkit): Salsa-isolate 3 hot detectors (co-change, drift, const-expr) — 2026-05-03
 - **ce4e6e8** perf(toolkit): deprecated-usage Salsa-isolation + math regression gate — 2026-05-03
-- **afd0965** perf(toolkit): self-discovered Salsa optimizations — warm runtime −40% — 2026-05-03
 
 
-### `refactor` (26)
+### `refactor` (27)
 
+- **6190869** refactor(toolkit): split state-machines top-level — analyze + buildFromBundles — 2026-05-03
 - **bddfb2a** refactor(toolkit): split data-flows top-level (analyzeDataFlows + buildDataFlowsFromBundles) — 2026-05-03
 - **d176584** refactor(toolkit): split renderLevel1/2/3 — synopsis/builder.ts ALL bombs cleared — 2026-05-03
 - **8f1792b** refactor(toolkit): split buildComponents (cyclo 24→under) — 5 helpers (groupByComp, edgeDeg, topFiles, tags, adrs) — 2026-05-03
@@ -60,7 +60,6 @@ Last update : 2026-05-03T19:52:25Z
 - **7c6668c** refactor(toolkit): kill LONG-FN-BY-PARAMS (5→0) + fix CHAOS-AMPLIFIER FP (6→3) — 2026-05-03
 - **96048d7** refactor(toolkit): extract NCD duplicates → ast-helpers + drivers/_common (NCD: 16→12) — 2026-05-03
 - **c24fb16** refactor(toolkit): tame AWAIT-IN-LOOP batch 6 — 33→0, AWAIT-IN-LOOP éliminé — 2026-05-03
-- **2b4ebc0** refactor(toolkit): tame AWAIT-IN-LOOP batch 3+4+5 — detectors + extractors (58→33) — 2026-05-03
 
 
 ### `chore` (2)
@@ -79,6 +78,7 @@ Last update : 2026-05-03T19:52:25Z
 
 ## Full history
 
+- **6190869** refactor(toolkit): split state-machines top-level — analyze + buildFromBundles — 2026-05-03
 - **bddfb2a** refactor(toolkit): split data-flows top-level (analyzeDataFlows + buildDataFlowsFromBundles) — 2026-05-03
 - **d176584** refactor(toolkit): split renderLevel1/2/3 — synopsis/builder.ts ALL bombs cleared — 2026-05-03
 - **8f1792b** refactor(toolkit): split buildComponents (cyclo 24→under) — 5 helpers (groupByComp, edgeDeg, topFiles, tags, adrs) — 2026-05-03
@@ -128,4 +128,3 @@ Last update : 2026-05-03T19:52:25Z
 - **0485ce4** feat(toolkit): self-optim Niveau 2A + Niveau 4 — math cost predict + auto-synth Salsa — 2026-05-03
 - **3ca2f45** feat(toolkit): self-optim auto-loop — connect probe → diag → brief → scaffold — 2026-05-03
 - **ce4e6e8** perf(toolkit): deprecated-usage Salsa-isolation + math regression gate — 2026-05-03
-- **afd0965** perf(toolkit): self-discovered Salsa optimizations — warm runtime −40% — 2026-05-03

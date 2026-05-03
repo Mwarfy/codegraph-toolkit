@@ -242,126 +242,129 @@ export interface BuildTruthPointsArgs {
   memSuffixes: string[]
 }
 
-export function buildTruthPointsFromSignals(args: BuildTruthPointsArgs): TruthPoint[] {
-  const {
-    files, sqlSignals, redisSignals, memorySignals, exportedFns,
-    allEdges, fileSet, aliases, memSuffixes,
-  } = args
-  const mcpToolFiles = new Set(files.filter((f) => /\/mcp\/tools\//.test(f)))
-
-  // Routes HTTP GET : on les tire des edges `route` existants (label = path).
+function collectHttpGetRoutes(allEdges: GraphEdge[], fileSet: ReadonlySet<string>): Array<{ file: string; path: string }> {
   const httpGetRoutes: Array<{ file: string; path: string }> = []
   for (const e of allEdges) {
     if (e.type !== 'route') continue
     if (!fileSet.has(e.from) && !fileSet.has(e.to)) continue
     const label = e.label ?? ''
-    // Les labels de route sont parfois préfixés "GET " / "POST " ; on retient
-    // seulement ce qui ressemble à un path. Heuristique prudente — si on
-    // doute, on omet.
+    // Les labels de route sont parfois préfixés "GET "/"POST " ; heuristique
+    // prudente — on retient seulement ce qui ressemble a un path API/health.
     if (label.startsWith('/api/') || label.startsWith('/health')) {
       const fromInFiles = fileSet.has(e.from) ? e.from : e.to
       httpGetRoutes.push({ file: fromInFiles, path: label })
     }
   }
+  return httpGetRoutes
+}
+
+function buildMirrorsForTable(
+  table: string,
+  extraPatterns: string[],
+  redisSignals: BuildTruthPointsArgs['redisSignals'],
+  memorySignals: BuildTruthPointsArgs['memorySignals'],
+  memSuffixes: string[],
+): TruthMirror[] {
+  const mirrors: TruthMirror[] = []
+  for (const r of redisSignals) {
+    if (!conceptMatchesKey(table, r.key, extraPatterns)) continue
+    mirrors.push({
+      kind: 'redis',
+      key: r.key,
+      ...(r.ttl ? { ttl: r.ttl } : {}),
+      file: r.file,
+      line: r.line,
+    })
+  }
+  for (const m of memorySignals) {
+    // Pour les caches, stripper le suffixe reconnu AVANT matching : `trustCache`
+    // doit matcher la table `trust_scores` via la base `trust`.
+    const base = stripCacheSuffix(m.varName, memSuffixes)
+    const matches =
+      conceptMatchesKey(table, m.varName, extraPatterns) ||
+      (base !== m.varName && conceptMatchesKey(table, base, extraPatterns))
+    if (!matches) continue
+    mirrors.push({ kind: 'memory', key: m.varName, file: m.file, line: m.line })
+  }
+  return mirrors
+}
+
+function buildExposedForTable(
+  table: string,
+  extraPatterns: string[],
+  exportedFns: BuildTruthPointsArgs['exportedFns'],
+  httpGetRoutes: Array<{ file: string; path: string }>,
+  mcpToolFiles: Set<string>,
+  writerReaderFiles: Set<string>,
+): TruthExposure[] {
+  const exposed: TruthExposure[] = []
+  for (const fn of exportedFns) {
+    const rest = fn.name.slice(fn.prefix.length)
+    if (!conceptMatchesName(table, rest, extraPatterns)) continue
+    exposed.push({ kind: 'function', id: fn.name, file: fn.file, line: fn.line })
+  }
+  for (const route of httpGetRoutes) {
+    if (!writerReaderFiles.has(route.file)) continue
+    exposed.push({ kind: 'route', id: route.path, file: route.file })
+  }
+  for (const toolFile of mcpToolFiles) {
+    if (!writerReaderFiles.has(toolFile)) continue
+    const base = path.basename(toolFile, '.ts')
+    exposed.push({ kind: 'mcp-tool', id: `mcp:${base}`, file: toolFile })
+  }
+  return exposed
+}
+
+function buildTruthPointForTable(
+  table: string,
+  args: BuildTruthPointsArgs,
+  ctx: { httpGetRoutes: Array<{ file: string; path: string }>; mcpToolFiles: Set<string> },
+): TruthPoint {
+  const { sqlSignals, redisSignals, memorySignals, exportedFns, aliases, memSuffixes } = args
+  const concept = table
+  const extraPatterns = aliases[concept] ?? aliases[singularize(concept)] ?? []
+
+  const writers: TruthRef[] = sqlSignals
+    .filter((s) => s.table === table && s.operation === 'write')
+    .map((s) => ({ file: s.file, symbol: s.symbol, line: s.line }))
+  const readers: TruthRef[] = sqlSignals
+    .filter((s) => s.table === table && s.operation === 'read')
+    .map((s) => ({ file: s.file, symbol: s.symbol, line: s.line }))
+
+  const mirrors = buildMirrorsForTable(table, extraPatterns, redisSignals, memorySignals, memSuffixes)
+  const writerReaderFiles = new Set<string>([
+    ...writers.map((w) => w.file),
+    ...readers.map((r) => r.file),
+  ])
+  const exposed = buildExposedForTable(table, extraPatterns, exportedFns, ctx.httpGetRoutes, ctx.mcpToolFiles, writerReaderFiles)
+
+  const dedupMirrors = dedup(mirrors, (m) => `${m.kind}|${m.key}|${m.file}|${m.line}`)
+  const dedupExposed = dedup(exposed, (e) => `${e.kind}|${e.id}|${e.file ?? ''}`)
+  dedupMirrors.sort(cmpMirror)
+  dedupExposed.sort(cmpExposure)
+  writers.sort(cmpRef)
+  readers.sort(cmpRef)
+
+  return {
+    concept,
+    canonical: { kind: 'table', name: table },
+    mirrors: dedupMirrors,
+    writers,
+    readers,
+    exposed: dedupExposed,
+  }
+}
+
+export function buildTruthPointsFromSignals(args: BuildTruthPointsArgs): TruthPoint[] {
+  const { files, sqlSignals, allEdges, fileSet } = args
+  const mcpToolFiles = new Set(files.filter((f) => /\/mcp\/tools\//.test(f)))
+  const httpGetRoutes = collectHttpGetRoutes(allEdges, fileSet)
 
   const tableNames = new Set<string>()
   for (const s of sqlSignals) tableNames.add(s.table)
 
-  const truthPoints: TruthPoint[] = []
-
-  for (const table of [...tableNames].sort()) {
-    const concept = table  // v1 : concept = nom de table, sans singularisation.
-    const extraPatterns = aliases[concept] ?? aliases[singularize(concept)] ?? []
-
-    const writers: TruthRef[] = sqlSignals
-      .filter((s) => s.table === table && s.operation === 'write')
-      .map((s) => ({ file: s.file, symbol: s.symbol, line: s.line }))
-
-    const readers: TruthRef[] = sqlSignals
-      .filter((s) => s.table === table && s.operation === 'read')
-      .map((s) => ({ file: s.file, symbol: s.symbol, line: s.line }))
-
-    // Miroirs : redis + memory matchant le concept.
-    const mirrors: TruthMirror[] = []
-
-    for (const r of redisSignals) {
-      if (!conceptMatchesKey(table, r.key, extraPatterns)) continue
-      mirrors.push({
-        kind: 'redis',
-        key: r.key,
-        ...(r.ttl ? { ttl: r.ttl } : {}),
-        file: r.file,
-        line: r.line,
-      })
-    }
-
-    for (const m of memorySignals) {
-      // Pour les caches, stripper le suffixe reconnu AVANT matching : le nom
-      // `trustCache` doit matcher la table `trust_scores` via la base `trust`.
-      const base = stripCacheSuffix(m.varName, memSuffixes)
-      const matches =
-        conceptMatchesKey(table, m.varName, extraPatterns) ||
-        (base !== m.varName && conceptMatchesKey(table, base, extraPatterns))
-      if (!matches) continue
-      mirrors.push({
-        kind: 'memory',
-        key: m.varName,
-        file: m.file,
-        line: m.line,
-      })
-    }
-
-    // Exposed : exports get/find/read/list dont le nom (sans préfixe) matche,
-    // + routes HTTP GET dans un fichier writer/reader, + MCP tools sentinel_get_*
-    // dans un fichier writer/reader.
-    const exposed: TruthExposure[] = []
-
-    const writerReaderFiles = new Set<string>([
-      ...writers.map((w) => w.file),
-      ...readers.map((r) => r.file),
-    ])
-
-    for (const fn of exportedFns) {
-      const rest = fn.name.slice(fn.prefix.length)
-      if (!conceptMatchesName(table, rest, extraPatterns)) continue
-      exposed.push({ kind: 'function', id: fn.name, file: fn.file, line: fn.line })
-    }
-
-    for (const route of httpGetRoutes) {
-      if (!writerReaderFiles.has(route.file)) continue
-      exposed.push({ kind: 'route', id: route.path, file: route.file })
-    }
-
-    for (const toolFile of mcpToolFiles) {
-      if (!writerReaderFiles.has(toolFile)) continue
-      // Nom dérivé du filename : tools/foo.ts → sentinel_get_foo candidate —
-      // imparfait, mais le fichier MCP existe et touche le concept, c'est
-      // l'info qui compte pour la carte.
-      const base = path.basename(toolFile, '.ts')
-      exposed.push({ kind: 'mcp-tool', id: `mcp:${base}`, file: toolFile })
-    }
-
-    // Dédup + tri stable.
-    const dedupMirrors = dedup(mirrors, (m) => `${m.kind}|${m.key}|${m.file}|${m.line}`)
-    const dedupExposed = dedup(exposed, (e) => `${e.kind}|${e.id}|${e.file ?? ''}`)
-
-    dedupMirrors.sort(cmpMirror)
-    dedupExposed.sort(cmpExposure)
-    writers.sort(cmpRef)
-    readers.sort(cmpRef)
-
-    // Pas de miroirs + un seul writer/reader => truth point peu informatif ;
-    // on le garde quand même pour la complétude (la carte doit tout lister).
-
-    truthPoints.push({
-      concept,
-      canonical: { kind: 'table', name: table },
-      mirrors: dedupMirrors,
-      writers,
-      readers,
-      exposed: dedupExposed,
-    })
-  }
+  const truthPoints: TruthPoint[] = [...tableNames].sort()
+    .map((table) => buildTruthPointForTable(table, args, { httpGetRoutes, mcpToolFiles }))
 
   // Tri déterministe : canonical avec mirrors d'abord (plus riche en signal),
   // puis par nom de concept.

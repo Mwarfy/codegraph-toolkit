@@ -199,6 +199,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+6190869 refactor(toolkit): split state-machines top-level — analyze + buildFromBundles
 bddfb2a refactor(toolkit): split data-flows top-level (analyzeDataFlows + buildDataFlowsFromBundles)
 d176584 refactor(toolkit): split renderLevel1/2/3 — synopsis/builder.ts ALL bombs cleared
 8f1792b refactor(toolkit): split buildComponents (cyclo 24→under) — 5 helpers (groupByComp, edgeDeg, topFiles, tags, adrs)
@@ -210,7 +211,6 @@ af4705f refactor(toolkit): split renderCoreFlows (cyclo 22→4) — 3 helpers (g
 a0add06 refactor(toolkit): split renderModuleFiche (cyclo 32→4) — 5 helpers section-by-section
 020e949 refactor(toolkit): split renderModules (cyclo 35→12) — 4 helpers index builders
 df1ee8c refactor(toolkit): split renderEventFlows (cyclo 25→5, cog 63→4) — 5 helpers extraits
-50eb1f8 fix(toolkit): articulation-point rule — exclure package entry points (FP systemique)
 ```
 
 ## Comment contribuer à ce brief
