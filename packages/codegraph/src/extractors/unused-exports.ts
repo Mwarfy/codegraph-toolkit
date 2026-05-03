@@ -110,37 +110,37 @@ export interface UnusedExportsFileBundle {
  *
  * `relPath` est le path relatif du fichier (clé "files" + clé namespace).
  */
-export function extractUnusedExportsFileBundle(
+function collectImportRefs(
   sourceFile: SourceFile,
-  relPath: string,
   rootDir: string,
-  project: Project,
-): UnusedExportsFileBundle {
-  const importedSymbols: UnusedExportsImportRef[] = []
-  const namespaceTargets: string[] = []
-
+  importedSymbols: UnusedExportsImportRef[],
+  namespaceTargets: string[],
+): void {
   for (const imp of sourceFile.getImportDeclarations()) {
     const targetFile = imp.getModuleSpecifierSourceFile()
     if (!targetFile) continue
     const targetPath = relativize(targetFile.getFilePath(), rootDir)
     if (!targetPath) continue
 
-    const nsImport = imp.getNamespaceImport()
-    if (nsImport) {
+    if (imp.getNamespaceImport()) {
       namespaceTargets.push(targetPath)
       continue
     }
-
-    const defaultImport = imp.getDefaultImport()
-    if (defaultImport) {
+    if (imp.getDefaultImport()) {
       importedSymbols.push({ targetFile: targetPath, symbol: 'default' })
     }
-
     for (const named of imp.getNamedImports()) {
       importedSymbols.push({ targetFile: targetPath, symbol: named.getName() })
     }
   }
+}
 
+function collectExportRefs(
+  sourceFile: SourceFile,
+  rootDir: string,
+  importedSymbols: UnusedExportsImportRef[],
+  namespaceTargets: string[],
+): void {
   for (const exp of sourceFile.getExportDeclarations()) {
     const targetFile = exp.getModuleSpecifierSourceFile()
     if (!targetFile) continue
@@ -151,27 +151,57 @@ export function extractUnusedExportsFileBundle(
       namespaceTargets.push(targetPath)
       continue
     }
-
     for (const named of exp.getNamedExports()) {
       importedSymbols.push({ targetFile: targetPath, symbol: named.getName() })
     }
   }
+}
 
-  // ─── Dynamic imports : `await import('./path.js')` ───
-  //
-  // Fix M-003 : le detector ne voyait que les imports statiques. Les
-  // consumers lazy chargent via `await import(...)` — leurs cibles
-  // étaient faussement marquées "safe-to-remove".
+/**
+ * `await import('./path')` destructure : capture les symbols pour ne pas
+ * faussement marquer "safe-to-remove" les exports utilises en lazy.
+ */
+function recordDynamicImportBinding(
+  parent: Node | undefined,
+  targetPath: string,
+  importedSymbols: UnusedExportsImportRef[],
+  namespaceTargets: string[],
+): void {
+  if (!parent || !Node.isVariableDeclaration(parent)) {
+    namespaceTargets.push(targetPath)
+    return
+  }
+  const nameNode = parent.getNameNode()
+  if (Node.isObjectBindingPattern(nameNode)) {
+    for (const element of nameNode.getElements()) {
+      const propNameNode = element.getPropertyNameNode()
+      const name = propNameNode ? propNameNode.getText() : element.getNameNode().getText()
+      importedSymbols.push({ targetFile: targetPath, symbol: name })
+    }
+    return
+  }
+  // Identifier ou autre forme — namespace import.
+  namespaceTargets.push(targetPath)
+}
+
+function collectDynamicImports(
+  sourceFile: SourceFile,
+  rootDir: string,
+  project: Project,
+  importedSymbols: UnusedExportsImportRef[],
+  namespaceTargets: string[],
+): void {
+  // Fix M-003 : detector v1 ne voyait que les imports statiques. Les
+  // consumers lazy via `await import(...)` voyaient leur cible faussement
+  // marquee "safe-to-remove".
   for (const callExpr of sourceFile.getDescendantsOfKind(SyntaxKind.CallExpression)) {
     const expr = callExpr.getExpression()
     if (expr.getText() !== 'import') continue
 
     const args = callExpr.getArguments()
     if (args.length === 0) continue
-
     const firstArg = args[0]
     if (!Node.isStringLiteral(firstArg) && !Node.isNoSubstitutionTemplateLiteral(firstArg)) continue
-
     const specifier = firstArg.getLiteralValue()
     if (!specifier.startsWith('.')) continue
 
@@ -180,45 +210,32 @@ export function extractUnusedExportsFileBundle(
 
     let parent: Node | undefined = callExpr.getParent()
     if (parent && Node.isAwaitExpression(parent)) parent = parent.getParent()
-
-    if (parent && Node.isVariableDeclaration(parent)) {
-      const nameNode = parent.getNameNode()
-
-      if (Node.isObjectBindingPattern(nameNode)) {
-        for (const element of nameNode.getElements()) {
-          const propNameNode = element.getPropertyNameNode()
-          const name = propNameNode ? propNameNode.getText() : element.getNameNode().getText()
-          importedSymbols.push({ targetFile: targetPath, symbol: name })
-        }
-        continue
-      }
-
-      if (Node.isIdentifier(nameNode)) {
-        namespaceTargets.push(targetPath)
-        continue
-      }
-    }
-
-    namespaceTargets.push(targetPath)
+    recordDynamicImportBinding(parent, targetPath, importedSymbols, namespaceTargets)
   }
+}
 
-  // ─── String literal hits (dynamic usage heuristic) ───
-  const stringLiteralSymbols: string[] = []
+const STRING_LITERAL_SYMBOL_RE = /['"`]([A-Za-z_$][A-Za-z0-9_$]*(?:Schema|Params|Handler|Action|Event|Type|Config)?)['"` ]/g
+
+function collectStringLiteralSymbols(text: string): string[] {
+  const out: string[] = []
   const seen = new Set<string>()
-  const text = sourceFile.getFullText()
-  const stringMatches = text.match(/['"`]([A-Za-z_$][A-Za-z0-9_$]*(?:Schema|Params|Handler|Action|Event|Type|Config)?)['"` ]/g)
-  if (stringMatches) {
-    for (const m of stringMatches) {
-      const clean = m.replace(/['"`\s]/g, '')
-      if (clean.length > 2 && !seen.has(clean)) {
-        seen.add(clean)
-        stringLiteralSymbols.push(clean)
-      }
+  const matches = text.match(STRING_LITERAL_SYMBOL_RE)
+  if (!matches) return out
+  for (const m of matches) {
+    const clean = m.replace(/['"`\s]/g, '')
+    if (clean.length > 2 && !seen.has(clean)) {
+      seen.add(clean)
+      out.push(clean)
     }
   }
+  return out
+}
 
-  // ─── Declared exports ───
-  const declaredExports: UnusedExportsDeclaredExport[] = []
+function collectDeclaredExports(
+  sourceFile: SourceFile,
+  text: string,
+): UnusedExportsDeclaredExport[] {
+  const out: UnusedExportsDeclaredExport[] = []
   for (const [name, declarations] of sourceFile.getExportedDeclarations()) {
     for (const decl of declarations) {
       const kind = classifyDeclaration(decl)
@@ -226,17 +243,29 @@ export function extractUnusedExportsFileBundle(
       const isReExport = decl.getSourceFile() !== sourceFile
       const symbolName = name === 'default' ? '(default)' : name
       const isUsedLocally = name !== 'default' && isUsedLocallyOnly(text, name, line)
-
-      declaredExports.push({
-        symbolName,
-        rawName: name,
-        kind,
-        line,
-        isReExport,
-        isUsedLocally,
-      })
+      out.push({ symbolName, rawName: name, kind, line, isReExport, isUsedLocally })
     }
   }
+  return out
+}
+
+export function extractUnusedExportsFileBundle(
+  sourceFile: SourceFile,
+  relPath: string,
+  rootDir: string,
+  project: Project,
+): UnusedExportsFileBundle {
+  void relPath  // signature contract, used by callers for lookup
+  const importedSymbols: UnusedExportsImportRef[] = []
+  const namespaceTargets: string[] = []
+
+  collectImportRefs(sourceFile, rootDir, importedSymbols, namespaceTargets)
+  collectExportRefs(sourceFile, rootDir, importedSymbols, namespaceTargets)
+  collectDynamicImports(sourceFile, rootDir, project, importedSymbols, namespaceTargets)
+
+  const text = sourceFile.getFullText()
+  const stringLiteralSymbols = collectStringLiteralSymbols(text)
+  const declaredExports = collectDeclaredExports(sourceFile, text)
 
   return {
     importedSymbols,

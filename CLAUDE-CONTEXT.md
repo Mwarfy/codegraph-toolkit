@@ -199,6 +199,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+86cff0b refactor(toolkit): split analyzeSqlSchema (cyclo 38→3) + dedupe SQL comparators to _shared/sql-helpers
 8988d09 refactor(toolkit): split parseColumnProperty (cyclo 18→3) — drizzle-schema.ts ALL bombs cleared
 377916d refactor(toolkit): split parseIndexFunction (cyclo 23→3) — 2 helpers (body-unwrap + chain-parse)
 23de1a8 refactor(toolkit): split parseDrizzleFile (cyclo 26→3) — 4 helpers + iteratePgTables generator
@@ -210,7 +211,6 @@ c55801c refactor(toolkit): split evaluateRule (cyclo 16→4) — 3 helpers (guar
 953ea56 refactor(toolkit): split Lexer.skipWS (cyclo 16→3) — parser.ts ALL bombs cleared
 a023167 refactor(toolkit): split Lexer.next (cyclo 19→under) — table single-char + tryTwoCharOp helper
 4b0c89d refactor(toolkit): split Parser.validateRule (cyclo 20→3) — 4 helpers safety checks
-1878143 refactor(toolkit): split analyzeDrizzleSchema (cyclo 20→3) — 4 helpers (3 cmp + 1 parse loop)
 ```
 
 ## Comment contribuer à ce brief
