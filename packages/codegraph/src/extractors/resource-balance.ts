@@ -36,6 +36,7 @@
  */
 
 import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
+import { makeIsExemptForMarker } from './_shared/ast-helpers.js'
 
 export interface ResourceImbalance {
   file: string
@@ -77,12 +78,7 @@ export function extractResourceBalanceFileBundle(
   if (TEST_FILE_RE.test(relPath)) return { imbalances: [] }
   const imbalances: ResourceImbalance[] = []
 
-  const lines = sf.getFullText().split('\n')
-  const isExempt = (line: number): boolean => {
-    if (line < 2 || line - 2 >= lines.length) return false
-    const prev = lines[line - 2]
-    return /\/\/\s*resource-balance-ok\b/.test(prev)
-  }
+  const isExempt = makeIsExemptForMarker(sf, 'resource-balance-ok')
 
   const checkFn = (
     name: string,

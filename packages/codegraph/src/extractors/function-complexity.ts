@@ -16,6 +16,7 @@
  */
 
 import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
+import { makeIsExemptForMarker } from './_shared/ast-helpers.js'
 
 export interface FunctionComplexity {
   file: string
@@ -60,11 +61,7 @@ export function extractFunctionComplexityFileBundle(
   if (TEST_FILE_RE.test(relPath)) return []
   const out: FunctionComplexity[] = []
 
-  const lines = sf.getFullText().split('\n')
-  const isExempt = (line: number): boolean => {
-    if (line < 2 || line - 2 >= lines.length) return false
-    return /\/\/\s*complexity-ok\b/.test(lines[line - 2])
-  }
+  const isExempt = makeIsExemptForMarker(sf, 'complexity-ok')
 
   // Function declarations
   for (const fn of sf.getFunctions()) {

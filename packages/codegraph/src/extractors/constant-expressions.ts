@@ -41,6 +41,7 @@
  */
 
 import { type SourceFile, Node, SyntaxKind } from 'ts-morph'
+import { makeIsExemptForMarker } from './_shared/ast-helpers.js'
 
 export type ConstantExpressionKind =
   | 'tautology-condition'
@@ -71,12 +72,7 @@ export function extractConstantExpressionsFileBundle(
 ): ConstantExpressionsFileBundle {
   if (TEST_FILE_RE.test(relPath)) return { findings: [] }
   const findings: ConstantExpressionFinding[] = []
-  const lines = sf.getFullText().split('\n')
-
-  const isExempt = (line: number): boolean => {
-    if (line < 2 || line - 2 >= lines.length) return false
-    return /\/\/\s*const-expr-ok\b/.test(lines[line - 2])
-  }
+  const isExempt = makeIsExemptForMarker(sf, 'const-expr-ok')
 
   // ─── Pattern 1 + 2 : tautology / contradiction in conditions ────
   for (const ifNode of sf.getDescendantsOfKind(SyntaxKind.IfStatement)) {

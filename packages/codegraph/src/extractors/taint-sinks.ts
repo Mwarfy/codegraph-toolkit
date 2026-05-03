@@ -22,7 +22,7 @@
  */
 
 import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
-import { findContainingSymbol } from './_shared/ast-helpers.js'
+import { findContainingSymbol, makeIsExemptForMarker } from './_shared/ast-helpers.js'
 
 export type TaintSinkKind =
   | 'sql'
@@ -96,12 +96,7 @@ export function extractTaintSinksFileBundle(
   if (TEST_FILE_RE.test(relPath)) return { sinks: [] }
   const sinks: TaintSink[] = []
 
-  const lines = sf.getFullText().split('\n')
-  const isExempt = (line: number): boolean => {
-    if (line < 2 || line - 2 >= lines.length) return false
-    const prev = lines[line - 2]
-    return /\/\/\s*taint-ok\b/.test(prev)
-  }
+  const isExempt = makeIsExemptForMarker(sf, 'taint-ok')
 
   for (const call of sf.getDescendantsOfKind(SyntaxKind.CallExpression)) {
     const callee = call.getExpression()

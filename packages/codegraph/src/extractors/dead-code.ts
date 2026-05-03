@@ -21,6 +21,7 @@
  */
 
 import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
+import { makeIsExemptForMarker } from './_shared/ast-helpers.js'
 
 export type DeadCodeKind =
   | 'identical-subexpressions'
@@ -61,12 +62,10 @@ export function extractDeadCodeFileBundle(
   if (TEST_FILE_RE.test(relPath)) return { findings: [] }
   const findings: DeadCodeFinding[] = []
 
+  const isExempt = makeIsExemptForMarker(sf, 'dead-code-ok')
+  // Aussi gardé localement pour le check `// fallthrough` ci-dessous
+  // (convention C/Java spécifique au switch-fallthrough pattern).
   const lines = sf.getFullText().split('\n')
-  const isExempt = (line: number): boolean => {
-    if (line < 2 || line - 2 >= lines.length) return false
-    const prev = lines[line - 2]
-    return /\/\/\s*dead-code-ok\b/.test(prev)
-  }
 
   // ─── Pattern 1 : identical-subexpressions ──────────────────────────
   for (const expr of sf.getDescendantsOfKind(SyntaxKind.BinaryExpression)) {

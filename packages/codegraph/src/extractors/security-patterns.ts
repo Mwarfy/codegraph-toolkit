@@ -22,7 +22,7 @@
  */
 
 import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
-import { findContainingSymbol } from './_shared/ast-helpers.js'
+import { findContainingSymbol, makeIsExemptForMarker } from './_shared/ast-helpers.js'
 
 const TEST_FILE_RE = /(\.test\.tsx?|\.spec\.tsx?|(^|\/)tests?\/|(^|\/)fixtures?\/)/
 const SECRET_NAME_RE = /^(password|passwd|pwd|secret|token|api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|client[-_]?secret|jwt|nonce|sessionid|csrf|otp|priv(ate)?[-_]?key|encryption[-_]?key)$/i
@@ -86,11 +86,7 @@ export function extractSecurityPatternsFileBundle(
   }
   if (TEST_FILE_RE.test(relPath)) return out
 
-  const lines = sf.getFullText().split('\n')
-  const isExempt = (line: number): boolean => {
-    if (line < 2 || line - 2 >= lines.length) return false
-    return /\/\/\s*security-ok\b/.test(lines[line - 2])
-  }
+  const isExempt = makeIsExemptForMarker(sf, 'security-ok')
 
   // Pass 1 : CallExpression — secretRef args + Math.random + cors() + https opts.
   for (const call of sf.getDescendantsOfKind(SyntaxKind.CallExpression)) {

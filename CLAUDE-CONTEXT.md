@@ -148,8 +148,8 @@
 - `packages/codegraph/src/incremental/queries.ts` (in: 32) · gov by ADR-007
 - `packages/codegraph/src/incremental/database.ts` (in: 30) · gov by ADR-007
 - `packages/salsa/dist/index.d.ts` (in: 29)
+- `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 23) · gov by ADR-012
 - `packages/codegraph/src/core/detector-registry.ts` (in: 18) · gov by ADR-008
-- `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 16) · gov by ADR-012
 - `packages/runtime-graph/src/core/types.ts` (in: 13) · gov by ADR-009
 - `packages/adr-toolkit/src/config.ts` (in: 10) · gov by ADR-002
 
@@ -200,6 +200,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+25fc296 fix(toolkit): kill META-CRITICAL (7→0) + 2 bugs détecteur + 6 tests
 70afbdc fix(toolkit): clean 93 violations (534→441, −17.4%) sans bypass
 b0f2c9a refactor(toolkit): split cli/index.ts god-file (2190→1520 LOC, −30%)
 c613ac7 refactor(toolkit): split analyzer.ts:runDeterministicDetectors en 5 phases
@@ -211,7 +212,6 @@ ee89730 docs(validation): self-analysis run #2 — toolkit voit 553 violations s
 af41582 feat(toolkit): symbolic simplification facts + 5 composite rules cross-discipline
 866eb25 fix(toolkit): bugs #1 #2 #3 #4 trouvés via test externe Hono
 a191d61 docs(validation): full-chain run #1 — 4 bugs trouvés sur Hono
-095661e docs(validation): run #1 — Hono framework (186 files, 3.5s, 0 crash, 0 hallucination)
 ```
 
 ## Comment contribuer à ce brief

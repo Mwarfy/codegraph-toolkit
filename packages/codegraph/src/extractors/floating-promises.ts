@@ -30,7 +30,7 @@
  */
 
 import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
-import { findContainingSymbol } from './_shared/ast-helpers.js'
+import { findContainingSymbol, makeIsExemptForMarker } from './_shared/ast-helpers.js'
 
 export interface FloatingPromiseSite {
   file: string
@@ -64,12 +64,7 @@ export function extractFloatingPromisesFileBundle(
   if (TEST_FILE_RE.test(relPath)) return { sites: [] }
   const sites: FloatingPromiseSite[] = []
 
-  const lines = sf.getFullText().split('\n')
-  const isExempt = (line: number): boolean => {
-    if (line < 2 || line - 2 >= lines.length) return false
-    const prev = lines[line - 2]
-    return /\/\/\s*fire-and-forget\b/.test(prev)
-  }
+  const isExempt = makeIsExemptForMarker(sf, 'fire-and-forget')
 
   for (const call of sf.getDescendantsOfKind(SyntaxKind.CallExpression)) {
     // Identifier le nom de la fonction appelée. Cas typiques :

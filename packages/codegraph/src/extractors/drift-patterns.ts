@@ -29,6 +29,7 @@
  */
 
 import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
+import { makeIsExemptForMarker } from './_shared/ast-helpers.js'
 import type { TodoMarker } from './todos.js'
 
 export type DriftSignalKind =
@@ -93,14 +94,8 @@ export function extractDriftPatternsFileBundle(
   const wrapperMinArgs = options.wrapperMinArgs ?? DEFAULT_WRAPPER_MIN_ARGS
   const signals: DriftSignal[] = []
 
-  // Construire un index ligne→texte pour le check `// drift-ok:` exempt.
-  const lines = sf.getFullText().split('\n')
-  const isExempt = (line: number): boolean => {
-    // Regarde la ligne PRÉCÉDANT (line-1) car drift-ok est en commentaire au-dessus.
-    if (line < 2 || line - 2 >= lines.length) return false
-    const prev = lines[line - 2]
-    return /\/\/\s*drift-ok\b/.test(prev)
-  }
+  // Check `// drift-ok` exempt — la ligne PRÉCÉDANT le signal.
+  const isExempt = makeIsExemptForMarker(sf, 'drift-ok')
 
   // Helper : check params optionnels sur n'importe quel "function-like".
   const checkParams = (

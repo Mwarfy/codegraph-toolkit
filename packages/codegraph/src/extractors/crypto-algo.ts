@@ -25,7 +25,7 @@
  */
 
 import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
-import { findContainingSymbol } from './_shared/ast-helpers.js'
+import { findContainingSymbol, makeIsExemptForMarker } from './_shared/ast-helpers.js'
 
 export interface CryptoCall {
   file: string
@@ -58,11 +58,7 @@ export function extractCryptoCallsFileBundle(
   if (TEST_FILE_RE.test(relPath)) return { calls: [] }
   const calls: CryptoCall[] = []
 
-  const lines = sf.getFullText().split('\n')
-  const isExempt = (line: number): boolean => {
-    if (line < 2 || line - 2 >= lines.length) return false
-    return /\/\/\s*crypto-ok\b/.test(lines[line - 2])
-  }
+  const isExempt = makeIsExemptForMarker(sf, 'crypto-ok')
 
   for (const call of sf.getDescendantsOfKind(SyntaxKind.CallExpression)) {
     const callee = call.getExpression()

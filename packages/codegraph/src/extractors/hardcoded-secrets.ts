@@ -25,6 +25,7 @@
  */
 
 import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
+import { makeIsExemptForMarker } from './_shared/ast-helpers.js'
 
 export interface HardcodedSecret {
   file: string
@@ -79,13 +80,8 @@ export function extractHardcodedSecretsFileBundle(
   // Skip test/fixture files entirely.
   if (TEST_FILE_RE.test(relPath)) return { secrets }
 
-  // Index ligne→texte pour le check `// secret-ok` exempt.
-  const lines = sf.getFullText().split('\n')
-  const isExempt = (line: number): boolean => {
-    if (line < 2 || line - 2 >= lines.length) return false
-    const prev = lines[line - 2]
-    return /\/\/\s*secret-ok\b/.test(prev)
-  }
+  // Check `// secret-ok` exempt — ligne précédant le secret literal.
+  const isExempt = makeIsExemptForMarker(sf, 'secret-ok')
 
   for (const lit of sf.getDescendantsOfKind(SyntaxKind.StringLiteral)) {
     const value = lit.getLiteralText()

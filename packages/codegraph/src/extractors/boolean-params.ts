@@ -23,6 +23,7 @@
  */
 
 import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
+import { makeIsExemptForMarker } from './_shared/ast-helpers.js'
 
 export interface BooleanParamSite {
   file: string
@@ -57,12 +58,7 @@ export function extractBooleanParamsFileBundle(
   if (TEST_FILE_RE.test(relPath)) return { sites: [] }
   const sites: BooleanParamSite[] = []
 
-  const lines = sf.getFullText().split('\n')
-  const isExempt = (line: number): boolean => {
-    if (line < 2 || line - 2 >= lines.length) return false
-    const prev = lines[line - 2]
-    return /\/\/\s*boolean-ok\b/.test(prev)
-  }
+  const isExempt = makeIsExemptForMarker(sf, 'boolean-ok')
 
   const checkFn = (
     name: string,

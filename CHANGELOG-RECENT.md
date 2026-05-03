@@ -5,7 +5,7 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T16:21:08Z
+Last update : 2026-05-03T16:41:41Z
 
 ## By type
 
@@ -29,8 +29,9 @@ Last update : 2026-05-03T16:21:08Z
 - **87f2ac1** feat(toolkit): Information Bottleneck (Tishby 1999) — 7e cross-discipline — 2026-05-01
 
 
-### `fix` (8)
+### `fix` (9)
 
+- **25fc296** fix(toolkit): kill META-CRITICAL (7→0) + 2 bugs détecteur + 6 tests — 2026-05-03
 - **70afbdc** fix(toolkit): clean 93 violations (534→441, −17.4%) sans bypass — 2026-05-03
 - **866eb25** fix(toolkit): bugs #1 #2 #3 #4 trouvés via test externe Hono — 2026-05-03
 - **0146402** fix(toolkit): close P0+P1+P2+P3 — review credibility gap part 2 — 2026-05-03
@@ -72,14 +73,13 @@ Last update : 2026-05-03T16:21:08Z
 - **18a37a7** chore(toolkit): retire 3 exports dead code (UnusedExport.facts) — 2026-05-01
 
 
-### `docs` (6)
+### `docs` (5)
 
 - **ee89730** docs(validation): self-analysis run #2 — toolkit voit 553 violations sur lui-même — 2026-05-03
 - **9a5d5ac** docs(validation): run #1.5 — composite rules sur Sentinel — 33× signal-to-noise — 2026-05-03
 - **a191d61** docs(validation): full-chain run #1 — 4 bugs trouvés sur Hono — 2026-05-03
 - **095661e** docs(validation): run #1 — Hono framework (186 files, 3.5s, 0 crash, 0 hallucination) — 2026-05-03
 - **c003043** docs: update READMEs for v0.5.0 — 91 rules, multi-dir, 7 cross-discipline — 2026-05-01
-- **3ecfa05** docs: cross-discipline metrics — synthese 6 disciplines portees — 2026-05-01
 
 
 ### `test` (1)
@@ -89,6 +89,7 @@ Last update : 2026-05-03T16:21:08Z
 
 ## Full history
 
+- **25fc296** fix(toolkit): kill META-CRITICAL (7→0) + 2 bugs détecteur + 6 tests — 2026-05-03
 - **70afbdc** fix(toolkit): clean 93 violations (534→441, −17.4%) sans bypass — 2026-05-03
 - **b0f2c9a** refactor(toolkit): split cli/index.ts god-file (2190→1520 LOC, −30%) — 2026-05-03
 - **c613ac7** refactor(toolkit): split analyzer.ts:runDeterministicDetectors en 5 phases — 2026-05-03
@@ -138,4 +139,3 @@ Last update : 2026-05-03T16:21:08Z
 - **443e072** feat(datalog): runFromDirs accepte rulesDir array (multi-dir loader) — 2026-05-01
 - **18a37a7** chore(toolkit): retire 3 exports dead code (UnusedExport.facts) — 2026-05-01
 - **87f2ac1** feat(toolkit): Information Bottleneck (Tishby 1999) — 7e cross-discipline — 2026-05-01
-- **3ecfa05** docs: cross-discipline metrics — synthese 6 disciplines portees — 2026-05-01

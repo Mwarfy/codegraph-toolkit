@@ -28,7 +28,7 @@
  */
 
 import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
-import { findContainingSymbol } from './_shared/ast-helpers.js'
+import { findContainingSymbol, makeIsExemptForMarker } from './_shared/ast-helpers.js'
 
 export interface DeprecatedUsageSite {
   file: string
@@ -111,12 +111,7 @@ export function extractDeprecatedUsageFileBundle(
   // ─── Pass 2 : detect call-sites matching globalDeprecatedNames ────
   if (TEST_FILE_RE.test(relPath)) return { declarations, sites }
 
-  const lines = sf.getFullText().split('\n')
-  const isExempt = (line: number): boolean => {
-    if (line < 2 || line - 2 >= lines.length) return false
-    const prev = lines[line - 2]
-    return /\/\/\s*deprecated-ok\b/.test(prev)
-  }
+  const isExempt = makeIsExemptForMarker(sf, 'deprecated-ok')
 
   const checkCall = (calleeText: string | null, line: number, containingSymbol: string): void => {
     if (!calleeText) return
