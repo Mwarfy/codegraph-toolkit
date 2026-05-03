@@ -1,3 +1,4 @@
+// ADR-005
 /**
  * Compression-based similarity — Normalized Compression Distance (NCD).
  *

@@ -77,6 +77,7 @@
 - `packages/codegraph/src/extractors/_shared/sql-helpers.ts` → ADR-012
 - `packages/codegraph/src/extractors/_shared/sql-types.ts` → ADR-012
 - `packages/codegraph/src/extractors/co-change.ts` → ADR-005
+- `packages/codegraph/src/extractors/compression-similarity.ts` → ADR-005
 - `packages/codegraph/src/extractors/constant-expressions.ts` → ADR-005
 - `packages/codegraph/src/extractors/eslint-import.ts` → ADR-005
 - `packages/codegraph/src/extractors/package-deps.ts` → ADR-005
@@ -146,9 +147,9 @@
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
 - `packages/codegraph/src/core/types.ts` (in: 77) · gov by ADR-006
-- `packages/codegraph/src/incremental/queries.ts` (in: 32) · gov by ADR-007
-- `packages/codegraph/src/incremental/database.ts` (in: 30) · gov by ADR-007
-- `packages/salsa/dist/index.d.ts` (in: 29)
+- `packages/codegraph/src/incremental/queries.ts` (in: 33) · gov by ADR-007
+- `packages/codegraph/src/incremental/database.ts` (in: 31) · gov by ADR-007
+- `packages/salsa/dist/index.d.ts` (in: 30)
 - `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 23) · gov by ADR-012
 - `packages/codegraph/src/core/detector-registry.ts` (in: 18) · gov by ADR-008
 - `packages/runtime-graph/src/core/types.ts` (in: 13) · gov by ADR-009
@@ -158,7 +159,7 @@
 
 Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `// ADR-NNN`** dans le code. Intentionnel ? Sinon poser un marqueur ou créer un ADR :
 
-- **29** `packages/salsa/dist/index.d.ts` _(top-hub)_
+- **30** `packages/salsa/dist/index.d.ts` _(top-hub)_
 
 ## Tensions actives — invitations à explorer
 
@@ -173,9 +174,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/audit-listener.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/scheduler.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/b.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **FSM-ORPHAN** `ApprovalStatus#expired` — état déclaré mais jamais écrit dans le code  
   _→ supprimer l'état OU ajouter la transition manquante_
@@ -201,6 +202,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+f55039d perf(toolkit): Salsa-iso compression-similarity (per-file snippets cached)
 c24fb16 refactor(toolkit): tame AWAIT-IN-LOOP batch 6 — 33→0, AWAIT-IN-LOOP éliminé
 2b4ebc0 refactor(toolkit): tame AWAIT-IN-LOOP batch 3+4+5 — detectors + extractors (58→33)
 9a86461 refactor(toolkit): tame AWAIT-IN-LOOP batch 2 — _shared, regenerate-anchors, drivers (70→58)
@@ -212,7 +214,6 @@ b0f2c9a refactor(toolkit): split cli/index.ts god-file (2190→1520 LOC, −30%)
 c613ac7 refactor(toolkit): split analyzer.ts:runDeterministicDetectors en 5 phases
 7151cfd perf(toolkit): Salsa-isolate 3 hot detectors (co-change, drift, const-expr)
 f2f93bc chore(brief): regen CLAUDE-CONTEXT + CHANGELOG post-refactor (553→534)
-5f8d691 refactor(toolkit): split god-files + fix REDOS detector + tests hubs
 ```
 
 ## Comment contribuer à ce brief

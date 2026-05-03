@@ -100,7 +100,44 @@ export const sitesOfFile = derived<string, DeprecatedUsageSite[]>(
   },
 )
 
-/** Final aggregator avec tri lex déterministe. */
+/** Final aggregator avec tri lex déterministe.
+ *
+ * Layered pour minimiser le coût de validation Salsa : si on dépend
+ * directement de N×declarationsOfFile + N×sitesOfFile depuis le top,
+ * chaque get('all') doit revérifier 1200 cells.
+ *
+ * Au lieu de ça, on group via 2 derived layers :
+ *   - allDeprecatedDeclarations(label) : 1 cell, deps = projectFiles +
+ *     N×declarationsOfFile. Validée 1 fois par run.
+ *   - allDeprecatedSites(label) : 1 cell, deps = projectFiles +
+ *     N×sitesOfFile. Validée 1 fois par run.
+ *
+ * Le top allDeprecatedUsage dépend SEULEMENT des 2 layers ci-dessus :
+ * 2 cells à valider, pas 1200. Si les layers sont stables (cache hit),
+ * top retourne en O(1).
+ */
+const allDeprecatedDeclarations = derived<string, DeprecatedDeclaration[]>(
+  db,
+  'allDeprecatedDeclarations',
+  (label) => {
+    const files = projectFiles.get(label)
+    const out: DeprecatedDeclaration[] = []
+    for (const f of files) out.push(...declarationsOfFile.get(f))
+    return out
+  },
+)
+
+const allDeprecatedSites = derived<string, DeprecatedUsageSite[]>(
+  db,
+  'allDeprecatedSites',
+  (label) => {
+    const files = projectFiles.get(label)
+    const out: DeprecatedUsageSite[] = []
+    for (const f of files) out.push(...sitesOfFile.get(f))
+    return out
+  },
+)
+
 export const allDeprecatedUsage = derived<
   string,
   { declarations: DeprecatedDeclaration[]; sites: DeprecatedUsageSite[] }
@@ -108,13 +145,8 @@ export const allDeprecatedUsage = derived<
   db,
   'allDeprecatedUsage',
   (label) => {
-    const files = projectFiles.get(label)
-    const declarations: DeprecatedDeclaration[] = []
-    const sites: DeprecatedUsageSite[] = []
-    for (const f of files) {
-      declarations.push(...declarationsOfFile.get(f))
-      sites.push(...sitesOfFile.get(f))
-    }
+    const declarations = [...allDeprecatedDeclarations.get(label)]
+    const sites = [...allDeprecatedSites.get(label)]
     const sortFn = (
       a: { file: string; line: number },
       b: { file: string; line: number },

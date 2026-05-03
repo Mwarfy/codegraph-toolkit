@@ -603,33 +603,42 @@ async function prebuildSharedProjectIncremental(
   setTsImportPrebuiltProject(project)
 
   // Feed fileContent + projectFiles inputs so Salsa queries can hit cache.
-  // Lit stat + content de N fichiers en parallèle (I/O fs indépendantes) —
-  // gain mesurable pour cold path : ~30% sur Sentinel (600 fichiers).
-  const fileEntries = await Promise.all(
+  //
+  // Two-phase parallelization : (1) stat en parallèle pour identifier les
+  // fichiers qui ont VRAIMENT changé (mtime ≠ cached), (2) read seulement
+  // ceux-là en parallèle. Le warm path (rien changé) ne fait QUE des stats
+  // — pas de readFile gaspillé. Cold path : full read parallèle.
+  const stats = await Promise.all(
     files.map(async (f) => {
       const absPath = path.join(config.rootDir, f)
-      let mtime: number | undefined
       try {
         const stat = await fs.stat(absPath)
-        mtime = stat.mtimeMs
-      } catch { /* file disappeared (race delete) — leave mtime undefined */ }
-      const existing = fileCache.get(f)
-      let content = existing
-      if (content === undefined) {
-        try {
-          content = await fs.readFile(absPath, 'utf-8')
-        } catch { content = '' }
-      }
-      return { f, mtime, content, fromCache: existing !== undefined }
+        return { f, absPath, mtime: stat.mtimeMs }
+      } catch { return { f, absPath, mtime: undefined as number | undefined } }
     }),
   )
-  // Mutations Salsa séquentielles (single-thread JS — pas de race).
-  for (const { f, mtime, content, fromCache } of fileEntries) {
+  // Identifie les files à (re)lire — skip si cellExists && mtime inchangé.
+  const toRead: Array<{ f: string; absPath: string; mtime: number | undefined }> = []
+  for (const entry of stats) {
+    const { f, mtime } = entry
     const cachedMtime = incGetCachedMtime(f)
     const cellExists = incFileContent.has(f)
     if (mtime !== undefined && cachedMtime === mtime && cellExists) continue
-    if (!fromCache && content !== '') fileCache.set(f, content!)
-    incFileContent.set(f, content ?? '')
+    toRead.push(entry)
+  }
+  // Read en parallèle uniquement les files à update.
+  const reads = await Promise.all(
+    toRead.map(async ({ f, absPath, mtime }) => {
+      let content = fileCache.get(f)
+      if (content === undefined) {
+        try { content = await fs.readFile(absPath, 'utf-8') } catch { content = '' }
+      }
+      return { f, mtime, content }
+    }),
+  )
+  for (const { f, mtime, content } of reads) {
+    fileCache.set(f, content)
+    incFileContent.set(f, content)
     if (mtime !== undefined) incSetCachedMtime(f, mtime)
   }
   incSetInputIfChanged(incProjectFiles, 'all', files)
