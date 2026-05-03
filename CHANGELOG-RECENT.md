@@ -5,7 +5,7 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T23:39:41Z
+Last update : 2026-05-03T23:41:42Z
 
 ## By type
 
@@ -19,6 +19,7 @@ Last update : 2026-05-03T23:39:41Z
 
 ### `refactor` (46)
 
+- **fb50d40** refactor(codegraph): split EventBusDetector.detect (cyclo 20→1, cog 48→0) — event-bus.ts cleared — 2026-05-04
 - **fcb7141** refactor(codegraph): split findReachablePaths (cyclo 21→3, cog 34→1) — reachability.ts cleared — 2026-05-04
 - **0047e61** refactor(codegraph): split validateStore (cyclo 22→4, cog 27→3) — store.ts cleared — 2026-05-04
 - **a73b0b8** refactor(codegraph-mcp): split codegraphTruthPointFor (cyclo 22→4, cog 26→1) — truth-point.ts cleared — 2026-05-04
@@ -38,11 +39,11 @@ Last update : 2026-05-03T23:39:41Z
 - **2f99c5d** refactor(codegraph): split analyzeTestCoverage (cyclo 27→1, cog 54→0) — analyzeTestCoverage bomb-free — 2026-05-04
 - **446c4b6** refactor(codegraph-mcp): split codegraphUncovered (cyclo 28→9, cog 29→3) — uncovered.ts bomb-free — 2026-05-04
 - **357636e** refactor(codegraph): split scanImportsInSourceFile (cyclo 28→1, cog 45→0) — ts-imports.ts bomb-free — 2026-05-04
-- **091d636** refactor(codegraph): split isAwaitedOrConsumed (cyclo 28→4, cog 47→5) — floating-promises.ts bomb-free — 2026-05-04
 
 
 ## Full history
 
+- **fb50d40** refactor(codegraph): split EventBusDetector.detect (cyclo 20→1, cog 48→0) — event-bus.ts cleared — 2026-05-04
 - **fcb7141** refactor(codegraph): split findReachablePaths (cyclo 21→3, cog 34→1) — reachability.ts cleared — 2026-05-04
 - **0047e61** refactor(codegraph): split validateStore (cyclo 22→4, cog 27→3) — store.ts cleared — 2026-05-04
 - **a73b0b8** refactor(codegraph-mcp): split codegraphTruthPointFor (cyclo 22→4, cog 26→1) — truth-point.ts cleared — 2026-05-04
@@ -92,4 +93,3 @@ Last update : 2026-05-03T23:39:41Z
 - **1ca9363** refactor(toolkit): split getTaintFromExpression + buildLineToSymbol — taint.ts ALL bombs cleared — 2026-05-03
 - **22ced53** refactor(toolkit): split walkForManifests + buildPackageDepsIssues — package-deps.ts ALL bombs cleared — 2026-05-03
 - **3b1d650** refactor(toolkit): split scanObjectWrites + detectListenerTriggers — state-machines.ts ALL bombs cleared — 2026-05-03
-- **d534d97** refactor(toolkit): split constant-expressions (cyclo 35+23→under) — constant-expressions.ts ALL bombs cleared — 2026-05-03

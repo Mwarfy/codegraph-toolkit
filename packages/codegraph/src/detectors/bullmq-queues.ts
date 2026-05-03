@@ -27,71 +27,83 @@ export class BullmqQueueDetector implements Detector {
   description = 'BullMQ queue producer → consumer relationships'
 
   async detect(ctx: DetectorContext): Promise<DetectedLink[]> {
-    const usages: QueueUsage[] = []
-    const links: DetectedLink[] = []
-
-    const queuePattern = /new\s+Queue\s*\(\s*['"]([^'"]+)['"]/g
-    const workerPattern = /new\s+Worker\s*\(\s*['"]([^'"]+)['"]/g
-    const addJobPattern = /(?:queue|schedulerQueue)\s*\.?\s*add\s*\(\s*['"]([^'"]+)['"]/g
-
-    // Lit en parallèle les .ts files (I/O fs indépendantes), match séquentiel.
     const tsFiles = ctx.files.filter((f) => f.endsWith('.ts'))
     const fileContents = await Promise.all(
       tsFiles.map(async (file) => ({ file, content: await ctx.readFile(file) })),
     )
+
+    const usages: QueueUsage[] = []
     for (const { file, content } of fileContents) {
-      let match: RegExpExecArray | null
-
-      // Local regexes pour éviter race lastIndex partagé entre fichiers
-      // (sinon parallélisation casserait le state global de la regex).
-      const queueRe = new RegExp(queuePattern.source, queuePattern.flags)
-      const workerRe = new RegExp(workerPattern.source, workerPattern.flags)
-      const addJobRe = new RegExp(addJobPattern.source, addJobPattern.flags)
-
-      // Queue instantiation (producer side)
-      while ((match = queueRe.exec(content)) !== null) {
-        usages.push({
-          file,
-          queueName: match[1],
-          role: 'producer',
-          line: this.getLineNumber(content, match.index),
-        })
-      }
-
-      // Worker instantiation (consumer side)
-      while ((match = workerRe.exec(content)) !== null) {
-        usages.push({
-          file,
-          queueName: match[1],
-          role: 'consumer',
-          line: this.getLineNumber(content, match.index),
-        })
-      }
-
-      // Job additions — track which file adds which jobs
-      const jobNames: string[] = []
-      while ((match = addJobRe.exec(content)) !== null) {
-        jobNames.push(match[1])
-      }
-
-      if (jobNames.length > 0) {
-        // Find which queue this file uses
-        const existingUsage = usages.find(u => u.file === file && u.role === 'producer')
-        if (existingUsage) {
-          existingUsage.jobNames = jobNames
-        }
-      }
+      this.scanFileQueueUsages(file, content, usages)
     }
 
-    // Link producers to consumers on the same queue
-    const producers = usages.filter(u => u.role === 'producer')
-    const consumers = usages.filter(u => u.role === 'consumer')
+    const consumers = usages.filter((u) => u.role === 'consumer')
+    const links: DetectedLink[] = []
+    this.linkProducersToConsumers(usages, links)
+    this.linkFallbackIntervals(fileContents, consumers, links)
+    return links
+  }
 
+  /** Scan 1 file pour Queue / Worker / queue.add → usages + jobNames. */
+  private scanFileQueueUsages(
+    file: string,
+    content: string,
+    usages: QueueUsage[],
+  ): void {
+    // Local regexes pour éviter race lastIndex partagé entre fichiers
+    // (sinon parallélisation casserait le state global de la regex).
+    const queueRe = /new\s+Queue\s*\(\s*['"]([^'"]+)['"]/g
+    const workerRe = /new\s+Worker\s*\(\s*['"]([^'"]+)['"]/g
+    const addJobRe = /(?:queue|schedulerQueue)\s*\.?\s*add\s*\(\s*['"]([^'"]+)['"]/g
+
+    this.collectRoleUsages(file, content, queueRe, 'producer', usages)
+    this.collectRoleUsages(file, content, workerRe, 'consumer', usages)
+    this.attachJobNames(file, content, addJobRe, usages)
+  }
+
+  private collectRoleUsages(
+    file: string,
+    content: string,
+    re: RegExp,
+    role: QueueUsage['role'],
+    usages: QueueUsage[],
+  ): void {
+    let match: RegExpExecArray | null
+    while ((match = re.exec(content)) !== null) {
+      usages.push({
+        file,
+        queueName: match[1],
+        role,
+        line: this.getLineNumber(content, match.index),
+      })
+    }
+  }
+
+  private attachJobNames(
+    file: string,
+    content: string,
+    addJobRe: RegExp,
+    usages: QueueUsage[],
+  ): void {
+    const jobNames: string[] = []
+    let match: RegExpExecArray | null
+    while ((match = addJobRe.exec(content)) !== null) jobNames.push(match[1])
+    if (jobNames.length === 0) return
+    const existingUsage = usages.find((u) => u.file === file && u.role === 'producer')
+    if (existingUsage) existingUsage.jobNames = jobNames
+  }
+
+  /** Link producers → consumers sur la même queue (skip self-links). */
+  private linkProducersToConsumers(
+    usages: QueueUsage[],
+    links: DetectedLink[],
+  ): void {
+    const producers = usages.filter((u) => u.role === 'producer')
+    const consumers = usages.filter((u) => u.role === 'consumer')
     for (const producer of producers) {
       for (const consumer of consumers) {
         if (producer.queueName !== consumer.queueName) continue
         if (producer.file === consumer.file) continue
-
         links.push({
           from: producer.file,
           to: consumer.file,
@@ -108,52 +120,61 @@ export class BullmqQueueDetector implements Detector {
         })
       }
     }
+  }
 
-    // Also detect setInterval/setTimeout fallback patterns
-    // (Sentinel falls back to setInterval when Redis is down).
-    // Réutilise tsFiles + lecture parallèle.
-    const intervalPattern = /setInterval\s*\(\s*(\w+)/g
-    const fileContents2 = await Promise.all(
-      tsFiles.map(async (file) => ({ file, content: await ctx.readFile(file) })),
-    )
-    for (const { file, content } of fileContents2) {
-      const intervalRe = new RegExp(intervalPattern.source, intervalPattern.flags)
+  /**
+   * Detect setInterval/setTimeout fallback patterns (Sentinel falls back to
+   * setInterval when Redis is down). Skip mentions in comments / docstrings
+   * (faux positif sur core/types.ts qui décrit les patterns dans des JSDoc).
+   */
+  private linkFallbackIntervals(
+    fileContents: ReadonlyArray<{ file: string; content: string }>,
+    consumers: QueueUsage[],
+    links: DetectedLink[],
+  ): void {
+    for (const { file, content } of fileContents) {
+      const intervalRe = /setInterval\s*\(\s*(\w+)/g
       let match: RegExpExecArray | null
       while ((match = intervalRe.exec(content)) !== null) {
-        // Skip mentions in comments / docstrings (audit codegraph-on-codegraph
-        // a révélé le faux positif sur core/types.ts qui décrit les
-        // patterns détectés dans des JSDoc).
         if (isInComment(content, match.index)) continue
-
-        // Check if this is near a BullMQ fallback comment or pattern
-        const surrounding = content.substring(
-          Math.max(0, match.index - 200),
-          match.index + 200
-        )
-        if (surrounding.includes('fallback') || surrounding.includes('Redis') || surrounding.includes('bull')) {
-          // This is a fallback interval — link it to the same consumers
-          for (const consumer of consumers) {
-            if (consumer.file === file) continue
-            links.push({
-              from: file,
-              to: consumer.file,
-              type: 'queue',
-              label: 'fallback-interval',
-              resolved: true,
-              line: this.getLineNumber(content, match.index),
-              meta: { fallback: true },
-            })
-          }
-        }
+        if (!hasFallbackContext(content, match.index)) continue
+        this.appendFallbackLinks(file, content, match.index, consumers, links)
       }
     }
+  }
 
-    return links
+  private appendFallbackLinks(
+    file: string,
+    content: string,
+    matchIndex: number,
+    consumers: QueueUsage[],
+    links: DetectedLink[],
+  ): void {
+    for (const consumer of consumers) {
+      if (consumer.file === file) continue
+      links.push({
+        from: file,
+        to: consumer.file,
+        type: 'queue',
+        label: 'fallback-interval',
+        resolved: true,
+        line: this.getLineNumber(content, matchIndex),
+        meta: { fallback: true },
+      })
+    }
   }
 
   private getLineNumber(content: string, offset: number): number {
     return content.substring(0, offset).split('\n').length
   }
+}
+
+/** Cherche des indices BullMQ-fallback (Redis down) autour du setInterval match. */
+function hasFallbackContext(content: string, matchIndex: number): boolean {
+  const surrounding = content.substring(Math.max(0, matchIndex - 200), matchIndex + 200)
+  return surrounding.includes('fallback')
+    || surrounding.includes('Redis')
+    || surrounding.includes('bull')
 }
 
 /**
