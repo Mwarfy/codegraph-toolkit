@@ -5,7 +5,7 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T20:56:26Z
+Last update : 2026-05-03T20:59:17Z
 
 ## By type
 
@@ -20,6 +20,7 @@ Last update : 2026-05-03T20:56:26Z
 
 ### `refactor` (45)
 
+- **ac2b550** refactor(toolkit): split symbol-refs (cyclo 20+18→under) — symbol-refs.ts ALL bombs cleared — 2026-05-03
 - **c677082** refactor(toolkit): split compression-similarity (cyclo 18+16→under) — compression-similarity.ts ALL bombs cleared — 2026-05-03
 - **ba540e4** refactor(toolkit): split analyzeCycles + tarjanScc — cycles.ts ALL bombs cleared — 2026-05-03
 - **321cd83** refactor(toolkit): split classifyExportsFromBundles (cyclo 25→3) — unused-exports.ts ALL bombs cleared — 2026-05-03
@@ -39,11 +40,11 @@ Last update : 2026-05-03T20:56:26Z
 - **1878143** refactor(toolkit): split analyzeDrizzleSchema (cyclo 20→3) — 4 helpers (3 cmp + 1 parse loop) — 2026-05-03
 - **4215f48** refactor(toolkit): split scanInlineSinks (cyclo 17→2, cog 63→3) — reuse trySink* helpers — 2026-05-03
 - **ce0b0a8** refactor(toolkit): split detectListenerEntries (cyclo 23→under) — 4 helpers — 2026-05-03
-- **47e3476** refactor(toolkit): split scanHttpOutboundSinks (cyclo 21→under) — 2 helpers — 2026-05-03
 
 
 ## Full history
 
+- **ac2b550** refactor(toolkit): split symbol-refs (cyclo 20+18→under) — symbol-refs.ts ALL bombs cleared — 2026-05-03
 - **c677082** refactor(toolkit): split compression-similarity (cyclo 18+16→under) — compression-similarity.ts ALL bombs cleared — 2026-05-03
 - **ba540e4** refactor(toolkit): split analyzeCycles + tarjanScc — cycles.ts ALL bombs cleared — 2026-05-03
 - **321cd83** refactor(toolkit): split classifyExportsFromBundles (cyclo 25→3) — unused-exports.ts ALL bombs cleared — 2026-05-03
@@ -93,4 +94,3 @@ Last update : 2026-05-03T20:56:26Z
 - **64b3dcd** refactor(toolkit): split exportFacts batch 5 — eliminate ALL bombs in facts/index.ts (CrossDiscipline + Tier234) — 2026-05-03
 - **fe16098** refactor(toolkit): split exportFacts batch 4 — eliminate 3 helper-bombs (Cycle, Security, Package) — 2026-05-03
 - **cbc6a6b** refactor(toolkit): split exportFacts batch 3 — exportFacts cyclo 84→4 (sous le seuil) — 2026-05-03
-- **5888c3e** refactor(toolkit): split exportFacts batch 2 — extract graph metrics + listeners (cyclomatic 102→84) — 2026-05-03

@@ -138,10 +138,7 @@ export function aggregateTypedCalls(
 
 // ─── Signatures ──────────────────────────────────────────────────────────────
 
-function extractSignatures(sf: SourceFile, file: string): TypedSignature[] {
-  const out: TypedSignature[] = []
-
-  // FunctionDeclaration exportée — `export function foo(...)`
+function extractFunctionDeclSignatures(sf: SourceFile, file: string, out: TypedSignature[]): void {
   for (const fd of sf.getFunctions()) {
     if (!fd.isExported()) continue
     const name = fd.getName()
@@ -155,14 +152,15 @@ function extractSignatures(sf: SourceFile, file: string): TypedSignature[] {
       line: fd.getStartLineNumber(),
     })
   }
+}
 
-  // ClassDeclaration exportée + méthodes
+function extractClassSignatures(sf: SourceFile, file: string, out: TypedSignature[]): void {
   for (const cd of sf.getClasses()) {
     if (!cd.isExported()) continue
     const className = cd.getName()
     if (!className) continue
 
-    // Signature de la classe (params du constructor, returnType = ClassName)
+    // Signature de la classe (params du constructor, returnType = ClassName).
     const ctor = cd.getConstructors()[0]
     out.push({
       file,
@@ -173,8 +171,7 @@ function extractSignatures(sf: SourceFile, file: string): TypedSignature[] {
       line: cd.getStartLineNumber(),
     })
 
-    // Méthodes publiques — pour le graphe on n'inclut que les méthodes non-privées
-    // (le # et le modifier `private` cachent l'API).
+    // Methodes publiques uniquement — # et `private` cachent l'API.
     for (const method of cd.getMethods()) {
       if (method.hasModifier(SyntaxKind.PrivateKeyword)) continue
       if (method.getName().startsWith('#')) continue
@@ -188,8 +185,10 @@ function extractSignatures(sf: SourceFile, file: string): TypedSignature[] {
       })
     }
   }
+}
 
-  // const exportée de type fonction — `export const foo = () => ...`
+function extractConstFunctionSignatures(sf: SourceFile, file: string, out: TypedSignature[]): void {
+  // const exportee de type fonction — `export const foo = () => ...`
   for (const vs of sf.getVariableStatements()) {
     if (!vs.isExported()) continue
     for (const vd of vs.getDeclarations()) {
@@ -197,8 +196,7 @@ function extractSignatures(sf: SourceFile, file: string): TypedSignature[] {
       if (!init) continue
       const initKind = init.getKind()
       if (initKind !== SyntaxKind.ArrowFunction && initKind !== SyntaxKind.FunctionExpression) continue
-
-      // Les deux kinds ont getParameters() + getReturnType() au runtime ts-morph.
+      // Les 2 kinds ont getParameters() + getReturnType() au runtime ts-morph.
       const fn = init as any
       out.push({
         file,
@@ -210,7 +208,13 @@ function extractSignatures(sf: SourceFile, file: string): TypedSignature[] {
       })
     }
   }
+}
 
+function extractSignatures(sf: SourceFile, file: string): TypedSignature[] {
+  const out: TypedSignature[] = []
+  extractFunctionDeclSignatures(sf, file, out)
+  extractClassSignatures(sf, file, out)
+  extractConstFunctionSignatures(sf, file, out)
   return out
 }
 
@@ -252,15 +256,15 @@ interface CallableUnit {
  * non-exportées aussi : un helper interne qui appelle un export doit produire
  * son edge — sinon on sous-compte la consommation d'une API.
  */
-function getCallableUnits(sf: SourceFile): CallableUnit[] {
-  const out: CallableUnit[] = []
-
+function pushCallableFunctions(sf: SourceFile, out: CallableUnit[]): void {
   for (const fd of sf.getFunctions()) {
     const body = fd.getBody()
     const name = fd.getName()
     if (body && name) out.push({ name, body })
   }
+}
 
+function pushCallableClassMembers(sf: SourceFile, out: CallableUnit[]): void {
   for (const cd of sf.getClasses()) {
     const className = cd.getName() ?? '<anonymous>'
     for (const method of cd.getMethods()) {
@@ -273,9 +277,13 @@ function getCallableUnits(sf: SourceFile): CallableUnit[] {
       if (body) out.push({ name: `${className}.constructor`, body })
     }
   }
+}
 
-  // Limité aux VariableStatement au scope du fichier — évite de re-capturer
-  // les closures imbriquées qui seraient déjà couvertes par le body parent.
+/**
+ * Limite aux VariableStatement au scope du fichier — evite de re-capturer
+ * les closures imbriquees qui seraient deja couvertes par le body parent.
+ */
+function pushCallableConstFunctions(sf: SourceFile, out: CallableUnit[]): void {
   for (const vs of sf.getVariableStatements()) {
     for (const vd of vs.getDeclarations()) {
       const init = vd.getInitializer()
@@ -286,7 +294,13 @@ function getCallableUnits(sf: SourceFile): CallableUnit[] {
       if (body) out.push({ name: vd.getName(), body })
     }
   }
+}
 
+function getCallableUnits(sf: SourceFile): CallableUnit[] {
+  const out: CallableUnit[] = []
+  pushCallableFunctions(sf, out)
+  pushCallableClassMembers(sf, out)
+  pushCallableConstFunctions(sf, out)
   return out
 }
 
