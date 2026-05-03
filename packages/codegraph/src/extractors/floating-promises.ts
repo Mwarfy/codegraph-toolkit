@@ -103,50 +103,63 @@ export function extractFloatingPromisesFileBundle(
  */
 function isAwaitedOrConsumed(call: Node): boolean {
   let cursor: Node = call
-  // Remonte les wrappers neutres : ParenthesizedExpression, AsExpression,
-  // TypeAssertionExpression, NonNullExpression.
   while (true) {
     const parent = cursor.getParent()
     if (!parent) return false
-    if (
-      Node.isParenthesizedExpression(parent) ||
-      Node.isAsExpression(parent) ||
-      Node.isTypeAssertion(parent) ||
-      Node.isNonNullExpression(parent)
-    ) {
+    if (isNeutralWrapper(parent)) {
       cursor = parent
       continue
     }
-    // Patterns de consommation acceptés.
-    if (Node.isAwaitExpression(parent)) return true
-    if (Node.isVoidExpression(parent)) return true
-    if (Node.isReturnStatement(parent)) return true
-    if (Node.isYieldExpression(parent)) return true
-    if (Node.isVariableDeclaration(parent)) return true
-    if (Node.isPropertyAssignment(parent)) return true
-    if (Node.isArrowFunction(parent)) return true   // `() => foo()` arrow concise body
-    if (Node.isBinaryExpression(parent)) {
-      const op = parent.getOperatorToken().getText()
-      if (op === '=' || op === '||' || op === '&&' || op === '??') return true
-    }
-    if (Node.isPropertyAccessExpression(parent)) {
-      // foo().then / .catch / .finally — chainé.
-      const propName = parent.getName()
-      if (propName === 'then' || propName === 'catch' || propName === 'finally') return true
-      // Autre property access (`foo().bar`) — considéré consommé aussi.
-      return true
-    }
-    if (Node.isCallExpression(parent)) {
-      // foo() est passé en argument à une autre fonction → consommé.
-      // Sauf si foo() EST la callee elle-même (cas rare).
-      return parent.getExpression() !== cursor
-    }
-    if (Node.isArrayLiteralExpression(parent)) return true   // [foo(), bar()]
-    if (Node.isObjectLiteralExpression(parent)) return true
-    if (Node.isSpreadElement(parent)) return true
-    if (Node.isConditionalExpression(parent)) return true    // `cond ? foo() : bar()`
-    return false
+    return isConsumingParent(parent, cursor)
   }
+}
+
+/** ParenthesizedExpression, AsExpression, TypeAssertion, NonNullExpression. */
+function isNeutralWrapper(parent: Node): boolean {
+  return Node.isParenthesizedExpression(parent)
+    || Node.isAsExpression(parent)
+    || Node.isTypeAssertion(parent)
+    || Node.isNonNullExpression(parent)
+}
+
+/** Tous les patterns acceptés comme "consomme la promesse". */
+function isConsumingParent(parent: Node, cursor: Node): boolean {
+  if (isReturnLikeContext(parent)) return true
+  if (isAssignmentLikeContext(parent)) return true
+  if (isContainerContext(parent)) return true
+  if (Node.isBinaryExpression(parent)) return isAssignOrShortCircuit(parent)
+  if (Node.isPropertyAccessExpression(parent)) return true   // .then/.catch/.finally OU autre prop access
+  if (Node.isCallExpression(parent)) return parent.getExpression() !== cursor
+  return false
+}
+
+/** await / void / return / yield / arrow concise body. */
+function isReturnLikeContext(parent: Node): boolean {
+  return Node.isAwaitExpression(parent)
+    || Node.isVoidExpression(parent)
+    || Node.isReturnStatement(parent)
+    || Node.isYieldExpression(parent)
+    || Node.isArrowFunction(parent)
+}
+
+/** const x = foo() / { x: foo() }. */
+function isAssignmentLikeContext(parent: Node): boolean {
+  return Node.isVariableDeclaration(parent)
+    || Node.isPropertyAssignment(parent)
+}
+
+/** [foo(), bar()] / { foo() } via shorthand / ...foo() / cond ? foo() : bar(). */
+function isContainerContext(parent: Node): boolean {
+  return Node.isArrayLiteralExpression(parent)
+    || Node.isObjectLiteralExpression(parent)
+    || Node.isSpreadElement(parent)
+    || Node.isConditionalExpression(parent)
+}
+
+/** = pour assign ; || && ?? pour fallback chain (la valeur est utilisée). */
+function isAssignOrShortCircuit(parent: import('ts-morph').BinaryExpression): boolean {
+  const op = parent.getOperatorToken().getText()
+  return op === '=' || op === '||' || op === '&&' || op === '??'
 }
 
 /**
