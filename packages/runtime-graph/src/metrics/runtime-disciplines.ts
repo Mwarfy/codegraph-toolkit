@@ -32,6 +32,11 @@ import {
   type LyapunovTimeseriesFact,
   type LyapunovTimeseriesOptions,
 } from './lyapunov-timeseries.js'
+import {
+  tdaPersistence,
+  type PersistentComponentFact,
+  type TdaPersistenceOptions,
+} from './tda-persistence.js'
 
 // ─── 1. HAMMING DISTANCE (statique ↔ runtime) ───────────────────────────
 
@@ -282,11 +287,14 @@ export interface AllDisciplinesResult {
   grangerFile: GrangerRuntimeFileFact[]
   /** Phase γ.2 — time-series Lyapunov 1D (Rosenstein-style sur LatencySeries). */
   lyapunovTs: LyapunovTimeseriesFact[]
+  /** Phase γ.2c — Persistent Homology dim-0 sur le call graph runtime. */
+  tdaPersistence: PersistentComponentFact[]
 }
 
 export interface ComputeAllDisciplinesOptions {
   granger?: GrangerRuntimeOptions
   lyapunovTs?: LyapunovTimeseriesOptions
+  tda?: TdaPersistenceOptions
 }
 
 export function computeAllDisciplines(
@@ -303,6 +311,7 @@ export function computeAllDisciplines(
     granger,
     grangerFile: grangerRuntimeFileRollup(granger),
     lyapunovTs: lyapunovTimeseries(snap, options.lyapunovTs),
+    tdaPersistence: tdaPersistence(snap, options.tda),
   }
 }
 
@@ -316,3 +325,8 @@ export type {
   LyapunovTimeseriesFact,
   LyapunovTimeseriesOptions,
 } from './lyapunov-timeseries.js'
+
+export type {
+  PersistentComponentFact,
+  TdaPersistenceOptions,
+} from './tda-persistence.js'

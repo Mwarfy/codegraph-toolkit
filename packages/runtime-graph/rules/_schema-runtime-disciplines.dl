@@ -32,3 +32,8 @@
 // Phase γ.2 — true time-series Lyapunov (Rosenstein-style 1D sur les buckets)
 .decl LyapunovTimeseries(kind: symbol, seriesKey: symbol, observations: number, stdDevX1000: number, lambdaX1000: number)
 .input LyapunovTimeseries
+
+// Phase γ.2c — Persistent Homology dim-0 (composantes connexes du call graph
+// avec filtration par edge count desc).
+.decl PersistentComponent(rep: symbol, birthCount: number, deathCount: number, persistence: number, componentSize: number)
+.input PersistentComponent

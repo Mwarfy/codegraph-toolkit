@@ -17,6 +17,7 @@ import type {
   GrangerRuntimeFact,
   GrangerRuntimeFileFact,
   LyapunovTimeseriesFact,
+  PersistentComponentFact,
 } from '../metrics/runtime-disciplines.js'
 
 function sym(s: string): string {
@@ -151,6 +152,19 @@ export async function exportDisciplineFacts(
   ])
   await writeRelation(outDir, 'LyapunovTimeseries', lyapunovTsRows)
   written.push({ name: 'LyapunovTimeseries', tuples: lyapunovTsRows.length })
+
+  // ─── PersistentComponent (γ.2c) ────────────────────────────────
+  // Persistent Homology dim-0 sur le call graph runtime.
+  // schema : (rep, birthCount, deathCount, persistence, size)
+  const tdaRows: string[][] = result.tdaPersistence.map((f: PersistentComponentFact) => [
+    sym(f.rep),
+    num(f.birthCount),
+    num(f.deathCount),
+    num(f.persistence),
+    num(f.size),
+  ])
+  await writeRelation(outDir, 'PersistentComponent', tdaRows)
+  written.push({ name: 'PersistentComponent', tuples: tdaRows.length })
 
   return { outDir, relations: written }
 }

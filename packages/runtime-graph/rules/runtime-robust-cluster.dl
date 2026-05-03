@@ -1,0 +1,25 @@
+// rule: runtime-robust-cluster
+// fires: a topologically-persistent runtime cluster — a component of the
+//        call graph whose persistence (birth - death) ≥ 50 (50 invocations
+//        of difference between the strongest internal edge and the edge
+//        that merged it into a bigger component).
+// signal: this is a ROBUST FUNCTIONAL MODULE — a cluster of files that
+//         tightly call each other, with internal edges far stronger than
+//         the bridges to the rest of the system. Identifies natural
+//         boundaries in the runtime call graph that may not match the
+//         declared module/folder structure.
+// action: compare to declared boundaries (folders, packs). If the cluster
+//         crosses package lines, it might be a "hidden module" that should
+//         be made explicit. If the cluster is contained, it confirms the
+//         module boundary is right.
+//
+// Note : we filter on size ≥ 3 — a 2-node cluster is just one edge, not
+// really a "cluster". 3+ nodes mean a non-trivial internal topology.
+
+.decl RobustCluster(rep: symbol, persistence: number, componentSize: number)
+.output RobustCluster
+
+RobustCluster(R, P, S) :-
+  PersistentComponent(R, _, _, P, S),
+  S >= 3,
+  P >= 50.
