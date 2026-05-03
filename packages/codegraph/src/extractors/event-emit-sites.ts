@@ -30,6 +30,7 @@
 
 import { Project, SyntaxKind, type SourceFile, type Node } from 'ts-morph'
 import * as path from 'node:path'
+import { buildLineToSymbol } from './_shared/ast-helpers.js'
 
 export interface EventEmitSite {
   /** Chemin relatif au rootDir. */
@@ -207,37 +208,4 @@ function relativize(absPath: string, rootDir: string): string | null {
   return rel.replace(/\\/g, '/')
 }
 
-function buildLineToSymbol(sf: SourceFile): Map<number, string> {
-  const map = new Map<number, string>()
-
-  for (const fd of sf.getFunctions()) {
-    const name = fd.getName()
-    if (!name) continue
-    const s = fd.getStartLineNumber()
-    const e = fd.getEndLineNumber()
-    for (let l = s; l <= e; l++) if (!map.has(l)) map.set(l, name)
-  }
-
-  for (const cd of sf.getClasses()) {
-    const cname = cd.getName() ?? '<anonymous>'
-    for (const m of cd.getMethods()) {
-      const s = m.getStartLineNumber()
-      const e = m.getEndLineNumber()
-      for (let l = s; l <= e; l++) if (!map.has(l)) map.set(l, `${cname}.${m.getName()}`)
-    }
-  }
-
-  for (const vs of sf.getVariableStatements()) {
-    for (const vd of vs.getDeclarations()) {
-      const init = vd.getInitializer()
-      if (!init) continue
-      const k = init.getKind()
-      if (k !== SyntaxKind.ArrowFunction && k !== SyntaxKind.FunctionExpression) continue
-      const s = vd.getStartLineNumber()
-      const e = vd.getEndLineNumber()
-      for (let l = s; l <= e; l++) if (!map.has(l)) map.set(l, vd.getName())
-    }
-  }
-
-  return map
-}
+// buildLineToSymbol moved to _shared/ast-helpers.ts (NCD dedup).

@@ -35,7 +35,10 @@
 import { Project, SyntaxKind, type SourceFile, type Node, type TypeAliasDeclaration, type EnumDeclaration } from 'ts-morph'
 import * as path from 'node:path'
 import * as fs from 'node:fs/promises'
-import { collectFunctionRanges, findContainerAtLine, type FnRange } from './_shared/ast-helpers.js'
+import {
+  collectFunctionRanges, findContainerAtLine, type FnRange,
+  extractLiteralString,
+} from './_shared/ast-helpers.js'
 import type {
   StateMachine,
   StateTransition,
@@ -721,13 +724,7 @@ function scanMethodCallWrites(
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function extractLiteralString(node: any): string | null {
-  if (!node) return null
-  const k = node.getKind?.()
-  if (k === SyntaxKind.StringLiteral) return node.getLiteralText?.() ?? null
-  if (k === SyntaxKind.NoSubstitutionTemplateLiteral) return node.getLiteralText?.() ?? null
-  return null
-}
+// extractLiteralString moved to _shared/ast-helpers.ts (NCD dedup).
 
 function dedup<T>(arr: T[]): T[] {
   return [...new Set(arr)]

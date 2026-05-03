@@ -58,6 +58,7 @@ Ne plus faire :
 - `packages/runtime-graph/src/capture/auto-bootstrap.ts`
 - `packages/runtime-graph/src/capture/otel-attach.ts`
 - `packages/runtime-graph/src/capture/span-aggregator.ts`
+- `packages/runtime-graph/src/drivers/_common.ts`
 - `packages/runtime-graph/src/drivers/chaos.ts`
 - `packages/runtime-graph/src/drivers/replay-tests.ts`
 - `packages/runtime-graph/src/drivers/synthetic.ts`

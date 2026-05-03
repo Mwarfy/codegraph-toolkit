@@ -5,7 +5,7 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T17:48:01Z
+Last update : 2026-05-03T18:07:49Z
 
 ## By type
 
@@ -38,15 +38,16 @@ Last update : 2026-05-03T17:48:01Z
 - **8c49ff7** fix(analyzer): factsOnly mode must populate TestedFile — 2026-05-03
 
 
-### `perf` (4)
+### `perf` (5)
 
+- **dcf47d4** perf(toolkit): split stat-from-read en prebuild + layered allDeprecatedUsage — 2026-05-03
 - **f55039d** perf(toolkit): Salsa-iso compression-similarity (per-file snippets cached) — 2026-05-03
 - **7151cfd** perf(toolkit): Salsa-isolate 3 hot detectors (co-change, drift, const-expr) — 2026-05-03
 - **ce4e6e8** perf(toolkit): deprecated-usage Salsa-isolation + math regression gate — 2026-05-03
 - **afd0965** perf(toolkit): self-discovered Salsa optimizations — warm runtime −40% — 2026-05-03
 
 
-### `refactor` (16)
+### `refactor` (15)
 
 - **c24fb16** refactor(toolkit): tame AWAIT-IN-LOOP batch 6 — 33→0, AWAIT-IN-LOOP éliminé — 2026-05-03
 - **2b4ebc0** refactor(toolkit): tame AWAIT-IN-LOOP batch 3+4+5 — detectors + extractors (58→33) — 2026-05-03
@@ -63,7 +64,6 @@ Last update : 2026-05-03T17:48:01Z
 - **7362f13** refactor(invariants): raffiner composite-orphan-file (Next.js framework-routed) — 2026-05-01
 - **84544b9** refactor(invariants): raffiner extractor empty-catch + rule passthrough-fn — 2026-05-01
 - **8eb80b8** refactor(invariants): raffiner composite-async-sink-with-swallow — 2026-05-01
-- **81dd087** refactor(toolkit): extract NCD-detected duplications + analyzer.ts cross-discipline — 2026-05-01
 
 
 ### `chore` (4)
@@ -89,6 +89,7 @@ Last update : 2026-05-03T17:48:01Z
 
 ## Full history
 
+- **dcf47d4** perf(toolkit): split stat-from-read en prebuild + layered allDeprecatedUsage — 2026-05-03
 - **f55039d** perf(toolkit): Salsa-iso compression-similarity (per-file snippets cached) — 2026-05-03
 - **c24fb16** refactor(toolkit): tame AWAIT-IN-LOOP batch 6 — 33→0, AWAIT-IN-LOOP éliminé — 2026-05-03
 - **2b4ebc0** refactor(toolkit): tame AWAIT-IN-LOOP batch 3+4+5 — detectors + extractors (58→33) — 2026-05-03
@@ -138,4 +139,3 @@ Last update : 2026-05-03T17:48:01Z
 - **7362f13** refactor(invariants): raffiner composite-orphan-file (Next.js framework-routed) — 2026-05-01
 - **84544b9** refactor(invariants): raffiner extractor empty-catch + rule passthrough-fn — 2026-05-01
 - **8eb80b8** refactor(invariants): raffiner composite-async-sink-with-swallow — 2026-05-01
-- **81dd087** refactor(toolkit): extract NCD-detected duplications + analyzer.ts cross-discipline — 2026-05-01

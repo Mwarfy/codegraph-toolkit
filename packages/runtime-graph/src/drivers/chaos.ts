@@ -22,6 +22,7 @@
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
 import type { Driver, DriverRunOptions, DriverRunResult } from '../core/types.js'
+import { readEntryPoints, parseRouteId, sleep, type EntryPointRow } from './_common.js'
 
 interface ChaosConfig {
   /** Base URL de l'app cible. Default: http://localhost:3000 */
@@ -36,11 +37,7 @@ interface ChaosConfig {
   variantsPerRoute?: number
 }
 
-interface EntryPointRow {
-  file: string
-  kind: string
-  id: string
-}
+// EntryPointRow imported from ./_common (NCD dedup).
 
 export const chaosDriver: Driver = {
   name: 'chaos',
@@ -173,29 +170,4 @@ async function issueChaosRequest(
   await res.text().catch(() => undefined)
 }
 
-// ─── Shared helpers (could be extracted to drivers/_common.ts en Phase γ) ──
-
-async function readEntryPoints(factsDir: string): Promise<EntryPointRow[]> {
-  const file = path.join(factsDir, 'EntryPoint.facts')
-  try {
-    const content = await fs.readFile(file, 'utf-8')
-    return content.split('\n').filter(l => l.trim()).map(line => {
-      const [file, kind, id] = line.split('\t')
-      return { file, kind, id }
-    })
-  } catch (err: unknown) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return []
-    throw err
-  }
-}
-
-function parseRouteId(id: string): { method: string; path: string } | null {
-  const m = id.trim().match(/^([A-Z]+)\s+(\/.*)$/)
-  if (m) return { method: m[1], path: m[2] }
-  if (id.startsWith('/')) return { method: 'GET', path: id }
-  return null
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
-}
+// readEntryPoints, parseRouteId, sleep moved to ./_common (NCD dedup).

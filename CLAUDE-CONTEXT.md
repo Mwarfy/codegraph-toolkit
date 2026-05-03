@@ -130,6 +130,7 @@
 - `packages/runtime-graph/src/capture/otel-attach.ts` → ADR-011
 - `packages/runtime-graph/src/capture/span-aggregator.ts` → ADR-011
 - `packages/runtime-graph/src/core/types.ts` → ADR-009
+- `packages/runtime-graph/src/drivers/_common.ts` → ADR-011
 - `packages/runtime-graph/src/drivers/chaos.ts` → ADR-011
 - `packages/runtime-graph/src/drivers/replay-tests.ts` → ADR-011
 - `packages/runtime-graph/src/drivers/synthetic.ts` → ADR-011
@@ -150,7 +151,7 @@
 - `packages/codegraph/src/incremental/queries.ts` (in: 33) · gov by ADR-007
 - `packages/codegraph/src/incremental/database.ts` (in: 31) · gov by ADR-007
 - `packages/salsa/dist/index.d.ts` (in: 30)
-- `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 23) · gov by ADR-012
+- `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 25) · gov by ADR-012
 - `packages/codegraph/src/core/detector-registry.ts` (in: 18) · gov by ADR-008
 - `packages/runtime-graph/src/core/types.ts` (in: 13) · gov by ADR-009
 - `packages/adr-toolkit/src/config.ts` (in: 10) · gov by ADR-002
@@ -202,6 +203,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+dcf47d4 perf(toolkit): split stat-from-read en prebuild + layered allDeprecatedUsage
 f55039d perf(toolkit): Salsa-iso compression-similarity (per-file snippets cached)
 c24fb16 refactor(toolkit): tame AWAIT-IN-LOOP batch 6 — 33→0, AWAIT-IN-LOOP éliminé
 2b4ebc0 refactor(toolkit): tame AWAIT-IN-LOOP batch 3+4+5 — detectors + extractors (58→33)
@@ -213,7 +215,6 @@ fbebea4 refactor(toolkit): extract makeIsExempt helper (NCD: 25→16, total 434�
 b0f2c9a refactor(toolkit): split cli/index.ts god-file (2190→1520 LOC, −30%)
 c613ac7 refactor(toolkit): split analyzer.ts:runDeterministicDetectors en 5 phases
 7151cfd perf(toolkit): Salsa-isolate 3 hot detectors (co-change, drift, const-expr)
-f2f93bc chore(brief): regen CLAUDE-CONTEXT + CHANGELOG post-refactor (553→534)
 ```
 
 ## Comment contribuer à ce brief

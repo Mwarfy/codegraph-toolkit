@@ -35,7 +35,10 @@
 
 import { Project, SyntaxKind, type Node, type SourceFile } from 'ts-morph'
 import * as path from 'node:path'
-import { collectFunctionRanges, findContainerAtLine, type FnRange } from './_shared/ast-helpers.js'
+import {
+  collectFunctionRanges, findContainerAtLine, type FnRange,
+  extractLiteralString,
+} from './_shared/ast-helpers.js'
 import type {
   DataFlow,
   DataFlowEntry,
@@ -420,17 +423,7 @@ function getCalleeMethodName(expr: Node): string | null {
   return null
 }
 
-function extractLiteralString(node: any): string | null {
-  if (!node) return null
-  const k = node.getKind?.()
-  if (k === SyntaxKind.StringLiteral) return node.getLiteralText?.() ?? null
-  if (k === SyntaxKind.NoSubstitutionTemplateLiteral) return node.getLiteralText?.() ?? null
-  // Pour les TemplateExpression (avec ${...}), capture le texte brut moins backticks.
-  if (k === SyntaxKind.TemplateExpression) {
-    return node.getText?.().slice(1, -1) ?? null
-  }
-  return null
-}
+// extractLiteralString moved to _shared/ast-helpers.ts (NCD dedup).
 
 function extractWriteTable(sql: string): string | null {
   const match = sql.match(/\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+(\w+)/i)

@@ -21,6 +21,7 @@ import * as path from 'node:path'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import type { Driver, DriverRunOptions, DriverRunResult } from '../core/types.js'
+import { readEntryPoints, parseRouteId, sleep, type EntryPointRow } from './_common.js'
 
 interface SyntheticConfig {
   /** URL de base de l'app cible. Default: http://localhost:3000 */
@@ -58,11 +59,7 @@ interface SyntheticConfig {
   }
 }
 
-interface EntryPointRow {
-  file: string
-  kind: string
-  id: string
-}
+// EntryPointRow imported from ./_common (NCD dedup).
 
 export const syntheticDriver: Driver = {
   name: 'synthetic',
@@ -216,37 +213,7 @@ async function spawnAppWithBootstrap(
   throw new Error(`spawned app did not become ready at ${baseUrl} within ${readyTimeout}ms`)
 }
 
-async function readEntryPoints(factsDir: string): Promise<EntryPointRow[]> {
-  const file = path.join(factsDir, 'EntryPoint.facts')
-  try {
-    const content = await fs.readFile(file, 'utf-8')
-    return content
-      .split('\n')
-      .filter(line => line.trim().length > 0)
-      .map(line => {
-        const [file, kind, id] = line.split('\t')
-        return { file, kind, id }
-      })
-  } catch (err: unknown) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return []
-    throw err
-  }
-}
-
-/**
- * Parse une route id du format codegraph.
- * Codegraph encode les routes comme `<METHOD> <PATH>` ou parfois juste path.
- * On accepte les deux formes pour robustesse.
- */
-function parseRouteId(id: string): { method: string; path: string } | null {
-  const trimmed = id.trim()
-  // Form 1: "GET /api/orders"
-  const m = trimmed.match(/^([A-Z]+)\s+(\/.*)$/)
-  if (m) return { method: m[1], path: m[2] }
-  // Form 2: just path (assume GET)
-  if (trimmed.startsWith('/')) return { method: 'GET', path: trimmed }
-  return null
-}
+// readEntryPoints + parseRouteId moved to ./_common (NCD dedup).
 
 async function issueRequest(baseUrl: string, method: string, routePath: string): Promise<void> {
   // Strip OpenAPI param syntax for synthetic curl :
@@ -281,6 +248,4 @@ function globMatch(glob: string, path: string): boolean {
   return re.test(path)
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
-}
+// sleep moved to ./_common (NCD dedup).
