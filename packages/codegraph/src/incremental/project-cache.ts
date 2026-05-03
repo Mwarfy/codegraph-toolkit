@@ -53,79 +53,120 @@ export async function getOrBuildSharedProject(
   previousMtimes: Map<string, number>,
   fileCache: Map<string, string>,
 ): Promise<Project> {
-  const sameContext =
-    cached !== null &&
-    cached.rootDir === rootDir &&
-    cached.tsConfigPath === tsConfigPath
-
-  if (!sameContext) {
-    // Cache invalide ou inexistant : créer un Project frais.
-    const project = createSharedProject(rootDir, files, tsConfigPath)
-    cached = {
-      project,
-      rootDir,
-      tsConfigPath,
-      fileSet: new Set(files),
-    }
-    return project
+  if (!isCacheCompatible(rootDir, tsConfigPath)) {
+    return rebuildAndCacheProject(rootDir, files, tsConfigPath)
   }
 
   const c = cached!
-  const project = c.project
   const newFileSet = new Set(files)
 
-  // Files added : addSourceFileAtPath
-  for (const f of files) {
-    if (c.fileSet.has(f)) continue
-    const absPath = path.join(rootDir, f)
-    try {
-      project.addSourceFileAtPath(absPath)
-    } catch { /* TS parse fail (syntax error, race delete) — file restera hors-Project, downstream tolerant */ }
-  }
-
-  // Files removed : removeSourceFile
-  for (const f of c.fileSet) {
-    if (newFileSet.has(f)) continue
-    const absPath = path.join(rootDir, f)
-    const sf = project.getSourceFile(absPath)
-    if (sf) project.removeSourceFile(sf)
-  }
-
-  // Files modified (mtime changé depuis previousMtimes) : replaceWithText
-  // pour invalider l'AST cache de ts-morph. On lit le contenu via
-  // fileCache (déjà rempli par analyzer si dispo) sinon fs.
-  for (const f of files) {
-    if (!c.fileSet.has(f)) continue  // déjà ajouté plus haut, AST frais
-    const prevMtime = previousMtimes.get(f)
-    if (prevMtime === undefined) continue  // 1er run : ne rien faire
-
-    const absPath = path.join(rootDir, f)
-    let mtime: number | undefined
-    try {
-      // await-ok: incremental run touche peu de files (delta), séquentiel acceptable
-      const stat = await fs.stat(absPath)
-      mtime = stat.mtimeMs
-    } catch {
-      mtime = undefined
-    }
-    if (mtime === undefined || mtime === prevMtime) continue
-
-    const sf = project.getSourceFile(absPath)
-    if (!sf) {
-      try { project.addSourceFileAtPath(absPath) } catch { /* parse fail — fileSet incohérent volontairement */ }
-      continue
-    }
-    let content = fileCache.get(f)
-    if (content === undefined) {
-      // await-ok: cache miss read, séquentiel acceptable (delta typique petit)
-      try { content = await fs.readFile(absPath, 'utf-8') } catch { content = '' }
-      fileCache.set(f, content)
-    }
-    sf.replaceWithText(content)
-  }
+  applyAddedFiles(c.project, rootDir, files, c.fileSet)
+  applyRemovedFiles(c.project, rootDir, c.fileSet, newFileSet)
+  await applyModifiedFiles(c.project, rootDir, files, c.fileSet, previousMtimes, fileCache)
 
   c.fileSet = newFileSet
+  return c.project
+}
+
+function isCacheCompatible(rootDir: string, tsConfigPath: string | undefined): boolean {
+  return cached !== null
+    && cached.rootDir === rootDir
+    && cached.tsConfigPath === tsConfigPath
+}
+
+function rebuildAndCacheProject(
+  rootDir: string,
+  files: string[],
+  tsConfigPath: string | undefined,
+): Project {
+  const project = createSharedProject(rootDir, files, tsConfigPath)
+  cached = { project, rootDir, tsConfigPath, fileSet: new Set(files) }
   return project
+}
+
+/** Files added : addSourceFileAtPath. Tolère parse errors (file restera hors). */
+function applyAddedFiles(
+  project: Project,
+  rootDir: string,
+  files: string[],
+  oldFileSet: Set<string>,
+): void {
+  for (const f of files) {
+    if (oldFileSet.has(f)) continue
+    try {
+      project.addSourceFileAtPath(path.join(rootDir, f))
+    } catch { /* parse fail (syntax error, race delete) — file hors-Project */ }
+  }
+}
+
+/** Files removed : removeSourceFile. */
+function applyRemovedFiles(
+  project: Project,
+  rootDir: string,
+  oldFileSet: Set<string>,
+  newFileSet: Set<string>,
+): void {
+  for (const f of oldFileSet) {
+    if (newFileSet.has(f)) continue
+    const sf = project.getSourceFile(path.join(rootDir, f))
+    if (sf) project.removeSourceFile(sf)
+  }
+}
+
+/**
+ * Files modified (mtime changé depuis previousMtimes) : replaceWithText pour
+ * invalider l'AST cache de ts-morph. Lit le contenu via fileCache si possible
+ * sinon fs. 1er run (no previousMtime) → no-op.
+ */
+async function applyModifiedFiles(
+  project: Project,
+  rootDir: string,
+  files: string[],
+  oldFileSet: Set<string>,
+  previousMtimes: Map<string, number>,
+  fileCache: Map<string, string>,
+): Promise<void> {
+  for (const f of files) {
+    if (!oldFileSet.has(f)) continue                 // déjà ajouté, AST frais
+    const prevMtime = previousMtimes.get(f)
+    if (prevMtime === undefined) continue            // 1er run : skip
+
+    const absPath = path.join(rootDir, f)
+    // await-ok: incremental run touche peu de files (delta), séquentiel OK
+    const mtime = await readMtimeOrUndefined(absPath)
+    if (mtime === undefined || mtime === prevMtime) continue
+
+    await refreshSourceFile(project, absPath, f, fileCache)
+  }
+}
+
+async function readMtimeOrUndefined(absPath: string): Promise<number | undefined> {
+  try {
+    const stat = await fs.stat(absPath)
+    return stat.mtimeMs
+  } catch {
+    return undefined
+  }
+}
+
+async function refreshSourceFile(
+  project: Project,
+  absPath: string,
+  f: string,
+  fileCache: Map<string, string>,
+): Promise<void> {
+  const sf = project.getSourceFile(absPath)
+  if (!sf) {
+    try { project.addSourceFileAtPath(absPath) } catch { /* parse fail */ }
+    return
+  }
+  let content = fileCache.get(f)
+  if (content === undefined) {
+    // await-ok: cache miss read, séquentiel OK (delta typique petit)
+    try { content = await fs.readFile(absPath, 'utf-8') } catch { content = '' }
+    fileCache.set(f, content)
+  }
+  sf.replaceWithText(content)
 }
 
 /** Force-jeter le cache. Utile pour tests ou commande CLI `--cold`. */

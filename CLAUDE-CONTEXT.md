@@ -178,15 +178,15 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 > pas verdict. Une tension non explorée n'est pas un bug — c'est un saut
 > latéral possible que le sol stable rend testable.
 
-- **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/datalog/src/cli.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/audit-listener.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/scheduler.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/b.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
@@ -208,6 +208,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+600fdb0 refactor(codegraph): split BullmqQueueDetector.detect (cyclo 20→2, cog 42→1) — bullmq-queues.ts cleared
 fb50d40 refactor(codegraph): split EventBusDetector.detect (cyclo 20→1, cog 48→0) — event-bus.ts cleared
 fcb7141 refactor(codegraph): split findReachablePaths (cyclo 21→3, cog 34→1) — reachability.ts cleared
 0047e61 refactor(codegraph): split validateStore (cyclo 22→4, cog 27→3) — store.ts cleared
@@ -219,7 +220,6 @@ a73b0b8 refactor(codegraph-mcp): split codegraphTruthPointFor (cyclo 22→4, cog
 05adaa7 refactor(codegraph): split extractDeprecatedUsageFileBundle (cyclo 23→2, cog 31→1) — deprecated-usage.ts cleared
 1e46881 refactor(codegraph): split extractResourceBalanceFileBundle (cyclo 24→5, cog 27→5) — resource-balance.ts cleared
 3b34ca1 refactor(codegraph): split importEslintViolations (cyclo 24→4, cog 29→2) — eslint-import.ts cleared
-bd9fcb0 refactor(codegraph): split printDiffSummary (cyclo 24→4, cog 42→3) — diff.ts cleared
 ```
 
 ## Comment contribuer à ce brief
