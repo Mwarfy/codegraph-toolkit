@@ -47,6 +47,7 @@ l'install.
 
 <!-- AUTO-GÉNÉRÉ depuis les marqueurs ADR-NNN du code source. Voir @liby-tools/adr-toolkit. NE PAS éditer à la main. -->
 
+- `packages/adr-toolkit/src/check-asserts.ts`
 - `packages/adr-toolkit/src/config.ts` — config-driven obligatoire, pas de hardcoded projet
 
 

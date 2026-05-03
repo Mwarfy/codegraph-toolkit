@@ -1,3 +1,4 @@
+// ADR-011
 /**
  * Chaos driver — error injection ciblée sur les entry points HTTP.
  *

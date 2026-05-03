@@ -1,3 +1,4 @@
+// ADR-011
 /**
  * replay-tests driver — lance la suite de tests existante du projet
  * sous OTel SDK pre-attached, pour capturer un run runtime à HAUTE

@@ -1,3 +1,4 @@
+// ADR-005
 /**
  * State Machines Extractor — structural map phase 1.6
  *

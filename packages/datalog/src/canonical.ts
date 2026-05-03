@@ -1,3 +1,4 @@
+// ADR-010
 /**
  * Canonical encoding helpers — tout ce qui touche au déterminisme passe ici.
  *

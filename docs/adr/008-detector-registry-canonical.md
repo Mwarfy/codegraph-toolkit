@@ -49,6 +49,8 @@ Pour tester un détecteur isolé : `createDetectors(['my-detector'])`.
 
 <!-- AUTO-GÉNÉRÉ depuis les marqueurs ADR-NNN du code source. Voir @liby-tools/adr-toolkit. NE PAS éditer à la main. -->
 
+- `packages/codegraph-mcp/src/snapshot-loader.ts`
+- `packages/codegraph/src/core/analyzer.ts`
 - `packages/codegraph/src/core/detector-registry.ts`
 - `packages/codegraph/src/core/detectors/barrels-detector.ts`
 - `packages/codegraph/src/core/detectors/complexity-detector.ts`
@@ -68,6 +70,9 @@ Pour tester un détecteur isolé : `createDetectors(['my-detector'])`.
 - `packages/codegraph/src/core/detectors/typed-calls-detector.ts`
 - `packages/codegraph/src/core/detectors/unused-exports-detector.ts`
 - `packages/codegraph/src/core/file-discovery.ts`
+- `packages/codegraph/src/core/graph.ts`
+- `packages/codegraph/src/detectors/ts-imports.ts`
+- `packages/codegraph/src/map/dsm-renderer.ts`
 
 
 ## Tested by

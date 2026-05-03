@@ -1,3 +1,4 @@
+// ADR-010
 /**
  * High-level runner — wire l'I/O autour du core pur.
  *

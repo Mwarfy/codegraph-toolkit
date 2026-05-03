@@ -1,3 +1,4 @@
+// ADR-002
 /**
  * Asserts ts-morph sur les ADRs : les claims sémantiques (« la fonction `foo`
  * existe », « `bar` est de type `Set<string>` ») deviennent EXÉCUTABLES.

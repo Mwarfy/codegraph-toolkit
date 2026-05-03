@@ -1,3 +1,4 @@
+// ADR-006
 /**
  * Core types for the Salsa-style incremental runtime.
  *

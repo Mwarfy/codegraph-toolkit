@@ -1,3 +1,4 @@
+// ADR-005
 /**
  * Unused Exports Detector — Smart Classification
  *

@@ -69,7 +69,10 @@ incrémental en bug de prod silencieux. Pas reproduisible.
 
 <!-- AUTO-GÉNÉRÉ depuis les marqueurs ADR-NNN du code source. Voir @liby-tools/adr-toolkit. NE PAS éditer à la main. -->
 
+- `packages/codegraph/src/check/types.ts`
 - `packages/codegraph/src/core/types.ts`
+- `packages/codegraph/src/diff/types.ts`
+- `packages/salsa/src/types.ts`
 
 
 ## Tested by

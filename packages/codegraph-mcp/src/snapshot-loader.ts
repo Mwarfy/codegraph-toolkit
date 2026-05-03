@@ -1,3 +1,4 @@
+// ADR-008
 /**
  * Snapshot loader — charge le dernier `.codegraph/snapshot-*.json` avec
  * mtime cache pour éviter de re-parser à chaque tool call.

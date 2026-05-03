@@ -1,3 +1,4 @@
+// ADR-005
 /**
  * Co-change extractor — paires de fichiers fréquemment modifiés ensemble.
  *

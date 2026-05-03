@@ -1,3 +1,4 @@
+// ADR-011
 /**
  * Span aggregator — projette les ReadableSpan OTel vers les facts canoniques.
  *

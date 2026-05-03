@@ -1,3 +1,4 @@
+// ADR-005
 /**
  * Package Deps Hygiene Extractor — structural map phase 3.8 #7
  *

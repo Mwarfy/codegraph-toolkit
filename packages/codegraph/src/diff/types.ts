@@ -1,3 +1,4 @@
+// ADR-006
 /**
  * Types du module `diff` — phase 3 du PLAN.md.
  *

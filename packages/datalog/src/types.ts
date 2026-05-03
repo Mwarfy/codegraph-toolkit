@@ -1,3 +1,4 @@
+// ADR-010
 /**
  * Core types for the datalog interpreter.
  *

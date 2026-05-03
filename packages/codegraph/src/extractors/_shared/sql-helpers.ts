@@ -1,3 +1,4 @@
+// ADR-012
 /**
  * SQL schema helpers partagés entre extracteurs sql-schema et drizzle-schema
  * (NCD = 41 entre les 2 originaux). Le calcul de FK-sans-index est

@@ -1,3 +1,4 @@
+// ADR-012
 /**
  * SQL types partagés entre `sql-schema.ts` et `_shared/sql-helpers.ts`.
  *

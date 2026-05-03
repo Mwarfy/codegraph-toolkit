@@ -1,3 +1,4 @@
+// ADR-011
 /**
  * OTel attach + in-memory span collection.
  *

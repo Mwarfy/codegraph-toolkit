@@ -1,3 +1,4 @@
+// ADR-011
 /**
  * Phase γ — disciplines mathématiques runtime.
  *

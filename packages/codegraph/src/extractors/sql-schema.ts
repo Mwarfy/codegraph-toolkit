@@ -1,3 +1,4 @@
+// ADR-005
 /**
  * SQL schema extractor — parse les migrations Postgres pour détecter
  * tables, colonnes, FKs, indexes. Émet `SqlFkWithoutIndex[]` quand un

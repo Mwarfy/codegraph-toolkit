@@ -1,3 +1,4 @@
+// ADR-010
 /**
  * Parser pour la syntaxe `.dl` — sous-ensemble compatible Soufflé.
  *

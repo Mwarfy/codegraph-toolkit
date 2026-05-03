@@ -1,3 +1,4 @@
+// ADR-011
 /**
  * Auto-bootstrap entry point — pour usage via `NODE_OPTIONS=--require`.
  *

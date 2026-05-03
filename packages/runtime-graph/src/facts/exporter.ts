@@ -1,3 +1,4 @@
+// ADR-011
 /**
  * Facts exporter — sérialise un RuntimeSnapshot vers les .facts TSV
  * dans .codegraph/facts-runtime/ (convention codegraph alignée).

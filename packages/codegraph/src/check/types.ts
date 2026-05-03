@@ -1,3 +1,4 @@
+// ADR-006
 /**
  * Types du module `check` — phase 2 du PLAN.md.
  *
