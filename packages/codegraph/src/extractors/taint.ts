@@ -102,6 +102,38 @@ export function scanTaintInSourceFile(
 
 // ─── Scope analysis ───────────────────────────────────────────────────────
 
+const NESTED_FN_KINDS = new Set([
+  SyntaxKind.FunctionDeclaration,
+  SyntaxKind.FunctionExpression,
+  SyntaxKind.ArrowFunction,
+  SyntaxKind.MethodDeclaration,
+])
+
+function isNestedFunctionScope(node: Node, scope: Node): boolean {
+  return node !== scope && NESTED_FN_KINDS.has(node.getKind())
+}
+
+function handleVarDeclaration(node: Node, tainted: Map<string, TaintInfo>, rules: TaintRules): void {
+  const vd = node as any
+  const name = vd.getName?.()
+  const init = vd.getInitializer?.()
+  if (!name || !init) return
+  handleAssignment(name, init, tainted, rules)
+}
+
+function handleAssignmentExpression(node: Node, tainted: Map<string, TaintInfo>, rules: TaintRules): void {
+  const bin = node as any
+  const op = bin.getOperatorToken?.()?.getKind?.()
+  if (op !== SyntaxKind.EqualsToken) return
+  const left = bin.getLeft?.()
+  const right = bin.getRight?.()
+  if (!left || !right) return
+  if (left.getKind?.() !== SyntaxKind.Identifier) return
+  const leftName = left.getText?.()
+  if (!leftName) return
+  handleAssignment(leftName, right, tainted, rules)
+}
+
 function analyzeScope(
   scope: Node,
   relPath: string,
@@ -110,54 +142,22 @@ function analyzeScope(
   violations: TaintViolation[],
 ): void {
   const tainted = new Map<string, TaintInfo>()
-
   // Corps du scope : pour fn/method/arrow on prend le body. Pour le file
   // c'est le SourceFile lui-même.
   const body = (scope as any).getBody?.() ?? scope
 
   body.forEachDescendant((node: Node, traversal: any) => {
-    const k = node.getKind()
-
-    // Skip les nested functions : elles sont analysées comme scopes séparés.
-    if (node !== scope && (
-      k === SyntaxKind.FunctionDeclaration ||
-      k === SyntaxKind.FunctionExpression ||
-      k === SyntaxKind.ArrowFunction ||
-      k === SyntaxKind.MethodDeclaration
-    )) {
+    if (isNestedFunctionScope(node, scope)) {
       traversal.skip()
       return
     }
-
-    // Variable declaration : `const x = INIT` / `let x = INIT`.
+    const k = node.getKind()
     if (k === SyntaxKind.VariableDeclaration) {
-      const vd = node as any
-      const name = vd.getName?.()
-      const init = vd.getInitializer?.()
-      if (!name || !init) return
-      handleAssignment(name, init, tainted, rules)
-      return
-    }
-
-    // Assignment expression : `x = RHS` — uniquement en BinaryExpression.
-    if (k === SyntaxKind.BinaryExpression) {
-      const bin = node as any
-      const op = bin.getOperatorToken?.()?.getKind?.()
-      if (op !== SyntaxKind.EqualsToken) return
-      const left = bin.getLeft?.()
-      const right = bin.getRight?.()
-      if (!left || !right) return
-      if (left.getKind?.() !== SyntaxKind.Identifier) return
-      const leftName = left.getText?.()
-      if (!leftName) return
-      handleAssignment(leftName, right, tainted, rules)
-      return
-    }
-
-    // Call expression : check sink match, sanitizer match.
-    if (k === SyntaxKind.CallExpression) {
+      handleVarDeclaration(node, tainted, rules)
+    } else if (k === SyntaxKind.BinaryExpression) {
+      handleAssignmentExpression(node, tainted, rules)
+    } else if (k === SyntaxKind.CallExpression) {
       handleCall(node, tainted, rules, relPath, lineToSymbol, violations)
-      return
     }
   })
 }
