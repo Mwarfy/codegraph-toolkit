@@ -199,6 +199,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+66cbcd7 refactor(toolkit): split findContainingSymbol + buildLineToSymbol — _shared/ast-helpers.ts ALL bombs cleared
 1ca9363 refactor(toolkit): split getTaintFromExpression + buildLineToSymbol — taint.ts ALL bombs cleared
 22ced53 refactor(toolkit): split walkForManifests + buildPackageDepsIssues — package-deps.ts ALL bombs cleared
 3b1d650 refactor(toolkit): split scanObjectWrites + detectListenerTriggers — state-machines.ts ALL bombs cleared
@@ -210,7 +211,6 @@ ba540e4 refactor(toolkit): split analyzeCycles + tarjanScc — cycles.ts ALL bom
 321cd83 refactor(toolkit): split classifyExportsFromBundles (cyclo 25→3) — unused-exports.ts ALL bombs cleared
 dd61398 refactor(toolkit): split extractUnusedExportsFileBundle (cyclo 36→3) — 6 helpers per-pass
 86cff0b refactor(toolkit): split analyzeSqlSchema (cyclo 38→3) + dedupe SQL comparators to _shared/sql-helpers
-8988d09 refactor(toolkit): split parseColumnProperty (cyclo 18→3) — drizzle-schema.ts ALL bombs cleared
 ```
 
 ## Comment contribuer à ce brief
