@@ -44,67 +44,119 @@ function applyConfigDefaults(
 export async function loadConfig(
   opts: { config?: string; root?: string; detectors?: string },
 ): Promise<CodeGraphConfig> {
-  // Try to load config file (--config <path>)
+  // 1. --config <path> explicite
   if (opts.config) {
-    const configPath = path.resolve(opts.config)
-    if (configPath.endsWith('.json')) {
-      const raw = JSON.parse(await fs.readFile(configPath, 'utf-8'))
-      // Resolve rootDir relative to config file location
-      if (raw.rootDir && !path.isAbsolute(raw.rootDir)) {
-        raw.rootDir = path.resolve(path.dirname(configPath), raw.rootDir)
-      }
-      // --root override : permet au caller d'utiliser la même config
-      // (include, entryPoints, detectors) mais de pointer vers un autre
-      // checkout du code.
-      if (opts.root) {
-        raw.rootDir = path.resolve(opts.root)
-        if (!raw.snapshotDir || !path.isAbsolute(raw.snapshotDir)) {
-          raw.snapshotDir = path.join(raw.rootDir, raw.snapshotDir || '.codegraph')
-        }
-      } else if (raw.snapshotDir && !path.isAbsolute(raw.snapshotDir)) {
-        raw.snapshotDir = path.resolve(path.dirname(configPath), raw.snapshotDir)
-      }
-      return applyConfigDefaults(raw)
-    }
-    const mod = await import(configPath)
-    return applyConfigDefaults(mod.default || mod)
+    return loadExplicitConfig(opts.config, opts.root)
   }
 
-  // Try default config locations
+  // 2. Try default config locations
   const root = path.resolve(opts.root || '.')
+  const fromDefault = await tryDefaultConfigs(root)
+  if (fromDefault) return fromDefault
+
+  // 3. Fallback to sensible defaults
+  return buildDefaultConfig(root, opts.detectors)
+}
+
+// ─── Path 1: --config explicit ──────────────────────────────────────────────
+
+async function loadExplicitConfig(
+  configOpt: string,
+  rootOpt: string | undefined,
+): Promise<CodeGraphConfig> {
+  const configPath = path.resolve(configOpt)
+  if (configPath.endsWith('.json')) {
+    const raw = JSON.parse(await fs.readFile(configPath, 'utf-8'))
+    resolveExplicitRootDir(raw, configPath, rootOpt)
+    resolveExplicitSnapshotDir(raw, configPath, rootOpt)
+    return applyConfigDefaults(raw)
+  }
+  const mod = await import(configPath)
+  return applyConfigDefaults(mod.default || mod)
+}
+
+function resolveExplicitRootDir(
+  raw: { rootDir?: string },
+  configPath: string,
+  rootOpt: string | undefined,
+): void {
+  if (rootOpt) {
+    raw.rootDir = path.resolve(rootOpt)
+    return
+  }
+  // Resolve rootDir relative to config file location
+  if (raw.rootDir && !path.isAbsolute(raw.rootDir)) {
+    raw.rootDir = path.resolve(path.dirname(configPath), raw.rootDir)
+  }
+}
+
+/**
+ * --root override : permet au caller d'utiliser la même config (include,
+ * entryPoints, detectors) mais de pointer vers un autre checkout du code.
+ * Le snapshotDir suit le nouveau root.
+ */
+function resolveExplicitSnapshotDir(
+  raw: { rootDir?: string; snapshotDir?: string },
+  configPath: string,
+  rootOpt: string | undefined,
+): void {
+  if (rootOpt) {
+    if (!raw.snapshotDir || !path.isAbsolute(raw.snapshotDir)) {
+      raw.snapshotDir = path.join(raw.rootDir!, raw.snapshotDir || '.codegraph')
+    }
+    return
+  }
+  if (raw.snapshotDir && !path.isAbsolute(raw.snapshotDir)) {
+    raw.snapshotDir = path.resolve(path.dirname(configPath), raw.snapshotDir)
+  }
+}
+
+// ─── Path 2: try default config locations ───────────────────────────────────
+
+async function tryDefaultConfigs(root: string): Promise<CodeGraphConfig | null> {
   const defaultPaths = [
     path.join(root, 'codegraph.config.ts'),
     path.join(root, 'codegraph.config.js'),
     path.join(root, 'codegraph.config.json'),
   ]
-
   for (const p of defaultPaths) {
-    try {
-      // await-ok: probe avec return on first match, séquentiel requis
-      await fs.access(p)
-      if (p.endsWith('.json')) {
-        // await-ok: probe path validé ci-dessus, séquentiel requis (return)
-        const raw = JSON.parse(await fs.readFile(p, 'utf-8'))
-        if (raw.rootDir && !path.isAbsolute(raw.rootDir)) {
-          raw.rootDir = path.resolve(path.dirname(p), raw.rootDir)
-        } else if (!raw.rootDir) {
-          raw.rootDir = root
-        }
-        return applyConfigDefaults(raw)
-      }
-      // await-ok: dynamic import du config TS/JS, séquentiel (return)
-      const mod = await import(p)
-      return applyConfigDefaults({ rootDir: root, ...(mod.default || mod) })
-    } catch {
-      // Try next
-    }
+    const cfg = await tryLoadOneDefault(p, root)
+    if (cfg) return cfg
   }
+  return null
+}
 
-  // Fallback to sensible defaults
-  const detectorNames = opts.detectors
-    ? opts.detectors.split(',').map((s) => s.trim())
+async function tryLoadOneDefault(
+  p: string,
+  root: string,
+): Promise<CodeGraphConfig | null> {
+  try {
+    // await-ok: probe avec return on first match, séquentiel requis
+    await fs.access(p)
+    if (p.endsWith('.json')) {
+      // await-ok: probe path validé, séquentiel requis (return)
+      const raw = JSON.parse(await fs.readFile(p, 'utf-8'))
+      if (raw.rootDir && !path.isAbsolute(raw.rootDir)) {
+        raw.rootDir = path.resolve(path.dirname(p), raw.rootDir)
+      } else if (!raw.rootDir) {
+        raw.rootDir = root
+      }
+      return applyConfigDefaults(raw)
+    }
+    // await-ok: dynamic import du config TS/JS, séquentiel (return)
+    const mod = await import(p)
+    return applyConfigDefaults({ rootDir: root, ...(mod.default || mod) })
+  } catch {
+    return null  // try next
+  }
+}
+
+// ─── Path 3: fallback defaults ──────────────────────────────────────────────
+
+function buildDefaultConfig(root: string, detectorsOpt: string | undefined): CodeGraphConfig {
+  const detectorNames = detectorsOpt
+    ? detectorsOpt.split(',').map((s) => s.trim())
     : listDetectorNames()
-
   return {
     rootDir: root,
     include: ['**/*.ts', '**/*.tsx'],
