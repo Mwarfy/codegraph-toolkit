@@ -46,40 +46,76 @@ export function computeComponentMetrics(
   const edgeTypes = new Set(options.edgeTypes ?? (['import'] as Array<GraphEdge['type']>))
   const exclude = new Set(options.excludeComponents ?? [])
 
-  // ─── Assign each file to a component ───────────────────────────────
+  const { fileToComponent, filesByComponent } = assignFilesToComponents(nodes, depth, exclude)
+  const { ca, ce } = computeAfferentEfferent(edges, edgeTypes, fileToComponent)
+  const { totalExports, abstractExports } = countExportsByAbstractness(filesByComponent)
 
-  const componentOf = (fileId: string): string | null => {
-    const segs = fileId.split('/').filter(Boolean)
-    if (segs.length === 0) return null
-    // Si le fichier est à la racine d'un répertoire avec moins de `depth`
-    // segments, on prend tout le path sauf le fichier (son dossier parent).
-    const n = Math.min(depth, segs.length - 1)
-    if (n <= 0) return segs[0]
-    return segs.slice(0, n).join('/')
-  }
+  const out = buildComponentMetrics(filesByComponent, ca, ce, totalExports, abstractExports)
+  out.sort(compareComponentMetrics)
+  return out
+}
 
+// ─── Phase 1: assign files to components ────────────────────────────────────
+
+interface ComponentAssignment {
+  fileToComponent: Map<string, string>
+  filesByComponent: Map<string, GraphNode[]>
+}
+
+function assignFilesToComponents(
+  nodes: GraphNode[],
+  depth: number,
+  exclude: Set<string>,
+): ComponentAssignment {
   const fileToComponent = new Map<string, string>()
   const filesByComponent = new Map<string, GraphNode[]>()
-
   for (const n of nodes) {
     if (n.type !== 'file') continue
-    const comp = componentOf(n.id)
+    const comp = componentOf(n.id, depth)
     if (!comp || exclude.has(comp)) continue
     fileToComponent.set(n.id, comp)
     const list = filesByComponent.get(comp) ?? []
     list.push(n)
     filesByComponent.set(comp, list)
   }
+  return { fileToComponent, filesByComponent }
+}
 
-  // ─── Count Ca / Ce per component ───────────────────────────────────
+/**
+ * Si le fichier est à la racine d'un répertoire avec moins de `depth`
+ * segments, on prend tout le path sauf le fichier (son dossier parent).
+ */
+function componentOf(fileId: string, depth: number): string | null {
+  const segs = fileId.split('/').filter(Boolean)
+  if (segs.length === 0) return null
+  const n = Math.min(depth, segs.length - 1)
+  if (n <= 0) return segs[0]
+  return segs.slice(0, n).join('/')
+}
 
-  const ca = new Map<string, number>()  // afferent coupling — external → internal
-  const ce = new Map<string, number>()  // efferent coupling — internal → external
+// ─── Phase 2: Ca / Ce per component ─────────────────────────────────────────
 
-  // Dédup : la paire (file-from, file-to) ne compte qu'une fois par sens,
-  // même si plusieurs edges existent entre les deux.
-  const seenAfferent = new Set<string>()   // `compDst → fileSrc`
-  const seenEfferent = new Set<string>()   // `compSrc → fileDst`
+interface CaCe {
+  /** afferent coupling — external → internal */
+  ca: Map<string, number>
+  /** efferent coupling — internal → external */
+  ce: Map<string, number>
+}
+
+/**
+ * Dédup : la paire (file-from, file-to) ne compte qu'une fois par sens,
+ * même si plusieurs edges existent entre les deux.
+ */
+function computeAfferentEfferent(
+  edges: GraphEdge[],
+  edgeTypes: Set<GraphEdge['type']>,
+  fileToComponent: Map<string, string>,
+): CaCe {
+  const ca = new Map<string, number>()
+  const ce = new Map<string, number>()
+  // Keys séparées par NUL pour éviter collision avec composantes contenant '/' ou '-'.
+  const seenAfferent = new Set<string>()   // `compDst NUL fileSrc`
+  const seenEfferent = new Set<string>()   // `compSrc NUL fileDst`
 
   for (const e of edges) {
     if (!edgeTypes.has(e.type)) continue
@@ -88,24 +124,35 @@ export function computeComponentMetrics(
     const cTo = fileToComponent.get(e.to)
     if (!cFrom || !cTo) continue
     if (cFrom === cTo) continue  // intra-component edge — ni Ca ni Ce
-
-    const afferentKey = `${cTo}\u0000${e.from}`
-    if (!seenAfferent.has(afferentKey)) {
-      seenAfferent.add(afferentKey)
-      ca.set(cTo, (ca.get(cTo) ?? 0) + 1)
-    }
-    const efferentKey = `${cFrom}\u0000${e.to}`
-    if (!seenEfferent.has(efferentKey)) {
-      seenEfferent.add(efferentKey)
-      ce.set(cFrom, (ce.get(cFrom) ?? 0) + 1)
-    }
+    bumpIfUnseen(seenAfferent, `${cTo}\u0000${e.from}`, ca, cTo)
+    bumpIfUnseen(seenEfferent, `${cFrom}\u0000${e.to}`, ce, cFrom)
   }
+  return { ca, ce }
+}
 
-  // ─── Count abstract vs concrete exports per component ─────────────
+function bumpIfUnseen(
+  seen: Set<string>,
+  key: string,
+  counter: Map<string, number>,
+  bucket: string,
+): void {
+  if (seen.has(key)) return
+  seen.add(key)
+  counter.set(bucket, (counter.get(bucket) ?? 0) + 1)
+}
 
+// ─── Phase 3: abstract vs concrete exports per component ───────────────────
+
+interface ExportCounts {
+  totalExports: Map<string, number>
+  abstractExports: Map<string, number>
+}
+
+function countExportsByAbstractness(
+  filesByComponent: Map<string, GraphNode[]>,
+): ExportCounts {
   const totalExports = new Map<string, number>()
   const abstractExports = new Map<string, number>()
-
   for (const [comp, files] of filesByComponent) {
     let t = 0, a = 0
     for (const f of files) {
@@ -118,9 +165,18 @@ export function computeComponentMetrics(
     totalExports.set(comp, t)
     abstractExports.set(comp, a)
   }
+  return { totalExports, abstractExports }
+}
 
-  // ─── Build output ──────────────────────────────────────────────────
+// ─── Phase 4: build ComponentMetrics rows ──────────────────────────────────
 
+function buildComponentMetrics(
+  filesByComponent: Map<string, GraphNode[]>,
+  ca: Map<string, number>,
+  ce: Map<string, number>,
+  totalExports: Map<string, number>,
+  abstractExports: Map<string, number>,
+): ComponentMetrics[] {
   const out: ComponentMetrics[] = []
   for (const [comp, files] of filesByComponent) {
     const caVal = ca.get(comp) ?? 0
@@ -143,12 +199,11 @@ export function computeComponentMetrics(
       distance: Number(D.toFixed(4)),
     })
   }
-
-  // Tri : distance desc (les plus problématiques en premier), puis nom asc.
-  out.sort((a, b) => {
-    if (a.distance !== b.distance) return b.distance - a.distance
-    return a.component < b.component ? -1 : a.component > b.component ? 1 : 0
-  })
-
   return out
+}
+
+/** Tri : distance desc (les plus problématiques en premier), puis nom asc. */
+function compareComponentMetrics(a: ComponentMetrics, b: ComponentMetrics): number {
+  if (a.distance !== b.distance) return b.distance - a.distance
+  return a.component < b.component ? -1 : a.component > b.component ? 1 : 0
 }
