@@ -77,112 +77,150 @@ export function findSqlNamingViolations(
   schema: SqlSchema,
 ): SqlNamingViolation[] {
   const violations: SqlNamingViolation[] = []
+  const fkSet = buildForeignKeySet(schema)
+
+  for (const table of schema.tables) {
+    checkTableName(table, violations)
+    for (const col of table.columns) {
+      checkColumn(col, table, fkSet, violations)
+    }
+    checkAuditColumns(table, violations)
+  }
+
+  violations.sort(compareViolation)
+  return violations
+}
+
+function buildForeignKeySet(schema: SqlSchema): Set<string> {
   const fkSet = new Set<string>()
   for (const fk of schema.foreignKeys) {
     fkSet.add(fk.fromTable + '\x00' + fk.fromColumn)
   }
+  return fkSet
+}
 
-  for (const table of schema.tables) {
-    // Table name — snake_case.
-    if (!SNAKE_CASE_RE.test(table.name)) {
-      violations.push({
-        kind: 'table-not-snake-case',
-        table: table.name,
-        column: '',
-        file: table.file,
-        line: table.line,
-      })
-    }
-
-    for (const col of table.columns) {
-      // Column name — snake_case.
-      if (!SNAKE_CASE_RE.test(col.name)) {
-        violations.push({
-          kind: 'column-not-snake-case',
-          table: table.name,
-          column: col.name,
-          file: table.file,
-          line: col.line,
-        })
-        continue   // skip les autres checks si le nom est déjà cassé
-      }
-
-      // Timestamp / temporal column — suffix `_at`.
-      if (TEMPORAL_TYPE_RE.test(col.type) && !col.name.endsWith('_at')) {
-        // Skip les patterns volontaires :
-        //   - `*_date`, `*_time` : alternatives sémantiques explicites (dob, birth_date)
-        //   - DATE type pur : convention "calendar date", pas un instant timestamp
-        //   - `*_until` : sémantique "deadline future" valide
-        //   - `window_*` ou `*_start`/`*_end` : intervalles temporels nommés
-        //   - `last_updated` : synonyme accepté de `updated_at`
-        const isDateTypePure = /^date(\s|$)/i.test(col.type)
-        const hasAcceptedSuffix =
-          col.name.endsWith('_date') ||
-          col.name.endsWith('_time') ||
-          col.name.endsWith('_until') ||
-          col.name.endsWith('_start') ||
-          col.name.endsWith('_end')
-        const hasAcceptedPrefix = col.name.startsWith('window_')
-        const isAcceptedSynonym = col.name === 'last_updated'
-
-        if (!hasAcceptedSuffix && !hasAcceptedPrefix && !isAcceptedSynonym && !isDateTypePure) {
-          violations.push({
-            kind: 'timestamp-missing-at-suffix',
-            table: table.name,
-            column: col.name,
-            file: table.file,
-            line: col.line,
-          })
-        }
-      }
-
-      // FK column — suffix `_id`.
-      if (fkSet.has(table.name + '\x00' + col.name) && !col.name.endsWith('_id')) {
-        violations.push({
-          kind: 'fk-missing-id-suffix',
-          table: table.name,
-          column: col.name,
-          file: table.file,
-          line: col.line,
-        })
-      }
-    }
-
-    // ─── Audit columns required (Tier 6) ──────────────────────────
-    // Tables business-critiques (matching pattern audit-required)
-    // doivent avoir `created_at`. Si non append-only, aussi
-    // `updated_at`.
-    if (AUDIT_REQUIRED_NAME_RE.test(table.name)) {
-      const colNames = new Set(table.columns.map((c) => c.name))
-      if (!colNames.has('created_at')) {
-        violations.push({
-          kind: 'audit-column-missing-created-at',
-          table: table.name,
-          column: '',
-          file: table.file,
-          line: table.line,
-        })
-      }
-      // updated_at requis seulement pour les tables MUTABLES (non
-      // append-only). events/logs/history/audit sont append-only par
-      // convention.
-      if (!APPEND_ONLY_NAME_RE.test(table.name) && !colNames.has('updated_at')) {
-        violations.push({
-          kind: 'audit-column-missing-updated-at',
-          table: table.name,
-          column: '',
-          file: table.file,
-          line: table.line,
-        })
-      }
-    }
-  }
-
-  // Tri stable.
-  violations.sort((a, b) => {
-    if (a.file !== b.file) return a.file < b.file ? -1 : 1
-    if (a.line !== b.line) return a.line - b.line
-    return a.kind < b.kind ? -1 : 1
+function checkTableName(
+  table: SqlSchema['tables'][number],
+  violations: SqlNamingViolation[],
+): void {
+  if (SNAKE_CASE_RE.test(table.name)) return
+  violations.push({
+    kind: 'table-not-snake-case',
+    table: table.name,
+    column: '',
+    file: table.file,
+    line: table.line,
   })
-  return violations
+}
+
+function checkColumn(
+  col: SqlSchema['tables'][number]['columns'][number],
+  table: SqlSchema['tables'][number],
+  fkSet: Set<string>,
+  violations: SqlNamingViolation[],
+): void {
+  if (!SNAKE_CASE_RE.test(col.name)) {
+    violations.push({
+      kind: 'column-not-snake-case',
+      table: table.name,
+      column: col.name,
+      file: table.file,
+      line: col.line,
+    })
+    return  // skip les autres checks si le nom est déjà cassé
+  }
+  checkTemporalSuffix(col, table, violations)
+  checkForeignKeyIdSuffix(col, table, fkSet, violations)
+}
+
+/**
+ * Timestamp / temporal column doit suffix `_at`. Skip patterns volontaires :
+ *   - `*_date`, `*_time` : alternatives sémantiques explicites (dob, birth_date)
+ *   - DATE type pur : convention "calendar date", pas un instant timestamp
+ *   - `*_until` : sémantique "deadline future" valide
+ *   - `window_*` ou `*_start`/`*_end` : intervalles temporels nommés
+ *   - `last_updated` : synonyme accepté de `updated_at`
+ */
+function checkTemporalSuffix(
+  col: SqlSchema['tables'][number]['columns'][number],
+  table: SqlSchema['tables'][number],
+  violations: SqlNamingViolation[],
+): void {
+  if (!TEMPORAL_TYPE_RE.test(col.type) || col.name.endsWith('_at')) return
+  if (isAcceptedTemporalPattern(col.name, col.type)) return
+  violations.push({
+    kind: 'timestamp-missing-at-suffix',
+    table: table.name,
+    column: col.name,
+    file: table.file,
+    line: col.line,
+  })
+}
+
+function isAcceptedTemporalPattern(name: string, type: string): boolean {
+  const isDateTypePure = /^date(\s|$)/i.test(type)
+  const hasAcceptedSuffix =
+    name.endsWith('_date') ||
+    name.endsWith('_time') ||
+    name.endsWith('_until') ||
+    name.endsWith('_start') ||
+    name.endsWith('_end')
+  const hasAcceptedPrefix = name.startsWith('window_')
+  const isAcceptedSynonym = name === 'last_updated'
+  return hasAcceptedSuffix || hasAcceptedPrefix || isAcceptedSynonym || isDateTypePure
+}
+
+function checkForeignKeyIdSuffix(
+  col: SqlSchema['tables'][number]['columns'][number],
+  table: SqlSchema['tables'][number],
+  fkSet: Set<string>,
+  violations: SqlNamingViolation[],
+): void {
+  const isFk = fkSet.has(table.name + '\x00' + col.name)
+  if (!isFk || col.name.endsWith('_id')) return
+  violations.push({
+    kind: 'fk-missing-id-suffix',
+    table: table.name,
+    column: col.name,
+    file: table.file,
+    line: col.line,
+  })
+}
+
+/**
+ * Tables business-critiques (audit-required) doivent avoir `created_at`.
+ * Si non append-only, aussi `updated_at` (events/logs/history/audit sont
+ * append-only par convention → updated_at non requis).
+ */
+function checkAuditColumns(
+  table: SqlSchema['tables'][number],
+  violations: SqlNamingViolation[],
+): void {
+  if (!AUDIT_REQUIRED_NAME_RE.test(table.name)) return
+  const colNames = new Set(table.columns.map((c) => c.name))
+  if (!colNames.has('created_at')) {
+    violations.push({
+      kind: 'audit-column-missing-created-at',
+      table: table.name,
+      column: '',
+      file: table.file,
+      line: table.line,
+    })
+  }
+  if (!APPEND_ONLY_NAME_RE.test(table.name) && !colNames.has('updated_at')) {
+    violations.push({
+      kind: 'audit-column-missing-updated-at',
+      table: table.name,
+      column: '',
+      file: table.file,
+      line: table.line,
+    })
+  }
+}
+
+/** Tri stable : file asc, line asc, kind asc. */
+function compareViolation(a: SqlNamingViolation, b: SqlNamingViolation): number {
+  if (a.file !== b.file) return a.file < b.file ? -1 : 1
+  if (a.line !== b.line) return a.line - b.line
+  return a.kind < b.kind ? -1 : 1
 }
