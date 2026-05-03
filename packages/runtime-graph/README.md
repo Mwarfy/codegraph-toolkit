@@ -97,11 +97,28 @@ await exportFactsRuntime(snapshot, { outDir: '.codegraph/facts-runtime' })
 
 ## Roadmap
 
-| Phase | Scope | ETA |
+| Phase | Scope | Status |
 |---|---|---|
-| **α (now)** | OTel attach + 7 facts + 5 rules + synthetic driver + CLI | — |
-| **β** | Multi-framework adapters (Express/Fastify/NestJS), multi-DB (Mongo/Kafka), config-driven | 6-8 weeks |
+| **α** | OTel attach + 7 facts + 5 rules + synthetic driver + CLI | ✅ shipped (alpha.1) |
+| **β (now)** | replay-tests driver + chaos driver + Express adapter + MongoDB support + config-driven | ✅ shipped (alpha.2) |
 | **γ** | 11 disciplines mathématiques runtime (TDA, Information Bottleneck, Lyapunov, etc.) | 8-12 weeks |
+
+## Phase β additions (alpha.2)
+
+- **`replay-tests` driver** — lance la suite de tests existante du projet
+  (vitest, jest, mocha) sous OTel SDK pre-attached. Couverture maximale
+  sans driver synthetic dédié.
+- **`chaos` driver** — error injection ciblée sur les routes HTTP (invalid
+  path params, malformed JSON, missing headers, unicode payloads). Exerce
+  les error paths que synthetic ne touche pas.
+- **Express adapter** — `discoverExpressRoutes(app)` walk `app._router.stack`
+  pour lister les routes registered (Express 4 + 5).
+- **MongoDB support** — `aggregateSpans` détecte `db.system='mongodb'` +
+  `db.mongodb.collection` (en plus du SQL parsing).
+- **Config loader** — `liby-runtime.config.ts` declarative au projet :
+  `defineConfig({ drivers: [...], capture: {...}, expectedTables: [...] })`.
+- **PID sub-dirs bootstrap** — fix critique : npm test parent et node child
+  écrivent dans `pid-<N>/` séparés. Le CLI merge tous les sub-dirs.
 
 ## License
 

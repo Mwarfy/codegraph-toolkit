@@ -33,6 +33,8 @@ const ATTR = {
   DB_SYSTEM: 'db.system',
   DB_STATEMENT: 'db.statement',
   DB_OPERATION: 'db.operation',
+  DB_MONGODB_COLLECTION: 'db.mongodb.collection',                       // OTel SemConv MongoDB
+  DB_NAME: 'db.name',                                                  // database name (fallback)
   CODE_FILEPATH: 'code.filepath',
   CODE_FUNCTION: 'code.function',
   CODE_NAMESPACE: 'code.namespace',
@@ -162,9 +164,22 @@ function aggregateDbQueries(spans: ReadableSpan[]): DbQueryExecutedFact[] {
     const attrs = span.attributes
     const dbSystem = attrs[ATTR.DB_SYSTEM] as string | undefined
     if (!dbSystem || dbSystem === 'redis') continue                    // redis va dans son propre fact
-    const stmt = attrs[ATTR.DB_STATEMENT] as string | undefined
-    const op = (attrs[ATTR.DB_OPERATION] as string | undefined) ?? extractSqlOp(stmt)
-    const table = extractSqlTable(stmt)
+
+    let table: string | null = null
+    let op: string | null = null
+
+    if (dbSystem === 'mongodb') {
+      // MongoDB : `db.mongodb.collection` est explicite, op vient de
+      // db.operation (find/insert/update/delete/aggregate).
+      table = (attrs[ATTR.DB_MONGODB_COLLECTION] as string | undefined) ?? null
+      op = ((attrs[ATTR.DB_OPERATION] as string | undefined) ?? '').toUpperCase() || null
+    } else {
+      // Postgres / MySQL / SQLite / etc. — parse depuis db.statement.
+      const stmt = attrs[ATTR.DB_STATEMENT] as string | undefined
+      op = (attrs[ATTR.DB_OPERATION] as string | undefined) ?? extractSqlOp(stmt)
+      table = extractSqlTable(stmt)
+    }
+
     if (!table || !op) continue
     const id = `${table}::${op}`
     const endTime = spanEndUnix(span)

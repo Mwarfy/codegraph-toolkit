@@ -146,6 +146,13 @@ export interface DriverRunResult {
   actionsCount: number
   /** Erreurs non-fatales rencontrées (pas d'exception fatale). */
   warnings: string[]
+  /**
+   * Optionnel — path d'un tmpDir contenant des facts collectées par
+   * un sub-process bootstrap (cas replay-tests). Le caller doit lire +
+   * merger ces facts AVANT de cleanup. Si absent, le driver a écrit
+   * directement dans le snapshot in-process.
+   */
+  bootstrapFactsDir?: string
 }
 
 // ─── Configuration projet (runtime-graph.config.ts) ──────────────────────

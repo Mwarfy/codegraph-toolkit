@@ -159,6 +159,39 @@ describe('aggregateSpans', () => {
     expect(ordersInsert!.lastAtUnix).toBe(1_700_000_200)
   })
 
+  it('extracts MongoDB queries via db.mongodb.collection + db.operation', () => {
+    const spans = [
+      fakeSpan({
+        attributes: {
+          'db.system': 'mongodb',
+          'db.mongodb.collection': 'users',
+          'db.operation': 'find',
+        },
+        endTimeUnix: 1_700_000_300,
+      }),
+      fakeSpan({
+        attributes: {
+          'db.system': 'mongodb',
+          'db.mongodb.collection': 'users',
+          'db.operation': 'insert',
+        },
+      }),
+      fakeSpan({
+        attributes: {
+          'db.system': 'mongodb',
+          'db.mongodb.collection': 'orders',
+          'db.operation': 'aggregate',
+        },
+      }),
+    ]
+    const snap = aggregateSpans(spans, { projectRoot: '/proj', runMeta: meta })
+    expect(snap.dbQueriesExecuted).toHaveLength(3)
+    const usersFind = snap.dbQueriesExecuted.find(d => d.table === 'users' && d.op === 'FIND')
+    expect(usersFind).toBeDefined()
+    const ordersAgg = snap.dbQueriesExecuted.find(d => d.table === 'orders' && d.op === 'AGGREGATE')
+    expect(ordersAgg).toBeDefined()
+  })
+
   it('routes redis to RedisOpExecuted not DbQueryExecuted', () => {
     const spans = [
       fakeSpan({

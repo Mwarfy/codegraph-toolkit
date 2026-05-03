@@ -24,6 +24,14 @@ export { exportFactsRuntime } from './facts/exporter.js'
 export type { ExportOptions, ExportResult } from './facts/exporter.js'
 
 export { syntheticDriver } from './drivers/synthetic.js'
+export { replayTestsDriver, importBootstrapFacts } from './drivers/replay-tests.js'
+export { chaosDriver } from './drivers/chaos.js'
+
+export { discoverExpressRoutes } from './adapters/frameworks/express.js'
+export type { ExpressLikeApp, DiscoveredRoute } from './adapters/frameworks/express.js'
+
+export { loadConfig, defineConfig } from './core/config-loader.js'
+export type { LoadedConfig } from './core/config-loader.js'
 
 export type {
   Driver,

@@ -24,9 +24,12 @@
 
 import * as path from 'node:path'
 import * as fs from 'node:fs/promises'
+import * as os from 'node:os'
 import { Command } from 'commander'
 import chalk from 'chalk'
 import { syntheticDriver } from './drivers/synthetic.js'
+import { replayTestsDriver } from './drivers/replay-tests.js'
+import { chaosDriver } from './drivers/chaos.js'
 import { exportFactsRuntime } from './facts/exporter.js'
 import { attachRuntimeCapture } from './capture/otel-attach.js'
 import { aggregateSpans } from './capture/span-aggregator.js'
@@ -42,7 +45,9 @@ program
 program
   .command('run')
   .description('Capture runtime via synthetic driver + export facts + run datalog rules')
-  .option('--driver <name>', 'driver name (synthetic|event-bus|replay-tests)', 'synthetic')
+  .option('--driver <name>', 'driver name (synthetic|replay-tests|chaos)', 'synthetic')
+  .option('--replay-cmd <cmd>', '[replay-tests] command to spawn (default: npm)', 'npm')
+  .option('--replay-args <args...>', '[replay-tests] command args (default: ["test"])')
   .option('--duration <seconds>', 'capture duration in seconds', '300')
   .option('--project-root <path>', 'project root path', process.cwd())
   .option('--out-dir <path>', 'output dir for runtime facts', '')
@@ -73,14 +78,36 @@ program
     const startedAtUnix = Math.floor(Date.now() / 1000)
     const startTime = Date.now()
     let driverResult
+
     if (opts.driver === 'synthetic') {
       driverResult = await syntheticDriver.run({
         projectRoot,
         durationMs: durationSec * 1000,
         config: { baseUrl: opts.baseUrl },
       })
+    } else if (opts.driver === 'replay-tests') {
+      // Le driver replay-tests spawn un sub-process avec OTel pre-attached.
+      // Les spans du sub-process sont écrits dans un tmpDir séparé (via
+      // auto-bootstrap.ts), exposé au caller via DriverRunResult.bootstrapFactsDir.
+      // Le CLI merge ce tmpDir dans outDir après le driver.
+      driverResult = await replayTestsDriver.run({
+        projectRoot,
+        durationMs: durationSec * 1000,
+        config: {
+          command: opts.replayCmd,
+          args: opts.replayArgs,
+        },
+      })
+    } else if (opts.driver === 'chaos') {
+      // Chaos driver : error injection sur les routes HTTP statique-discoverées.
+      // Force l'exécution des error paths que synthetic ne touche pas.
+      driverResult = await chaosDriver.run({
+        projectRoot,
+        durationMs: durationSec * 1000,
+        config: { baseUrl: opts.baseUrl },
+      })
     } else {
-      console.error(chalk.red(`Unknown driver: ${opts.driver}. Phase α supports: synthetic`))
+      console.error(chalk.red(`Unknown driver: ${opts.driver}. Phase β supports: synthetic, replay-tests, chaos`))
       process.exit(2)
       return
     }
@@ -95,7 +122,7 @@ program
 
     // 3. Stop capture, get spans, aggregate
     const spans = await capture.stop()
-    console.log(chalk.gray(`  ✓ Captured ${spans.length} spans`))
+    console.log(chalk.gray(`  ✓ Captured ${spans.length} spans (in-process)`))
 
     const snapshot: RuntimeSnapshot = aggregateSpans(spans, {
       projectRoot,
@@ -107,8 +134,23 @@ program
       },
     })
 
-    // 4. Export facts
+    // 4. Export in-process facts
     const exportResult = await exportFactsRuntime(snapshot, { outDir })
+
+    // 4b. Merge bootstrap facts (sub-process replay-tests case).
+    // Si le driver a écrit ses propres facts dans un tmpDir (via
+    // auto-bootstrap.ts), on les merge en CONCATENANT lex sorted —
+    // l'in-process snapshot et le sub-process bootstrap se complètent
+    // (in-process : driver overhead + manual spans ; sub-process :
+    // toute la couverture de la suite de tests).
+    if (driverResult.bootstrapFactsDir) {
+      try {
+        await mergeFactsDirs(driverResult.bootstrapFactsDir, outDir)
+        await fs.rm(driverResult.bootstrapFactsDir, { recursive: true, force: true })
+      } catch (err) {
+        console.log(chalk.yellow(`  ⚠ bootstrap facts merge failed: ${err instanceof Error ? err.message : err}`))
+      }
+    }
     console.log(chalk.gray(`  ✓ Wrote ${exportResult.relations.length} relations`))
     for (const rel of exportResult.relations) {
       console.log(chalk.gray(`    ${rel.name.padEnd(28)} ${String(rel.tuples).padStart(5)} tuples`))
@@ -150,6 +192,66 @@ program.parseAsync(process.argv).catch(err => {
 })
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
+
+/**
+ * Merge deux dirs de facts TSV : pour chaque .facts du srcDir, on append
+ * les lignes au .facts correspondant de dstDir, on dédoublonne, on
+ * resort lex. Conserve la determinism du format codegraph.
+ *
+ * RuntimeRunMeta est OVERWRITE (un seul run = 1 row) — sinon on aurait
+ * 2 rows et les rules qui le consomment se confuseraient.
+ *
+ * Le bootstrap (replay-tests) écrit dans des sub-dirs `pid-<N>/` pour
+ * éviter les collisions parent/child. Cette fonction explore les sub-dirs
+ * et merge le contenu de tous les pid-* dans dstDir.
+ */
+async function mergeFactsDirs(srcDir: string, dstDir: string): Promise<void> {
+  const entries = await fs.readdir(srcDir, { withFileTypes: true })
+  // Sources : sub-dirs pid-* + le srcDir lui-même (cas legacy ou direct write)
+  const sourceDirs: string[] = [srcDir]
+  for (const e of entries) {
+    if (e.isDirectory() && e.name.startsWith('pid-')) {
+      sourceDirs.push(path.join(srcDir, e.name))
+    }
+  }
+
+  for (const sd of sourceDirs) {
+    let files: string[]
+    try { files = await fs.readdir(sd) } catch { continue }
+
+    for (const f of files) {
+      if (!f.endsWith('.facts')) continue
+      const srcPath = path.join(sd, f)
+      // skip if not a regular file (could be sub-dir with same suffix — unlikely)
+      try {
+        const stat = await fs.stat(srcPath)
+        if (!stat.isFile()) continue
+      } catch { continue }
+
+      const dstPath = path.join(dstDir, f)
+      const srcContent = await fs.readFile(srcPath, 'utf-8')
+
+      if (f === 'RuntimeRunMeta.facts') {
+        // Overwrite sur 1ère meta non-vide, ignore subsequent (peuvent venir
+        // de plusieurs PIDs — on garde la 1ère pour réduire à 1 row).
+        if (srcContent.trim().length > 0) {
+          await fs.writeFile(dstPath, srcContent, 'utf-8')
+        }
+        continue
+      }
+
+      let dstContent = ''
+      try { dstContent = await fs.readFile(dstPath, 'utf-8') } catch { /* dst absent */ }
+
+      const merged = new Set<string>()
+      for (const l of dstContent.split('\n')) if (l.trim()) merged.add(l)
+      for (const l of srcContent.split('\n')) if (l.trim()) merged.add(l)
+
+      const sorted = [...merged].sort()
+      await fs.writeFile(dstPath, sorted.length > 0 ? sorted.join('\n') + '\n' : '', 'utf-8')
+    }
+  }
+}
 
 /**
  * Crée un RuntimeRuleExempt.facts vide si l'utilisateur n'a pas
