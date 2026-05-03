@@ -109,6 +109,7 @@
 - `packages/codegraph/src/incremental/persistence.ts` → ADR-007
 - `packages/codegraph/src/incremental/project-cache.ts` → ADR-007
 - `packages/codegraph/src/incremental/queries.ts` → ADR-007
+- `packages/codegraph/src/incremental/resource-balance.ts` → ADR-007
 - `packages/codegraph/src/incremental/security-patterns.ts` → ADR-007
 - `packages/codegraph/src/incremental/state-machines.ts` → ADR-007
 - `packages/codegraph/src/incremental/symbol-refs.ts` → ADR-007
@@ -149,9 +150,9 @@
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
 - `packages/codegraph/src/core/types.ts` (in: 77) · gov by ADR-006
-- `packages/codegraph/src/incremental/queries.ts` (in: 34) · gov by ADR-007
-- `packages/codegraph/src/incremental/database.ts` (in: 32) · gov by ADR-007
-- `packages/salsa/dist/index.d.ts` (in: 31)
+- `packages/codegraph/src/incremental/queries.ts` (in: 35) · gov by ADR-007
+- `packages/codegraph/src/incremental/database.ts` (in: 33) · gov by ADR-007
+- `packages/salsa/dist/index.d.ts` (in: 32)
 - `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 25) · gov by ADR-012
 - `packages/codegraph/src/core/detector-registry.ts` (in: 18) · gov by ADR-008
 - `packages/runtime-graph/src/core/types.ts` (in: 13) · gov by ADR-009
@@ -161,7 +162,7 @@
 
 Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `// ADR-NNN`** dans le code. Intentionnel ? Sinon poser un marqueur ou créer un ADR :
 
-- **31** `packages/salsa/dist/index.d.ts` _(top-hub)_
+- **32** `packages/salsa/dist/index.d.ts` _(top-hub)_
 
 ## Tensions actives — invitations à explorer
 
@@ -180,6 +181,16 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/b.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **FSM-ORPHAN** `ApprovalStatus#expired` — état déclaré mais jamais écrit dans le code  
+  _→ supprimer l'état OU ajouter la transition manquante_
+- **FSM-ORPHAN** `DocumentPhase#published` — état déclaré mais jamais écrit dans le code  
+  _→ supprimer l'état OU ajouter la transition manquante_
+- **FSM-ORPHAN** `DocumentPhase#archived` — état déclaré mais jamais écrit dans le code  
+  _→ supprimer l'état OU ajouter la transition manquante_
+- **FSM-ORPHAN** `NodeStatus#entry-point` — état déclaré mais jamais écrit dans le code  
+  _→ supprimer l'état OU ajouter la transition manquante_
+- **FSM-ORPHAN** `NodeStatus#uncertain` — état déclaré mais jamais écrit dans le code  
+  _→ supprimer l'état OU ajouter la transition manquante_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
 - **DEP-UNUSED** `test-only-in-deps` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
@@ -190,16 +201,11 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ inline les imports + supprimer le barrel_
 - **BARREL-LOW** `packages/codegraph/src/index.ts` — barrel à 8 re-export(s) pour 0 consumer(s)  
   _→ inline les imports + supprimer le barrel_
-- **BARREL-LOW** `packages/codegraph/tests/fixtures/package-deps/src/barrel.ts` — barrel à 2 re-export(s) pour 1 consumer(s)  
-  _→ inline les imports + supprimer le barrel_
-- **BARREL-LOW** `packages/datalog/src/index.ts` — barrel à 13 re-export(s) pour 0 consumer(s)  
-  _→ inline les imports + supprimer le barrel_
-- **BARREL-LOW** `packages/runtime-graph/src/capture/index.ts` — barrel à 3 re-export(s) pour 0 consumer(s)  
-  _→ inline les imports + supprimer le barrel_
 
 ## Activité récente (14 derniers jours)
 
 ```
+c9e30bd perf(toolkit): Salsa-iso magic-numbers detector — 539ms → 0ms warm (top hot detector eliminé)
 702a89f refactor(toolkit): split codegraphContext (cyclo 50→<15) — context.ts ALL bombs cleared
 7369852 refactor(toolkit): split extractDeadCodeFileBundle (cyclo 50→3, cog 78→0) — dead-code.ts ALL bombs cleared
 8caddca refactor(toolkit): split computeAffectedFromCli + scanTestsImportingAffected — cli/index.ts ALL bombs cleared
@@ -211,7 +217,6 @@ e27c2be refactor(toolkit): split codegraphAffected + dedup computeAffected — a
 d534d97 refactor(toolkit): split constant-expressions (cyclo 35+23→under) — constant-expressions.ts ALL bombs cleared
 f4ee98f refactor(toolkit): split typed-calls (cyclo 18+16→under) — typed-calls.ts ALL bombs cleared
 ac2b550 refactor(toolkit): split symbol-refs (cyclo 20+18→under) — symbol-refs.ts ALL bombs cleared
-c677082 refactor(toolkit): split compression-similarity (cyclo 18+16→under) — compression-similarity.ts ALL bombs cleared
 ```
 
 ## Comment contribuer à ce brief

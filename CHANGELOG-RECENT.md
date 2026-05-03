@@ -5,11 +5,16 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T21:26:17Z
+Last update : 2026-05-03T22:01:17Z
 
 ## By type
 
-### `refactor` (50)
+### `perf` (1)
+
+- **c9e30bd** perf(toolkit): Salsa-iso magic-numbers detector — 539ms → 0ms warm (top hot detector eliminé) — 2026-05-04
+
+
+### `refactor` (49)
 
 - **702a89f** refactor(toolkit): split codegraphContext (cyclo 50→<15) — context.ts ALL bombs cleared — 2026-05-03
 - **7369852** refactor(toolkit): split extractDeadCodeFileBundle (cyclo 50→3, cog 78→0) — dead-code.ts ALL bombs cleared — 2026-05-03
@@ -35,6 +40,7 @@ Last update : 2026-05-03T21:26:17Z
 
 ## Full history
 
+- **c9e30bd** perf(toolkit): Salsa-iso magic-numbers detector — 539ms → 0ms warm (top hot detector eliminé) — 2026-05-04
 - **702a89f** refactor(toolkit): split codegraphContext (cyclo 50→<15) — context.ts ALL bombs cleared — 2026-05-03
 - **7369852** refactor(toolkit): split extractDeadCodeFileBundle (cyclo 50→3, cog 78→0) — dead-code.ts ALL bombs cleared — 2026-05-03
 - **8caddca** refactor(toolkit): split computeAffectedFromCli + scanTestsImportingAffected — cli/index.ts ALL bombs cleared — 2026-05-03
@@ -84,4 +90,3 @@ Last update : 2026-05-03T21:26:17Z
 - **af4705f** refactor(toolkit): split renderCoreFlows (cyclo 22→4) — 3 helpers (group + table + detail) — 2026-05-03
 - **69911dc** refactor(toolkit): split renderStats (cyclo 24→11) — 5 helpers stats lines — 2026-05-03
 - **9609b7d** refactor(toolkit): split renderIndex (cyclo 28→3) — 3 helpers + bucket pattern factor — 2026-05-03
-- **a0add06** refactor(toolkit): split renderModuleFiche (cyclo 32→4) — 5 helpers section-by-section — 2026-05-03

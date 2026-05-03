@@ -116,6 +116,7 @@ import { allDeprecatedUsage as incAllDeprecatedUsage } from '../incremental/depr
 import { allConstantExpressions as incAllConstantExpressions } from '../incremental/constant-expressions.js'
 import { allHardcodedSecrets as incAllHardcodedSecrets } from '../incremental/hardcoded-secrets.js'
 import { allMagicNumbers as incAllMagicNumbers } from '../incremental/magic-numbers.js'
+import { allResourceBalances as incAllResourceBalances } from '../incremental/resource-balance.js'
 import { allFunctionComplexity as incAllFunctionComplexity } from '../incremental/function-complexity.js'
 import { allEvalCalls as incAllEvalCalls } from '../incremental/eval-calls.js'
 import { allDriftPatternsAst as incAllDriftPatternsAst } from '../incremental/drift-patterns.js'
@@ -875,14 +876,16 @@ async function runPhase4SecurityAndQuality(ctx: DetectorPhaseContext) {
  * undefined → snapshot fields restent non-set.
  */
 async function runPhase5SqlAndResource(ctx: DetectorPhaseContext) {
-  const { config, files, sharedProject, snapshot, timing } = ctx
+  const { config, files, sharedProject, snapshot, timing, incremental } = ctx
 
   const sqlNamingViolations = await runDetectorTimed(timing, 'sql-naming',
     async () => snapshot.sqlSchema ? findSqlNamingViolations(snapshot.sqlSchema) : undefined)
   const sqlMigrationOrderViolations = await runDetectorTimed(timing, 'sql-migration-order',
     async () => snapshot.sqlSchema ? findMigrationOrderViolations(snapshot.sqlSchema) : undefined)
   const resourceImbalances = await runDetectorTimed(timing, 'resource-balance',
-    () => analyzeResourceBalance(config.rootDir, files, sharedProject))
+    () => incremental
+      ? Promise.resolve(incAllResourceBalances.get('all'))
+      : analyzeResourceBalance(config.rootDir, files, sharedProject))
 
   return { sqlNamingViolations, sqlMigrationOrderViolations, resourceImbalances }
 }
