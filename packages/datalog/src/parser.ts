@@ -94,30 +94,43 @@ class Lexer {
     throw new DatalogError(code, msg, pos, this.source)
   }
 
+  private skipLineComment(): void {
+    while (this.i < this.src.length && this.peek() !== '\n') this.advance()
+  }
+
+  private skipBlockComment(): void {
+    const startPos = this.pos()
+    this.advance(); this.advance() // consume '/*'
+    while (this.i < this.src.length && !(this.peek() === '*' && this.peek(1) === '/')) {
+      this.advance()
+    }
+    if (this.i >= this.src.length) {
+      this.err('parse.unterminatedComment', 'block comment is not closed', startPos)
+    }
+    this.advance(); this.advance() // consume '*/'
+  }
+
+  /** Returns true if it consumed something (whitespace or comment). */
+  private skipOneWS(): boolean {
+    const c = this.peek()
+    if (c === ' ' || c === '\t' || c === '\r' || c === '\n') {
+      this.advance()
+      return true
+    }
+    if (c === '/' && this.peek(1) === '/') {
+      this.skipLineComment()
+      return true
+    }
+    if (c === '/' && this.peek(1) === '*') {
+      this.skipBlockComment()
+      return true
+    }
+    return false
+  }
+
   private skipWS(): void {
-    while (this.i < this.src.length) {
-      const c = this.peek()
-      if (c === ' ' || c === '\t' || c === '\r' || c === '\n') {
-        this.advance()
-        continue
-      }
-      if (c === '/' && this.peek(1) === '/') {
-        while (this.i < this.src.length && this.peek() !== '\n') this.advance()
-        continue
-      }
-      if (c === '/' && this.peek(1) === '*') {
-        const startPos = this.pos()
-        this.advance(); this.advance()
-        while (this.i < this.src.length && !(this.peek() === '*' && this.peek(1) === '/')) {
-          this.advance()
-        }
-        if (this.i >= this.src.length) {
-          this.err('parse.unterminatedComment', 'block comment is not closed', startPos)
-        }
-        this.advance(); this.advance()
-        continue
-      }
-      break
+    while (this.i < this.src.length && this.skipOneWS()) {
+      // skipOneWS advanced — keep looping
     }
   }
 

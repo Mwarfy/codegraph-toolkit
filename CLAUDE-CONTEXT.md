@@ -199,6 +199,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+a023167 refactor(toolkit): split Lexer.next (cyclo 19→under) — table single-char + tryTwoCharOp helper
 4b0c89d refactor(toolkit): split Parser.validateRule (cyclo 20→3) — 4 helpers safety checks
 1878143 refactor(toolkit): split analyzeDrizzleSchema (cyclo 20→3) — 4 helpers (3 cmp + 1 parse loop)
 4215f48 refactor(toolkit): split scanInlineSinks (cyclo 17→2, cog 63→3) — reuse trySink* helpers
@@ -210,7 +211,6 @@ ce0b0a8 refactor(toolkit): split detectListenerEntries (cyclo 23→under) — 4 
 4b6165c refactor(toolkit): split buildFlow (cyclo 19→4) — 4 helpers BFS-extracted
 a5ac751 refactor(toolkit): split buildTestFilesIndex (cyclo 17→1) — 5 helpers + ImportIndices struct
 62de53a refactor(toolkit): split analyzeScope (cyclo 17→3) — extract per-kind handlers
-6cfd2fe refactor(toolkit): split analyzePackageDeps (cyclo 17→4) — 3 helpers
 ```
 
 ## Comment contribuer à ce brief
