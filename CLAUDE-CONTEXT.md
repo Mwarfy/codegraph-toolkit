@@ -208,6 +208,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+fcb7141 refactor(codegraph): split findReachablePaths (cyclo 21→3, cog 34→1) — reachability.ts cleared
 0047e61 refactor(codegraph): split validateStore (cyclo 22→4, cog 27→3) — store.ts cleared
 a73b0b8 refactor(codegraph-mcp): split codegraphTruthPointFor (cyclo 22→4, cog 26→1) — truth-point.ts cleared
 9e41eaa refactor(codegraph): split loadConfig (cyclo 21→4, cog 38→3) — _shared.ts cleared
@@ -219,7 +220,6 @@ a73b0b8 refactor(codegraph-mcp): split codegraphTruthPointFor (cyclo 22→4, cog
 3b34ca1 refactor(codegraph): split importEslintViolations (cyclo 24→4, cog 29→2) — eslint-import.ts cleared
 bd9fcb0 refactor(codegraph): split printDiffSummary (cyclo 24→4, cog 42→3) — diff.ts cleared
 dc507d3 refactor(codegraph): split findArticulationPoints (cyclo 23→2, cog 46→0) — articulation-points.ts cleared
-df37db7 refactor(codegraph): split diffTypedCalls (cyclo 25→5, cog 30→0) — diff/typed-calls.ts cleared
 ```
 
 ## Comment contribuer à ce brief

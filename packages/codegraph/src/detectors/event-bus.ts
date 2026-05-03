@@ -30,117 +30,134 @@ export class EventBusDetector implements Detector {
   description = 'Event-bus emit/listen relationships between blocks'
 
   async detect(ctx: DetectorContext): Promise<DetectedLink[]> {
+    const { allEmitters, allListeners } = await this.collectEmittersAndListeners(ctx)
+    const allEmittedEvents = collectEmittedEventNames(allEmitters)
+    const links = this.buildLinksFromEmittersListeners(allEmitters, allListeners, allEmittedEvents)
+    return this.deduplicateLinks(links)
+  }
+
+  /**
+   * Lit en parallèle les .ts/.tsx files + extract block-style declarations
+   * + direct emit/listen calls via 4 regex.
+   */
+  private async collectEmittersAndListeners(
+    ctx: DetectorContext,
+  ): Promise<{ allEmitters: EventDeclaration[]; allListeners: EventDeclaration[] }> {
     const emitters: EventDeclaration[] = []
     const listeners: EventDeclaration[] = []
     const directEmits: EventDeclaration[] = []
     const directListens: EventDeclaration[] = []
 
-    // Regex for block-style declarations
-    const emitsPattern = /get\s+emits\(\)\s*(?::\s*string\[\])?\s*\{\s*return\s*\[([^\]]*)\]/g
-    const listensToPattern = /get\s+listensTo\(\)\s*(?::\s*string\[\])?\s*\{\s*return\s*\[([^\]]*)\]/g
-
-    // Regex for direct emit calls
-    const emitCallPattern = /(?:emit|emitEvent)\(\s*\{[^}]*type:\s*['"]([^'"]+)['"]/g
-
-    // Regex for direct listen calls
-    const listenCallPattern = /listen\(\s*['"]([^'"]+)['"]/g
-
-    // Lit en parallèle les .ts/.tsx files (I/O fs indépendantes).
     const tsFiles = ctx.files.filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'))
     const fileContents = await Promise.all(
       tsFiles.map(async (file) => ({ file, content: await ctx.readFile(file) })),
     )
     for (const { file, content } of fileContents) {
-      // Local regexes pour éviter race lastIndex partagé entre fichiers.
-      const emitsRe = new RegExp(emitsPattern.source, emitsPattern.flags)
-      const listensToRe = new RegExp(listensToPattern.source, listensToPattern.flags)
-      const emitCallRe = new RegExp(emitCallPattern.source, emitCallPattern.flags)
-      const listenCallRe = new RegExp(listenCallPattern.source, listenCallPattern.flags)
-      let match: RegExpExecArray | null
+      this.scanFileDeclarations(file, content, emitters, listeners, directEmits, directListens)
+    }
+    return {
+      allEmitters: [...emitters, ...directEmits],
+      allListeners: [...listeners, ...directListens],
+    }
+  }
 
-      // Block emits declarations
-      while ((match = emitsRe.exec(content)) !== null) {
-        const events = this.parseStringArray(match[1])
-        if (events.length > 0) {
-          const line = this.getLineNumber(content, match.index)
-          emitters.push({ file, eventNames: events, line })
-        }
-      }
+  private scanFileDeclarations(
+    file: string,
+    content: string,
+    emitters: EventDeclaration[],
+    listeners: EventDeclaration[],
+    directEmits: EventDeclaration[],
+    directListens: EventDeclaration[],
+  ): void {
+    // Local regexes pour éviter race lastIndex partagé entre fichiers.
+    const emitsRe = /get\s+emits\(\)\s*(?::\s*string\[\])?\s*\{\s*return\s*\[([^\]]*)\]/g
+    const listensToRe = /get\s+listensTo\(\)\s*(?::\s*string\[\])?\s*\{\s*return\s*\[([^\]]*)\]/g
+    const emitCallRe = /(?:emit|emitEvent)\(\s*\{[^}]*type:\s*['"]([^'"]+)['"]/g
+    const listenCallRe = /listen\(\s*['"]([^'"]+)['"]/g
 
-      // Block listensTo declarations
-      while ((match = listensToRe.exec(content)) !== null) {
-        const events = this.parseStringArray(match[1])
-        if (events.length > 0) {
-          const line = this.getLineNumber(content, match.index)
-          listeners.push({ file, eventNames: events, line })
-        }
-      }
+    this.collectArrayDeclarations(file, content, emitsRe, emitters)
+    this.collectArrayDeclarations(file, content, listensToRe, listeners)
+    this.collectDirectCalls(file, content, emitCallRe, directEmits)
+    this.collectDirectCalls(file, content, listenCallRe, directListens)
+  }
 
-      // Direct emit() calls
-      while ((match = emitCallRe.exec(content)) !== null) {
-        const line = this.getLineNumber(content, match.index)
-        directEmits.push({ file, eventNames: [match[1]], line })
-      }
-
-      // Direct listen() calls
-      while ((match = listenCallRe.exec(content)) !== null) {
-        const line = this.getLineNumber(content, match.index)
-        directListens.push({ file, eventNames: [match[1]], line })
+  /** Scan block-style `get emits() { return ['a', 'b'] }` ou listensTo. */
+  private collectArrayDeclarations(
+    file: string,
+    content: string,
+    re: RegExp,
+    out: EventDeclaration[],
+  ): void {
+    let match: RegExpExecArray | null
+    while ((match = re.exec(content)) !== null) {
+      const events = this.parseStringArray(match[1])
+      if (events.length > 0) {
+        out.push({ file, eventNames: events, line: this.getLineNumber(content, match.index) })
       }
     }
+  }
 
-    // Merge all emitters and listeners
-    const allEmitters = [...emitters, ...directEmits]
-    const allListeners = [...listeners, ...directListens]
-
-    // Collect all known emitted event names (for glob expansion)
-    const allEmittedEvents = new Set<string>()
-    for (const e of allEmitters) {
-      for (const name of e.eventNames) {
-        allEmittedEvents.add(name)
-      }
+  /** Scan direct calls `emit({ type: 'foo' })` ou listen('foo'). */
+  private collectDirectCalls(
+    file: string,
+    content: string,
+    re: RegExp,
+    out: EventDeclaration[],
+  ): void {
+    let match: RegExpExecArray | null
+    while ((match = re.exec(content)) !== null) {
+      out.push({
+        file,
+        eventNames: [match[1]],
+        line: this.getLineNumber(content, match.index),
+      })
     }
+  }
 
-    // Build links: for each listener, find all emitters that match
+  private buildLinksFromEmittersListeners(
+    allEmitters: EventDeclaration[],
+    allListeners: EventDeclaration[],
+    allEmittedEvents: Set<string>,
+  ): DetectedLink[] {
     const links: DetectedLink[] = []
-
     for (const listener of allListeners) {
       for (const listenPattern of listener.eventNames) {
-        // Expand glob patterns against known events
+        // Expand glob patterns against known events.
         const matchingEvents = this.expandGlob(listenPattern, allEmittedEvents)
-
         for (const eventName of matchingEvents) {
-          // Find all emitters of this event
-          for (const emitter of allEmitters) {
-            if (emitter.file === listener.file) continue // skip self-links
-            if (!emitter.eventNames.includes(eventName)) continue
-
-            links.push({
-              from: emitter.file,
-              to: listener.file,
-              type: 'event',
-              label: eventName,
-              resolved: true,
-              line: emitter.line,
-              meta: {
-                emitLine: emitter.line,
-                listenLine: listener.line,
-                pattern: listenPattern !== eventName ? listenPattern : undefined,
-              },
-            })
-          }
+          this.appendLinksForEvent(eventName, listenPattern, listener, allEmitters, links)
         }
-
-        // If glob matched nothing — might be listening to external events
-        if (matchingEvents.length === 0 && !listenPattern.includes('*')) {
-          // This listener has no known emitter — could be an external source
-          // Don't create a link, but the listener file won't be orphaned
-          // because of other connections
-        }
+        // If glob matched nothing : potential external source — don't create
+        // a link, le listener file restera connecté via d'autres edges.
       }
     }
+    return links
+  }
 
-    return this.deduplicateLinks(links)
+  private appendLinksForEvent(
+    eventName: string,
+    listenPattern: string,
+    listener: EventDeclaration,
+    allEmitters: EventDeclaration[],
+    links: DetectedLink[],
+  ): void {
+    for (const emitter of allEmitters) {
+      if (emitter.file === listener.file) continue  // skip self-links
+      if (!emitter.eventNames.includes(eventName)) continue
+      links.push({
+        from: emitter.file,
+        to: listener.file,
+        type: 'event',
+        label: eventName,
+        resolved: true,
+        line: emitter.line,
+        meta: {
+          emitLine: emitter.line,
+          listenLine: listener.line,
+          pattern: listenPattern !== eventName ? listenPattern : undefined,
+        },
+      })
+    }
   }
 
   private parseStringArray(arrayContent: string): string[] {
@@ -180,4 +197,13 @@ export class EventBusDetector implements Detector {
       return true
     })
   }
+}
+
+/** Collect tous les event names émis (across all emitters) — pour glob expansion. */
+function collectEmittedEventNames(emitters: EventDeclaration[]): Set<string> {
+  const out = new Set<string>()
+  for (const e of emitters) {
+    for (const name of e.eventNames) out.add(name)
+  }
+  return out
 }
