@@ -130,6 +130,117 @@ export async function analyzeDrizzleSchema(
  * Parse un seul SourceFile à la recherche de pgTable exports.
  * Retourne tables/indexes/foreignKeys (sans le FK-without-index calc).
  */
+interface PgTableCallInfo {
+  init: import('ts-morph').CallExpression
+  varName: string
+  tableName: string
+  args: import('ts-morph').Node[]
+}
+
+/**
+ * Match `const X = pgTable('name', { ... })` et retourne info structurelle
+ * partagee entre Pass 1 (varName → tableName map) et Pass 2 (extract cols).
+ */
+function matchPgTableDecl(decl: import('ts-morph').VariableDeclaration): PgTableCallInfo | null {
+  const init = decl.getInitializer()
+  if (!init || !Node.isCallExpression(init)) return null
+  if (getCalleeName(init) !== 'pgTable') return null
+  const args = init.getArguments()
+  if (args.length < 2) return null
+  const nameArg = args[0]
+  if (!Node.isStringLiteral(nameArg)) return null
+  return {
+    init,
+    varName: decl.getName(),
+    tableName: nameArg.getLiteralText(),
+    args,
+  }
+}
+
+/**
+ * Iterate les variable statements top-level + match pgTable. Le shape est
+ * shared entre Pass 1 et Pass 2 — factor en helper.
+ */
+function* iteratePgTables(sf: SourceFile): Generator<PgTableCallInfo> {
+  for (const stmt of sf.getStatements()) {
+    if (!Node.isVariableStatement(stmt)) continue
+    for (const decl of stmt.getDeclarationList().getDeclarations()) {
+      const info = matchPgTableDecl(decl)
+      if (info) yield info
+    }
+  }
+}
+
+function emitImplicitColumnIndexes(
+  column: SqlColumn,
+  tableName: string,
+  filePath: string,
+  indexes: SqlIndex[],
+): void {
+  if (column.isPrimaryKey) {
+    indexes.push({
+      name: `${tableName}_pkey`,
+      table: tableName,
+      firstColumn: column.name,
+      columns: [column.name],
+      unique: true,
+      implicit: true,
+      file: filePath,
+      line: column.line,
+    })
+  } else if (column.isUnique) {
+    indexes.push({
+      name: `${tableName}_${column.name}_key`,
+      table: tableName,
+      firstColumn: column.name,
+      columns: [column.name],
+      unique: true,
+      implicit: true,
+      file: filePath,
+      line: column.line,
+    })
+  }
+}
+
+interface ColumnExtractResult {
+  columns: SqlColumn[]
+  jsToDbColumn: Map<string, string>
+}
+
+function extractColumnsFromObjectLiteral(
+  colsArg: import('ts-morph').ObjectLiteralExpression,
+  tableName: string,
+  filePath: string,
+  varNameToTable: Map<string, string>,
+  indexes: SqlIndex[],
+  foreignKeys: SqlForeignKey[],
+): ColumnExtractResult {
+  const columns: SqlColumn[] = []
+  // Drizzle nomme la prop JS en camelCase mais la column DB en snake_case.
+  const jsToDbColumn = new Map<string, string>()
+  for (const prop of colsArg.getProperties()) {
+    if (!Node.isPropertyAssignment(prop)) continue
+    const colInfo = parseColumnProperty(prop, varNameToTable)
+    if (!colInfo) continue
+    columns.push(colInfo.column)
+    const jsName = prop.getName().replace(/^['"]|['"]$/g, '')
+    jsToDbColumn.set(jsName, colInfo.column.name)
+
+    if (colInfo.column.foreignKey) {
+      foreignKeys.push({
+        fromTable: tableName,
+        fromColumn: colInfo.column.name,
+        toTable: colInfo.column.foreignKey.toTable,
+        toColumn: colInfo.column.foreignKey.toColumn,
+        file: filePath,
+        line: colInfo.column.line,
+      })
+    }
+    emitImplicitColumnIndexes(colInfo.column, tableName, filePath, indexes)
+  }
+  return { columns, jsToDbColumn }
+}
+
 export function parseDrizzleFile(
   sf: SourceFile,
   filePath: string,
@@ -138,103 +249,34 @@ export function parseDrizzleFile(
   const indexes: SqlIndex[] = []
   const foreignKeys: SqlForeignKey[] = []
 
-  // Map varName → table name (intra-fichier) pour résoudre les references
+  // Pass 1 : varName → tableName map (intra-fichier) pour resoudre
+  // les references Drizzle (`references(() => other.id)`).
   const varNameToTable = new Map<string, string>()
-
-  // Pass 1 : collecter les tables (varName → tableName)
-  for (const stmt of sf.getStatements()) {
-    if (!Node.isVariableStatement(stmt)) continue
-    for (const decl of stmt.getDeclarationList().getDeclarations()) {
-      const init = decl.getInitializer()
-      if (!init || !Node.isCallExpression(init)) continue
-      if (getCalleeName(init) !== 'pgTable') continue
-      const args = init.getArguments()
-      if (args.length < 2) continue
-      const nameArg = args[0]
-      if (!Node.isStringLiteral(nameArg)) continue
-      const tableName = nameArg.getLiteralText()
-      const varName = decl.getName()
-      varNameToTable.set(varName, tableName)
-    }
+  for (const info of iteratePgTables(sf)) {
+    varNameToTable.set(info.varName, info.tableName)
   }
 
-  // Pass 2 : extraire les colonnes + indexes + FKs
-  for (const stmt of sf.getStatements()) {
-    if (!Node.isVariableStatement(stmt)) continue
-    for (const decl of stmt.getDeclarationList().getDeclarations()) {
-      const init = decl.getInitializer()
-      if (!init || !Node.isCallExpression(init)) continue
-      if (getCalleeName(init) !== 'pgTable') continue
-      const args = init.getArguments()
-      if (args.length < 2) continue
-      const nameArg = args[0]
-      if (!Node.isStringLiteral(nameArg)) continue
-      const tableName = nameArg.getLiteralText()
-      const tableLine = init.getStartLineNumber()
+  // Pass 2 : extraire columns + indexes + FKs.
+  for (const info of iteratePgTables(sf)) {
+    const colsArg = info.args[1]
+    if (!Node.isObjectLiteralExpression(colsArg)) continue
 
-      // 2e arg : object literal des colonnes
-      const colsArg = args[1]
-      if (!Node.isObjectLiteralExpression(colsArg)) continue
+    const { columns, jsToDbColumn } = extractColumnsFromObjectLiteral(
+      colsArg, info.tableName, filePath, varNameToTable, indexes, foreignKeys,
+    )
 
-      const columns: SqlColumn[] = []
-      // Mapping jsPropName → dbColumnName pour résoudre `table.<jsName>`
-      // dans les calls d'index (pass 3). Drizzle nomme la prop JS en
-      // camelCase mais la column DB en snake_case souvent.
-      const jsToDbColumn = new Map<string, string>()
-      for (const prop of colsArg.getProperties()) {
-        if (!Node.isPropertyAssignment(prop)) continue
-        const colInfo = parseColumnProperty(prop, varNameToTable)
-        if (!colInfo) continue
-        columns.push(colInfo.column)
-        // Capture le nom JS de la propriété pour le mapping
-        const jsName = prop.getName().replace(/^['"]|['"]$/g, '')
-        jsToDbColumn.set(jsName, colInfo.column.name)
+    tables.push({
+      name: info.tableName,
+      file: filePath,
+      line: info.init.getStartLineNumber(),
+      columns,
+    })
 
-        // Émet FK + index implicite si présent
-        if (colInfo.column.foreignKey) {
-          foreignKeys.push({
-            fromTable: tableName,
-            fromColumn: colInfo.column.name,
-            toTable: colInfo.column.foreignKey.toTable,
-            toColumn: colInfo.column.foreignKey.toColumn,
-            file: filePath,
-            line: colInfo.column.line,
-          })
-        }
-        if (colInfo.column.isPrimaryKey) {
-          indexes.push({
-            name: `${tableName}_pkey`,
-            table: tableName,
-            firstColumn: colInfo.column.name,
-            columns: [colInfo.column.name],
-            unique: true,
-            implicit: true,
-            file: filePath,
-            line: colInfo.column.line,
-          })
-        } else if (colInfo.column.isUnique) {
-          indexes.push({
-            name: `${tableName}_${colInfo.column.name}_key`,
-            table: tableName,
-            firstColumn: colInfo.column.name,
-            columns: [colInfo.column.name],
-            unique: true,
-            implicit: true,
-            file: filePath,
-            line: colInfo.column.line,
-          })
-        }
-      }
-
-      tables.push({ name: tableName, file: filePath, line: tableLine, columns })
-
-      // 3e arg (optionnel) : (table) => ({ idx: index('x').on(...) })
-      if (args.length >= 3) {
-        const indexArg = args[2]
-        if (Node.isArrowFunction(indexArg)) {
-          const indexResults = parseIndexFunction(indexArg, tableName, filePath, jsToDbColumn)
-          indexes.push(...indexResults)
-        }
+    // 3e arg (optionnel) : (table) => ({ idx: index('x').on(...) }).
+    if (info.args.length >= 3) {
+      const indexArg = info.args[2]
+      if (Node.isArrowFunction(indexArg)) {
+        indexes.push(...parseIndexFunction(indexArg, info.tableName, filePath, jsToDbColumn))
       }
     }
   }
