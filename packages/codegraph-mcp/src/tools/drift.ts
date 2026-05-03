@@ -41,56 +41,96 @@ export function codegraphDrift(args: DriftArgs): { content: string } {
   const snapshot = loadSnapshot(repoRoot)
   const all: DriftSignal[] = snapshot.driftSignals ?? []
 
-  let scope: DriftSignal[]
-  let scopeLabel: string
-  if (args.file_path) {
-    const rel = toRelPath(repoRoot, args.file_path)
-    scope = all.filter((s) => s.file === rel)
-    scopeLabel = `for ${rel}`
-  } else {
-    scope = all
-    scopeLabel = 'project-wide'
+  const { scope, scopeLabel } = filterByScope(all, repoRoot, args.file_path)
+
+  if (scope.length === 0) {
+    return { content: emptyScopeMessage(scopeLabel, !!args.file_path) }
   }
 
+  return { content: formatDriftSignalsByKind(scope, scopeLabel, limit) }
+}
+
+function filterByScope(
+  all: DriftSignal[],
+  repoRoot: string,
+  filePath: string | undefined,
+): { scope: DriftSignal[]; scopeLabel: string } {
+  if (!filePath) return { scope: all, scopeLabel: 'project-wide' }
+  const rel = toRelPath(repoRoot, filePath)
+  return {
+    scope: all.filter((s) => s.file === rel),
+    scopeLabel: `for ${rel}`,
+  }
+}
+
+function emptyScopeMessage(scopeLabel: string, perFile: boolean): string {
+  const lines: string[] = []
+  lines.push(`🐌 Drift signals — 0 total ${scopeLabel}`)
+  lines.push('')
+  lines.push(perFile
+    ? '  ✓ No drift signals for this file.'
+    : '  ✓ No drift signals — project clean.',
+  )
+  return lines.join('\n')
+}
+
+const KIND_ORDER: Array<DriftSignal['kind']> = [
+  'excessive-optional-params',
+  'wrapper-superfluous',
+  'todo-no-owner',
+]
+
+function formatDriftSignalsByKind(
+  scope: DriftSignal[],
+  scopeLabel: string,
+  limit: number,
+): string {
   const lines: string[] = []
   lines.push(`🐌 Drift signals — ${scope.length} total ${scopeLabel}`)
   lines.push('')
 
-  if (scope.length === 0) {
-    if (args.file_path) {
-      lines.push('  ✓ No drift signals for this file.')
-    } else {
-      lines.push('  ✓ No drift signals — project clean.')
-    }
-    return { content: lines.join('\n') }
+  const byKind = groupByKind(scope)
+  for (const kind of KIND_ORDER) {
+    const items = byKind.get(kind)
+    if (!items || items.length === 0) continue
+    items.sort(compareDriftSignal)
+    appendKindSection(kind, items, limit, lines)
   }
 
-  // Grouper par kind. Pour chaque kind, top-N triés par severity puis file.
+  lines.push('  💡 Convention : `// drift-ok: <reason>` sur la ligne précédant un signal le supprime.')
+  return lines.join('\n')
+}
+
+function groupByKind(scope: DriftSignal[]): Map<string, DriftSignal[]> {
   const byKind = new Map<string, DriftSignal[]>()
   for (const s of scope) {
     if (!byKind.has(s.kind)) byKind.set(s.kind, [])
     byKind.get(s.kind)!.push(s)
   }
+  return byKind
+}
 
-  const kindOrder = ['excessive-optional-params', 'wrapper-superfluous', 'todo-no-owner']
-  for (const kind of kindOrder) {
-    const items = byKind.get(kind)
-    if (!items || items.length === 0) continue
-    items.sort((a, b) => b.severity - a.severity || (a.file < b.file ? -1 : a.file > b.file ? 1 : a.line - b.line))
-    lines.push(`  ## ${kind} (${items.length})`)
-    const shown = items.slice(0, limit)
-    for (const s of shown) {
-      const sevTag = s.severity === 3 ? '⚠⚠ ' : s.severity === 2 ? '⚠ ' : ''
-      lines.push(`    ${sevTag}${s.file}:${s.line}`)
-      lines.push(`      ${s.message}`)
-    }
-    if (items.length > limit) {
-      lines.push(`    (+${items.length - limit} more — pass limit higher to see)`)
-    }
-    lines.push('')
+/** Severity desc, file asc, line asc. */
+function compareDriftSignal(a: DriftSignal, b: DriftSignal): number {
+  if (a.severity !== b.severity) return b.severity - a.severity
+  if (a.file !== b.file) return a.file < b.file ? -1 : 1
+  return a.line - b.line
+}
+
+function appendKindSection(
+  kind: string,
+  items: DriftSignal[],
+  limit: number,
+  lines: string[],
+): void {
+  lines.push(`  ## ${kind} (${items.length})`)
+  for (const s of items.slice(0, limit)) {
+    const sevTag = s.severity === 3 ? '⚠⚠ ' : s.severity === 2 ? '⚠ ' : ''
+    lines.push(`    ${sevTag}${s.file}:${s.line}`)
+    lines.push(`      ${s.message}`)
   }
-
-  lines.push('  💡 Convention : `// drift-ok: <reason>` sur la ligne précédant un signal le supprime.')
-
-  return { content: lines.join('\n') }
+  if (items.length > limit) {
+    lines.push(`    (+${items.length - limit} more — pass limit higher to see)`)
+  }
+  lines.push('')
 }
