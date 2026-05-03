@@ -52,15 +52,17 @@ import {
   type Rule, type SourcePos, type Term,
 } from './types.js'
 
+type TokenKind =
+  | 'dot' | 'comma' | 'colon' | 'lparen' | 'rparen' | 'minus'
+  | 'turnstile'        // :-
+  | 'bang'             // !
+  | 'directive'        // .decl / .input / .output
+  | 'string' | 'number' | 'ident' | 'kw_not' | 'underscore'
+  | 'gt' | 'lt' | 'gte' | 'lte' | 'neq'   // Tier 15 — comparison ops
+  | 'eof'
+
 interface Token {
-  kind:
-    | 'dot' | 'comma' | 'colon' | 'lparen' | 'rparen' | 'minus'
-    | 'turnstile'        // :-
-    | 'bang'             // !
-    | 'directive'        // .decl / .input / .output
-    | 'string' | 'number' | 'ident' | 'kw_not' | 'underscore'
-    | 'gt' | 'lt' | 'gte' | 'lte' | 'neq'   // Tier 15 — comparison ops
-    | 'eof'
+  kind: TokenKind
   value: string
   pos: SourcePos
 }
@@ -176,6 +178,29 @@ class Lexer {
     return { kind: 'directive', value: s, pos: start }
   }
 
+  /** Single-char tokens : 1 char advance + 1 token kind/value. */
+  private readonly SINGLE_CHAR_TOKENS: Record<string, { kind: TokenKind; value: string } | undefined> = {
+    ',': { kind: 'comma', value: ',' },
+    '(': { kind: 'lparen', value: '(' },
+    ')': { kind: 'rparen', value: ')' },
+  }
+
+  /**
+   * Two-char operator tokens : `<lead>` + optionel `<follow>` → `<both>`.
+   * Si `follow` non present apres lead → emit `singleKind` (1 char only).
+   */
+  private tryTwoCharOp(
+    lead: string, follow: string,
+    singleKind: TokenKind, doubleKind: TokenKind, start: SourcePos,
+  ): Token {
+    this.advance()
+    if (this.peek() === follow) {
+      this.advance()
+      return { kind: doubleKind, value: lead + follow, pos: start }
+    }
+    return { kind: singleKind, value: lead, pos: start }
+  }
+
   next(): Token {
     this.skipWS()
     if (this.i >= this.src.length) return { kind: 'eof', value: '', pos: this.pos() }
@@ -188,32 +213,15 @@ class Lexer {
       this.advance()
       return { kind: 'dot', value: '.', pos: start }
     }
-    if (c === ',') { this.advance(); return { kind: 'comma', value: ',', pos: start } }
-    if (c === '(') { this.advance(); return { kind: 'lparen', value: '(', pos: start } }
-    if (c === ')') { this.advance(); return { kind: 'rparen', value: ')', pos: start } }
-    if (c === '!') {
+    const single = this.SINGLE_CHAR_TOKENS[c]
+    if (single) {
       this.advance()
-      if (this.peek() === '=') { this.advance(); return { kind: 'neq', value: '!=', pos: start } }
-      return { kind: 'bang', value: '!', pos: start }
+      return { kind: single.kind, value: single.value, pos: start }
     }
-    if (c === '>') {
-      this.advance()
-      if (this.peek() === '=') { this.advance(); return { kind: 'gte', value: '>=', pos: start } }
-      return { kind: 'gt', value: '>', pos: start }
-    }
-    if (c === '<') {
-      this.advance()
-      if (this.peek() === '=') { this.advance(); return { kind: 'lte', value: '<=', pos: start } }
-      return { kind: 'lt', value: '<', pos: start }
-    }
-    if (c === ':') {
-      this.advance()
-      if (this.peek() === '-') {
-        this.advance()
-        return { kind: 'turnstile', value: ':-', pos: start }
-      }
-      return { kind: 'colon', value: ':', pos: start }
-    }
+    if (c === '!') return this.tryTwoCharOp('!', '=', 'bang', 'neq', start)
+    if (c === '>') return this.tryTwoCharOp('>', '=', 'gt', 'gte', start)
+    if (c === '<') return this.tryTwoCharOp('<', '=', 'lt', 'lte', start)
+    if (c === ':') return this.tryTwoCharOp(':', '-', 'colon', 'turnstile', start)
     if (c === '"') return this.readString()
     if (c === '-' || /[0-9]/.test(c)) return this.readNumber()
     if (/[A-Za-z_]/.test(c)) return this.readIdentOrKeyword()
