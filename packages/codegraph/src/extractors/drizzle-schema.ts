@@ -365,6 +365,72 @@ function parseColumnProperty(
  * Parse l'arrow function `(table) => ({ idx: index('x').on(table.col) })`
  * et extrait les SqlIndex émis.
  */
+/**
+ * Le body d'une arrow `(table) => ...` peut etre :
+ *   - Block (`{ return { ... } }`)
+ *   - ObjectLiteralExpression direct (`({ ... })`)
+ *   - ParenthesizedExpression wrapping le object
+ */
+function getArrowReturnObject(fn: ArrowFunction): ObjectLiteralExpression | null {
+  const body = fn.getBody()
+  if (Node.isBlock(body)) {
+    const retStmt = body.getStatements().find((s) => Node.isReturnStatement(s))
+    if (retStmt && Node.isReturnStatement(retStmt)) {
+      const expr = retStmt.getExpression()
+      if (expr && Node.isObjectLiteralExpression(expr)) return expr
+    }
+    return null
+  }
+  if (Node.isObjectLiteralExpression(body)) return body
+  if (Node.isParenthesizedExpression(body)) {
+    const inner = body.getExpression()
+    if (Node.isObjectLiteralExpression(inner)) return inner
+  }
+  return null
+}
+
+interface ParsedIndexCall {
+  name: string
+  unique: boolean
+  cols: string[]
+}
+
+/**
+ * Parse `index('name').on(table.col1, table.col2)` ou
+ * `uniqueIndex('name').on(...)`. Retourne null si shape n'est pas reconnue.
+ */
+function parseIndexCallChain(
+  call: import('ts-morph').CallExpression,
+  jsToDbColumn: Map<string, string>,
+): ParsedIndexCall | null {
+  const chain = collectCallChain(call)
+  const baseCall = chain[0]
+  const baseName = getCalleeName(baseCall)
+  if (baseName !== 'index' && baseName !== 'uniqueIndex') return null
+
+  const baseArgs = baseCall.getArguments()
+  if (baseArgs.length === 0 || !Node.isStringLiteral(baseArgs[0])) return null
+
+  const onCall = chain.find((c) => getCalleeName(c) === 'on')
+  if (!onCall) return null
+
+  const cols: string[] = []
+  for (const arg of onCall.getArguments()) {
+    if (Node.isPropertyAccessExpression(arg)) {
+      // `table.col` : map camelCase JS → snake_case DB via jsToDbColumn.
+      const jsName = arg.getName()
+      cols.push(jsToDbColumn.get(jsName) ?? jsName)
+    }
+  }
+  if (cols.length === 0) return null
+
+  return {
+    name: baseArgs[0].getLiteralText(),
+    unique: baseName === 'uniqueIndex',
+    cols,
+  }
+}
+
 function parseIndexFunction(
   fn: ArrowFunction,
   tableName: string,
@@ -372,68 +438,22 @@ function parseIndexFunction(
   jsToDbColumn: Map<string, string>,
 ): SqlIndex[] {
   const out: SqlIndex[] = []
-  const body = fn.getBody()
-
-  // body peut être :
-  //   - Block (`(table) => { return { ... } }`)
-  //   - Direct ObjectLiteralExpression (`(table) => ({ ... })`)
-  //   - ParenthesizedExpression wrapping the object
-  let obj: ObjectLiteralExpression | null = null
-  if (Node.isBlock(body)) {
-    // Cherche `return { ... }`
-    const retStmt = body.getStatements().find((s) => Node.isReturnStatement(s))
-    if (retStmt && Node.isReturnStatement(retStmt)) {
-      const expr = retStmt.getExpression()
-      if (expr && Node.isObjectLiteralExpression(expr)) obj = expr
-    }
-  } else if (Node.isObjectLiteralExpression(body)) {
-    obj = body
-  } else if (Node.isParenthesizedExpression(body)) {
-    const inner = body.getExpression()
-    if (Node.isObjectLiteralExpression(inner)) obj = inner
-  }
-
+  const obj = getArrowReturnObject(fn)
   if (!obj) return out
 
   for (const prop of obj.getProperties()) {
     if (!Node.isPropertyAssignment(prop)) continue
     const init = prop.getInitializer()
     if (!init || !Node.isCallExpression(init)) continue
-
-    const chain = collectCallChain(init)
-    // Cherche un baseCall = `index('name')` ou `uniqueIndex('name')`
-    const baseCall = chain[0]
-    const baseName = getCalleeName(baseCall)
-    if (baseName !== 'index' && baseName !== 'uniqueIndex') continue
-    const isUnique = baseName === 'uniqueIndex'
-
-    const baseArgs = baseCall.getArguments()
-    if (baseArgs.length === 0 || !Node.isStringLiteral(baseArgs[0])) continue
-    const indexName = baseArgs[0].getLiteralText()
-
-    // Cherche le call `.on(table.col1, table.col2, ...)` dans le chain
-    const onCall = chain.find((c) => getCalleeName(c) === 'on')
-    if (!onCall) continue
-
-    const onArgs = onCall.getArguments()
-    const cols: string[] = []
-    for (const arg of onArgs) {
-      if (Node.isPropertyAccessExpression(arg)) {
-        // `table.col` → on prend le name JS `col`, puis on le mappe au
-        // nom DB via jsToDbColumn (pour gérer le camelCase JS →
-        // snake_case DB de Drizzle).
-        const jsName = arg.getName()
-        cols.push(jsToDbColumn.get(jsName) ?? jsName)
-      }
-    }
-    if (cols.length === 0) continue
+    const parsed = parseIndexCallChain(init, jsToDbColumn)
+    if (!parsed) continue
 
     out.push({
-      name: indexName,
+      name: parsed.name,
       table: tableName,
-      firstColumn: cols[0],
-      columns: cols,
-      unique: isUnique,
+      firstColumn: parsed.cols[0],
+      columns: parsed.cols,
+      unique: parsed.unique,
       implicit: false,
       file: filePath,
       line: prop.getStartLineNumber(),

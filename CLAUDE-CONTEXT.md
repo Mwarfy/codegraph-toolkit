@@ -175,9 +175,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/audit-listener.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/scheduler.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/b.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
@@ -199,6 +199,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+23de1a8 refactor(toolkit): split parseDrizzleFile (cyclo 26→3) — 4 helpers + iteratePgTables generator
 bdec532 refactor(toolkit): split collectOrmSignals (cyclo 28→3) — truth-points.ts ALL bombs cleared
 1bdb707 refactor(toolkit): split collectAstSignals (cyclo 29→3) — 3 per-domain collectors
 cde9741 refactor(toolkit): split collectSqlSignals (cyclo 33→3) — 5 helpers SQL pattern matching
@@ -210,7 +211,6 @@ a023167 refactor(toolkit): split Lexer.next (cyclo 19→under) — table single-
 1878143 refactor(toolkit): split analyzeDrizzleSchema (cyclo 20→3) — 4 helpers (3 cmp + 1 parse loop)
 4215f48 refactor(toolkit): split scanInlineSinks (cyclo 17→2, cog 63→3) — reuse trySink* helpers
 ce0b0a8 refactor(toolkit): split detectListenerEntries (cyclo 23→under) — 4 helpers
-47e3476 refactor(toolkit): split scanHttpOutboundSinks (cyclo 21→under) — 2 helpers
 ```
 
 ## Comment contribuer à ce brief
