@@ -68,21 +68,34 @@ const DRIZZLE_COLUMN_TYPES = new Set([
  *                  ceux qui contiennent `pgTable` import)
  * @param project   Shared ts-morph Project (réutilisé)
  */
-export async function analyzeDrizzleSchema(
-  rootDir: string,
-  files: string[],
-  project: Project,
-): Promise<SqlSchemaResult> {
+function cmpFileLine<T extends { file: string; line: number }>(a: T, b: T): number {
+  if (a.file !== b.file) return a.file < b.file ? -1 : 1
+  return a.line - b.line
+}
+
+function cmpFromTableColumn<T extends { fromTable: string; fromColumn: string }>(a: T, b: T): number {
+  if (a.fromTable !== b.fromTable) return a.fromTable < b.fromTable ? -1 : 1
+  if (a.fromColumn !== b.fromColumn) return a.fromColumn < b.fromColumn ? -1 : 1
+  return 0
+}
+
+function cmpTableColumn<T extends { table: string; column: string }>(a: T, b: T): number {
+  if (a.table !== b.table) return a.table < b.table ? -1 : 1
+  if (a.column !== b.column) return a.column < b.column ? -1 : 1
+  return 0
+}
+
+interface DrizzleAggregated {
+  tables: SqlTable[]
+  indexes: SqlIndex[]
+  foreignKeys: SqlForeignKey[]
+}
+
+function parseDrizzleFiles(rootDir: string, files: string[], project: Project): DrizzleAggregated {
+  const fileSet = new Set(files)
   const tables: SqlTable[] = []
   const indexes: SqlIndex[] = []
   const foreignKeys: SqlForeignKey[] = []
-
-  // Map identifier (varName) → table name in DB. Permet de résoudre
-  // `references(() => players.id)` quand `players` est `pgTable('players', ...)`.
-  // Construit en first-pass file-par-file. Pour cross-file ref, on devra
-  // étendre v2.
-  const fileSet = new Set(files)
-
   for (const sf of project.getSourceFiles()) {
     const relPath = relativize(sf.getFilePath(), rootDir)
     if (!relPath || !fileSet.has(relPath)) continue
@@ -91,22 +104,24 @@ export async function analyzeDrizzleSchema(
     indexes.push(...fileResult.indexes)
     foreignKeys.push(...fileResult.foreignKeys)
   }
+  return { tables, indexes, foreignKeys }
+}
+
+export async function analyzeDrizzleSchema(
+  rootDir: string,
+  files: string[],
+  project: Project,
+): Promise<SqlSchemaResult> {
+  const { tables, indexes, foreignKeys } = parseDrizzleFiles(rootDir, files, project)
 
   const fkWithoutIndex = computeFkWithoutIndex(foreignKeys, indexes)
   const primaryKeys = derivePrimaryKeys(tables, indexes)
 
-  // Tri stable
-  tables.sort((a, b) => a.file < b.file ? -1 : a.file > b.file ? 1 : a.line - b.line)
-  indexes.sort((a, b) => a.file < b.file ? -1 : a.file > b.file ? 1 : a.line - b.line)
-  foreignKeys.sort((a, b) =>
-    a.fromTable < b.fromTable ? -1 : a.fromTable > b.fromTable ? 1 :
-    a.fromColumn < b.fromColumn ? -1 : a.fromColumn > b.fromColumn ? 1 : 0)
-  fkWithoutIndex.sort((a, b) =>
-    a.fromTable < b.fromTable ? -1 : a.fromTable > b.fromTable ? 1 :
-    a.fromColumn < b.fromColumn ? -1 : a.fromColumn > b.fromColumn ? 1 : 0)
-  primaryKeys.sort((a, b) =>
-    a.table < b.table ? -1 : a.table > b.table ? 1 :
-    a.column < b.column ? -1 : a.column > b.column ? 1 : 0)
+  tables.sort(cmpFileLine)
+  indexes.sort(cmpFileLine)
+  foreignKeys.sort(cmpFromTableColumn)
+  fkWithoutIndex.sort(cmpFromTableColumn)
+  primaryKeys.sort(cmpTableColumn)
 
   return { tables, indexes, foreignKeys, fkWithoutIndex, primaryKeys }
 }
