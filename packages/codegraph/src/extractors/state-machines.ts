@@ -118,10 +118,15 @@ export async function analyzeStateMachines(
   // writes. Cette structure est calculable en parallèle et cachable
   // par-fichier (cf. incremental/state-machines.ts).
 
+  // Skip test/fixture files — leur FSM concepts (ApprovalStatus,
+  // DocumentPhase, WorkerStatus) sont des declarations synthétiques
+  // pour tester le detecteur, pas du code production a valider.
+  const TEST_FILE_RE = /(\.test\.tsx?|\.spec\.tsx?|(^|\/)tests?\/|(^|\/)fixtures?\/)/
   const fileBundles = new Map<string, StateMachineFileBundle>()
   for (const sf of project.getSourceFiles()) {
     const relPath = relativize(sf.getFilePath(), rootDir)
     if (!relPath || !fileSet.has(relPath)) continue
+    if (TEST_FILE_RE.test(relPath)) continue
     fileBundles.set(relPath, extractStateMachineFileBundle(sf, relPath, listenFns, suffixes))
   }
 
@@ -311,6 +316,7 @@ export function extractStateMachineFileBundle(
   scanSqlWrites(sf, relPath, fnRanges, writes)
   scanObjectWrites(sf, relPath, fnRanges, writes)
   scanMethodCallWrites(sf, relPath, fnRanges, writes)
+  scanAttributeApiWrites(sf, relPath, fnRanges, writes)
   scanClassPropertyInitializers(sf, relPath, writes)
 
   return { concepts, fnRanges, listenerTriggers, routeTriggers, writes }
@@ -719,6 +725,52 @@ function scanMethodCallWrites(
     const line = call.getStartLineNumber?.() ?? 0
     const container = findContainerAtLine(ranges, line) ?? ''
     out.push({ field, value, file, line, container: `${file}:${container}` })
+  })
+}
+
+/**
+ * Detecte les writes via les APIs `set*Attribute` / `set*Property` (3 args
+ * fixes : id, fieldName, value). Couvre graphology `setNodeAttribute`,
+ * `setEdgeAttribute`, mais aussi les APIs DOM-like (`setAttribute(elem, 'class', 'X')`)
+ * et les setters d'ORM/state-libs avec ce pattern triplet.
+ *
+ * Conservatisme :
+ *   - 3 args exactement (filter aggressif).
+ *   - Method match strict `^set\w+(?:Attribute|Property)$`.
+ *   - args[1] = StringLiteral matchant un nom de field FSM.
+ *   - args[2] = StringLiteral pour value.
+ *
+ * Motivation : `this.graph.setNodeAttribute(id, 'status', 'entry-point')`
+ * dans graph.ts laisse les états `entry-point` / `uncertain` flagés
+ * orphan par le detecteur v1 (qui ne voyait que `this.<set>(value)` 2-args).
+ */
+function scanAttributeApiWrites(
+  sf: SourceFile,
+  file: string,
+  ranges: FnRange[],
+  out: WriteSignal[],
+): void {
+  const METHOD_RE = /^set\w+(?:Attribute|Property)$/
+
+  sf.forEachDescendant((node) => {
+    if (node.getKind() !== SyntaxKind.CallExpression) return
+    const call = node as any
+    const expr = call.getExpression?.()
+    if (!expr || expr.getKind() !== SyntaxKind.PropertyAccessExpression) return
+
+    const method = expr.getName?.()
+    if (!method || !METHOD_RE.test(method)) return
+
+    const args = call.getArguments?.() ?? []
+    if (args.length !== 3) return
+
+    const field = extractLiteralString(args[1])
+    const value = extractLiteralString(args[2])
+    if (!field || !value) return
+
+    const line = call.getStartLineNumber?.() ?? 0
+    const container = findContainerAtLine(ranges, line) ?? ''
+    out.push({ field: field.toLowerCase(), value, file, line, container: `${file}:${container}` })
   })
 }
 
