@@ -278,7 +278,8 @@ program
         path.join(config.rootDir, 'codegraph', 'arch-rules.json'),
       ]
       for (const p of candidates) {
-        try { await fs.access(p); rulesPath = p; break } catch { /* probe: try next candidate */ }
+        // await-ok: probe avec break sur première match, séquentiel requis
+        try { await fs.access(p); rulesPath = p; break } catch { /* probe: try next */ }
       }
     }
     if (!rulesPath) {

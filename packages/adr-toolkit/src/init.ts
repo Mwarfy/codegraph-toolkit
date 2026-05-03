@@ -99,18 +99,25 @@ async function detectStack(rootDir: string): Promise<DetectedStack> {
     'sentinel-core/package.json',
     'sentinel-web/package.json',
   ]
-  for (const rel of candidates) {
-    const p = path.join(rootDir, rel)
-    if (!(await exists(p))) continue
-    try {
-      const pkg = JSON.parse(await readFile(p, 'utf-8'))
-      const allDeps = {
-        ...(pkg.dependencies ?? {}),
-        ...(pkg.devDependencies ?? {}),
-      }
-      if (allDeps['drizzle-orm']) stack.hasDrizzle = true
-      if (allDeps['prisma'] || allDeps['@prisma/client']) stack.hasPrisma = true
-    } catch { /* malformed package.json, skip */ }
+  // Lit les N package.json en parallèle (I/O fs indépendantes, accumulation
+  // dans `stack` séquentielle après résolution).
+  const pkgContents = await Promise.all(
+    candidates.map(async (rel) => {
+      const p = path.join(rootDir, rel)
+      if (!(await exists(p))) return null
+      try {
+        return JSON.parse(await readFile(p, 'utf-8'))
+      } catch { return null /* malformed package.json, skip */ }
+    }),
+  )
+  for (const pkg of pkgContents) {
+    if (!pkg) continue
+    const allDeps = {
+      ...(pkg.dependencies ?? {}),
+      ...(pkg.devDependencies ?? {}),
+    }
+    if (allDeps['drizzle-orm']) stack.hasDrizzle = true
+    if (allDeps['prisma'] || allDeps['@prisma/client']) stack.hasPrisma = true
   }
 
   const sqlPaths = [
@@ -122,6 +129,7 @@ async function detectStack(rootDir: string): Promise<DetectedStack> {
     'src/db/migrations',
   ]
   for (const rel of sqlPaths) {
+    // await-ok: short-circuit sur première match, séquentiel requis
     if (await exists(path.join(rootDir, rel))) {
       stack.hasRawSqlMigrations = true
       break
@@ -370,22 +378,28 @@ async function writeGitHooks(rootDir: string, result: InitResult): Promise<void>
   const hooksDir = path.join(rootDir, 'scripts/git-hooks')
   await mkdir(hooksDir, { recursive: true })
 
-  for (const hook of ['pre-commit.sh', 'post-commit.sh', 'adr-hook.sh']) {
-    const targetName = hook === 'adr-hook.sh' ? 'adr-hook.sh' : hook.replace(/\.sh$/, '')
-    const target = path.join(hooksDir, targetName)
-    if (await exists(target)) {
-      result.skipped.push(`scripts/git-hooks/${targetName}`)
-      continue
-    }
-    const source = path.join(HOOKS_TEMPLATES_DIR, hook)
-    if (!(await exists(source))) {
-      result.warnings.push(`hook source absent: ${source}`)
-      continue
-    }
-    const content = await readFile(source, 'utf-8')
-    await writeFile(target, content, 'utf-8')
-    await chmod(target, 0o755)
-    result.created.push(`scripts/git-hooks/${targetName}`)
+  // Process les 3 hooks en parallèle (fichiers indépendants).
+  const hookResults = await Promise.all(
+    ['pre-commit.sh', 'post-commit.sh', 'adr-hook.sh'].map(async (hook) => {
+      const targetName = hook === 'adr-hook.sh' ? 'adr-hook.sh' : hook.replace(/\.sh$/, '')
+      const target = path.join(hooksDir, targetName)
+      if (await exists(target)) {
+        return { kind: 'skipped' as const, path: `scripts/git-hooks/${targetName}` }
+      }
+      const source = path.join(HOOKS_TEMPLATES_DIR, hook)
+      if (!(await exists(source))) {
+        return { kind: 'warning' as const, msg: `hook source absent: ${source}` }
+      }
+      const content = await readFile(source, 'utf-8')
+      await writeFile(target, content, 'utf-8')
+      await chmod(target, 0o755)
+      return { kind: 'created' as const, path: `scripts/git-hooks/${targetName}` }
+    }),
+  )
+  for (const r of hookResults) {
+    if (r.kind === 'skipped') result.skipped.push(r.path)
+    else if (r.kind === 'warning') result.warnings.push(r.msg)
+    else result.created.push(r.path)
   }
 }
 
@@ -472,14 +486,20 @@ async function wireInvariantsPackage(
     (f) => f.endsWith('.dl') && f !== 'schema-subset.dl',
   )
 
-  for (const rule of ruleFiles) {
-    const target = path.join(targetDir, rule)
-    if (await exists(target)) {
-      result.skipped.push(`invariants/${rule}`)
-      continue
-    }
-    await copyFile(path.join(pkgInvariants, rule), target)
-    result.created.push(`invariants/${rule}`)
+  // Copy en parallèle (fichiers indépendants).
+  const ruleResults = await Promise.all(
+    ruleFiles.map(async (rule) => {
+      const target = path.join(targetDir, rule)
+      if (await exists(target)) {
+        return { kind: 'skipped' as const, rule }
+      }
+      await copyFile(path.join(pkgInvariants, rule), target)
+      return { kind: 'created' as const, rule }
+    }),
+  )
+  for (const r of ruleResults) {
+    if (r.kind === 'skipped') result.skipped.push(`invariants/${r.rule}`)
+    else result.created.push(`invariants/${r.rule}`)
   }
 
   // Si pas de schema.dl dans le projet, copier le schema-subset.dl du
@@ -598,6 +618,7 @@ async function copyDatalogTestRunner(
   ]
   let testDir: string | null = null
   for (const candidate of testDirCandidates) {
+    // await-ok: short-circuit sur première match, séquentiel requis
     if (await exists(path.join(rootDir, candidate))) {
       testDir = candidate
       break

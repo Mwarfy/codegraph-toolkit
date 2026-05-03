@@ -57,6 +57,7 @@ export async function detectSingletonCandidates(
     const fullPath = path.join(config.rootDir, relativePath)
     let content: string
     try {
+      // await-ok: scan one-shot bootstrap, séquentiel acceptable (≤ ms files)
       content = await readFile(fullPath, 'utf-8')
     } catch {
       continue
@@ -170,6 +171,7 @@ export async function detectHubCandidates(
     // Skip if file already has an ADR marker — avoid redundant proposals.
     let content: string
     try {
+      // await-ok: scan one-shot bootstrap, séquentiel acceptable
       content = await readFile(fullPath, 'utf-8')
     } catch {
       continue
@@ -603,6 +605,7 @@ export async function bootstrapAdrs(opts: BootstrapOptions): Promise<BootstrapRe
     try {
       let fileContent: string
       try {
+        // await-ok: per-candidate read dans loop séquentielle LLM (cf. ci-dessous), mêmes contraintes
         fileContent = await readFile(candidate.filePath, 'utf-8')
       } catch (e) {
         errors.push({ candidate, error: `Cannot read file: ${(e as Error).message}` })
@@ -635,18 +638,18 @@ export async function bootstrapAdrs(opts: BootstrapOptions): Promise<BootstrapRe
         continue
       }
 
-      const draftPayload = mode === 'cli'
-        ? await callViaClaudeCli({
-            systemPrompt: CLI_SYSTEM_PROMPT,
-            userPrompt,
-            model,
-          })
-        : await callViaSdk({
+      // LLM call séquentiel par candidate — rate-limit Anthropic + cohérence par draft.
+      // Extrait dans une promise pour marker await-ok sur 1 site (sinon 2 sites
+      // dans le ternaire ci-dessous, chacun ayant besoin de son marker).
+      // await-ok: LLM call séquentiel par candidate — rate-limit + cohérence
+      const draftPayload = await (mode === 'cli'
+        ? callViaClaudeCli({ systemPrompt: CLI_SYSTEM_PROMPT, userPrompt, model })
+        : callViaSdk({
             client: sdkClient!,
             systemPrompt: 'Tu es un assistant d\'extraction d\'ADR.',
             userPrompt,
             model,
-          })
+          }))
 
       const draft: AdrDraft = {
         verdict: draftPayload.verdict ?? 'skip',
@@ -668,6 +671,7 @@ export async function bootstrapAdrs(opts: BootstrapOptions): Promise<BootstrapRe
 
       // Validation pré-apply : les asserts ts-morph doivent résoudre contre
       // le code RÉEL. Sinon le pre-commit suivant pèterait silencieusement.
+      // await-ok: validation séquentielle par draft (ts-morph project setup partagé)
       const validation = await validateDraftAsserts(draft, config)
       if (!validation.valid) {
         const failedSymbols = new Set(validation.failedAsserts.map(f => f.split(':')[0]?.trim()))

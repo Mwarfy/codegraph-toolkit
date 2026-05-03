@@ -5,11 +5,11 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T16:41:41Z
+Last update : 2026-05-03T16:52:52Z
 
 ## By type
 
-### `feat` (16)
+### `feat` (15)
 
 - **af41582** feat(toolkit): symbolic simplification facts + 5 composite rules cross-discipline — 2026-05-03
 - **2f84a70** feat(toolkit): Niveau 5 effect-analysis + roadmap defers Niveaux 6/7 — 2026-05-03
@@ -26,7 +26,6 @@ Last update : 2026-05-03T16:41:41Z
 - **dc48f25** feat(toolkit): 4 nouvelles disciplines mathématiques (8e→11e) — 2026-05-01
 - **691337e** feat(toolkit): 8e discipline Newman-Girvan + 4 méta-composites cross-disciplines — 2026-05-01
 - **443e072** feat(datalog): runFromDirs accepte rulesDir array (multi-dir loader) — 2026-05-01
-- **87f2ac1** feat(toolkit): Information Bottleneck (Tishby 1999) — 7e cross-discipline — 2026-05-01
 
 
 ### `fix` (9)
@@ -49,8 +48,9 @@ Last update : 2026-05-03T16:41:41Z
 - **afd0965** perf(toolkit): self-discovered Salsa optimizations — warm runtime −40% — 2026-05-03
 
 
-### `refactor` (11)
+### `refactor` (12)
 
+- **fbebea4** refactor(toolkit): extract makeIsExempt helper (NCD: 25→16, total 434→422) — 2026-05-03
 - **b0f2c9a** refactor(toolkit): split cli/index.ts god-file (2190→1520 LOC, −30%) — 2026-05-03
 - **c613ac7** refactor(toolkit): split analyzer.ts:runDeterministicDetectors en 5 phases — 2026-05-03
 - **5f8d691** refactor(toolkit): split god-files + fix REDOS detector + tests hubs — 2026-05-03
@@ -89,6 +89,7 @@ Last update : 2026-05-03T16:41:41Z
 
 ## Full history
 
+- **fbebea4** refactor(toolkit): extract makeIsExempt helper (NCD: 25→16, total 434→422) — 2026-05-03
 - **25fc296** fix(toolkit): kill META-CRITICAL (7→0) + 2 bugs détecteur + 6 tests — 2026-05-03
 - **70afbdc** fix(toolkit): clean 93 violations (534→441, −17.4%) sans bypass — 2026-05-03
 - **b0f2c9a** refactor(toolkit): split cli/index.ts god-file (2190→1520 LOC, −30%) — 2026-05-03
@@ -138,4 +139,3 @@ Last update : 2026-05-03T16:41:41Z
 - **c003043** docs: update READMEs for v0.5.0 — 91 rules, multi-dir, 7 cross-discipline — 2026-05-01
 - **443e072** feat(datalog): runFromDirs accepte rulesDir array (multi-dir loader) — 2026-05-01
 - **18a37a7** chore(toolkit): retire 3 exports dead code (UnusedExport.facts) — 2026-05-01
-- **87f2ac1** feat(toolkit): Information Bottleneck (Tishby 1999) — 7e cross-discipline — 2026-05-01

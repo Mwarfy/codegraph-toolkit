@@ -251,8 +251,12 @@ async function mergeFactsDirs(srcDir: string, dstDir: string): Promise<void> {
     }
   }
 
+  // CLI one-shot fact merge — séquentiel acceptable (<100ms total even sur
+  // gros corpus). Promise.all sur la double boucle nested rendrait le code
+  // dur à lire pour gain négligeable côté CLI tool.
   for (const sd of sourceDirs) {
     let files: string[]
+    // await-ok: CLI fact-merge one-shot, séquentiel délibéré
     try { files = await fs.readdir(sd) } catch { continue }
 
     for (const f of files) {
@@ -260,23 +264,27 @@ async function mergeFactsDirs(srcDir: string, dstDir: string): Promise<void> {
       const srcPath = path.join(sd, f)
       // skip if not a regular file (could be sub-dir with same suffix — unlikely)
       try {
+        // await-ok: CLI fact-merge one-shot, séquentiel délibéré
         const stat = await fs.stat(srcPath)
         if (!stat.isFile()) continue
       } catch { continue }
 
       const dstPath = path.join(dstDir, f)
+      // await-ok: CLI fact-merge one-shot, séquentiel délibéré
       const srcContent = await fs.readFile(srcPath, 'utf-8')
 
       if (f === 'RuntimeRunMeta.facts') {
         // Overwrite sur 1ère meta non-vide, ignore subsequent (peuvent venir
         // de plusieurs PIDs — on garde la 1ère pour réduire à 1 row).
         if (srcContent.trim().length > 0) {
+          // await-ok: CLI fact-merge one-shot, séquentiel délibéré
           await fs.writeFile(dstPath, srcContent, 'utf-8')
         }
         continue
       }
 
       let dstContent = ''
+      // await-ok: CLI fact-merge one-shot, séquentiel délibéré
       try { dstContent = await fs.readFile(dstPath, 'utf-8') } catch { /* dst absent */ }
 
       const merged = new Set<string>()
@@ -284,6 +292,7 @@ async function mergeFactsDirs(srcDir: string, dstDir: string): Promise<void> {
       for (const l of srcContent.split('\n')) if (l.trim()) merged.add(l)
 
       const sorted = [...merged].sort()
+      // await-ok: CLI fact-merge one-shot, séquentiel délibéré
       await fs.writeFile(dstPath, sorted.length > 0 ? sorted.join('\n') + '\n' : '', 'utf-8')
     }
   }
@@ -423,14 +432,21 @@ async function mergeFactsForRun(runtimeDir: string, staticDir: string): Promise<
   // Phase α : simple — overwrite-strategy = "runtime wins on collision".
   try {
     const staticFiles = await fs.readdir(staticDir)
-    for (const f of staticFiles) {
-      if (!f.endsWith('.facts')) continue
-      const dst = path.join(runtimeDir, f)
-      // Only copy if runtime version doesn't exist (don't shadow)
-      try { await fs.access(dst); continue } catch { /* fall through */ }
-      const src = path.join(staticDir, f)
-      await fs.copyFile(src, dst)
-    }
+    // Copy facts statiques en parallèle (fichiers indépendants, no collision).
+    await Promise.all(
+      staticFiles
+        .filter((f) => f.endsWith('.facts'))
+        .map(async (f) => {
+          const dst = path.join(runtimeDir, f)
+          // Only copy if runtime version doesn't exist (don't shadow)
+          try {
+            await fs.access(dst)
+            return // déjà présent côté runtime — skip
+          } catch { /* fall through to copy */ }
+          const src = path.join(staticDir, f)
+          await fs.copyFile(src, dst)
+        }),
+    )
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
     // No static facts → datalog still works for rules that don't depend on them.
