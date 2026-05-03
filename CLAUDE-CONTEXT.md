@@ -102,6 +102,7 @@
 - `packages/codegraph/src/incremental/event-emit-sites.ts` → ADR-007
 - `packages/codegraph/src/incremental/function-complexity.ts` → ADR-007
 - `packages/codegraph/src/incremental/hardcoded-secrets.ts` → ADR-007
+- `packages/codegraph/src/incremental/magic-numbers.ts` → ADR-007
 - `packages/codegraph/src/incremental/metrics.ts` → ADR-007
 - `packages/codegraph/src/incremental/oauth-scope-literals.ts` → ADR-007
 - `packages/codegraph/src/incremental/package-deps.ts` → ADR-007
@@ -148,9 +149,9 @@
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
 - `packages/codegraph/src/core/types.ts` (in: 77) · gov by ADR-006
-- `packages/codegraph/src/incremental/queries.ts` (in: 33) · gov by ADR-007
-- `packages/codegraph/src/incremental/database.ts` (in: 31) · gov by ADR-007
-- `packages/salsa/dist/index.d.ts` (in: 30)
+- `packages/codegraph/src/incremental/queries.ts` (in: 34) · gov by ADR-007
+- `packages/codegraph/src/incremental/database.ts` (in: 32) · gov by ADR-007
+- `packages/salsa/dist/index.d.ts` (in: 31)
 - `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 25) · gov by ADR-012
 - `packages/codegraph/src/core/detector-registry.ts` (in: 18) · gov by ADR-008
 - `packages/runtime-graph/src/core/types.ts` (in: 13) · gov by ADR-009
@@ -160,7 +161,7 @@
 
 Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `// ADR-NNN`** dans le code. Intentionnel ? Sinon poser un marqueur ou créer un ADR :
 
-- **30** `packages/salsa/dist/index.d.ts` _(top-hub)_
+- **31** `packages/salsa/dist/index.d.ts` _(top-hub)_
 
 ## Tensions actives — invitations à explorer
 
@@ -199,6 +200,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+702a89f refactor(toolkit): split codegraphContext (cyclo 50→<15) — context.ts ALL bombs cleared
 7369852 refactor(toolkit): split extractDeadCodeFileBundle (cyclo 50→3, cog 78→0) — dead-code.ts ALL bombs cleared
 8caddca refactor(toolkit): split computeAffectedFromCli + scanTestsImportingAffected — cli/index.ts ALL bombs cleared
 e27c2be refactor(toolkit): split codegraphAffected + dedup computeAffected — affected.ts ALL bombs cleared
@@ -210,7 +212,6 @@ d534d97 refactor(toolkit): split constant-expressions (cyclo 35+23→under) — 
 f4ee98f refactor(toolkit): split typed-calls (cyclo 18+16→under) — typed-calls.ts ALL bombs cleared
 ac2b550 refactor(toolkit): split symbol-refs (cyclo 20+18→under) — symbol-refs.ts ALL bombs cleared
 c677082 refactor(toolkit): split compression-similarity (cyclo 18+16→under) — compression-similarity.ts ALL bombs cleared
-ba540e4 refactor(toolkit): split analyzeCycles + tarjanScc — cycles.ts ALL bombs cleared
 ```
 
 ## Comment contribuer à ce brief

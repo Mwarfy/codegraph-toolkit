@@ -67,6 +67,7 @@ DB via `new SalsaDatabase()` LOCAL au test, jamais exporté.
 - `packages/codegraph/src/incremental/event-emit-sites.ts`
 - `packages/codegraph/src/incremental/function-complexity.ts`
 - `packages/codegraph/src/incremental/hardcoded-secrets.ts`
+- `packages/codegraph/src/incremental/magic-numbers.ts`
 - `packages/codegraph/src/incremental/metrics.ts`
 - `packages/codegraph/src/incremental/oauth-scope-literals.ts`
 - `packages/codegraph/src/incremental/package-deps.ts`

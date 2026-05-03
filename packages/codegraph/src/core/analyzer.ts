@@ -115,6 +115,7 @@ import { allDeadCode as incAllDeadCode } from '../incremental/dead-code.js'
 import { allDeprecatedUsage as incAllDeprecatedUsage } from '../incremental/deprecated-usage.js'
 import { allConstantExpressions as incAllConstantExpressions } from '../incremental/constant-expressions.js'
 import { allHardcodedSecrets as incAllHardcodedSecrets } from '../incremental/hardcoded-secrets.js'
+import { allMagicNumbers as incAllMagicNumbers } from '../incremental/magic-numbers.js'
 import { allFunctionComplexity as incAllFunctionComplexity } from '../incremental/function-complexity.js'
 import { allEvalCalls as incAllEvalCalls } from '../incremental/eval-calls.js'
 import { allDriftPatternsAst as incAllDriftPatternsAst } from '../incremental/drift-patterns.js'
@@ -745,7 +746,9 @@ async function runPhase1IndependentDetectors(ctx: DetectorPhaseContext) {
   const longFunctions = await runDetectorTimed(timing, 'long-functions',
     () => analyzeLongFunctions(config.rootDir, files, sharedProject))
   const magicNumbers = await runDetectorTimed(timing, 'magic-numbers',
-    () => analyzeMagicNumbers(config.rootDir, files, sharedProject))
+    () => incremental
+      ? Promise.resolve(incAllMagicNumbers.get('all'))
+      : analyzeMagicNumbers(config.rootDir, files, sharedProject))
   const testCoverage = await runDetectorTimed(timing, 'test-coverage',
     () => analyzeTestCoverage(config.rootDir, files, snapshot.edges))
   const coChangePairs = await runDetectorTimed(timing, 'co-change',
