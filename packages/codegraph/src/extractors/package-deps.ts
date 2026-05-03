@@ -166,17 +166,54 @@ async function discoverManifests(rootDir: string): Promise<PackageManifest[]> {
   return out
 }
 
+const PKG_SKIP_DIRS = new Set([
+  'node_modules', '.git', 'dist', 'build', '.next',
+  'coverage', '.turbo', '.cache',
+])
+
+function buildDeclaredDeps(raw: any): Map<string, DepBlock> {
+  const declared = new Map<string, DepBlock>()
+  for (const name of Object.keys(raw.dependencies ?? {})) {
+    declared.set(name, 'dependencies')
+  }
+  for (const name of Object.keys(raw.devDependencies ?? {})) {
+    if (!declared.has(name)) declared.set(name, 'devDependencies')
+  }
+  for (const name of Object.keys(raw.peerDependencies ?? {})) {
+    if (!declared.has(name)) declared.set(name, 'peerDependencies')
+  }
+  return declared
+}
+
+async function readPackageManifest(
+  full: string,
+  dir: string,
+  rootDir: string,
+): Promise<PackageManifest | null> {
+  try {
+    // await-ok: 1 package.json par dir typiquement, sequentiel acceptable.
+    const raw = JSON.parse(await fs.readFile(full, 'utf-8'))
+    const scriptsText = Object.values(raw.scripts ?? {})
+      .filter((v): v is string => typeof v === 'string')
+      .join(' \n ')
+    return {
+      abs: full,
+      rel: path.relative(rootDir, full).replace(/\\/g, '/'),
+      dir,
+      declared: buildDeclaredDeps(raw),
+      scriptsText,
+    }
+  } catch {
+    return null  // JSON invalide — skip silencieusement.
+  }
+}
+
 async function walkForManifests(
   dir: string,
   rootDir: string,
   acc: PackageManifest[],
 ): Promise<void> {
-  const dirName = path.basename(dir)
-  const skip = new Set([
-    'node_modules', '.git', 'dist', 'build', '.next',
-    'coverage', '.turbo', '.cache',
-  ])
-  if (skip.has(dirName) && dir !== rootDir) return
+  if (PKG_SKIP_DIRS.has(path.basename(dir)) && dir !== rootDir) return
 
   let entries
   try {
@@ -185,38 +222,14 @@ async function walkForManifests(
     return
   }
 
-  // Process package.json files séquentiellement (peu nombreux par dir),
-  // récurse sub-dirs en parallèle (push partagé OK en JS single-thread).
+  // Process package.json sequentiel (peu nombreux par dir), recurse
+  // sub-dirs en parallele (push partage OK en JS single-thread).
   const subdirs: string[] = []
   for (const entry of entries) {
     const full = path.join(dir, entry.name)
     if (entry.isFile() && entry.name === 'package.json') {
-      try {
-        // await-ok: 1 package.json par dir typiquement, séquentiel acceptable
-        const raw = JSON.parse(await fs.readFile(full, 'utf-8'))
-        const declared = new Map<string, DepBlock>()
-        for (const name of Object.keys(raw.dependencies ?? {})) {
-          declared.set(name, 'dependencies')
-        }
-        for (const name of Object.keys(raw.devDependencies ?? {})) {
-          if (!declared.has(name)) declared.set(name, 'devDependencies')
-        }
-        for (const name of Object.keys(raw.peerDependencies ?? {})) {
-          if (!declared.has(name)) declared.set(name, 'peerDependencies')
-        }
-        const scriptsText = Object.values(raw.scripts ?? {})
-          .filter((v): v is string => typeof v === 'string')
-          .join(' \n ')
-        acc.push({
-          abs: full,
-          rel: path.relative(rootDir, full).replace(/\\/g, '/'),
-          dir,
-          declared,
-          scriptsText,
-        })
-      } catch {
-        // JSON invalide — skip silencieusement.
-      }
+      const manifest = await readPackageManifest(full, dir, rootDir)
+      if (manifest) acc.push(manifest)
     } else if (entry.isDirectory()) {
       subdirs.push(full)
     }
@@ -334,6 +347,85 @@ export {
  * Précondition : `manifests` est l'output de `discoverManifests()`,
  * filtré aux active (au moins 1 fichier dans leur scope).
  */
+/**
+ * Pour chaque dep declaree non-importee : `declared-runtime-asset` si
+ * regex `node_modules/<pkg>/` matche le source (ex: `p5.min.js` charge
+ * en runtime), `declared-unused` sinon. Skip @types/* et deps appelees
+ * via npm script (ex: `tsc -b`, `vitest run`).
+ */
+function classifyDeclaredDeps(
+  m: PackageManifest,
+  importedNames: Set<string>,
+  runtimeAssets: Map<string, Set<string>>,
+  issues: PackageDepsIssue[],
+): void {
+  for (const [name, block] of m.declared) {
+    if (importedNames.has(name)) continue
+    if (name.startsWith('@types/')) continue
+
+    const runtimeRefs = runtimeAssets.get(name)
+    if (runtimeRefs && runtimeRefs.size > 0) {
+      issues.push({
+        kind: 'declared-runtime-asset',
+        packageName: name,
+        packageJson: m.rel,
+        importers: [],
+        declaredIn: block,
+        runtimeAssetReferences: [...runtimeRefs].sort(),
+      })
+      continue
+    }
+    if (isReferencedInScripts(name, m.scriptsText)) continue
+    issues.push({
+      kind: 'declared-unused',
+      packageName: name,
+      packageJson: m.rel,
+      importers: [],
+      declaredIn: block,
+    })
+  }
+}
+
+/**
+ * Pour chaque dep importee : `missing` si non-declaree, `devOnly` si
+ * declaree dans `dependencies` mais utilisee uniquement par tests
+ * (devrait etre dans `devDependencies`).
+ */
+function classifyImportedDeps(
+  m: PackageManifest,
+  imports: Map<string, Set<string>>,
+  testREs: RegExp[],
+  issues: PackageDepsIssue[],
+): void {
+  for (const [name, importers] of imports) {
+    const block = m.declared.get(name)
+    const importersList = [...importers].sort()
+
+    if (!block) {
+      issues.push({
+        kind: 'missing',
+        packageName: name,
+        packageJson: m.rel,
+        importers: importersList,
+      })
+      continue
+    }
+    if (block !== 'dependencies') continue
+
+    const testOnly = importersList.every((f) => testREs.some((r) => r.test(f)))
+    if (testOnly) {
+      issues.push({
+        kind: 'devOnly',
+        packageName: name,
+        packageJson: m.rel,
+        importers: importersList,
+        testImporters: importersList,
+        declaredIn: block,
+      })
+    }
+  }
+}
+
 function buildPackageDepsIssues(
   active: PackageManifest[],
   importsByManifest: Map<string, Map<string, Set<string>>>,
@@ -347,56 +439,8 @@ function buildPackageDepsIssues(
     const runtimeAssets = runtimeAssetsByManifest.get(m.abs)!
     const importedNames = new Set(imports.keys())
 
-    for (const [name, block] of m.declared) {
-      if (importedNames.has(name)) continue
-      if (name.startsWith('@types/')) continue
-      const runtimeRefs = runtimeAssets.get(name)
-      if (runtimeRefs && runtimeRefs.size > 0) {
-        issues.push({
-          kind: 'declared-runtime-asset',
-          packageName: name,
-          packageJson: m.rel,
-          importers: [],
-          declaredIn: block,
-          runtimeAssetReferences: [...runtimeRefs].sort(),
-        })
-      } else if (isReferencedInScripts(name, m.scriptsText)) {
-        // Le package est invoqué via npm script (ex: `tsc -b`, `vitest run`).
-        // Pas un import, mais usage légitime — skip le flag.
-      } else {
-        issues.push({
-          kind: 'declared-unused',
-          packageName: name,
-          packageJson: m.rel,
-          importers: [],
-          declaredIn: block,
-        })
-      }
-    }
-
-    for (const [name, importers] of imports) {
-      const block = m.declared.get(name)
-      const importersList = [...importers].sort()
-      const testOnly = importersList.every((f) => testREs.some((r) => r.test(f)))
-
-      if (!block) {
-        issues.push({
-          kind: 'missing',
-          packageName: name,
-          packageJson: m.rel,
-          importers: importersList,
-        })
-      } else if (block === 'dependencies' && testOnly) {
-        issues.push({
-          kind: 'devOnly',
-          packageName: name,
-          packageJson: m.rel,
-          importers: importersList,
-          testImporters: importersList,
-          declaredIn: block,
-        })
-      }
-    }
+    classifyDeclaredDeps(m, importedNames, runtimeAssets, issues)
+    classifyImportedDeps(m, imports, testREs, issues)
   }
 
   issues.sort((a, b) => {
