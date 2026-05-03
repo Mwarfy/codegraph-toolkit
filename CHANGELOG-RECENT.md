@@ -5,7 +5,7 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T20:15:58Z
+Last update : 2026-05-03T20:17:53Z
 
 ## By type
 
@@ -27,8 +27,9 @@ Last update : 2026-05-03T20:15:58Z
 - **7151cfd** perf(toolkit): Salsa-isolate 3 hot detectors (co-change, drift, const-expr) — 2026-05-03
 
 
-### `refactor` (37)
+### `refactor` (38)
 
+- **ce0b0a8** refactor(toolkit): split detectListenerEntries (cyclo 23→under) — 4 helpers — 2026-05-03
 - **47e3476** refactor(toolkit): split scanHttpOutboundSinks (cyclo 21→under) — 2 helpers — 2026-05-03
 - **9efbf60** refactor(toolkit): split scanSinks (cyclo 18→under) — 4 per-kind sink helpers — 2026-05-03
 - **2e2a8e8** refactor(toolkit): split prebuildSharedProjectIncremental (cyclo 16→3) — 3 helpers + reuse findTsConfigPath — 2026-05-03
@@ -48,7 +49,6 @@ Last update : 2026-05-03T20:15:58Z
 - **af4705f** refactor(toolkit): split renderCoreFlows (cyclo 22→4) — 3 helpers (group + table + detail) — 2026-05-03
 - **69911dc** refactor(toolkit): split renderStats (cyclo 24→11) — 5 helpers stats lines — 2026-05-03
 - **9609b7d** refactor(toolkit): split renderIndex (cyclo 28→3) — 3 helpers + bucket pattern factor — 2026-05-03
-- **a0add06** refactor(toolkit): split renderModuleFiche (cyclo 32→4) — 5 helpers section-by-section — 2026-05-03
 
 
 ### `chore` (1)
@@ -56,14 +56,14 @@ Last update : 2026-05-03T20:15:58Z
 - **f2f93bc** chore(brief): regen CLAUDE-CONTEXT + CHANGELOG post-refactor (553→534) — 2026-05-03
 
 
-### `docs` (2)
+### `docs` (1)
 
 - **ee89730** docs(validation): self-analysis run #2 — toolkit voit 553 violations sur lui-même — 2026-05-03
-- **9a5d5ac** docs(validation): run #1.5 — composite rules sur Sentinel — 33× signal-to-noise — 2026-05-03
 
 
 ## Full history
 
+- **ce0b0a8** refactor(toolkit): split detectListenerEntries (cyclo 23→under) — 4 helpers — 2026-05-03
 - **47e3476** refactor(toolkit): split scanHttpOutboundSinks (cyclo 21→under) — 2 helpers — 2026-05-03
 - **9efbf60** refactor(toolkit): split scanSinks (cyclo 18→under) — 4 per-kind sink helpers — 2026-05-03
 - **2e2a8e8** refactor(toolkit): split prebuildSharedProjectIncremental (cyclo 16→3) — 3 helpers + reuse findTsConfigPath — 2026-05-03
@@ -113,4 +113,3 @@ Last update : 2026-05-03T20:15:58Z
 - **f2f93bc** chore(brief): regen CLAUDE-CONTEXT + CHANGELOG post-refactor (553→534) — 2026-05-03
 - **5f8d691** refactor(toolkit): split god-files + fix REDOS detector + tests hubs — 2026-05-03
 - **ee89730** docs(validation): self-analysis run #2 — toolkit voit 553 violations sur lui-même — 2026-05-03
-- **9a5d5ac** docs(validation): run #1.5 — composite rules sur Sentinel — 33× signal-to-noise — 2026-05-03

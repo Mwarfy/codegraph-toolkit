@@ -695,39 +695,40 @@ interface ScanInlineSinksArgs {
   out: DataFlowSink[]
 }
 
+/**
+ * Detecte les sinks d'1 call expression dans le contexte d'un body
+ * d'arrow/function inline. Reuse des helpers `trySink*` definis pour
+ * `scanSinks` — meme semantique, push direct dans `out` au lieu de
+ * Map<container, sinks[]>.
+ */
+function detectInlineSinkAtCall(call: any, ctx: { file: string; containerKey: string; out: DataFlowSink[]; queryFns: Set<string>; emitFns: Set<string>; httpRespFns: Set<string>; bullmqFns: Set<string> }): void {
+  const expr = call.getExpression?.()
+  if (!expr) return
+  const method = getCalleeMethodName(expr)
+  if (!method) return
+
+  const line = call.getStartLineNumber?.() ?? 0
+  const callArgs = call.getArguments?.() ?? []
+  // Adapter : construit un push-as-array vers `out` (au lieu de map).
+  const localMap = new Map<string, DataFlowSink[]>()
+  localMap.set(ctx.containerKey, ctx.out)
+  const sinkCtx: SinkCallCtx = {
+    callArgs, file: ctx.file, line, containerKey: ctx.containerKey, out: localMap,
+  }
+
+  if (ctx.queryFns.has(method)) trySinkDbWrite(sinkCtx)
+  else if (ctx.emitFns.has(method)) trySinkEventEmit(sinkCtx)
+  else if (ctx.httpRespFns.has(method)) trySinkHttpResponse(sinkCtx)
+  else if (ctx.bullmqFns.has(method)) trySinkBullmqEnqueue(expr, sinkCtx)
+}
+
 function scanInlineSinks(args: ScanInlineSinksArgs): void {
   const { body, file, fakeRange, queryFns, emitFns, httpRespFns, bullmqFns, out } = args
   const containerKey = `${file}:${fakeRange.name}`
-  const walk = (n: Node) => {
+  const ctx = { file, containerKey, out, queryFns, emitFns, httpRespFns, bullmqFns }
+  const walk = (n: Node): void => {
     if (n.getKind() === SyntaxKind.CallExpression) {
-      const call = n as any
-      const expr = call.getExpression?.()
-      if (expr) {
-        const method = getCalleeMethodName(expr)
-        if (method) {
-          const line = call.getStartLineNumber?.() ?? 0
-          const args = call.getArguments?.() ?? []
-
-          if (queryFns.has(method)) {
-            const sql = extractLiteralString(args[0])
-            if (sql) {
-              const t = extractWriteTable(sql)
-              if (t) out.push({ kind: 'db-write', target: t, file, line, container: containerKey })
-            }
-          } else if (emitFns.has(method)) {
-            const ev = extractLiteralString(args[0])
-            if (ev) out.push({ kind: 'event-emit', target: ev, file, line, container: containerKey })
-          } else if (httpRespFns.has(method)) {
-            out.push({ kind: 'http-response', target: '', file, line, container: containerKey })
-          } else if (bullmqFns.has(method) && expr.getKind() === SyntaxKind.PropertyAccessExpression) {
-            const left = (expr as any).getExpression?.()?.getText?.()?.toLowerCase() ?? ''
-            if (left.includes('queue')) {
-              const job = extractLiteralString(args[0])
-              if (job) out.push({ kind: 'bullmq-enqueue', target: job, file, line, container: containerKey })
-            }
-          }
-        }
-      }
+      detectInlineSinkAtCall(n as any, ctx)
     }
     n.forEachChild(walk)
   }
