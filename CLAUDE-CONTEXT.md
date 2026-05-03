@@ -119,6 +119,7 @@
 - `packages/runtime-graph/src/facts/exporter.ts` → ADR-011
 - `packages/runtime-graph/src/metrics/runtime-disciplines.ts` → ADR-011
 - `packages/salsa/src/types.ts` → ADR-006
+- `scripts/scaffold-salsa.sh` → ADR-007
 
 > **Dogfooding** : ce repo gouverne sa propre architecture via le toolkit qu'il publie. Les 4 ADRs ci-dessus encadrent les invariants critiques (zéro LLM dans synopsis, config-driven, séparation détecteurs, 3 rôles bootstrap).
 
@@ -129,9 +130,9 @@
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
 - `packages/codegraph/src/core/types.ts` (in: 75) · gov by ADR-006
-- `packages/codegraph/src/incremental/queries.ts` (in: 25) · gov by ADR-007
-- `packages/codegraph/src/incremental/database.ts` (in: 23) · gov by ADR-007
-- `packages/salsa/dist/index.d.ts` (in: 22)
+- `packages/codegraph/src/incremental/queries.ts` (in: 26) · gov by ADR-007
+- `packages/codegraph/src/incremental/database.ts` (in: 24) · gov by ADR-007
+- `packages/salsa/dist/index.d.ts` (in: 23)
 - `packages/codegraph/src/core/detector-registry.ts` (in: 18) · gov by ADR-008
 - `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 14) · gov by ADR-012
 - `packages/runtime-graph/src/core/types.ts` (in: 13) · gov by ADR-009
@@ -141,7 +142,7 @@
 
 Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `// ADR-NNN`** dans le code. Intentionnel ? Sinon poser un marqueur ou créer un ADR :
 
-- **22** `packages/salsa/dist/index.d.ts` _(top-hub)_
+- **23** `packages/salsa/dist/index.d.ts` _(top-hub)_
 
 ## Tensions actives — invitations à explorer
 
@@ -184,6 +185,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+ce4e6e8 perf(toolkit): deprecated-usage Salsa-isolation + math regression gate
 afd0965 perf(toolkit): self-discovered Salsa optimizations — warm runtime −40%
 67c5581 feat(toolkit): mathematical self-governance — 100% load-bearing files governed
 c484f1f refactor(codegraph): runDeterministicDetectors 279→108 LOC + git-fixture determinism
@@ -195,7 +197,6 @@ fc1c79d feat(runtime-graph): Phase γ.2b — true time-series Lyapunov 1D
 81b8fb9 fix(toolkit): self-detected defects via codegraph + runtime-graph
 e73e85d fix(codegraph): break direct cycle sql-helpers ↔ sql-schema via type extraction
 e9a2b44 feat(runtime-graph): Phase γ — 4 mathematical disciplines runtime + composite rules
-f642620 fix(runtime-graph): CLI rulesDir resolution via __dirname (no package.json export)
 ```
 
 ## Comment contribuer à ce brief

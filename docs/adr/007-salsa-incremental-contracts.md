@@ -75,6 +75,7 @@ DB via `new SalsaDatabase()` LOCAL au test, jamais exporté.
 - `packages/codegraph/src/incremental/typed-calls.ts`
 - `packages/codegraph/src/incremental/unused-exports.ts`
 - `packages/codegraph/src/incremental/watcher.ts`
+- `scripts/scaffold-salsa.sh`
 
 
 ## Tested by

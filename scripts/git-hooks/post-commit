@@ -40,4 +40,17 @@ if [ -z "$SKIP_CONTEXT_BRIEF" ]; then
     echo -e "\033[0;32m  brief\033[0m ✓ brief regenerated"
 fi
 
+# 3. Self-optim brief injection (best-effort, no hard fail)
+#    Si .codegraph/facts-self-runtime/DetectorTiming.facts existe, on
+#    injecte la section "Self-optim opportunities" dans le brief. Le
+#    probe lui-même ne tourne PAS au post-commit (~10s, trop lent).
+#    L'humain le run manuellement quand il veut une mise à jour des
+#    candidats : `npx tsx scripts/self-runtime-probe.ts`.
+if [ -z "$SKIP_SELF_OPTIM" ] && [ -f "$REPO_ROOT/.codegraph/facts-self-runtime/DetectorTiming.facts" ]; then
+  if [ -f "$REPO_ROOT/scripts/inject-self-optim-brief.ts" ]; then
+    npx tsx scripts/inject-self-optim-brief.ts > /dev/null 2>&1 && \
+      echo -e "\033[0;32m  self-optim\033[0m ✓ brief opportunities updated" || true
+  fi
+fi
+
 exit 0
