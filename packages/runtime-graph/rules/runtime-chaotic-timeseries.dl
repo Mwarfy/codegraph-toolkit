@@ -1,0 +1,30 @@
+// rule: runtime-chaotic-timeseries
+// fires: a (kind, key) latency series with Lyapunov 1D λ_ts ≥ 0.7 on
+//        ≥ 5 non-empty buckets — the latency oscillates wildly bucket-to-bucket
+//        relative to its own standard deviation.
+// signal: TIME-EVOLUTION instability, distinct from "high p95" which the
+//         γ.1 rule `runtime-chaotic-latency` catches. A route at steady
+//         100ms p95 is fine for this rule. A route oscillating 50↔500ms
+//         (same p95) fires here.
+// action: investigate variance source — typically lock contention,
+//         intermittent cache miss, GC pressure, or external dependency
+//         with unstable SLO. The pattern matters more than the average.
+//
+// Threshold rationale :
+//   λ_ts ≈ 0    : steady series (consecutive buckets ~ same value)
+//   λ_ts ≈ 0.3  : moderate variation (~σ × 30% per step)
+//   λ_ts ≥ 0.7  : strong variation (chaotic regime — fires this rule)
+//   λ_ts ≥ 1.0  : major chaos (variation > σ per step, almost always pathological)
+//
+// stdDev gate : skip series whose σ is so small that any variation looks
+// chaotic relative to it. Min σ × 1000 = 5 → series must vary by ≥ 5ms
+// for the divergence rate to be meaningful.
+
+.decl ChaoticTimeseries(kind: symbol, seriesKey: symbol, observations: number, lambdaX1000: number)
+.output ChaoticTimeseries
+
+ChaoticTimeseries(K, S, Obs, Lambda) :-
+  LyapunovTimeseries(K, S, Obs, StdDev, Lambda),
+  Obs >= 5,
+  StdDev >= 5,
+  Lambda >= 700.

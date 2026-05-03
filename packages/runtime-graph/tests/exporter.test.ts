@@ -33,6 +33,8 @@ const emptySnapshot: RuntimeSnapshot = {
 describe('exportFactsRuntime', () => {
   it('writes 8 fact files + schema + manifest', async () => {
     // 7 base facts (α/β) + LatencySeries (γ.2) = 8
+    // Note: the discipline facts (Granger, LyapunovTs, etc.) are emitted
+    // separately by exportDisciplineFacts, not by exportFactsRuntime.
     await exportFactsRuntime(emptySnapshot, { outDir: tmpDir })
     const files = await fs.readdir(tmpDir)
     const factsFiles = files.filter(f => f.endsWith('.facts'))

@@ -27,6 +27,11 @@ import {
   type GrangerRuntimeFileFact,
   type GrangerRuntimeOptions,
 } from './granger-runtime.js'
+import {
+  lyapunovTimeseries,
+  type LyapunovTimeseriesFact,
+  type LyapunovTimeseriesOptions,
+} from './lyapunov-timeseries.js'
 
 // ─── 1. HAMMING DISTANCE (statique ↔ runtime) ───────────────────────────
 
@@ -269,15 +274,19 @@ export interface AllDisciplinesResult {
   hamming: ReturnType<typeof hammingStaticRuntime> | null
   informationBottleneck: InformationBottleneckRuntimeFact[]
   newmanGirvan: NewmanGirvanRuntimeFact
+  /** Scalar Lyapunov γ.1 (per-symbol p95-based proxy). */
   lyapunov: LyapunovRuntimeFact[]
   /** Phase γ.2 — empty si snap.latencySeries absent (compat α/β). */
   granger: GrangerRuntimeFact[]
   /** Phase γ.2 — file-level rollup pour cross-validation avec static GrangerCausality. */
   grangerFile: GrangerRuntimeFileFact[]
+  /** Phase γ.2 — time-series Lyapunov 1D (Rosenstein-style sur LatencySeries). */
+  lyapunovTs: LyapunovTimeseriesFact[]
 }
 
 export interface ComputeAllDisciplinesOptions {
   granger?: GrangerRuntimeOptions
+  lyapunovTs?: LyapunovTimeseriesOptions
 }
 
 export function computeAllDisciplines(
@@ -293,6 +302,7 @@ export function computeAllDisciplines(
     lyapunov: lyapunovRuntime(snap),
     granger,
     grangerFile: grangerRuntimeFileRollup(granger),
+    lyapunovTs: lyapunovTimeseries(snap, options.lyapunovTs),
   }
 }
 
@@ -301,3 +311,8 @@ export type {
   GrangerRuntimeFileFact,
   GrangerRuntimeOptions,
 } from './granger-runtime.js'
+
+export type {
+  LyapunovTimeseriesFact,
+  LyapunovTimeseriesOptions,
+} from './lyapunov-timeseries.js'

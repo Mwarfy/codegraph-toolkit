@@ -28,3 +28,7 @@
 // Phase γ.2 — sparse time-series buckets
 .decl LatencySeries(kind: symbol, seriesKey: symbol, bucketIdx: number, eventCount: number, meanLatencyMs: number)
 .input LatencySeries
+
+// Phase γ.2 — true time-series Lyapunov (Rosenstein-style 1D sur les buckets)
+.decl LyapunovTimeseries(kind: symbol, seriesKey: symbol, observations: number, stdDevX1000: number, lambdaX1000: number)
+.input LyapunovTimeseries

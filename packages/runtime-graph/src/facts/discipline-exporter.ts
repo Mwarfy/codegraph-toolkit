@@ -16,6 +16,7 @@ import type {
   NewmanGirvanRuntimeFact,
   GrangerRuntimeFact,
   GrangerRuntimeFileFact,
+  LyapunovTimeseriesFact,
 } from '../metrics/runtime-disciplines.js'
 
 function sym(s: string): string {
@@ -137,6 +138,19 @@ export async function exportDisciplineFacts(
   ])
   await writeRelation(outDir, 'GrangerRuntimeFile', grangerFileRows)
   written.push({ name: 'GrangerRuntimeFile', tuples: grangerFileRows.length })
+
+  // ─── LyapunovTimeseries (γ.2) ──────────────────────────────────
+  // True time-series Lyapunov 1D (Rosenstein-style) sur LatencySeries.
+  // schema : (kind, seriesKey, observations, stdDevX1000, lambdaX1000)
+  const lyapunovTsRows: string[][] = result.lyapunovTs.map((f: LyapunovTimeseriesFact) => [
+    sym(f.kind),
+    sym(f.key),
+    num(f.observations),
+    num(f.stdDevX1000),
+    num(f.lambdaX1000),
+  ])
+  await writeRelation(outDir, 'LyapunovTimeseries', lyapunovTsRows)
+  written.push({ name: 'LyapunovTimeseries', tuples: lyapunovTsRows.length })
 
   return { outDir, relations: written }
 }

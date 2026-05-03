@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+5c78f3a feat(runtime-graph): Phase γ.2a — Granger causality runtime + time-series infra
 81b8fb9 fix(toolkit): self-detected defects via codegraph + runtime-graph
 e73e85d fix(codegraph): break direct cycle sql-helpers ↔ sql-schema via type extraction
 e9a2b44 feat(runtime-graph): Phase γ — 4 mathematical disciplines runtime + composite rules
@@ -111,7 +112,6 @@ e65ea40 feat(runtime-graph): Phase α — runtime observability framework with d
 6eb35b2 refactor(toolkit): HotAllocation requires ModuleCentrality>200 (FP reduction)
 40b2842 refactor(toolkit): SQL DROP/skip-rollbacks + disable noisy composite rules
 51d7e5f refactor(toolkit): sql-naming exemptions + ADD/RENAME ordering + edge-case patterns
-0c9d608 test(toolkit): contract tests pour CrossDisciplineDetector POC
 ```
 
 ## Comment contribuer à ce brief
