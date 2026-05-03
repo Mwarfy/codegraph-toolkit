@@ -512,177 +512,213 @@ function buildComponents(
 
 // ─── Render: Level 1 ─────────────────────────────────────────────────────────
 
-export function renderLevel1(s: SynopsisJSON): string {
-  const lines: string[] = []
-  lines.push(`# CodeGraph Synopsis — Level 1 (Context)`)
-  lines.push('')
-  lines.push(`_Generated ${s.generatedAt}${s.commitHash ? ` · commit ${s.commitHash}` : ''}_`)
-  lines.push('')
-  lines.push(`**Stats** — ${s.stats.totalFiles} files · ${s.stats.totalEdges} edges · ${s.stats.orphanCount} orphans · health ${formatHealth(s.stats.healthScore)}`)
-  lines.push('')
-  lines.push(`**Edges** — ${formatEdgeBreakdown(s.edgesByType)}`)
-  lines.push('')
-
-  // Phase 3.8 signaux — une ligne chacun si présent.
-  if (s.phase38) {
-    const p = s.phase38
-    const sig: string[] = []
-    if (p.packageDeps) sig.push(`**Deps** — ${p.packageDeps.missing} missing · ${p.packageDeps.declaredUnused} unused · ${p.packageDeps.devOnly} devOnly`)
-    if (p.barrels) sig.push(`**Barrels** — ${p.barrels.total} total · ${p.barrels.lowValue} low-value`)
-    if (p.taint) sig.push(`**Taint** — ${p.taint.total} violations (crit ${p.taint.critical} · high ${p.taint.high} · med ${p.taint.medium} · low ${p.taint.low})`)
-    if (p.dsm) sig.push(`**DSM** — ${p.dsm.containers} containers · ${p.dsm.backEdges} back-edges · ${p.dsm.sccSizeGt1} SCC(s) ≥ 2`)
-    for (const line of sig) {
-      lines.push(line)
-      lines.push('')
-    }
+function renderL1Phase38(p: SynopsisJSON['phase38']): string[] {
+  if (!p) return []
+  const sig: string[] = []
+  if (p.packageDeps) sig.push(`**Deps** — ${p.packageDeps.missing} missing · ${p.packageDeps.declaredUnused} unused · ${p.packageDeps.devOnly} devOnly`)
+  if (p.barrels) sig.push(`**Barrels** — ${p.barrels.total} total · ${p.barrels.lowValue} low-value`)
+  if (p.taint) sig.push(`**Taint** — ${p.taint.total} violations (crit ${p.taint.critical} · high ${p.taint.high} · med ${p.taint.medium} · low ${p.taint.low})`)
+  if (p.dsm) sig.push(`**DSM** — ${p.dsm.containers} containers · ${p.dsm.backEdges} back-edges · ${p.dsm.sccSizeGt1} SCC(s) ≥ 2`)
+  const out: string[] = []
+  for (const line of sig) {
+    out.push(line, '')
   }
+  return out
+}
 
-  // Containers
-  lines.push(`## Containers`)
-  lines.push('')
-  for (const c of s.containers) {
+function renderL1Containers(containers: SynopsisJSON['containers']): string[] {
+  const out: string[] = ['## Containers', '']
+  for (const c of containers) {
     const compTop = c.components.slice(0, 5).map(x => `\`${x.label}\`(${x.fileCount})`).join(' · ')
-    lines.push(`- **${c.id}** — ${c.fileCount} files · ${c.components.length} components · ${c.orphanCount} orphan  →  ${compTop}`)
+    out.push(`- **${c.id}** — ${c.fileCount} files · ${c.components.length} components · ${c.orphanCount} orphan  →  ${compTop}`)
   }
-  lines.push('')
+  out.push('')
+  return out
+}
 
-  // Top hubs (avec ADRs gouvernant si fournis)
-  lines.push(`## Top hubs (in-degree, global)`)
-  lines.push('')
-  for (const h of s.topHubs) {
+function renderL1TopHubs(topHubs: SynopsisJSON['topHubs']): string[] {
+  const out: string[] = ['## Top hubs (in-degree, global)', '']
+  for (const h of topHubs) {
     const adrSuffix = h.adrs && h.adrs.length > 0
       ? ` · gov by ${h.adrs.map(n => `ADR-${n}`).join(', ')}`
       : ''
-    lines.push(`- **${h.inDegree}** \`${h.id}\`${adrSuffix}`)
+    out.push(`- **${h.inDegree}** \`${h.id}\`${adrSuffix}`)
   }
-  lines.push('')
+  out.push('')
+  return out
+}
 
-  // ADR anchor suggestions (Lien 1+2) — fichiers load-bearing sans marqueur.
-  // Section présente seulement si options.adrMarkers a été fourni à buildSynopsis.
-  if (s.adrSuggestions && s.adrSuggestions.length > 0) {
-    lines.push(`## ⚠ ADR anchor suggestions`)
-    lines.push('')
-    lines.push(`Fichiers load-bearing (in-degree ≥ seuil ou truth-point) sans aucun marqueur \`// ADR-NNN\` dans le code. Intentionnel ? Sinon, poser un marqueur ou créer un ADR.`)
-    lines.push('')
-    for (const sug of s.adrSuggestions.slice(0, 10)) {
-      lines.push(`- **${sug.inDegree}** \`${sug.file}\` _(${sug.reason})_`)
-    }
-    lines.push('')
+function renderL1AdrSuggestions(adrSuggestions?: SynopsisJSON['adrSuggestions']): string[] {
+  if (!adrSuggestions || adrSuggestions.length === 0) return []
+  const out: string[] = [
+    '## ⚠ ADR anchor suggestions',
+    '',
+    'Fichiers load-bearing (in-degree ≥ seuil ou truth-point) sans aucun marqueur `// ADR-NNN` dans le code. Intentionnel ? Sinon, poser un marqueur ou créer un ADR.',
+    '',
+  ]
+  for (const sug of adrSuggestions.slice(0, 10)) {
+    out.push(`- **${sug.inDegree}** \`${sug.file}\` _(${sug.reason})_`)
   }
+  out.push('')
+  return out
+}
 
-  // Cross-container edges
-  if (s.crossContainerEdges.length) {
-    lines.push(`## Cross-container flow`)
-    lines.push('')
-    for (const x of s.crossContainerEdges) {
-      const sample = x.samples.length ? `  _e.g._ ${x.samples.map(v => `\`${v}\``).join(', ')}` : ''
-      lines.push(`- ${x.from} → ${x.to} · ${x.count} \`${x.type}\`${sample}`)
-    }
-    lines.push('')
+function renderL1CrossContainer(crossEdges: SynopsisJSON['crossContainerEdges']): string[] {
+  if (crossEdges.length === 0) return []
+  const out: string[] = ['## Cross-container flow', '']
+  for (const x of crossEdges) {
+    const sample = x.samples.length ? `  _e.g._ ${x.samples.map(v => `\`${v}\``).join(', ')}` : ''
+    out.push(`- ${x.from} → ${x.to} · ${x.count} \`${x.type}\`${sample}`)
   }
+  out.push('')
+  return out
+}
 
-  // Mermaid
-  lines.push(`## Map`)
-  lines.push('')
-  lines.push('```mermaid')
-  lines.push('graph TB')
+function renderL1Mermaid(s: SynopsisJSON): string[] {
+  const out: string[] = ['## Map', '', '```mermaid', 'graph TB']
   for (const c of s.containers) {
-    const safe = mermaidId(c.id)
-    lines.push(`  ${safe}["${c.label}<br/>${c.fileCount} files"]`)
+    out.push(`  ${mermaidId(c.id)}["${c.label}<br/>${c.fileCount} files"]`)
   }
   for (const x of s.crossContainerEdges) {
-    lines.push(`  ${mermaidId(x.from)} -->|${x.count} ${x.type}| ${mermaidId(x.to)}`)
+    out.push(`  ${mermaidId(x.from)} -->|${x.count} ${x.type}| ${mermaidId(x.to)}`)
   }
-  lines.push('```')
-  lines.push('')
+  out.push('```', '')
+  return out
+}
+
+export function renderLevel1(s: SynopsisJSON): string {
+  const lines: string[] = [
+    '# CodeGraph Synopsis — Level 1 (Context)', '',
+    `_Generated ${s.generatedAt}${s.commitHash ? ` · commit ${s.commitHash}` : ''}_`, '',
+    `**Stats** — ${s.stats.totalFiles} files · ${s.stats.totalEdges} edges · ${s.stats.orphanCount} orphans · health ${formatHealth(s.stats.healthScore)}`, '',
+    `**Edges** — ${formatEdgeBreakdown(s.edgesByType)}`, '',
+    ...renderL1Phase38(s.phase38),
+    ...renderL1Containers(s.containers),
+    ...renderL1TopHubs(s.topHubs),
+    ...renderL1AdrSuggestions(s.adrSuggestions),
+    ...renderL1CrossContainer(s.crossContainerEdges),
+    ...renderL1Mermaid(s),
+  ]
   return lines.join('\n')
 }
 
 // ─── Render: Level 2 ─────────────────────────────────────────────────────────
 
-export function renderLevel2(s: SynopsisJSON): string {
-  const lines: string[] = []
-  lines.push(`# CodeGraph Synopsis — Level 2 (Containers)`)
-  lines.push('')
-  lines.push(`_Generated ${s.generatedAt}${s.commitHash ? ` · commit ${s.commitHash}` : ''}_`)
-  lines.push('')
-
-  for (const c of s.containers) {
-    lines.push(`## ${c.id}`)
-    lines.push('')
-    lines.push(`${c.fileCount} files · ${c.components.length} components · ${c.orphanCount} orphans · ${c.entryPoints.length} entry points`)
-    lines.push('')
-    lines.push(`### Components`)
-    lines.push('')
-    for (const comp of c.components.slice(0, 10)) {
-      const tagStr = comp.tags.length ? ` [${comp.tags.join(',')}]` : ''
-      lines.push(`- \`${comp.label}\` — ${comp.fileCount} files · in ${comp.inDegree} · out ${comp.outDegree}${tagStr}`)
-    }
-    if (c.components.length > 10) {
-      lines.push(`- _…${c.components.length - 10} more_`)
-    }
-    lines.push('')
-
-    if (c.topHubs.length) {
-      lines.push(`### Top files (in-degree)`)
-      lines.push('')
-      for (const h of c.topHubs) {
-        lines.push(`- **${h.inDegree}** \`${h.id}\``)
-      }
-      lines.push('')
-    }
-
-    // Events with emitter → listener mapping (denser than two flat lists)
-    if (c.events.mappings.length) {
-      lines.push(`### Events`)
-      lines.push('')
-      for (const m of c.events.mappings) {
-        const em = m.emitters.length ? m.emitters.map(x => `\`${x}\``).join(', ') : '_external_'
-        const lst = m.listeners.length ? m.listeners.map(x => `\`${x}\``).join(', ') : '_none_'
-        lines.push(`- **${m.label}** — emits: ${em} → listens: ${lst}`)
-      }
-      lines.push('')
-    }
-
-    const summary: string[] = []
-    if (c.routes.length) summary.push(`${c.routes.length} routes exposed`)
-    if (c.tables.length) summary.push(`${c.tables.length} db tables touched`)
-    if (summary.length) {
-      lines.push(`### Surface`)
-      lines.push('')
-      lines.push(summary.join(' · '))
-      lines.push('')
-      if (c.routes.length) {
-        lines.push(`- **Routes:** ${truncateList(c.routes, 15)}`)
-      }
-      if (c.tables.length) {
-        lines.push(`- **Tables:** ${truncateList(c.tables, 20)}`)
-      }
-      lines.push('')
-    }
+function renderL2ContainerComponents(c: SynopsisJSON['containers'][number]): string[] {
+  const out: string[] = ['### Components', '']
+  for (const comp of c.components.slice(0, 10)) {
+    const tagStr = comp.tags.length ? ` [${comp.tags.join(',')}]` : ''
+    out.push(`- \`${comp.label}\` — ${comp.fileCount} files · in ${comp.inDegree} · out ${comp.outDegree}${tagStr}`)
   }
+  if (c.components.length > 10) out.push(`- _…${c.components.length - 10} more_`)
+  out.push('')
+  return out
+}
 
-  // Mermaid: containers w/ components (top 5 per container) + cross-container edges
-  lines.push(`## Map`)
-  lines.push('')
-  lines.push('```mermaid')
-  lines.push('graph TB')
+function renderL2ContainerEvents(c: SynopsisJSON['containers'][number]): string[] {
+  if (c.events.mappings.length === 0) return []
+  const out: string[] = ['### Events', '']
+  for (const m of c.events.mappings) {
+    const em = m.emitters.length ? m.emitters.map(x => `\`${x}\``).join(', ') : '_external_'
+    const lst = m.listeners.length ? m.listeners.map(x => `\`${x}\``).join(', ') : '_none_'
+    out.push(`- **${m.label}** — emits: ${em} → listens: ${lst}`)
+  }
+  out.push('')
+  return out
+}
+
+function renderL2ContainerSurface(c: SynopsisJSON['containers'][number]): string[] {
+  const summary: string[] = []
+  if (c.routes.length) summary.push(`${c.routes.length} routes exposed`)
+  if (c.tables.length) summary.push(`${c.tables.length} db tables touched`)
+  if (summary.length === 0) return []
+  const out: string[] = ['### Surface', '', summary.join(' · '), '']
+  if (c.routes.length) out.push(`- **Routes:** ${truncateList(c.routes, 15)}`)
+  if (c.tables.length) out.push(`- **Tables:** ${truncateList(c.tables, 20)}`)
+  out.push('')
+  return out
+}
+
+function renderL2ContainerSection(c: SynopsisJSON['containers'][number]): string[] {
+  const out: string[] = [
+    `## ${c.id}`, '',
+    `${c.fileCount} files · ${c.components.length} components · ${c.orphanCount} orphans · ${c.entryPoints.length} entry points`,
+    '',
+    ...renderL2ContainerComponents(c),
+  ]
+  if (c.topHubs.length) {
+    out.push('### Top files (in-degree)', '')
+    for (const h of c.topHubs) out.push(`- **${h.inDegree}** \`${h.id}\``)
+    out.push('')
+  }
+  out.push(...renderL2ContainerEvents(c))
+  out.push(...renderL2ContainerSurface(c))
+  return out
+}
+
+function renderL2Mermaid(s: SynopsisJSON): string[] {
+  const out: string[] = ['## Map', '', '```mermaid', 'graph TB']
   for (const c of s.containers) {
-    lines.push(`  subgraph ${mermaidId(c.id)} [${c.label}]`)
+    out.push(`  subgraph ${mermaidId(c.id)} [${c.label}]`)
     for (const comp of c.components.slice(0, 6)) {
-      lines.push(`    ${mermaidId(comp.id)}["${comp.label}<br/>${comp.fileCount}"]`)
+      out.push(`    ${mermaidId(comp.id)}["${comp.label}<br/>${comp.fileCount}"]`)
     }
-    lines.push(`  end`)
+    out.push(`  end`)
   }
   for (const x of s.crossContainerEdges) {
-    lines.push(`  ${mermaidId(x.from)} -->|${x.count} ${x.type}| ${mermaidId(x.to)}`)
+    out.push(`  ${mermaidId(x.from)} -->|${x.count} ${x.type}| ${mermaidId(x.to)}`)
   }
-  lines.push('```')
-  lines.push('')
+  out.push('```', '')
+  return out
+}
+
+export function renderLevel2(s: SynopsisJSON): string {
+  const lines: string[] = [
+    '# CodeGraph Synopsis — Level 2 (Containers)', '',
+    `_Generated ${s.generatedAt}${s.commitHash ? ` · commit ${s.commitHash}` : ''}_`, '',
+  ]
+  for (const c of s.containers) {
+    lines.push(...renderL2ContainerSection(c))
+  }
+  lines.push(...renderL2Mermaid(s))
   return lines.join('\n')
 }
 
 // ─── Render: Level 3 ─────────────────────────────────────────────────────────
+
+function renderL3EntryPoints(c: SynopsisJSON['containers'][number]): string[] {
+  if (c.entryPoints.length === 0) return []
+  const out: string[] = ['## Entry points', '']
+  for (const e of c.entryPoints) out.push(`- \`${e}\``)
+  out.push('')
+  return out
+}
+
+function renderL3ComponentDetail(comp: SynopsisJSON['containers'][number]['components'][number]): string[] {
+  const tagStr = comp.tags.length ? ` [${comp.tags.join(',')}]` : ''
+  const out: string[] = [
+    `### \`${comp.label}\`${tagStr} · ${comp.fileCount} files`,
+    '',
+    `in: ${comp.inDegree} · out: ${comp.outDegree}`,
+  ]
+  if (comp.topFiles.length) {
+    out.push('', 'Key files:')
+    for (const f of comp.topFiles) out.push(`- \`${f.label}\` (in ${f.inDegree}) — \`${f.id}\``)
+  }
+  out.push('')
+  return out
+}
+
+function renderL3Components(c: SynopsisJSON['containers'][number]): string[] {
+  const out: string[] = ['## Components', '']
+  for (const comp of c.components) out.push(...renderL3ComponentDetail(comp))
+  return out
+}
+
+function renderL3SimpleSection(title: string, items: string[], maxItems: number): string[] {
+  if (items.length === 0) return []
+  return [`## ${title}`, '', truncateList(items, maxItems), '']
+}
 
 export function renderLevel3(s: SynopsisJSON, containerId: string): string {
   const c = s.containers.find(x => x.id === containerId)
@@ -691,43 +727,16 @@ export function renderLevel3(s: SynopsisJSON, containerId: string): string {
     return `# CodeGraph Synopsis — Level 3 (unknown container "${containerId}")\n\nAvailable: ${avail}\n`
   }
 
-  const lines: string[] = []
-  lines.push(`# CodeGraph Synopsis — Level 3 (Components — ${c.id})`)
-  lines.push('')
-  lines.push(`_Generated ${s.generatedAt}${s.commitHash ? ` · commit ${s.commitHash}` : ''}_`)
-  lines.push('')
-  lines.push(`${c.fileCount} files · ${c.components.length} components · ${c.orphanCount} orphans`)
-  lines.push('')
-
-  if (c.entryPoints.length) {
-    lines.push(`## Entry points`)
-    lines.push('')
-    for (const e of c.entryPoints) {
-      lines.push(`- \`${e}\``)
-    }
-    lines.push('')
-  }
-
-  lines.push(`## Components`)
-  lines.push('')
-  for (const comp of c.components) {
-    const tagStr = comp.tags.length ? ` [${comp.tags.join(',')}]` : ''
-    lines.push(`### \`${comp.label}\`${tagStr} · ${comp.fileCount} files`)
-    lines.push('')
-    lines.push(`in: ${comp.inDegree} · out: ${comp.outDegree}`)
-    if (comp.topFiles.length) {
-      lines.push('')
-      lines.push(`Key files:`)
-      for (const f of comp.topFiles) {
-        lines.push(`- \`${f.label}\` (in ${f.inDegree}) — \`${f.id}\``)
-      }
-    }
-    lines.push('')
-  }
+  const lines: string[] = [
+    `# CodeGraph Synopsis — Level 3 (Components — ${c.id})`, '',
+    `_Generated ${s.generatedAt}${s.commitHash ? ` · commit ${s.commitHash}` : ''}_`, '',
+    `${c.fileCount} files · ${c.components.length} components · ${c.orphanCount} orphans`, '',
+    ...renderL3EntryPoints(c),
+    ...renderL3Components(c),
+  ]
 
   if (c.events.mappings.length) {
-    lines.push(`## Events`)
-    lines.push('')
+    lines.push('## Events', '')
     for (const m of c.events.mappings) {
       const em = m.emitters.length ? m.emitters.map(x => `\`${x}\``).join(', ') : '_external_'
       const lst = m.listeners.length ? m.listeners.map(x => `\`${x}\``).join(', ') : '_none_'
@@ -736,19 +745,8 @@ export function renderLevel3(s: SynopsisJSON, containerId: string): string {
     lines.push('')
   }
 
-  if (c.routes.length) {
-    lines.push(`## Routes exposed`)
-    lines.push('')
-    lines.push(truncateList(c.routes, 20))
-    lines.push('')
-  }
-
-  if (c.tables.length) {
-    lines.push(`## DB tables touched`)
-    lines.push('')
-    lines.push(truncateList(c.tables, 30))
-    lines.push('')
-  }
+  lines.push(...renderL3SimpleSection('Routes exposed', c.routes, 20))
+  lines.push(...renderL3SimpleSection('DB tables touched', c.tables, 30))
 
   // Mermaid: inter-component edges inside this container
   lines.push(`## Map`)

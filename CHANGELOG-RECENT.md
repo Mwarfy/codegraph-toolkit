@@ -5,7 +5,7 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T19:44:40Z
+Last update : 2026-05-03T19:46:11Z
 
 ## By type
 
@@ -40,8 +40,9 @@ Last update : 2026-05-03T19:44:40Z
 - **afd0965** perf(toolkit): self-discovered Salsa optimizations — warm runtime −40% — 2026-05-03
 
 
-### `refactor` (24)
+### `refactor` (25)
 
+- **8f1792b** refactor(toolkit): split buildComponents (cyclo 24→under) — 5 helpers (groupByComp, edgeDeg, topFiles, tags, adrs) — 2026-05-03
 - **275466c** refactor(toolkit): split buildSynopsis (cyclo 75→5, cog 130→4) — 9 helpers + ctx struct — 2026-05-03
 - **e4019fb** refactor(toolkit): builder.ts ALL bombs cleared — split TruthPoints + PackageDeps + TaintViolations — 2026-05-03
 - **af4705f** refactor(toolkit): split renderCoreFlows (cyclo 22→4) — 3 helpers (group + table + detail) — 2026-05-03
@@ -61,14 +62,12 @@ Last update : 2026-05-03T19:44:40Z
 - **2b4ebc0** refactor(toolkit): tame AWAIT-IN-LOOP batch 3+4+5 — detectors + extractors (58→33) — 2026-05-03
 - **9a86461** refactor(toolkit): tame AWAIT-IN-LOOP batch 2 — _shared, regenerate-anchors, drivers (70→58) — 2026-05-03
 - **5933423** refactor(toolkit): tame AWAIT-IN-LOOP — parallelize hot paths + mark scaffold (105→70) — 2026-05-03
-- **fbebea4** refactor(toolkit): extract makeIsExempt helper (NCD: 25→16, total 434→422) — 2026-05-03
 
 
-### `chore` (3)
+### `chore` (2)
 
 - **f2f93bc** chore(brief): regen CLAUDE-CONTEXT + CHANGELOG post-refactor (553→534) — 2026-05-03
 - **2067d1f** chore(release): v0.3.0 consolidation — npm-publishable core, experimental gated — 2026-05-03
-- **173915c** chore(toolkit): self-discipline pass — close credibility gap from external review — 2026-05-03
 
 
 ### `docs` (4)
@@ -81,6 +80,7 @@ Last update : 2026-05-03T19:44:40Z
 
 ## Full history
 
+- **8f1792b** refactor(toolkit): split buildComponents (cyclo 24→under) — 5 helpers (groupByComp, edgeDeg, topFiles, tags, adrs) — 2026-05-03
 - **275466c** refactor(toolkit): split buildSynopsis (cyclo 75→5, cog 130→4) — 9 helpers + ctx struct — 2026-05-03
 - **e4019fb** refactor(toolkit): builder.ts ALL bombs cleared — split TruthPoints + PackageDeps + TaintViolations — 2026-05-03
 - **af4705f** refactor(toolkit): split renderCoreFlows (cyclo 22→4) — 3 helpers (group + table + detail) — 2026-05-03
@@ -130,4 +130,3 @@ Last update : 2026-05-03T19:44:40Z
 - **afd0965** perf(toolkit): self-discovered Salsa optimizations — warm runtime −40% — 2026-05-03
 - **67c5581** feat(toolkit): mathematical self-governance — 100% load-bearing files governed — 2026-05-03
 - **c484f1f** refactor(codegraph): runDeterministicDetectors 279→108 LOC + git-fixture determinism — 2026-05-03
-- **173915c** chore(toolkit): self-discipline pass — close credibility gap from external review — 2026-05-03
