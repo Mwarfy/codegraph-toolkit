@@ -47,7 +47,7 @@
 - `packages/salsa/dist/index.d.ts` (in: 19)
 - `packages/codegraph/src/core/detector-registry.ts` (in: 18)
 - `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 14)
-- `packages/runtime-graph/src/core/types.ts` (in: 12)
+- `packages/runtime-graph/src/core/types.ts` (in: 13)
 - `packages/adr-toolkit/src/config.ts` (in: 10) · gov by ADR-002
 
 ## ⚠ ADR anchor suggestions
@@ -100,6 +100,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+79c4fed feat(runtime-graph): Phase γ.2c — TDA Persistent Homology dim-0
 fc1c79d feat(runtime-graph): Phase γ.2b — true time-series Lyapunov 1D
 5c78f3a feat(runtime-graph): Phase γ.2a — Granger causality runtime + time-series infra
 81b8fb9 fix(toolkit): self-detected defects via codegraph + runtime-graph
@@ -111,7 +112,6 @@ ca252d2 fix(runtime-graph): retire grandfathers + refine rules + self-probe E2E 
 e65ea40 feat(runtime-graph): Phase α — runtime observability framework with datalog query language
 8c49ff7 fix(analyzer): factsOnly mode must populate TestedFile
 6eb35b2 refactor(toolkit): HotAllocation requires ModuleCentrality>200 (FP reduction)
-40b2842 refactor(toolkit): SQL DROP/skip-rollbacks + disable noisy composite rules
 ```
 
 ## Comment contribuer à ce brief

@@ -5,6 +5,7 @@
     { "path": "packages/codegraph-mcp" },
     { "path": "packages/adr-toolkit" },
     { "path": "packages/datalog" },
-    { "path": "packages/salsa" }
+    { "path": "packages/salsa" },
+    { "path": "packages/runtime-graph" }
   ]
 }

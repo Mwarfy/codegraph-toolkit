@@ -1,6 +1,6 @@
 {
   "name": "@liby-tools/runtime-graph",
-  "version": "0.1.0-alpha.3",
+  "version": "0.1.0-alpha.4",
   "description": "Runtime observability framework — captures actual execution graph, joins with codegraph static facts via datalog. The OSS alternative to Datadog Live Code Coverage / JFrog X-Ray.",
   "type": "module",
   "main": "./dist/index.js",
