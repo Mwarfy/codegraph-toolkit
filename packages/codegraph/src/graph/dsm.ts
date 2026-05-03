@@ -184,81 +184,130 @@ function buildMatrixAndBackEdges(
 
 // ─── Tarjan SCC (itératif) ────────────────────────────────────────────
 
+/**
+ * Frame machine pour éviter la récursion profonde sur gros call graph.
+ * pendingChild = le child qui vient de retourner ; relax du lowlink se fait
+ * lazy au prochain tour.
+ */
+interface TarjanFrame {
+  node: string
+  iter: Iterator<string>
+  pendingChild?: string
+}
+
+interface TarjanState {
+  index: Map<string, number>
+  lowlink: Map<string, number>
+  onStack: Set<string>
+  stack: string[]
+  sccs: string[][]
+  nextIndex: number
+}
+
 function tarjanScc(
   nodes: string[],
   adj: Map<string, Set<string>>,
 ): string[][] {
-  const index = new Map<string, number>()
-  const lowlink = new Map<string, number>()
-  const onStack = new Set<string>()
-  const stack: string[] = []
-  const sccs: string[][] = []
-  let nextIndex = 0
-
+  const state: TarjanState = {
+    index: new Map<string, number>(),
+    lowlink: new Map<string, number>(),
+    onStack: new Set<string>(),
+    stack: [],
+    sccs: [],
+    nextIndex: 0,
+  }
   // Tri alpha des nodes → déterminisme total des SCC indices.
-  const sortedNodes = [...nodes].sort()
-
-  // Frame machine pour éviter la récursion profonde.
-  interface Frame {
-    node: string
-    iter: Iterator<string>
-    pendingChild?: string
+  for (const startNode of [...nodes].sort()) {
+    if (state.index.has(startNode)) continue
+    runTarjanFrom(startNode, adj, state)
   }
+  return state.sccs
+}
 
-  for (const startNode of sortedNodes) {
-    if (index.has(startNode)) continue
+/** Itère le DFS Tarjan depuis startNode jusqu'à épuisement de la callStack. */
+function runTarjanFrom(
+  startNode: string,
+  adj: Map<string, Set<string>>,
+  state: TarjanState,
+): void {
+  const callStack: TarjanFrame[] = []
+  pushTarjanNode(startNode, adj, state, callStack)
 
-    const callStack: Frame[] = []
-    const pushNode = (node: string): void => {
-      index.set(node, nextIndex)
-      lowlink.set(node, nextIndex)
-      nextIndex++
-      stack.push(node)
-      onStack.add(node)
-      const neighbors = [...(adj.get(node) ?? [])].sort()
-      callStack.push({ node, iter: neighbors[Symbol.iterator]() })
+  while (callStack.length > 0) {
+    const frame = callStack[callStack.length - 1]!
+
+    if (frame.pendingChild !== undefined) {
+      const child = frame.pendingChild
+      frame.pendingChild = undefined
+      state.lowlink.set(
+        frame.node,
+        Math.min(state.lowlink.get(frame.node)!, state.lowlink.get(child)!),
+      )
     }
 
-    pushNode(startNode)
-
-    while (callStack.length > 0) {
-      const frame = callStack[callStack.length - 1]!
-
-      if (frame.pendingChild !== undefined) {
-        const child = frame.pendingChild
-        frame.pendingChild = undefined
-        lowlink.set(frame.node, Math.min(lowlink.get(frame.node)!, lowlink.get(child)!))
-      }
-
-      const next = frame.iter.next()
-      if (next.done) {
-        // Fin des voisins : SCC root check.
-        if (lowlink.get(frame.node) === index.get(frame.node)) {
-          const scc: string[] = []
-          while (true) {
-            const w = stack.pop()!
-            onStack.delete(w)
-            scc.push(w)
-            if (w === frame.node) break
-          }
-          sccs.push(scc)
-        }
-        callStack.pop()
-        if (callStack.length > 0) {
-          callStack[callStack.length - 1]!.pendingChild = frame.node
-        }
-        continue
-      }
-
-      const child = next.value
-      if (!index.has(child)) {
-        frame.pendingChild = child
-        pushNode(child)
-      } else if (onStack.has(child)) {
-        lowlink.set(frame.node, Math.min(lowlink.get(frame.node)!, index.get(child)!))
-      }
+    const next = frame.iter.next()
+    if (next.done) {
+      finalizeTarjanFrame(frame, callStack, state)
+      continue
     }
+    advanceTarjanFrame(frame, next.value, adj, state, callStack)
   }
+}
 
-  return sccs
+function pushTarjanNode(
+  node: string,
+  adj: Map<string, Set<string>>,
+  state: TarjanState,
+  callStack: TarjanFrame[],
+): void {
+  state.index.set(node, state.nextIndex)
+  state.lowlink.set(node, state.nextIndex)
+  state.nextIndex++
+  state.stack.push(node)
+  state.onStack.add(node)
+  const neighbors = [...(adj.get(node) ?? [])].sort()
+  callStack.push({ node, iter: neighbors[Symbol.iterator]() })
+}
+
+/** Fin des voisins : SCC root check + pop frame. */
+function finalizeTarjanFrame(
+  frame: TarjanFrame,
+  callStack: TarjanFrame[],
+  state: TarjanState,
+): void {
+  if (state.lowlink.get(frame.node) === state.index.get(frame.node)) {
+    const scc: string[] = []
+    while (true) {
+      const w = state.stack.pop()!
+      state.onStack.delete(w)
+      scc.push(w)
+      if (w === frame.node) break
+    }
+    state.sccs.push(scc)
+  }
+  callStack.pop()
+  if (callStack.length > 0) {
+    callStack[callStack.length - 1]!.pendingChild = frame.node
+  }
+}
+
+/** Étape DFS : recurse si child unvisited, sinon update lowlink si on stack. */
+function advanceTarjanFrame(
+  frame: TarjanFrame,
+  child: string,
+  adj: Map<string, Set<string>>,
+  state: TarjanState,
+  callStack: TarjanFrame[],
+): void {
+  if (!state.index.has(child)) {
+    frame.pendingChild = child
+    pushTarjanNode(child, adj, state, callStack)
+    return
+  }
+  if (state.onStack.has(child)) {
+    state.lowlink.set(
+      frame.node,
+      Math.min(state.lowlink.get(frame.node)!, state.index.get(child)!),
+    )
+  }
 }
