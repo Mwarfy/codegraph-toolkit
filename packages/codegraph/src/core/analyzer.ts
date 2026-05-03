@@ -1025,6 +1025,79 @@ function patchSnapshotWithDetectorResults(
  * factsOnly skip component-metrics + dsm (mais pas module-metrics —
  * utilisé pour le ranking dans le boot brief).
  */
+/**
+ * Wrap try/catch + timing tracking pour un detector post-snapshot.
+ * Sans helper, chaque appel duplique 5 lignes (timer start, try/catch,
+ * timing assign dans les 2 branches).
+ */
+interface MetricStepArgs {
+  name: string
+  enabled: boolean
+  timing: AnalyzeResult['timing']
+  fn: () => void | Promise<void>
+}
+
+async function runMetricStep(args: MetricStepArgs): Promise<void> {
+  if (!args.enabled) return
+  const t = performance.now()
+  try {
+    await args.fn()
+    args.timing.detectors[args.name] = performance.now() - t
+  } catch (err) {
+    args.timing.detectors[args.name] = performance.now() - t
+    console.error(`  ✗ ${args.name} failed: ${err}`)
+  }
+}
+
+interface MetricRunArgs {
+  config: CodeGraphConfig
+  snapshot: GraphSnapshot
+  incremental: boolean
+}
+
+function runModuleMetricsStep(args: MetricRunArgs): void {
+  const { config, snapshot, incremental } = args
+  const mmOptions = config.detectorOptions?.['moduleMetrics'] ?? {}
+  if (incremental) {
+    incSetInputIfChanged(incGraphNodes, 'all', snapshot.nodes)
+    incSetInputIfChanged(incGraphEdgesForMetrics, 'all', snapshot.edges)
+    snapshot.moduleMetrics = incAllModuleMetrics.get('all')
+  } else {
+    snapshot.moduleMetrics = computeModuleMetrics(snapshot.nodes, snapshot.edges, {
+      edgeTypesForCentrality: mmOptions['edgeTypesForCentrality'] as any,
+      pagerankAlpha: mmOptions['pagerankAlpha'] as number | undefined,
+      pagerankTolerance: mmOptions['pagerankTolerance'] as number | undefined,
+    })
+  }
+}
+
+function runComponentMetricsStep(args: MetricRunArgs): void {
+  const { config, snapshot, incremental } = args
+  const cmOptions = config.detectorOptions?.['componentMetrics'] ?? {}
+  if (incremental) {
+    if (!incGraphNodes.has('all')) incSetInputIfChanged(incGraphNodes, 'all', snapshot.nodes)
+    if (!incGraphEdgesForMetrics.has('all')) incSetInputIfChanged(incGraphEdgesForMetrics, 'all', snapshot.edges)
+    snapshot.componentMetrics = incAllComponentMetrics.get('all')
+  } else {
+    snapshot.componentMetrics = computeComponentMetrics(snapshot.nodes, snapshot.edges, {
+      depth: cmOptions['depth'] as number | undefined,
+      edgeTypes: cmOptions['edgeTypes'] as any,
+      excludeComponents: cmOptions['excludeComponents'] as string[] | undefined,
+    })
+  }
+}
+
+function runDsmStep(config: CodeGraphConfig, snapshot: GraphSnapshot): void {
+  const dsmOptions = config.detectorOptions?.['dsm'] ?? {}
+  const depth = (dsmOptions['depth'] as number | undefined) ?? 3
+  const fileNodes = snapshot.nodes.filter((n) => n.type === 'file').map((n) => n.id)
+  const importEdges = snapshot.edges
+    .filter((e) => e.type === 'import')
+    .map((e) => ({ from: e.from, to: e.to }))
+  const agg = aggregateByContainer(fileNodes, importEdges, depth)
+  snapshot.dsm = computeDsm(agg.nodes, agg.edges)
+}
+
 async function runPostSnapshotMetrics(
   config: CodeGraphConfig,
   snapshot: GraphSnapshot,
@@ -1032,87 +1105,30 @@ async function runPostSnapshotMetrics(
   options: { factsOnly: boolean; incremental: boolean },
 ): Promise<void> {
   const { factsOnly, incremental } = options
+  const opts = config.detectorOptions
 
-  // module-metrics
-  const moduleMetricsEnabled =
-    (config.detectorOptions?.['moduleMetrics']?.['enabled'] as boolean | undefined) ?? true
-  const tModuleMetrics = performance.now()
-  if (moduleMetricsEnabled) {
-    try {
-      const mmOptions = config.detectorOptions?.['moduleMetrics'] ?? {}
-      if (incremental) {
-        incSetInputIfChanged(incGraphNodes, 'all', snapshot.nodes)
-        incSetInputIfChanged(incGraphEdgesForMetrics, 'all', snapshot.edges)
-        snapshot.moduleMetrics = incAllModuleMetrics.get('all')
-      } else {
-        snapshot.moduleMetrics = computeModuleMetrics(
-          snapshot.nodes,
-          snapshot.edges,
-          {
-            edgeTypesForCentrality: mmOptions['edgeTypesForCentrality'] as any,
-            pagerankAlpha: mmOptions['pagerankAlpha'] as number | undefined,
-            pagerankTolerance: mmOptions['pagerankTolerance'] as number | undefined,
-          },
-        )
-      }
-      timing.detectors['module-metrics'] = performance.now() - tModuleMetrics
-    } catch (err) {
-      timing.detectors['module-metrics'] = performance.now() - tModuleMetrics
-      console.error(`  ✗ module-metrics failed: ${err}`)
-    }
-  }
+  await runMetricStep({
+    name: 'module-metrics',
+    enabled: (opts?.['moduleMetrics']?.['enabled'] as boolean | undefined) ?? true,
+    timing,
+    fn: () => runModuleMetricsStep({ config, snapshot, incremental }),
+  })
 
-  // component-metrics
-  const componentMetricsEnabled =
-    !factsOnly &&
-    ((config.detectorOptions?.['componentMetrics']?.['enabled'] as boolean | undefined) ?? true)
-  const tComponentMetrics = performance.now()
-  if (componentMetricsEnabled) {
-    try {
-      const cmOptions = config.detectorOptions?.['componentMetrics'] ?? {}
-      if (incremental) {
-        if (!incGraphNodes.has('all')) incSetInputIfChanged(incGraphNodes, 'all', snapshot.nodes)
-        if (!incGraphEdgesForMetrics.has('all')) incSetInputIfChanged(incGraphEdgesForMetrics, 'all', snapshot.edges)
-        snapshot.componentMetrics = incAllComponentMetrics.get('all')
-      } else {
-        snapshot.componentMetrics = computeComponentMetrics(
-          snapshot.nodes,
-          snapshot.edges,
-          {
-            depth: cmOptions['depth'] as number | undefined,
-            edgeTypes: cmOptions['edgeTypes'] as any,
-            excludeComponents: cmOptions['excludeComponents'] as string[] | undefined,
-          },
-        )
-      }
-      timing.detectors['component-metrics'] = performance.now() - tComponentMetrics
-    } catch (err) {
-      timing.detectors['component-metrics'] = performance.now() - tComponentMetrics
-      console.error(`  ✗ component-metrics failed: ${err}`)
-    }
-  }
+  await runMetricStep({
+    name: 'component-metrics',
+    enabled: !factsOnly &&
+      ((opts?.['componentMetrics']?.['enabled'] as boolean | undefined) ?? true),
+    timing,
+    fn: () => runComponentMetricsStep({ config, snapshot, incremental }),
+  })
 
-  // dsm
-  const dsmEnabled =
-    !factsOnly &&
-    ((config.detectorOptions?.['dsm']?.['enabled'] as boolean | undefined) ?? true)
-  const tDsm = performance.now()
-  if (dsmEnabled) {
-    try {
-      const dsmOptions = config.detectorOptions?.['dsm'] ?? {}
-      const depth = (dsmOptions['depth'] as number | undefined) ?? 3
-      const fileNodes = snapshot.nodes.filter((n) => n.type === 'file').map((n) => n.id)
-      const importEdges = snapshot.edges
-        .filter((e) => e.type === 'import')
-        .map((e) => ({ from: e.from, to: e.to }))
-      const agg = aggregateByContainer(fileNodes, importEdges, depth)
-      snapshot.dsm = computeDsm(agg.nodes, agg.edges)
-      timing.detectors['dsm'] = performance.now() - tDsm
-    } catch (err) {
-      timing.detectors['dsm'] = performance.now() - tDsm
-      console.error(`  ✗ dsm failed: ${err}`)
-    }
-  }
+  await runMetricStep({
+    name: 'dsm',
+    enabled: !factsOnly &&
+      ((opts?.['dsm']?.['enabled'] as boolean | undefined) ?? true),
+    timing,
+    fn: () => runDsmStep(config, snapshot),
+  })
 }
 
 // ─── File Discovery ─────────────────────────────────────────────────────

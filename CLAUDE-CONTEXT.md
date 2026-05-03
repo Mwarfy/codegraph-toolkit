@@ -199,6 +199,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+3e30c42 refactor(toolkit): split buildTruthPointsFromSignals (cyclo 34→3) — 4 helpers per-table
 6190869 refactor(toolkit): split state-machines top-level — analyze + buildFromBundles
 bddfb2a refactor(toolkit): split data-flows top-level (analyzeDataFlows + buildDataFlowsFromBundles)
 d176584 refactor(toolkit): split renderLevel1/2/3 — synopsis/builder.ts ALL bombs cleared
@@ -210,7 +211,6 @@ af4705f refactor(toolkit): split renderCoreFlows (cyclo 22→4) — 3 helpers (g
 9609b7d refactor(toolkit): split renderIndex (cyclo 28→3) — 3 helpers + bucket pattern factor
 a0add06 refactor(toolkit): split renderModuleFiche (cyclo 32→4) — 5 helpers section-by-section
 020e949 refactor(toolkit): split renderModules (cyclo 35→12) — 4 helpers index builders
-df1ee8c refactor(toolkit): split renderEventFlows (cyclo 25→5, cog 63→4) — 5 helpers extraits
 ```
 
 ## Comment contribuer à ce brief
