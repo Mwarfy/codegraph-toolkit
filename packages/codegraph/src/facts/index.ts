@@ -1016,6 +1016,17 @@ function emitSqlFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
  * pour reduire la cyclomatic + cognitive de exportFacts.
  */
 function emitTier234Facts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
+  emitFunctionShapeFacts(snapshot, relations)
+  emitDeprecatedAndDeadFacts(snapshot, relations)
+  emitDiagnosticFacts(snapshot, relations)
+}
+
+/**
+ * Function shape Tier 2 — BooleanParam (param fonction de type boolean,
+ * code smell Clean Code) + FloatingPromise (promesse non-await, RTE
+ * silencieux). Sources : extractors/boolean-params + floating-promises.
+ */
+function emitFunctionShapeFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
   const booleanParamRel: RelationDef = {
     name: 'BooleanParam',
     decl: '(file:symbol, line:number, name:symbol, paramName:symbol, paramIndex:number, totalParams:number)',
@@ -1029,16 +1040,6 @@ function emitTier234Facts(snapshot: GraphSnapshot, relations: RelationDef[]): vo
   }
   relations.push(booleanParamRel)
 
-  const deadCodeRel: RelationDef = {
-    name: 'DeadCode',
-    decl: '(file:symbol, line:number, kind:symbol)',
-    rows: [],
-  }
-  for (const d of snapshot.deadCode ?? []) {
-    deadCodeRel.rows.push([sym(d.file), num(d.line), sym(d.kind)])
-  }
-  relations.push(deadCodeRel)
-
   const floatingPromiseRel: RelationDef = {
     name: 'FloatingPromise',
     decl: '(file:symbol, line:number, callee:symbol, containingSymbol:symbol)',
@@ -1051,6 +1052,23 @@ function emitTier234Facts(snapshot: GraphSnapshot, relations: RelationDef[]): vo
     ])
   }
   relations.push(floatingPromiseRel)
+}
+
+/**
+ * Tier 3 — DeadCode + Deprecated (Decl + Usage).
+ * - DeadCode : symbols inutilisés (dead-code detector AST + import graph).
+ * - DeprecatedDecl/Usage : @deprecated tags + their call sites.
+ */
+function emitDeprecatedAndDeadFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
+  const deadCodeRel: RelationDef = {
+    name: 'DeadCode',
+    decl: '(file:symbol, line:number, kind:symbol)',
+    rows: [],
+  }
+  for (const d of snapshot.deadCode ?? []) {
+    deadCodeRel.rows.push([sym(d.file), num(d.line), sym(d.kind)])
+  }
+  relations.push(deadCodeRel)
 
   const deprecatedDeclRel: RelationDef = {
     name: 'DeprecatedDecl',
@@ -1071,7 +1089,14 @@ function emitTier234Facts(snapshot: GraphSnapshot, relations: RelationDef[]): vo
     }
   }
   relations.push(deprecatedDeclRel, deprecatedUsageRel)
+}
 
+/**
+ * Tier 4 diagnostic facts — ArticulationPoint (graph theory cut vertex),
+ * ConstantExpression (tautology/contradiction/etc.), EslintViolation
+ * (importe depuis .codegraph/eslint.json si présent).
+ */
+function emitDiagnosticFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
   const articulationPointRel: RelationDef = {
     name: 'ArticulationPoint',
     decl: '(file:symbol, severity:number)',
@@ -1082,7 +1107,6 @@ function emitTier234Facts(snapshot: GraphSnapshot, relations: RelationDef[]): vo
   }
   relations.push(articulationPointRel)
 
-  // Constant expressions (tautology / contradiction / gratuitous bool / etc.)
   const constantExprRel: RelationDef = {
     name: 'ConstantExpression',
     decl: '(kind:symbol, file:symbol, line:number, exprRepr:symbol)',
@@ -1093,7 +1117,6 @@ function emitTier234Facts(snapshot: GraphSnapshot, relations: RelationDef[]): vo
   }
   relations.push(constantExprRel)
 
-  // ESLint violations imported from .codegraph/eslint.json (if present).
   const eslintRel: RelationDef = {
     name: 'EslintViolation',
     decl: '(file:symbol, line:number, ruleId:symbol, severity:number)',
@@ -1185,7 +1208,20 @@ function emitCrossDisciplineFacts(
   snapshot: GraphSnapshot,
   relations: RelationDef[],
 ): void {
-  // ─── SpectralMetric (théorie spectrale, Fiedler λ₂) ─────────────────
+  emitSpectralAndEntropyFacts(snapshot, relations)
+  emitDuplicateAndDriftFacts(snapshot, relations)
+  emitCommunityAndCausalityFacts(snapshot, relations)
+}
+
+/**
+ * Cross-discipline batch 1 : graph theory + information theory.
+ * - SpectralMetric (Fiedler λ₂) : connectivité algébrique du graphe.
+ * - SymbolEntropy (Shannon) : entropie des appels sortants par symbol.
+ * - PackageMinCut (Ford-Fulkerson) : min-cut entre packages.
+ * - InformationBottleneck (Tishby/Pereira/Bialek 1999) : symbols qui
+ *   compriment l'information du graphe. Aux : SymbolFile (file:name).
+ */
+function emitSpectralAndEntropyFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
   const spectralRel: RelationDef = {
     name: 'SpectralMetric',
     decl: '(scope:symbol, nodeCount:number, edgeCount:number, fiedlerX1000:number, cheegerBound:number)',
@@ -1199,7 +1235,6 @@ function emitCrossDisciplineFacts(
   }
   relations.push(spectralRel)
 
-  // ─── SymbolEntropy (théorie de l'information, Shannon) ──────────────
   const entropyRel: RelationDef = {
     name: 'SymbolEntropy',
     decl: '(fromSymbol:symbol, callCount:number, distinctCallees:number, entropyX1000:number)',
@@ -1213,46 +1248,6 @@ function emitCrossDisciplineFacts(
   }
   relations.push(entropyRel)
 
-  // ─── SignatureNearDuplicate (théorie des codes, Hamming) ────────────
-  const sigDupRel: RelationDef = {
-    name: 'SignatureNearDuplicate',
-    decl: '(symbolA:symbol, symbolB:symbol, hamming:number)',
-    rows: [],
-  }
-  for (const d of snapshot.signatureDuplicates ?? []) {
-    sigDupRel.rows.push([sym(d.symbolA), sym(d.symbolB), num(d.hamming)])
-  }
-  relations.push(sigDupRel)
-
-  // ─── PersistentCycle (TDA — homologie persistante) ─────────────────
-  const persistentCycleRel: RelationDef = {
-    name: 'PersistentCycle',
-    decl: '(cycleId:symbol, snapshotCount:number, totalSnapshots:number, persistenceX1000:number, gated:symbol)',
-    rows: [],
-  }
-  for (const c of snapshot.persistentCycles ?? []) {
-    persistentCycleRel.rows.push([
-      sym(c.cycleId), num(c.snapshotCount), num(c.totalSnapshots),
-      num(c.persistenceX1000), sym(c.gated ? 'true' : 'false'),
-    ])
-  }
-  relations.push(persistentCycleRel)
-
-  // ─── LyapunovMetric (théorie systèmes dynamiques) ──────────────────
-  const lyapunovRel: RelationDef = {
-    name: 'LyapunovMetric',
-    decl: '(file:symbol, totalCoChanges:number, partnerCount:number, lyapunovX1000:number)',
-    rows: [],
-  }
-  for (const l of snapshot.lyapunovMetrics ?? []) {
-    lyapunovRel.rows.push([
-      sym(l.file), num(l.totalCoChanges),
-      num(l.partnerCount), num(l.lyapunovX1000),
-    ])
-  }
-  relations.push(lyapunovRel)
-
-  // ─── PackageMinCut (théorie des flots, Ford-Fulkerson) ─────────────
   const minCutRel: RelationDef = {
     name: 'PackageMinCut',
     decl: '(fromPackage:symbol, toPackage:symbol, edgeCount:number, minCut:number)',
@@ -1266,15 +1261,13 @@ function emitCrossDisciplineFacts(
   }
   relations.push(minCutRel)
 
-  // ─── InformationBottleneck (Tishby/Pereira/Bialek 1999) ────────────
   const ibRel: RelationDef = {
     name: 'InformationBottleneck',
     decl: '(symbol:symbol, callerCount:number, calleeCount:number, scoreX1000:number)',
     rows: [],
   }
-  // Auxiliaire : SymbolFile(symbol, file) — extrait depuis "file:name".
-  // Permet aux rules de joindre des facts file-level (EntryPoint, etc.)
-  // avec des facts symbol-level (IB, NCD, signatures, ...).
+  // Aux : SymbolFile(symbol, file) — extrait "file:name" → file pour
+  // permettre aux rules de joindre facts file-level avec symbol-level.
   const symbolFileRel: RelationDef = {
     name: 'SymbolFile',
     decl: '(symbol:symbol, file:symbol)',
@@ -1285,18 +1278,81 @@ function emitCrossDisciplineFacts(
       sym(ib.symbol), num(ib.callerCount),
       num(ib.calleeCount), num(ib.bottleneckScoreX1000),
     ])
-    // Extract `file:name` → file
     const colonIdx = ib.symbol.lastIndexOf(':')
     if (colonIdx > 0) {
       symbolFileRel.rows.push([sym(ib.symbol), sym(ib.symbol.slice(0, colonIdx))])
     }
   }
-  relations.push(ibRel)
-  relations.push(symbolFileRel)
+  relations.push(ibRel, symbolFileRel)
+}
 
-  // ─── ImportCommunity (Newman-Girvan 2004 / Louvain 2008) ──────────
-  // 8e discipline : community detection sur le graphe d'imports.
-  // misplaced=1 si le file est dans une community != son package physique.
+/**
+ * Cross-discipline batch 2 : duplicates + drift signals.
+ * - SignatureNearDuplicate (théorie des codes, Hamming).
+ * - PersistentCycle (TDA — homologie persistante).
+ * - LyapunovMetric (systèmes dynamiques, exposant de divergence).
+ * - CompressionDistance (NCD, Kolmogorov).
+ */
+function emitDuplicateAndDriftFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
+  const sigDupRel: RelationDef = {
+    name: 'SignatureNearDuplicate',
+    decl: '(symbolA:symbol, symbolB:symbol, hamming:number)',
+    rows: [],
+  }
+  for (const d of snapshot.signatureDuplicates ?? []) {
+    sigDupRel.rows.push([sym(d.symbolA), sym(d.symbolB), num(d.hamming)])
+  }
+  relations.push(sigDupRel)
+
+  const persistentCycleRel: RelationDef = {
+    name: 'PersistentCycle',
+    decl: '(cycleId:symbol, snapshotCount:number, totalSnapshots:number, persistenceX1000:number, gated:symbol)',
+    rows: [],
+  }
+  for (const c of snapshot.persistentCycles ?? []) {
+    persistentCycleRel.rows.push([
+      sym(c.cycleId), num(c.snapshotCount), num(c.totalSnapshots),
+      num(c.persistenceX1000), sym(c.gated ? 'true' : 'false'),
+    ])
+  }
+  relations.push(persistentCycleRel)
+
+  const lyapunovRel: RelationDef = {
+    name: 'LyapunovMetric',
+    decl: '(file:symbol, totalCoChanges:number, partnerCount:number, lyapunovX1000:number)',
+    rows: [],
+  }
+  for (const l of snapshot.lyapunovMetrics ?? []) {
+    lyapunovRel.rows.push([
+      sym(l.file), num(l.totalCoChanges),
+      num(l.partnerCount), num(l.lyapunovX1000),
+    ])
+  }
+  relations.push(lyapunovRel)
+
+  const ncdRel: RelationDef = {
+    name: 'CompressionDistance',
+    decl: '(symbolA:symbol, symbolB:symbol, ncdX1000:number)',
+    rows: [],
+  }
+  for (const ncd of snapshot.compressionDistances ?? []) {
+    ncdRel.rows.push([
+      sym(ncd.symbolA), sym(ncd.symbolB), num(ncd.ncdX1000),
+    ])
+  }
+  relations.push(ncdRel)
+}
+
+/**
+ * Cross-discipline batch 3 : community detection + causality.
+ * - ImportCommunity (Newman-Girvan / Louvain) : community detection
+ *   sur graphe d'imports. misplaced=1 si community != package physique.
+ * - ModularityScore : Q global Newman-Girvan (singleton).
+ * - FactKindStability (Markov stationary distribution).
+ * - BayesianCoChange : P(B|A) directionnelle.
+ * - GrangerCausality : lag-1 causation git.
+ */
+function emitCommunityAndCausalityFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
   const communityRel: RelationDef = {
     name: 'ImportCommunity',
     decl: '(file:symbol, communityId:number, physicalPackage:symbol, misplaced:number)',
@@ -1310,8 +1366,6 @@ function emitCrossDisciplineFacts(
   }
   relations.push(communityRel)
 
-  // ─── ModularityScore — score Q global Newman-Girvan ────────────────
-  // Singleton fact : un seul tuple par snapshot.
   const modularityRel: RelationDef = {
     name: 'ModularityScore',
     decl: '(globalQX1000:number, communityCount:number, misplacedCount:number)',
@@ -1326,7 +1380,6 @@ function emitCrossDisciplineFacts(
   }
   relations.push(modularityRel)
 
-  // ─── FactKindStability (Markov stationary distribution) ────────────
   const stabilityRel: RelationDef = {
     name: 'FactKindStability',
     decl: '(relationName:symbol, snapshotsTotal:number, stableTransitions:number, stationaryStableX1000:number, avgTupleCount:number)',
@@ -1341,7 +1394,6 @@ function emitCrossDisciplineFacts(
   }
   relations.push(stabilityRel)
 
-  // ─── BayesianCoChange (9e discipline : P(B|A) directionnelle) ──────
   const bayesRel: RelationDef = {
     name: 'BayesianCoChange',
     decl: '(driver:symbol, follower:symbol, conditionalProbX1000:number)',
@@ -1349,27 +1401,11 @@ function emitCrossDisciplineFacts(
   }
   for (const b of snapshot.bayesianCoChanges ?? []) {
     bayesRel.rows.push([
-      sym(b.driver), sym(b.follower),
-      num(b.conditionalProbX1000),
+      sym(b.driver), sym(b.follower), num(b.conditionalProbX1000),
     ])
   }
   relations.push(bayesRel)
 
-  // ─── CompressionDistance (10e discipline : NCD Kolmogorov) ─────────
-  const ncdRel: RelationDef = {
-    name: 'CompressionDistance',
-    decl: '(symbolA:symbol, symbolB:symbol, ncdX1000:number)',
-    rows: [],
-  }
-  for (const ncd of snapshot.compressionDistances ?? []) {
-    ncdRel.rows.push([
-      sym(ncd.symbolA), sym(ncd.symbolB),
-      num(ncd.ncdX1000),
-    ])
-  }
-  relations.push(ncdRel)
-
-  // ─── GrangerCausality (11e discipline : lag-1 causation git) ───────
   const grangerRel: RelationDef = {
     name: 'GrangerCausality',
     decl: '(driverFile:symbol, followerFile:symbol, observations:number, excessConditionalX1000:number)',
