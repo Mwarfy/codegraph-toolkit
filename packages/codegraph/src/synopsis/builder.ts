@@ -405,6 +405,80 @@ export function buildSynopsis(snapshot: GraphSnapshot, options: SynopsisOptions 
   }
 }
 
+/**
+ * Component id = `<container>/src/<second>` for "src-like" structure,
+ * else `<container>/<first>`.
+ */
+function deriveCompId(containerId: string, fileId: string): string {
+  const rel = fileId.slice(containerId.length + 1)
+  const parts = rel.split('/')
+  if (parts[0] === 'src' && parts.length >= 3) {
+    return `${containerId}/src/${parts[1]}`
+  }
+  return `${containerId}/${parts[0]}`
+}
+
+function groupFilesByComponent(containerId: string, cFiles: GraphNode[]): Map<string, GraphNode[]> {
+  const byComp = new Map<string, GraphNode[]>()
+  for (const f of cFiles) {
+    const compId = deriveCompId(containerId, f.id)
+    const arr = byComp.get(compId) || []
+    arr.push(f)
+    byComp.set(compId, arr)
+  }
+  return byComp
+}
+
+function computeComponentEdgeDegrees(idSet: Set<string>, edges: GraphEdge[]): { inD: number; outD: number } {
+  let inD = 0
+  let outD = 0
+  for (const e of edges) {
+    const inInSet = idSet.has(e.to)
+    const outInSet = idSet.has(e.from)
+    if (inInSet && !outInSet) inD++
+    if (outInSet && !inInSet) outD++
+  }
+  return { inD, outD }
+}
+
+function buildComponentTopFiles(
+  nodes: GraphNode[],
+  inDeg: Map<string, number>,
+  adrMarkers?: Map<string, string[]>,
+): Array<{ id: string; label: string; inDegree: number; adrs?: string[] }> {
+  return nodes
+    .map(n => {
+      const t = { id: n.id, label: n.label, inDegree: inDeg.get(n.id) || 0 } as { id: string; label: string; inDegree: number; adrs?: string[] }
+      const adrs = adrMarkers?.get(n.id)
+      if (adrs) t.adrs = adrs
+      return t
+    })
+    .filter(t => t.inDegree > 0)
+    .sort((a, b) => b.inDegree - a.inDegree || a.id.localeCompare(b.id))
+    .slice(0, 3)
+}
+
+function dominantTags(nodes: GraphNode[]): string[] {
+  const tagCounts = new Map<string, number>()
+  for (const n of nodes) {
+    for (const t of n.tags) tagCounts.set(t, (tagCounts.get(t) || 0) + 1)
+  }
+  return Array.from(tagCounts.entries())
+    .filter(([_, c]) => c >= Math.max(1, nodes.length / 2))
+    .map(([t]) => t)
+    .sort()
+}
+
+function unionAdrs(nodes: GraphNode[], adrMarkers?: Map<string, string[]>): string[] | undefined {
+  if (!adrMarkers) return undefined
+  const set = new Set<string>()
+  for (const n of nodes) {
+    const arr = adrMarkers.get(n.id)
+    if (arr) for (const a of arr) set.add(a)
+  }
+  return set.size > 0 ? [...set].sort() : undefined
+}
+
 function buildComponents(
   containerId: string,
   cFiles: GraphNode[],
@@ -413,82 +487,21 @@ function buildComponents(
   outDeg: Map<string, number>,
   adrMarkers?: Map<string, string[]>,
 ): ComponentEntry[] {
-  // Component id = containerId/src/<second> for "src-like" structure, else containerId/<first>
-  const byComp = new Map<string, GraphNode[]>()
-  for (const f of cFiles) {
-    const rel = f.id.slice(containerId.length + 1)
-    const parts = rel.split('/')
-    let compLabel: string
-    let compId: string
-    if (parts[0] === 'src' && parts.length >= 3) {
-      compLabel = parts[1]
-      compId = `${containerId}/src/${parts[1]}`
-    } else {
-      compLabel = parts[0]
-      compId = `${containerId}/${parts[0]}`
-    }
-    const arr = byComp.get(compId) || []
-    arr.push(f)
-    byComp.set(compId, arr)
-  }
-
-  const compIdToLabel = (cid: string) => cid.slice(containerId.length + 1).split('/').slice(-1)[0]
-
-  const compFileIds = new Map<string, Set<string>>()
-  for (const [cid, nodes] of byComp) {
-    compFileIds.set(cid, new Set(nodes.map(n => n.id)))
-  }
+  const byComp = groupFilesByComponent(containerId, cFiles)
+  const compIdToLabel = (cid: string): string => cid.slice(containerId.length + 1).split('/').slice(-1)[0]
 
   const entries: ComponentEntry[] = Array.from(byComp.entries()).map(([cid, nodes]) => {
-    const idSet = compFileIds.get(cid)!
-    let inD = 0
-    let outD = 0
-    for (const e of edges) {
-      const inInSet = idSet.has(e.to)
-      const outInSet = idSet.has(e.from)
-      if (inInSet && !outInSet) inD++
-      if (outInSet && !inInSet) outD++
-    }
-    const topFiles = nodes
-      .map(n => {
-        const t = { id: n.id, label: n.label, inDegree: inDeg.get(n.id) || 0 } as { id: string; label: string; inDegree: number; adrs?: string[] }
-        const adrs = adrMarkers?.get(n.id)
-        if (adrs) t.adrs = adrs
-        return t
-      })
-      .filter(t => t.inDegree > 0)
-      .sort((a, b) => b.inDegree - a.inDegree || a.id.localeCompare(b.id))
-      .slice(0, 3)
-
-    // Dominant tags (tags that appear in >=50% of files)
-    const tagCounts = new Map<string, number>()
-    for (const n of nodes) {
-      for (const t of n.tags) tagCounts.set(t, (tagCounts.get(t) || 0) + 1)
-    }
-    const tags = Array.from(tagCounts.entries())
-      .filter(([_, c]) => c >= Math.max(1, nodes.length / 2))
-      .map(([t]) => t)
-      .sort()
-
-    // ADRs distinct du composant (union des fichiers)
-    let compAdrs: string[] | undefined
-    if (adrMarkers) {
-      const set = new Set<string>()
-      for (const n of nodes) {
-        const arr = adrMarkers.get(n.id)
-        if (arr) for (const a of arr) set.add(a)
-      }
-      if (set.size > 0) compAdrs = [...set].sort()
-    }
-
+    const idSet = new Set(nodes.map(n => n.id))
+    const { inD, outD } = computeComponentEdgeDegrees(idSet, edges)
+    const compAdrs = unionAdrs(nodes, adrMarkers)
     return {
       id: cid,
       label: compIdToLabel(cid),
       fileCount: nodes.length,
       inDegree: inD,
       outDegree: outD,
-      topFiles,
-      tags,
+      topFiles: buildComponentTopFiles(nodes, inDeg, adrMarkers),
+      tags: dominantTags(nodes),
       ...(compAdrs ? { adrs: compAdrs } : {}),
     }
   })
