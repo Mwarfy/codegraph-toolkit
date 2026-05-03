@@ -208,6 +208,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+b431f2f refactor(codegraph): split getOrBuildSharedProject (cyclo 20→2, cog 33→1) — project-cache.ts cleared
 600fdb0 refactor(codegraph): split BullmqQueueDetector.detect (cyclo 20→2, cog 42→1) — bullmq-queues.ts cleared
 fb50d40 refactor(codegraph): split EventBusDetector.detect (cyclo 20→1, cog 48→0) — event-bus.ts cleared
 fcb7141 refactor(codegraph): split findReachablePaths (cyclo 21→3, cog 34→1) — reachability.ts cleared
@@ -219,7 +220,6 @@ a73b0b8 refactor(codegraph-mcp): split codegraphTruthPointFor (cyclo 22→4, cog
 1bc0481 refactor(codegraph): split DbTableDetector.detect (cyclo 22→1, cog 47→0) — db-tables.ts cleared
 05adaa7 refactor(codegraph): split extractDeprecatedUsageFileBundle (cyclo 23→2, cog 31→1) — deprecated-usage.ts cleared
 1e46881 refactor(codegraph): split extractResourceBalanceFileBundle (cyclo 24→5, cog 27→5) — resource-balance.ts cleared
-3b34ca1 refactor(codegraph): split importEslintViolations (cyclo 24→4, cog 29→2) — eslint-import.ts cleared
 ```
 
 ## Comment contribuer à ce brief

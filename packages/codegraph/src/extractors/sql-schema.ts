@@ -316,105 +316,127 @@ export function derivePrimaryKeys(tables: SqlTable[], indexes: SqlIndex[]): SqlP
  * d'I/O), utilisable en test. Public pour réutilisation par la version
  * Salsa éventuelle.
  */
-export function parseSqlFile(
-  content: string,
-  file: string,
-): { tables: SqlTable[]; indexes: SqlIndex[]; foreignKeys: SqlForeignKey[]; addedColumns: AddedColumn[]; renamedColumns: RenamedColumn[]; droppedTables: DroppedTable[] } {
-  const tables: SqlTable[] = []
-  const indexes: SqlIndex[] = []
-  const foreignKeys: SqlForeignKey[] = []
-  const addedColumns: AddedColumn[] = []
-  const renamedColumns: RenamedColumn[] = []
-  const droppedTables: DroppedTable[] = []
+interface ParseSqlResult {
+  tables: SqlTable[]
+  indexes: SqlIndex[]
+  foreignKeys: SqlForeignKey[]
+  addedColumns: AddedColumn[]
+  renamedColumns: RenamedColumn[]
+  droppedTables: DroppedTable[]
+}
 
-  // ─── CREATE TABLE ────────────────────────────────────────────────
-  // Capture: nom + bloc parenthèses (avec parenthèses imbriquées).
-  // Approche : chercher `CREATE TABLE ... (` puis matcher la `)` finale
-  // en respectant le balance.
-  const createTableRe = /CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?\s+(\w+(?:\.\w+)?)\s*\(/gi
+export function parseSqlFile(content: string, file: string): ParseSqlResult {
+  const r: ParseSqlResult = {
+    tables: [], indexes: [], foreignKeys: [],
+    addedColumns: [], renamedColumns: [], droppedTables: [],
+  }
+  parseCreateTable(content, file, r)
+  parseCreateIndex(content, file, r.indexes)
+  parseAlterTableFk(content, file, r.foreignKeys)
+  parseAlterAddColumn(content, file, r.addedColumns)
+  parseAlterRenameColumn(content, file, r.renamedColumns)
+  parseDropTable(content, file, r.droppedTables)
+  return r
+}
+
+/**
+ * `CREATE TABLE [IF NOT EXISTS] name (...)` — match closing paren via balanced
+ * scanner pour gérer les parenthèses imbriquées dans le bloc colonnes.
+ */
+function parseCreateTable(content: string, file: string, r: ParseSqlResult): void {
+  const re = /CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?\s+(\w+(?:\.\w+)?)\s*\(/gi
   let m: RegExpExecArray | null
-  while ((m = createTableRe.exec(content)) !== null) {
+  while ((m = re.exec(content)) !== null) {
     const tableName = stripSchema(m[1])
     const startIdx = m.index + m[0].length
     const tableStartLine = lineNumberAt(content, m.index)
 
-    // Match closing paren via balance
     const blockEnd = matchBalancedParen(content, startIdx)
     if (blockEnd === -1) continue
     const block = content.slice(startIdx, blockEnd)
 
     const columns = parseTableColumns(block, tableStartLine)
-    tables.push({ name: tableName, file, line: tableStartLine, columns })
+    r.tables.push({ name: tableName, file, line: tableStartLine, columns })
 
-    // Émet les FKs inline + indexes implicites
-    for (const col of columns) {
-      if (col.foreignKey) {
-        foreignKeys.push({
-          fromTable: tableName,
-          fromColumn: col.name,
-          toTable: col.foreignKey.toTable,
-          toColumn: col.foreignKey.toColumn,
-          file,
-          line: col.line,
-        })
-      }
-      if (col.isPrimaryKey) {
-        indexes.push({
-          name: `${tableName}_pkey`,
-          table: tableName,
-          firstColumn: col.name,
-          columns: [col.name],
-          unique: true,
-          implicit: true,
-          file,
-          line: col.line,
-        })
-      } else if (col.isUnique) {
-        indexes.push({
-          name: `${tableName}_${col.name}_key`,
-          table: tableName,
-          firstColumn: col.name,
-          columns: [col.name],
-          unique: true,
-          implicit: true,
-          file,
-          line: col.line,
-        })
-      }
-    }
-
-    // Table-level constraints (PRIMARY KEY (a, b), UNIQUE (x, y))
-    const tableLevelIndexes = parseTableLevelConstraints(block, tableName, tableStartLine, file)
-    indexes.push(...tableLevelIndexes)
+    emitInlineFksAndImplicitIndexes(columns, tableName, file, r)
+    r.indexes.push(...parseTableLevelConstraints(block, tableName, tableStartLine, file))
   }
+}
 
-  // ─── CREATE INDEX ────────────────────────────────────────────────
-  const createIndexRe = /CREATE\s+(UNIQUE\s+)?INDEX(?:\s+CONCURRENTLY)?(?:\s+IF\s+NOT\s+EXISTS)?\s+(\w+)\s+ON\s+(\w+(?:\.\w+)?)\s*\(([^)]+)\)/gi
-  while ((m = createIndexRe.exec(content)) !== null) {
-    const isUnique = !!m[1]
-    const indexName = m[2]
-    const tableName = stripSchema(m[3])
-    const colsRaw = m[4]
-    const cols = parseIndexColumns(colsRaw)
-    const firstColumn = cols.length > 0 && !cols[0].includes('(')
-      ? cols[0]
-      : null  // expression-based, on skip pour le matching FK
+/** Émet les FK inline + indexes implicites (PRIMARY KEY / UNIQUE) per column. */
+function emitInlineFksAndImplicitIndexes(
+  columns: ReturnType<typeof parseTableColumns>,
+  tableName: string,
+  file: string,
+  r: ParseSqlResult,
+): void {
+  for (const col of columns) {
+    if (col.foreignKey) {
+      r.foreignKeys.push({
+        fromTable: tableName,
+        fromColumn: col.name,
+        toTable: col.foreignKey.toTable,
+        toColumn: col.foreignKey.toColumn,
+        file,
+        line: col.line,
+      })
+    }
+    if (col.isPrimaryKey) {
+      r.indexes.push(makeImplicitIndex(`${tableName}_pkey`, tableName, col.name, file, col.line))
+    } else if (col.isUnique) {
+      r.indexes.push(makeImplicitIndex(`${tableName}_${col.name}_key`, tableName, col.name, file, col.line))
+    }
+  }
+}
+
+function makeImplicitIndex(
+  name: string,
+  table: string,
+  column: string,
+  file: string,
+  line: number,
+): SqlIndex {
+  return {
+    name,
+    table,
+    firstColumn: column,
+    columns: [column],
+    unique: true,
+    implicit: true,
+    file,
+    line,
+  }
+}
+
+function parseCreateIndex(content: string, file: string, indexes: SqlIndex[]): void {
+  const re = /CREATE\s+(UNIQUE\s+)?INDEX(?:\s+CONCURRENTLY)?(?:\s+IF\s+NOT\s+EXISTS)?\s+(\w+)\s+ON\s+(\w+(?:\.\w+)?)\s*\(([^)]+)\)/gi
+  let m: RegExpExecArray | null
+  while ((m = re.exec(content)) !== null) {
+    const cols = parseIndexColumns(m[4])
+    // expression-based : skip pour le matching FK (firstColumn=null).
+    const firstColumn = cols.length > 0 && !cols[0].includes('(') ? cols[0] : null
     indexes.push({
-      name: indexName,
-      table: tableName,
+      name: m[2],
+      table: stripSchema(m[3]),
       firstColumn,
       columns: cols,
-      unique: isUnique,
+      unique: !!m[1],
       implicit: false,
       file,
       line: lineNumberAt(content, m.index),
     })
   }
+}
 
-  // ─── ALTER TABLE ... ADD CONSTRAINT ... FOREIGN KEY ──────────────
-  // Pattern moins fréquent mais à supporter
-  const alterFkRe = /ALTER\s+TABLE\s+(\w+(?:\.\w+)?)\s+ADD\s+(?:CONSTRAINT\s+\w+\s+)?FOREIGN\s+KEY\s*\(\s*(\w+)\s*\)\s+REFERENCES\s+(\w+(?:\.\w+)?)\s*\(\s*(\w+)\s*\)/gi
-  while ((m = alterFkRe.exec(content)) !== null) {
+/** ALTER TABLE ... ADD [CONSTRAINT name] FOREIGN KEY (col) REFERENCES ... */
+function parseAlterTableFk(
+  content: string,
+  file: string,
+  foreignKeys: SqlForeignKey[],
+): void {
+  const re = /ALTER\s+TABLE\s+(\w+(?:\.\w+)?)\s+ADD\s+(?:CONSTRAINT\s+\w+\s+)?FOREIGN\s+KEY\s*\(\s*(\w+)\s*\)\s+REFERENCES\s+(\w+(?:\.\w+)?)\s*\(\s*(\w+)\s*\)/gi
+  let m: RegExpExecArray | null
+  while ((m = re.exec(content)) !== null) {
     foreignKeys.push({
       fromTable: stripSchema(m[1]),
       fromColumn: m[2],
@@ -424,25 +446,32 @@ export function parseSqlFile(
       line: lineNumberAt(content, m.index),
     })
   }
+}
 
-  // ─── ALTER TABLE ... ADD COLUMN ──────────────────────────────────
-  // Migrations qui étendent une table existante. Sans ce parsing, le
-  // détecteur sql-schema ne voit que les CREATE TABLE source — les
-  // colonnes ajoutées via ALTER ne sont pas détectées, créant des FP
-  // sur les rules sql-audit-columns / sql-fk-needs-index.
-  //
-  // Pattern : `ALTER TABLE [IF EXISTS] table ADD [COLUMN] [IF NOT EXISTS] col TYPE [...constraints]`
-  const alterAddColRe = /ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(\w+(?:\.\w+)?)\s+ADD\s+(?:COLUMN\s+)?(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s+([A-Z][A-Z0-9_()]*(?:\([^)]*\))?)\s*([^;,\n]*)/gi
-  while ((m = alterAddColRe.exec(content)) !== null) {
-    // Skip si match a déjà été parsed comme FK (ALTER TABLE ... ADD CONSTRAINT FK ...)
+/**
+ * ALTER TABLE [IF EXISTS] table ADD [COLUMN] [IF NOT EXISTS] col TYPE [...]
+ *
+ * Migrations qui étendent une table existante. Sans ce parsing, le détecteur
+ * sql-schema ne voit que les CREATE TABLE source → FP sur sql-audit-columns /
+ * sql-fk-needs-index.
+ *
+ * Skip les patterns ambigus :
+ *   - ALTER TABLE x ADD CONSTRAINT FK : déjà parsé par parseAlterTableFk.
+ *   - ALTER TABLE x ADD PRIMARY KEY / UNIQUE / CHECK / EXCLUDE : table-level
+ *     constraint sans CONSTRAINT keyword. Sans skip, parser croit voir une
+ *     col `PRIMARY` de type `KEY` → FP column-not-snake-case sur "PRIMARY".
+ */
+function parseAlterAddColumn(
+  content: string,
+  file: string,
+  addedColumns: AddedColumn[],
+): void {
+  const re = /ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(\w+(?:\.\w+)?)\s+ADD\s+(?:COLUMN\s+)?(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s+([A-Z][A-Z0-9_()]*(?:\([^)]*\))?)\s*([^;,\n]*)/gi
+  let m: RegExpExecArray | null
+  while ((m = re.exec(content)) !== null) {
     if (/FOREIGN\s+KEY/i.test(m[0])) continue
     if (/CONSTRAINT/i.test(m[0])) continue
-    // Skip table-level constraints sans CONSTRAINT keyword :
-    // `ALTER TABLE x ADD PRIMARY KEY (id)`, `ADD UNIQUE (col)`, `ADD CHECK (...)`.
-    // Sans ce skip, le parseur croit voir une col `PRIMARY` de type `KEY`
-    // → FP `column-not-snake-case` sur "PRIMARY".
-    const colName = m[2].toUpperCase()
-    if (colName === 'PRIMARY' || colName === 'UNIQUE' || colName === 'CHECK' || colName === 'EXCLUDE') continue
+    if (isReservedColKeyword(m[2])) continue
     addedColumns.push({
       table: stripSchema(m[1]),
       column: m[2],
@@ -454,14 +483,26 @@ export function parseSqlFile(
       line: lineNumberAt(content, m.index),
     })
   }
+}
 
-  // ─── ALTER TABLE ... RENAME COLUMN ────────────────────────────────
-  // Pattern : `ALTER TABLE [IF EXISTS] table RENAME COLUMN old TO new`
-  // (variant : `RENAME old TO new` sans COLUMN keyword).
-  // Critical pour éviter les FP sur les rules sql-naming/sql-audit-columns
-  // après un cleanup rename qui résout déjà la convention.
-  const alterRenameColRe = /ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(\w+(?:\.\w+)?)\s+RENAME\s+(?:COLUMN\s+)?(\w+)\s+TO\s+(\w+)/gi
-  while ((m = alterRenameColRe.exec(content)) !== null) {
+function isReservedColKeyword(name: string): boolean {
+  const upper = name.toUpperCase()
+  return upper === 'PRIMARY' || upper === 'UNIQUE' || upper === 'CHECK' || upper === 'EXCLUDE'
+}
+
+/**
+ * ALTER TABLE [IF EXISTS] table RENAME [COLUMN] old TO new — critical pour
+ * éviter les FP sur sql-naming après un cleanup rename qui résout déjà la
+ * convention.
+ */
+function parseAlterRenameColumn(
+  content: string,
+  file: string,
+  renamedColumns: RenamedColumn[],
+): void {
+  const re = /ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(\w+(?:\.\w+)?)\s+RENAME\s+(?:COLUMN\s+)?(\w+)\s+TO\s+(\w+)/gi
+  let m: RegExpExecArray | null
+  while ((m = re.exec(content)) !== null) {
     renamedColumns.push({
       table: stripSchema(m[1]),
       fromName: m[2],
@@ -470,22 +511,27 @@ export function parseSqlFile(
       line: lineNumberAt(content, m.index),
     })
   }
+}
 
-  // ─── DROP TABLE ───────────────────────────────────────────────────
-  // Pattern : `DROP TABLE [IF EXISTS] table [CASCADE|RESTRICT]`.
-  // Une table droppée DOIT être retirée du résultat — sinon les rules
-  // sql-naming/sql-audit-columns flaggent des violations sur des tables
-  // mortes (cf. mig 039 dropshipping cleanup).
-  const dropTableRe = /DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(\w+(?:\.\w+)?)\s*(?:CASCADE|RESTRICT)?\s*[;,\n]/gi
-  while ((m = dropTableRe.exec(content)) !== null) {
+/**
+ * DROP TABLE [IF EXISTS] table [CASCADE|RESTRICT] — une table droppée DOIT
+ * être retirée du résultat ; sinon sql-naming/sql-audit-columns flaggent des
+ * tables mortes (cf. mig 039 dropshipping cleanup).
+ */
+function parseDropTable(
+  content: string,
+  file: string,
+  droppedTables: DroppedTable[],
+): void {
+  const re = /DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(\w+(?:\.\w+)?)\s*(?:CASCADE|RESTRICT)?\s*[;,\n]/gi
+  let m: RegExpExecArray | null
+  while ((m = re.exec(content)) !== null) {
     droppedTables.push({
       table: stripSchema(m[1]),
       file,
       line: lineNumberAt(content, m.index),
     })
   }
-
-  return { tables, indexes, foreignKeys, addedColumns, renamedColumns, droppedTables }
 }
 
 // Internal helper type for ALTER TABLE ADD COLUMN tracking
