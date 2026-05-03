@@ -565,65 +565,70 @@ interface CollectAstSignalsArgs {
   exportedFns: ExportedFnSignal[]
 }
 
-function collectAstSignals(args: CollectAstSignalsArgs): void {
-  const {
-    sf, file, redisVars, memSuffixes, memCtors, exposedPrefixes,
-    redisSignals, memorySignals, exportedFns,
-  } = args
-  const lineToSymbol = buildLineToSymbol(sf)
+function tryCollectRedisCall(
+  node: Node,
+  file: string,
+  redisVars: Set<string>,
+  lineToSymbol: Map<number, string>,
+  out: RedisSignal[],
+): void {
+  if (node.getKind() !== SyntaxKind.CallExpression) return
+  const call = node as any
+  const expr = call.getExpression?.()
+  if (!expr || expr.getKind() !== SyntaxKind.PropertyAccessExpression) return
 
-  // Redis : `redis.set(key, val, 'EX', ttl)` / `redis.setex(key, ttl, val)` etc.
-  sf.forEachDescendant((node) => {
-    if (node.getKind() !== SyntaxKind.CallExpression) return
-    const call = node as any
-    const expr = call.getExpression?.()
-    if (!expr || expr.getKind() !== SyntaxKind.PropertyAccessExpression) return
-    const left = expr.getExpression?.()
-    const method = expr.getName?.()
-    if (!left || left.getKind() !== SyntaxKind.Identifier) return
-    if (!redisVars.has(left.getText())) return
-    if (!method || !REDIS_WRITE_METHODS.has(method)) return
+  const left = expr.getExpression?.()
+  const method = expr.getName?.()
+  if (!left || left.getKind() !== SyntaxKind.Identifier) return
+  if (!redisVars.has(left.getText())) return
+  if (!method || !REDIS_WRITE_METHODS.has(method)) return
 
-    const args = call.getArguments?.() ?? []
-    if (args.length === 0) return
+  const callArgs = call.getArguments?.() ?? []
+  if (callArgs.length === 0) return
+  const key = extractLiteralString(callArgs[0])
+  if (!key) return  // cle dynamique sans prefixe — on omet
 
-    const key = extractLiteralString(args[0])
-    if (!key) return  // clé dynamique sans préfixe — on omet
-
-    const line = call.getStartLineNumber?.() ?? 0
-    const ttl = extractTtl(method, args)
-    redisSignals.push({
-      file,
-      method,
-      key,
-      ...(ttl ? { ttl } : {}),
-      line,
-      symbol: lineToSymbol.get(line) ?? '',
-    })
+  const line = call.getStartLineNumber?.() ?? 0
+  const ttl = extractTtl(method, callArgs)
+  out.push({
+    file, method, key,
+    ...(ttl ? { ttl } : {}),
+    line,
+    symbol: lineToSymbol.get(line) ?? '',
   })
+}
 
-  // Memory caches : `const nameCache = new Map(...)` / `new LRUCache(...)`.
+function collectMemoryCaches(
+  sf: SourceFile,
+  file: string,
+  memSuffixes: string[],
+  memCtors: Set<string>,
+  out: MemorySignal[],
+): void {
   for (const vs of sf.getVariableStatements()) {
     for (const vd of vs.getDeclarations()) {
       const match = matchMemoryCache(vd, memSuffixes, memCtors)
       if (!match) continue
-      memorySignals.push({
-        file,
-        varName: vd.getName(),
-        ctor: match,
-        line: vd.getStartLineNumber(),
+      out.push({
+        file, varName: vd.getName(), ctor: match, line: vd.getStartLineNumber(),
       })
     }
   }
+}
 
-  // Exports get/find/read/list.
+function collectExportedFns(
+  sf: SourceFile,
+  file: string,
+  exposedPrefixes: string[],
+  out: ExportedFnSignal[],
+): void {
   for (const fd of sf.getFunctions()) {
     if (!fd.isExported()) continue
     const name = fd.getName()
     if (!name) continue
     const prefix = exposedPrefixes.find((p) => startsWithPrefix(name, p))
     if (!prefix) continue
-    exportedFns.push({ file, name, prefix, line: fd.getStartLineNumber() })
+    out.push({ file, name, prefix, line: fd.getStartLineNumber() })
   }
   for (const vs of sf.getVariableStatements()) {
     if (!vs.isExported()) continue
@@ -635,9 +640,23 @@ function collectAstSignals(args: CollectAstSignalsArgs): void {
       const name = vd.getName()
       const prefix = exposedPrefixes.find((p) => startsWithPrefix(name, p))
       if (!prefix) continue
-      exportedFns.push({ file, name, prefix, line: vd.getStartLineNumber() })
+      out.push({ file, name, prefix, line: vd.getStartLineNumber() })
     }
   }
+}
+
+function collectAstSignals(args: CollectAstSignalsArgs): void {
+  const {
+    sf, file, redisVars, memSuffixes, memCtors, exposedPrefixes,
+    redisSignals, memorySignals, exportedFns,
+  } = args
+  const lineToSymbol = buildLineToSymbol(sf)
+
+  sf.forEachDescendant((node) => {
+    tryCollectRedisCall(node, file, redisVars, lineToSymbol, redisSignals)
+  })
+  collectMemoryCaches(sf, file, memSuffixes, memCtors, memorySignals)
+  collectExportedFns(sf, file, exposedPrefixes, exportedFns)
 }
 
 function matchMemoryCache(
