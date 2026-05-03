@@ -5,7 +5,7 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T22:30:34Z
+Last update : 2026-05-03T22:32:41Z
 
 ## By type
 
@@ -19,6 +19,7 @@ Last update : 2026-05-03T22:30:34Z
 
 ### `refactor` (46)
 
+- **384b28a** refactor(codegraph): split extractSecurityPatternsFileBundle (cyclo 41→2, cog 119→1) — security-patterns.ts bomb-free — 2026-05-04
 - **5cd34f2** refactor(codegraph): split computeGrangerCausality (cyclo 42→8, cog 53→2) — granger-causality.ts bomb-free — 2026-05-04
 - **3340d64** refactor(datalog): split stratify (cyclo 42→2, cog 67→0) — stratify.ts bomb-free — 2026-05-04
 - **ead1516** refactor(toolkit): split extractDriftPatternsFileBundle (cyclo 45→3) — drift-patterns.ts ALL bombs cleared — 2026-05-04
@@ -38,11 +39,11 @@ Last update : 2026-05-03T22:30:34Z
 - **321cd83** refactor(toolkit): split classifyExportsFromBundles (cyclo 25→3) — unused-exports.ts ALL bombs cleared — 2026-05-03
 - **dd61398** refactor(toolkit): split extractUnusedExportsFileBundle (cyclo 36→3) — 6 helpers per-pass — 2026-05-03
 - **86cff0b** refactor(toolkit): split analyzeSqlSchema (cyclo 38→3) + dedupe SQL comparators to _shared/sql-helpers — 2026-05-03
-- **8988d09** refactor(toolkit): split parseColumnProperty (cyclo 18→3) — drizzle-schema.ts ALL bombs cleared — 2026-05-03
 
 
 ## Full history
 
+- **384b28a** refactor(codegraph): split extractSecurityPatternsFileBundle (cyclo 41→2, cog 119→1) — security-patterns.ts bomb-free — 2026-05-04
 - **5cd34f2** refactor(codegraph): split computeGrangerCausality (cyclo 42→8, cog 53→2) — granger-causality.ts bomb-free — 2026-05-04
 - **3340d64** refactor(datalog): split stratify (cyclo 42→2, cog 67→0) — stratify.ts bomb-free — 2026-05-04
 - **ead1516** refactor(toolkit): split extractDriftPatternsFileBundle (cyclo 45→3) — drift-patterns.ts ALL bombs cleared — 2026-05-04
@@ -92,4 +93,3 @@ Last update : 2026-05-03T22:30:34Z
 - **3e30c42** refactor(toolkit): split buildTruthPointsFromSignals (cyclo 34→3) — 4 helpers per-table — 2026-05-03
 - **6190869** refactor(toolkit): split state-machines top-level — analyze + buildFromBundles — 2026-05-03
 - **bddfb2a** refactor(toolkit): split data-flows top-level (analyzeDataFlows + buildDataFlowsFromBundles) — 2026-05-03
-- **d176584** refactor(toolkit): split renderLevel1/2/3 — synopsis/builder.ts ALL bombs cleared — 2026-05-03

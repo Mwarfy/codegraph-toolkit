@@ -91,19 +91,41 @@ export function analyzeCoChangeSync(
   const maxFilesPerCommit = options.maxFilesPerCommit ?? 50
   const knownFiles = options.knownFiles
 
+  const raw = fetchGitLog(rootDir, sinceDays, maxCommits)
+  if (raw === null) return []
+
+  const commits = parseCoChangeCommits(raw)
+  const { fileCommitCount, pairCount } = computeCoChangeCounts(
+    commits,
+    knownFiles,
+    maxFilesPerCommit,
+  )
+
+  return emitCoChangePairs(pairCount, fileCommitCount, minCount, minJaccard)
+}
+
+// ─── Phase 1: fetch raw git log ─────────────────────────────────────────────
+
+function fetchGitLog(
+  rootDir: string,
+  sinceDays: number,
+  maxCommits: number,
+): string | null {
   // git log --name-only --pretty=format:'COMMIT' --since=Nd
   // Output : alternance entre 'COMMIT' lines + filenames jusqu'au COMMIT suivant.
-  let raw: string
   try {
-    raw = execSync(
+    return execSync(
       `git log --name-only --pretty=format:COMMIT --since=${sinceDays}.days -n ${maxCommits}`,
       { cwd: rootDir, encoding: 'utf-8', maxBuffer: 100 * 1024 * 1024 },
     )
   } catch {
-    return [] // pas de repo git, ou git pas installé → silence
+    return null // pas de repo git, ou git pas installé → silence
   }
+}
 
-  // Parse en commits (chaque commit = liste de fichiers).
+// ─── Phase 2: parse commits from raw log ────────────────────────────────────
+
+function parseCoChangeCommits(raw: string): string[][] {
   const commits: string[][] = []
   let currentFiles: string[] = []
   for (const line of raw.split('\n')) {
@@ -115,49 +137,79 @@ export function analyzeCoChangeSync(
     }
   }
   if (currentFiles.length > 0) commits.push(currentFiles)
+  return commits
+}
 
-  // Compte par fichier + par paire.
+// ─── Phase 3: compute per-file + per-pair commit counts ────────────────────
+
+interface CoChangeCounts {
+  fileCommitCount: Map<string, number>
+  pairCount: Map<string, number>
+}
+
+// KNOWNFILES SEMANTICS (fix bug #1) :
+// Avant : filter Strict — un commit ne contribue que si CHAQUE fichier
+// appartient à knownFiles. Casse les projets où les tests vivent dans
+// une extension non-incluse dans le glob (Hono : src/foo/foo.test.tsx
+// co-changent avec src/foo/foo.ts mais .tsx sont exclus du `src/**` glob TS).
+//
+// Après : on garde TOUS les fichiers du commit, mais on n'émet une PAIR
+// que si AU MOINS UN des 2 côtés est dans knownFiles. Permet de capturer
+// les paires test↔source légitimes sans flooder avec des paires
+// README↔CHANGELOG entièrement hors projet.
+function computeCoChangeCounts(
+  commits: string[][],
+  knownFiles: Set<string> | undefined,
+  maxFilesPerCommit: number,
+): CoChangeCounts {
   const fileCommitCount = new Map<string, number>()
   const pairCount = new Map<string, number>()
 
   for (const files of commits) {
     if (files.length > maxFilesPerCommit) continue // skip lint/rename massifs
-    // KNOWNFILES SEMANTICS (fix bug #1) :
-    // Avant : filter Strict — un commit ne contribue que si CHAQUE fichier
-    // appartient à knownFiles. Casse les projets où les tests vivent dans
-    // une extension non-incluse dans le glob (Hono : src/foo/foo.test.tsx
-    // co-changent avec src/foo/foo.ts mais .tsx sont exclus du `src/**/*.ts`).
-    //
-    // Après : on garde TOUS les fichiers du commit, mais on n'émet une PAIR
-    // que si AU MOINS UN des 2 côtés est dans knownFiles. Permet de capturer
-    // les paires test↔source légitimes sans flooder avec des paires
-    // README↔CHANGELOG entièrement hors projet.
     const sorted = [...new Set(files)].sort()
-    if (sorted.length < 2) {
-      for (const f of sorted) {
-        if (!knownFiles || knownFiles.has(f)) {
-          fileCommitCount.set(f, (fileCommitCount.get(f) ?? 0) + 1)
-        }
-      }
-      continue
-    }
-    // Compte le commit pour chaque fichier (utile au denominator Jaccard).
-    for (const f of sorted) {
-      if (!knownFiles || knownFiles.has(f)) {
-        fileCommitCount.set(f, (fileCommitCount.get(f) ?? 0) + 1)
-      }
-    }
-    for (let i = 0; i < sorted.length; i++) {
-      for (let j = i + 1; j < sorted.length; j++) {
-        // Pair acceptée si knownFiles est absent OU si au moins UN côté est tracké.
-        if (knownFiles && !knownFiles.has(sorted[i]) && !knownFiles.has(sorted[j])) continue
-        const key = sorted[i] + '\x00' + sorted[j]
-        pairCount.set(key, (pairCount.get(key) ?? 0) + 1)
-      }
+    bumpFileCommitCounts(sorted, knownFiles, fileCommitCount)
+    if (sorted.length < 2) continue
+    bumpPairCounts(sorted, knownFiles, pairCount)
+  }
+  return { fileCommitCount, pairCount }
+}
+
+function bumpFileCommitCounts(
+  sorted: string[],
+  knownFiles: Set<string> | undefined,
+  fileCommitCount: Map<string, number>,
+): void {
+  for (const f of sorted) {
+    if (!knownFiles || knownFiles.has(f)) {
+      fileCommitCount.set(f, (fileCommitCount.get(f) ?? 0) + 1)
     }
   }
+}
 
-  // Construit les paires + filtre par seuils.
+function bumpPairCounts(
+  sorted: string[],
+  knownFiles: Set<string> | undefined,
+  pairCount: Map<string, number>,
+): void {
+  for (let i = 0; i < sorted.length; i++) {
+    for (let j = i + 1; j < sorted.length; j++) {
+      // Pair acceptée si knownFiles est absent OU si au moins UN côté est tracké.
+      if (knownFiles && !knownFiles.has(sorted[i]) && !knownFiles.has(sorted[j])) continue
+      const key = sorted[i] + '\x00' + sorted[j]
+      pairCount.set(key, (pairCount.get(key) ?? 0) + 1)
+    }
+  }
+}
+
+// ─── Phase 4: filter + sort + emit ──────────────────────────────────────────
+
+function emitCoChangePairs(
+  pairCount: Map<string, number>,
+  fileCommitCount: Map<string, number>,
+  minCount: number,
+  minJaccard: number,
+): CoChangePair[] {
   const pairs: CoChangePair[] = []
   for (const [key, count] of pairCount) {
     if (count < minCount) continue
@@ -169,14 +221,14 @@ export function analyzeCoChangeSync(
     if (jaccard < minJaccard) continue
     pairs.push({ from, to, count, totalCommitsFrom, totalCommitsTo, jaccard })
   }
-
-  // Tri stable : count desc, jaccard desc, from asc, to asc.
-  pairs.sort((a, b) => {
-    if (a.count !== b.count) return b.count - a.count
-    if (a.jaccard !== b.jaccard) return b.jaccard - a.jaccard
-    if (a.from !== b.from) return a.from < b.from ? -1 : 1
-    return a.to < b.to ? -1 : 1
-  })
-
+  pairs.sort(compareCoChangePair)
   return pairs
+}
+
+/** Tri stable : count desc, jaccard desc, from asc, to asc. */
+function compareCoChangePair(a: CoChangePair, b: CoChangePair): number {
+  if (a.count !== b.count) return b.count - a.count
+  if (a.jaccard !== b.jaccard) return b.jaccard - a.jaccard
+  if (a.from !== b.from) return a.from < b.from ? -1 : 1
+  return a.to < b.to ? -1 : 1
 }
