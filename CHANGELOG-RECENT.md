@@ -5,7 +5,7 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T23:36:30Z
+Last update : 2026-05-03T23:38:06Z
 
 ## By type
 
@@ -19,6 +19,7 @@ Last update : 2026-05-03T23:36:30Z
 
 ### `refactor` (46)
 
+- **0047e61** refactor(codegraph): split validateStore (cyclo 22→4, cog 27→3) — store.ts cleared — 2026-05-04
 - **a73b0b8** refactor(codegraph-mcp): split codegraphTruthPointFor (cyclo 22→4, cog 26→1) — truth-point.ts cleared — 2026-05-04
 - **9e41eaa** refactor(codegraph): split loadConfig (cyclo 21→4, cog 38→3) — _shared.ts cleared — 2026-05-04
 - **65c2c5c** refactor(codegraph): split mergeSqlSchemaResults (cyclo 21→1, cog 42→0) — drizzle-schema-detector.ts cleared — 2026-05-04
@@ -38,11 +39,11 @@ Last update : 2026-05-03T23:36:30Z
 - **357636e** refactor(codegraph): split scanImportsInSourceFile (cyclo 28→1, cog 45→0) — ts-imports.ts bomb-free — 2026-05-04
 - **091d636** refactor(codegraph): split isAwaitedOrConsumed (cyclo 28→4, cog 47→5) — floating-promises.ts bomb-free — 2026-05-04
 - **2afff33** refactor(codegraph): split tarjanScc (cyclo 13→3, cog 37→3) — dsm.ts FULLY bomb-free — 2026-05-04
-- **5e798f4** refactor(codegraph): split computeDsm (cyclo 29→1, cog 45→0) — top-level orchestrator clean — 2026-05-04
 
 
 ## Full history
 
+- **0047e61** refactor(codegraph): split validateStore (cyclo 22→4, cog 27→3) — store.ts cleared — 2026-05-04
 - **a73b0b8** refactor(codegraph-mcp): split codegraphTruthPointFor (cyclo 22→4, cog 26→1) — truth-point.ts cleared — 2026-05-04
 - **9e41eaa** refactor(codegraph): split loadConfig (cyclo 21→4, cog 38→3) — _shared.ts cleared — 2026-05-04
 - **65c2c5c** refactor(codegraph): split mergeSqlSchemaResults (cyclo 21→1, cog 42→0) — drizzle-schema-detector.ts cleared — 2026-05-04
@@ -92,4 +93,3 @@ Last update : 2026-05-03T23:36:30Z
 - **3b1d650** refactor(toolkit): split scanObjectWrites + detectListenerTriggers — state-machines.ts ALL bombs cleared — 2026-05-03
 - **d534d97** refactor(toolkit): split constant-expressions (cyclo 35+23→under) — constant-expressions.ts ALL bombs cleared — 2026-05-03
 - **f4ee98f** refactor(toolkit): split typed-calls (cyclo 18+16→under) — typed-calls.ts ALL bombs cleared — 2026-05-03
-- **ac2b550** refactor(toolkit): split symbol-refs (cyclo 20+18→under) — symbol-refs.ts ALL bombs cleared — 2026-05-03

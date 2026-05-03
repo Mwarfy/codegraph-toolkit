@@ -25,15 +25,31 @@ export interface ReachabilityOptions {
  * hops). Optimisé : on ne calcule pas tous les paths vers tous les nœuds
  * — seulement ceux qui matchent un prédicat.
  */
+interface ReachablePath { from: string; to: string; path: string[] }
+
 export function findReachablePaths(
   sources: Set<string>,
   targets: Set<string>,
   edges: GraphEdge[],
   options: ReachabilityOptions = {},
-): Array<{ from: string; to: string; path: string[] }> {
+): ReachablePath[] {
   const edgeTypes = new Set(options.edgeTypes ?? (['import'] as Array<GraphEdge['type']>))
+  const adj = buildSortedAdjacency(edges, edgeTypes)
 
-  // Adjacency list (only relevant edge types).
+  const out: ReachablePath[] = []
+  for (const src of [...sources].sort()) {
+    const parent = bfsFromSource(src, adj)
+    collectPathsToTargets(src, targets, parent, out)
+  }
+  out.sort(compareReachablePath)
+  return out
+}
+
+/** Adjacency list filtrée + sortée (déterminisme de la BFS). */
+function buildSortedAdjacency(
+  edges: GraphEdge[],
+  edgeTypes: Set<GraphEdge['type']>,
+): Map<string, string[]> {
   const adj = new Map<string, string[]>()
   for (const e of edges) {
     if (!edgeTypes.has(e.type)) continue
@@ -41,53 +57,66 @@ export function findReachablePaths(
     list.push(e.to)
     adj.set(e.from, list)
   }
-
-  // Tri stable de chaque liste d'adjacence pour déterminisme.
   for (const list of adj.values()) list.sort()
+  return adj
+}
 
-  const out: Array<{ from: string; to: string; path: string[] }> = []
-  const sortedSources = [...sources].sort()
-
-  for (const src of sortedSources) {
-    // BFS depuis src. `parent` garde le prédécesseur pour reconstruire le path.
-    const parent = new Map<string, string | null>()
-    parent.set(src, null)
-    const queue: string[] = [src]
-    while (queue.length > 0) {
-      const cur = queue.shift()!
-      const next = adj.get(cur) ?? []
-      for (const nxt of next) {
-        if (parent.has(nxt)) continue
-        parent.set(nxt, cur)
-        queue.push(nxt)
-      }
-    }
-
-    // Reconstruct paths to every target reached.
-    for (const tgt of targets) {
-      if (tgt === src) continue
-      if (!parent.has(tgt)) continue
-      // Walk parent chain.
-      const path: string[] = []
-      let cur: string | null = tgt
-      while (cur !== null) {
-        path.unshift(cur)
-        cur = parent.get(cur) ?? null
-      }
-      // Skip trivial 1-hop (covered by direct `disallow`, pas `disallowReachable`).
-      if (path.length < 3) continue
-      out.push({ from: src, to: tgt, path })
+/**
+ * BFS depuis src. `parent` garde le prédécesseur pour reconstruire le path.
+ * parent.get(src) === null = source (pas de prédécesseur).
+ */
+function bfsFromSource(
+  src: string,
+  adj: Map<string, string[]>,
+): Map<string, string | null> {
+  const parent = new Map<string, string | null>()
+  parent.set(src, null)
+  const queue: string[] = [src]
+  while (queue.length > 0) {
+    const cur = queue.shift()!
+    for (const nxt of adj.get(cur) ?? []) {
+      if (parent.has(nxt)) continue
+      parent.set(nxt, cur)
+      queue.push(nxt)
     }
   }
+  return parent
+}
 
-  // Tri déterministe.
-  out.sort((a, b) => {
-    if (a.from !== b.from) return a.from < b.from ? -1 : 1
-    if (a.to !== b.to) return a.to < b.to ? -1 : 1
-    return 0
-  })
+/**
+ * Reconstruct paths from src to chaque target accessible.
+ * Skip trivial 1-hop (couvert par direct `disallow`, pas `disallowReachable`).
+ */
+function collectPathsToTargets(
+  src: string,
+  targets: Set<string>,
+  parent: Map<string, string | null>,
+  out: ReachablePath[],
+): void {
+  for (const tgt of targets) {
+    if (tgt === src) continue
+    if (!parent.has(tgt)) continue
+    const path = reconstructPath(tgt, parent)
+    if (path.length < 3) continue
+    out.push({ from: src, to: tgt, path })
+  }
+}
 
-  return out
+/** Walk parent chain from tgt back to source — return path src → tgt. */
+function reconstructPath(tgt: string, parent: Map<string, string | null>): string[] {
+  const path: string[] = []
+  let cur: string | null = tgt
+  while (cur !== null) {
+    path.unshift(cur)
+    cur = parent.get(cur) ?? null
+  }
+  return path
+}
+
+function compareReachablePath(a: ReachablePath, b: ReachablePath): number {
+  if (a.from !== b.from) return a.from < b.from ? -1 : 1
+  if (a.to !== b.to) return a.to < b.to ? -1 : 1
+  return 0
 }
 
 /**
