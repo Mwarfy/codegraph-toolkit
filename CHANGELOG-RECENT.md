@@ -5,7 +5,7 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T23:29:49Z
+Last update : 2026-05-03T23:31:18Z
 
 ## By type
 
@@ -19,6 +19,7 @@ Last update : 2026-05-03T23:29:49Z
 
 ### `refactor` (46)
 
+- **725ecdf** refactor(runtime-graph): split grangerRuntime (cyclo 22→5, cog 41→4) — granger-runtime.ts cleared — 2026-05-04
 - **1bc0481** refactor(codegraph): split DbTableDetector.detect (cyclo 22→1, cog 47→0) — db-tables.ts cleared — 2026-05-04
 - **05adaa7** refactor(codegraph): split extractDeprecatedUsageFileBundle (cyclo 23→2, cog 31→1) — deprecated-usage.ts cleared — 2026-05-04
 - **1e46881** refactor(codegraph): split extractResourceBalanceFileBundle (cyclo 24→5, cog 27→5) — resource-balance.ts cleared — 2026-05-04
@@ -38,11 +39,11 @@ Last update : 2026-05-03T23:29:49Z
 - **aa09cb1** refactor(codegraph): split runCrossDisciplineDetectors (cyclo 30→9, cog 43→6) — cross-discipline-orchestrator.ts bomb-free — 2026-05-04
 - **798d038** refactor(codegraph): split scanEmitSitesInSourceFile (cyclo 31→3, cog 39→2) — event-emit-sites.ts bomb-free — 2026-05-04
 - **bd1923f** refactor(codegraph-mcp): split codegraphDatalogQuery (cyclo 31→7, cog 52→3) — datalog-query.ts bomb-free — 2026-05-04
-- **89be66f** refactor(codegraph): split extractArgumentsFileBundle (cyclo 33→3, cog 53→2) — arguments.ts bomb-free — 2026-05-04
 
 
 ## Full history
 
+- **725ecdf** refactor(runtime-graph): split grangerRuntime (cyclo 22→5, cog 41→4) — granger-runtime.ts cleared — 2026-05-04
 - **1bc0481** refactor(codegraph): split DbTableDetector.detect (cyclo 22→1, cog 47→0) — db-tables.ts cleared — 2026-05-04
 - **05adaa7** refactor(codegraph): split extractDeprecatedUsageFileBundle (cyclo 23→2, cog 31→1) — deprecated-usage.ts cleared — 2026-05-04
 - **1e46881** refactor(codegraph): split extractResourceBalanceFileBundle (cyclo 24→5, cog 27→5) — resource-balance.ts cleared — 2026-05-04
@@ -92,4 +93,3 @@ Last update : 2026-05-03T23:29:49Z
 - **c677082** refactor(toolkit): split compression-similarity (cyclo 18+16→under) — compression-similarity.ts ALL bombs cleared — 2026-05-03
 - **ba540e4** refactor(toolkit): split analyzeCycles + tarjanScc — cycles.ts ALL bombs cleared — 2026-05-03
 - **321cd83** refactor(toolkit): split classifyExportsFromBundles (cyclo 25→3) — unused-exports.ts ALL bombs cleared — 2026-05-03
-- **dd61398** refactor(toolkit): split extractUnusedExportsFileBundle (cyclo 36→3) — 6 helpers per-pass — 2026-05-03

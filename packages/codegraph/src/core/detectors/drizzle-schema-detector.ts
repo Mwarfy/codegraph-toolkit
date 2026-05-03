@@ -22,6 +22,11 @@ import {
   type SqlSchemaResult,
 } from '../../extractors/drizzle-schema.js'
 import { derivePrimaryKeys } from '../../extractors/sql-schema.js'
+import {
+  cmpSqlFileLine,
+  cmpSqlFromTableColumn,
+  cmpSqlTableColumn,
+} from '../../extractors/_shared/sql-helpers.js'
 
 export class DrizzleSchemaDetector implements Detector<SqlSchemaResult> {
   readonly name = 'drizzle-schema'
@@ -70,44 +75,45 @@ function mergeSqlSchemaResults(
   const tables = [...a.tables, ...b.tables]
   const indexes = [...a.indexes, ...b.indexes]
   const foreignKeys = [...a.foreignKeys, ...b.foreignKeys]
+  const fkWithoutIndex = recomputeFkWithoutIndex(indexes, foreignKeys)
 
-  // Recalcul fkWithoutIndex sur l'union
+  tables.sort(cmpSqlFileLine)
+  indexes.sort(cmpSqlFileLine)
+  foreignKeys.sort(cmpSqlFromTableColumn)
+  fkWithoutIndex.sort(cmpSqlFromTableColumn)
+
+  // Re-dérive les PK sur l'union (un PK peut venir de l'un ou l'autre).
+  const primaryKeys = derivePrimaryKeys(tables, indexes)
+  primaryKeys.sort(cmpSqlTableColumn)
+
+  return { tables, indexes, foreignKeys, fkWithoutIndex, primaryKeys }
+}
+
+/**
+ * Un FK peut être déclaré côté Drizzle mais indexé via une migration .sql
+ * (ou inversement). Recalcul sur l'union des indexes.
+ */
+function recomputeFkWithoutIndex(
+  indexes: SqlSchemaResult['indexes'],
+  foreignKeys: SqlSchemaResult['foreignKeys'],
+): SqlSchemaResult['fkWithoutIndex'] {
   const indexedFirstCol = new Set<string>()
   for (const idx of indexes) {
     if (idx.firstColumn === null) continue
     indexedFirstCol.add(`${idx.table}\x00${idx.firstColumn}`)
   }
 
-  const fkWithoutIndex: typeof a.fkWithoutIndex = []
+  const fkWithoutIndex: SqlSchemaResult['fkWithoutIndex'] = []
   for (const fk of foreignKeys) {
-    const key = `${fk.fromTable}\x00${fk.fromColumn}`
-    if (!indexedFirstCol.has(key)) {
-      fkWithoutIndex.push({
-        fromTable: fk.fromTable,
-        fromColumn: fk.fromColumn,
-        toTable: fk.toTable,
-        toColumn: fk.toColumn,
-        file: fk.file,
-        line: fk.line,
-      })
-    }
+    if (indexedFirstCol.has(`${fk.fromTable}\x00${fk.fromColumn}`)) continue
+    fkWithoutIndex.push({
+      fromTable: fk.fromTable,
+      fromColumn: fk.fromColumn,
+      toTable: fk.toTable,
+      toColumn: fk.toColumn,
+      file: fk.file,
+      line: fk.line,
+    })
   }
-
-  // Tri stable comme dans les analyzers
-  tables.sort((x, y) => x.file < y.file ? -1 : x.file > y.file ? 1 : x.line - y.line)
-  indexes.sort((x, y) => x.file < y.file ? -1 : x.file > y.file ? 1 : x.line - y.line)
-  foreignKeys.sort((x, y) =>
-    x.fromTable < y.fromTable ? -1 : x.fromTable > y.fromTable ? 1 :
-    x.fromColumn < y.fromColumn ? -1 : x.fromColumn > y.fromColumn ? 1 : 0)
-  fkWithoutIndex.sort((x, y) =>
-    x.fromTable < y.fromTable ? -1 : x.fromTable > y.fromTable ? 1 :
-    x.fromColumn < y.fromColumn ? -1 : x.fromColumn > y.fromColumn ? 1 : 0)
-
-  // Re-dérive les PK sur l'union (un PK peut venir de l'un ou l'autre).
-  const primaryKeys = derivePrimaryKeys(tables, indexes)
-  primaryKeys.sort((x, y) =>
-    x.table < y.table ? -1 : x.table > y.table ? 1 :
-    x.column < y.column ? -1 : x.column > y.column ? 1 : 0)
-
-  return { tables, indexes, foreignKeys, fkWithoutIndex, primaryKeys }
+  return fkWithoutIndex
 }
