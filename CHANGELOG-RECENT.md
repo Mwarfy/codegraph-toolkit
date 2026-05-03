@@ -5,7 +5,7 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T23:17:07Z
+Last update : 2026-05-03T23:18:51Z
 
 ## By type
 
@@ -19,6 +19,7 @@ Last update : 2026-05-03T23:17:07Z
 
 ### `refactor` (46)
 
+- **3814233** refactor(codegraph): split findSqlNamingViolations (cyclo 26→3, cog 42→3) — sql-naming.ts bomb-free — 2026-05-04
 - **024b628** refactor(codegraph): split computeModuleMetrics (cyclo 27→4, cog 22→0) — module-metrics.ts bomb-free — 2026-05-04
 - **8a6e1e1** refactor(codegraph): split applyTransitiveReexportCoverage (cyclo 11→4, cog 26→4) — test-coverage.ts FULLY bomb-free — 2026-05-04
 - **2f99c5d** refactor(codegraph): split analyzeTestCoverage (cyclo 27→1, cog 54→0) — analyzeTestCoverage bomb-free — 2026-05-04
@@ -38,11 +39,11 @@ Last update : 2026-05-03T23:17:07Z
 - **e02af8d** refactor(codegraph): split computeComponentMetrics (cyclo 36→4, cog 44→0) — component-metrics.ts bomb-free — 2026-05-04
 - **13162d1** refactor(codegraph): split extractTaintedVarsFileBundle (cyclo 37→6, cog 62→7) — tainted-vars.ts bomb-free — 2026-05-04
 - **4e81398** refactor(codegraph): split analyzeCoChangeSync (cyclo 40→7, cog 54→1) — co-change.ts bomb-free — 2026-05-04
-- **384b28a** refactor(codegraph): split extractSecurityPatternsFileBundle (cyclo 41→2, cog 119→1) — security-patterns.ts bomb-free — 2026-05-04
 
 
 ## Full history
 
+- **3814233** refactor(codegraph): split findSqlNamingViolations (cyclo 26→3, cog 42→3) — sql-naming.ts bomb-free — 2026-05-04
 - **024b628** refactor(codegraph): split computeModuleMetrics (cyclo 27→4, cog 22→0) — module-metrics.ts bomb-free — 2026-05-04
 - **8a6e1e1** refactor(codegraph): split applyTransitiveReexportCoverage (cyclo 11→4, cog 26→4) — test-coverage.ts FULLY bomb-free — 2026-05-04
 - **2f99c5d** refactor(codegraph): split analyzeTestCoverage (cyclo 27→1, cog 54→0) — analyzeTestCoverage bomb-free — 2026-05-04
@@ -92,4 +93,3 @@ Last update : 2026-05-03T23:17:07Z
 - **bdec532** refactor(toolkit): split collectOrmSignals (cyclo 28→3) — truth-points.ts ALL bombs cleared — 2026-05-03
 - **1bdb707** refactor(toolkit): split collectAstSignals (cyclo 29→3) — 3 per-domain collectors — 2026-05-03
 - **cde9741** refactor(toolkit): split collectSqlSignals (cyclo 33→3) — 5 helpers SQL pattern matching — 2026-05-03
-- **423bc96** refactor(toolkit): split evaluate (cyclo 40→7, cog 123→4) — eval.ts ALL bombs cleared — 2026-05-03

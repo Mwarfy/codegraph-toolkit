@@ -92,6 +92,36 @@ export function diffTypedCalls(before: GraphSnapshot, after: GraphSnapshot): Typ
   const beforeSigMap = new Map(beforeSigs.map((s) => [sigKey(s), s]))
   const afterSigMap = new Map(afterSigs.map((s) => [sigKey(s), s]))
 
+  const { addedSignatures, modifiedSignatures } = diffSignatureSets(afterSigMap, beforeSigMap)
+  const removedSignatures = collectRemovedSignatures(beforeSigMap, afterSigMap)
+  const { callEdgesAdded, callEdgesRemoved } = diffCallEdges(
+    before.typedCalls?.callEdges ?? [],
+    after.typedCalls?.callEdges ?? [],
+  )
+
+  addedSignatures.sort(compareSignatureByKey)
+  removedSignatures.sort(compareSignatureByKey)
+  modifiedSignatures.sort(compareModifiedSignature)
+
+  return {
+    addedSignatures,
+    removedSignatures,
+    modifiedSignatures,
+    callEdgesAdded,
+    callEdgesRemoved,
+  }
+}
+
+/**
+ * Pour chaque signature in `after` :
+ *   - absente de `before` → added.
+ *   - présente, params+returnType inchangés → skip.
+ *   - présente, modifié → SignatureChange avec breaking reasons.
+ */
+function diffSignatureSets(
+  afterSigMap: Map<string, TypedSignature>,
+  beforeSigMap: Map<string, TypedSignature>,
+): { addedSignatures: TypedSignature[]; modifiedSignatures: SignatureChange[] } {
   const addedSignatures: TypedSignature[] = []
   const modifiedSignatures: SignatureChange[] = []
   for (const [key, afterSig] of afterSigMap) {
@@ -101,53 +131,58 @@ export function diffTypedCalls(before: GraphSnapshot, after: GraphSnapshot): Typ
       continue
     }
     if (paramsEqual(prev.params, afterSig.params) && prev.returnType === afterSig.returnType) {
-      continue  // inchangée
+      continue
     }
-    const reasons = detectBreakingReasons(prev, afterSig)
-    modifiedSignatures.push({
-      file: afterSig.file,
-      exportName: afterSig.exportName,
-      before: { params: prev.params, returnType: prev.returnType },
-      after: { params: afterSig.params, returnType: afterSig.returnType },
-      breaking: reasons.length > 0,
-      breakingReasons: reasons,
-    })
+    modifiedSignatures.push(buildSignatureChange(prev, afterSig))
   }
+  return { addedSignatures, modifiedSignatures }
+}
 
-  const removedSignatures: TypedSignature[] = []
+function buildSignatureChange(prev: TypedSignature, afterSig: TypedSignature): SignatureChange {
+  const reasons = detectBreakingReasons(prev, afterSig)
+  return {
+    file: afterSig.file,
+    exportName: afterSig.exportName,
+    before: { params: prev.params, returnType: prev.returnType },
+    after: { params: afterSig.params, returnType: afterSig.returnType },
+    breaking: reasons.length > 0,
+    breakingReasons: reasons,
+  }
+}
+
+function collectRemovedSignatures(
+  beforeSigMap: Map<string, TypedSignature>,
+  afterSigMap: Map<string, TypedSignature>,
+): TypedSignature[] {
+  const removed: TypedSignature[] = []
   for (const [key, beforeSig] of beforeSigMap) {
-    if (!afterSigMap.has(key)) removedSignatures.push(beforeSig)
+    if (!afterSigMap.has(key)) removed.push(beforeSig)
   }
+  return removed
+}
 
-  // Call edges — agrégats seuls.
-  const beforeEdges = before.typedCalls?.callEdges ?? []
-  const afterEdges = after.typedCalls?.callEdges ?? []
+function diffCallEdges(
+  beforeEdges: ReadonlyArray<TypedCallEdge>,
+  afterEdges: ReadonlyArray<TypedCallEdge>,
+): { callEdgesAdded: number; callEdgesRemoved: number } {
   const beforeEdgeSet = new Set(beforeEdges.map(edgeKey))
   const afterEdgeSet = new Set(afterEdges.map(edgeKey))
   let callEdgesAdded = 0
   let callEdgesRemoved = 0
   for (const k of afterEdgeSet) if (!beforeEdgeSet.has(k)) callEdgesAdded++
   for (const k of beforeEdgeSet) if (!afterEdgeSet.has(k)) callEdgesRemoved++
+  return { callEdgesAdded, callEdgesRemoved }
+}
 
-  // Tri déterministe : par (file, exportName).
-  const byKey = (a: TypedSignature, b: TypedSignature): number => {
-    if (a.file !== b.file) return a.file < b.file ? -1 : 1
-    return a.exportName < b.exportName ? -1 : a.exportName > b.exportName ? 1 : 0
-  }
-  addedSignatures.sort(byKey)
-  removedSignatures.sort(byKey)
-  modifiedSignatures.sort((a, b) => {
-    // Breaking en premier, puis tri stable (file, export).
-    if (a.breaking !== b.breaking) return a.breaking ? -1 : 1
-    if (a.file !== b.file) return a.file < b.file ? -1 : 1
-    return a.exportName < b.exportName ? -1 : a.exportName > b.exportName ? 1 : 0
-  })
+/** Tri déterministe : par (file, exportName). */
+function compareSignatureByKey(a: TypedSignature, b: TypedSignature): number {
+  if (a.file !== b.file) return a.file < b.file ? -1 : 1
+  return a.exportName < b.exportName ? -1 : a.exportName > b.exportName ? 1 : 0
+}
 
-  return {
-    addedSignatures,
-    removedSignatures,
-    modifiedSignatures,
-    callEdgesAdded,
-    callEdgesRemoved,
-  }
+/** Breaking en premier, puis (file, export). */
+function compareModifiedSignature(a: SignatureChange, b: SignatureChange): number {
+  if (a.breaking !== b.breaking) return a.breaking ? -1 : 1
+  if (a.file !== b.file) return a.file < b.file ? -1 : 1
+  return a.exportName < b.exportName ? -1 : a.exportName > b.exportName ? 1 : 0
 }
