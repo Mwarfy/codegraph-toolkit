@@ -188,6 +188,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+9a5d5ac docs(validation): run #1.5 — composite rules sur Sentinel — 33× signal-to-noise
 af41582 feat(toolkit): symbolic simplification facts + 5 composite rules cross-discipline
 866eb25 fix(toolkit): bugs #1 #2 #3 #4 trouvés via test externe Hono
 a191d61 docs(validation): full-chain run #1 — 4 bugs trouvés sur Hono
@@ -199,7 +200,6 @@ a191d61 docs(validation): full-chain run #1 — 4 bugs trouvés sur Hono
 3ca2f45 feat(toolkit): self-optim auto-loop — connect probe → diag → brief → scaffold
 ce4e6e8 perf(toolkit): deprecated-usage Salsa-isolation + math regression gate
 afd0965 perf(toolkit): self-discovered Salsa optimizations — warm runtime −40%
-67c5581 feat(toolkit): mathematical self-governance — 100% load-bearing files governed
 ```
 
 ## Comment contribuer à ce brief

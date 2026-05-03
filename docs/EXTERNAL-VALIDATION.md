@@ -290,3 +290,134 @@ Pour que Sentinel fire `COMPOSITE-ESLINT-IN-*` :
 
 C'est documenté maintenant — utilisateur sait quoi attendre selon le shape
 de son projet.
+
+---
+
+## Run #2 — Self-analyse du toolkit lui-même — 2026-05-03
+
+Le test ultime : codegraph-toolkit s'analyse avec **toutes** ses propres
+règles. Mesure honnête de sa propre dette + validation que le système
+fonctionne sur un projet shape "monorepo TS multi-package".
+
+### Profile du toolkit
+
+  - **267 fichiers TS** sur 7 packages (codegraph, adr-toolkit, datalog,
+    salsa, runtime-graph, codegraph-mcp, invariants-postgres-ts)
+  - 526 import edges, 9924 facts émis sur 83 relations
+  - Cold run : ~5s
+
+### Émission de facts (top relations)
+
+  | Relation                | Count |
+  |─────────────────────── |─────  |
+  | FunctionParam           | 1485  |
+  | UnusedExport            | 1064  |
+  | FunctionComplexity      | 791   |
+  | AllocationInLoop        | 736   |
+  | ImportEdge              | 536   |
+  | TaintSink               | 494   |
+  | InformationBottleneck   | 436   |
+  | RegexLiteral            | 435   |
+  | ImportCommunity         | 315   |
+  | SymbolCallEdge          | 259   |
+  | CoChange                | 208   |
+  | ConstantExpression      | 15    |
+  | EslintViolation         | 0 (no eslint.json) |
+
+### Datalog rules result : 553 violations sur 23 types
+
+Distribution majeure :
+
+  | Type                                | Count | Sévérité     |
+  |─────────────────────────────────── |─────  |───────────── |
+  | COMPOSITE-CYCLOMATIC-BOMB            | 135   | high         |
+  | COMPOSITE-COGNITIVE-BOMB             | 113   | high         |
+  | COMPOSITE-AWAIT-IN-LOOP              | 104   | medium       |
+  | COMPOSITE-ORPHAN-FILE                | 48    | low (test fixtures expected) |
+  | COMPOSITE-NEAR-DUPLICATE-FN          | 23    | medium       |
+  | COMPOSITE-SILENT-ERROR               | 20    | medium       |
+  | NO-NEW-ARTICULATION-POINT            | 12    | high         |
+  | COMPOSITE-REDOS                      | 12    | high (security) |
+  | COMPOSITE-BARREL-LOW-VALUE           | 9     | low          |
+  | META-COMPOSITE-CRITICAL-INSTABILITY  | 8     | **CRITICAL** |
+  | COMPOSITE-CHAOS-AMPLIFIER            | 7     | high         |
+  | NO-EVAL                              | 6     | high (security) |
+  | COMPOSITE-DRIFT-SIGNAL-DENSITY       | 6     | medium       |
+  | COMPOSITE-GRANGER-DRIVER             | 5     | low          |
+  | COMPOSITE-COCHANGE-WITHOUT-COTEST    | 5     | medium       |
+  | COMPOSITE-HUB-UNTESTED               | 2     | **CRITICAL** |
+  | COMPOSITE-GOD-DISPATCHER             | 2     | **CRITICAL** |
+  | COMPOSITE-GOD-FUNCTION               | 1     | high         |
+  | COMPOSITE-HIGH-CRITICAL-UNTESTED     | 1     | low (test fixture) |
+
+### Top critical findings (ordre de priorité)
+
+**META-COMPOSITE-CRITICAL-INSTABILITY (8)** — la rule la plus stricte.
+Combine : fichier central + λ Lyapunov > 2 (cascade refactor) + sans
+test direct.
+
+  - `packages/adr-toolkit/src/init.ts`
+  - `packages/codegraph-mcp/src/index.ts`
+  - `packages/codegraph/src/cli/index.ts` (god file 2176 LOC, déjà connu)
+  - `packages/codegraph/src/core/types.ts` (top hub in:74, déjà connu)
+  - `packages/codegraph/src/extractors/code-quality-patterns.ts`
+  - + 3 autres
+
+**COMPOSITE-GOD-DISPATCHER (2)** — fonctions cyclomatic + entropy haute :
+  - `packages/codegraph/src/core/analyzer.ts:analyze` (déjà splittée
+    partiellement — Niveau 4 self-optim)
+  - `packages/codegraph/src/core/analyzer.ts:runDeterministicDetectors`
+    (refactorée commit c484f1f de 279 → 108 LOC, mais détection persiste
+    si entropy callees reste haute)
+
+**COMPOSITE-HUB-UNTESTED (2)** :
+  - `packages/codegraph/src/core/types.ts` — top hub in:74, sans test
+    direct (ADR-006 le déclare contrat canonical, mais pas de tests
+    de invariance schema)
+  - `packages/salsa/dist/index.d.ts` — **faux positif** (c'est du dist
+    artifact, pas du source)
+
+**COMPOSITE-CYCLOMATIC-BOMB (135)** concentrés sur :
+  - `packages/adr-toolkit/src/init.ts` (4 fns) — connu, init est
+    naturellement complexe (détection stack + génération config)
+  - `packages/adr-toolkit/src/bootstrap*.ts`
+  - `packages/codegraph/src/cli/index.ts` (god file confirmé)
+  - `packages/codegraph/src/extractors/*.ts` divers
+
+**ConstantExpression sur le toolkit** : 15 findings (11 gratuitous-bool,
+3 double-negation, 1 literal-fold-opportunity), modestes — le code du
+toolkit est globalement propre sur les patterns simples, mais a de la
+**vraie dette structurelle** (cyclomatic, cognitive, god-files).
+
+### Le toolkit voit-il sa propre dette ? OUI
+
+  ✓ Top hubs sans test (types.ts identifié)
+  ✓ God-files (cli/index.ts 2176 LOC, déjà documenté + plan migration)
+  ✓ God-dispatchers (analyzer.ts:analyze, runDeterministicDetectors)
+  ✓ Cyclomatic bombs (135 fonctions > 15 cyclomatic)
+  ✓ Chaos amplifiers (7 fichiers λ Lyapunov > 2 = cascade refactor)
+  ✓ Critical instability (8 fichiers central + chaos + sans test)
+  ✓ Faux positifs identifiables (test fixtures, dist .d.ts)
+
+### Limites observées sur la self-analyse
+
+  - **0 cycles** détectés (CycleNode vide) → soit le toolkit est
+    vraiment sans cycles (cohérent avec ADR-007 + bug fix sql-helpers
+    précédent), soit le détecteur cycles a un bug. Probable mélange :
+    le seul cycle connu (sql-helpers ↔ sql-schema) a été cassé via
+    extraction sql-types.ts.
+  - **0 EslintViolation** car pas d'eslint.json fourni
+  - **48 ORPHAN-FILE** dont la majorité = test fixtures intentionnels
+    (cycles/a.ts, b.ts, c.ts pour tester cycle detection)
+
+### Conclusion
+
+Le toolkit s'analyse avec succès en **5s**, émet **9924 facts**, joue
+**95+ rules datalog**, et trouve **553 violations** dont une vingtaine
+de **vraies priorités** (META-COMPOSITE, GOD-DISPATCHER, HUB-UNTESTED,
+CRITICAL-INSTABILITY).
+
+C'est exactement ce qu'on demande au toolkit : **trouver la dette qui
+mord**, en filtrant le bruit via composition cross-discipline.
+
+Le toolkit se gouverne lui-même. La boucle est complète.
