@@ -52,9 +52,18 @@ export function findArticulationPoints(
   options: { includeIndirect?: boolean } = {},
 ): ArticulationPoint[] {
   const includeIndirect = options.includeIndirect ?? false
-
-  // Build adjacency non-dirigée à partir des import edges.
   const nodeIds = new Set<string>(nodes.map((n) => n.id))
+  const adj = buildUndirectedAdjacency(nodeIds, edges, includeIndirect)
+  const isAP = findApsViaDfs(nodeIds, adj)
+  return rankArticulationPoints(isAP, nodeIds, adj)
+}
+
+/** Build adjacency non-dirigée depuis edges import (+ event/queue si indirect). */
+function buildUndirectedAdjacency(
+  nodeIds: Set<string>,
+  edges: Edge[],
+  includeIndirect: boolean,
+): Map<string, Set<string>> {
   const adj = new Map<string, Set<string>>()
   for (const id of nodeIds) adj.set(id, new Set())
   for (const e of edges) {
@@ -63,73 +72,116 @@ export function findArticulationPoints(
     adj.get(e.from)!.add(e.to)
     adj.get(e.to)!.add(e.from)
   }
+  return adj
+}
 
-  const disc = new Map<string, number>()
-  const low = new Map<string, number>()
-  const parent = new Map<string, string | null>()
-  const isAP = new Set<string>()
-  let time = 0
+interface DfsState {
+  disc: Map<string, number>
+  low: Map<string, number>
+  parent: Map<string, string | null>
+  isAP: Set<string>
+  time: number
+}
 
-  // DFS iterative (évite stack overflow sur gros codebases).
-  // Pour chaque nœud non visité, lance un DFS depuis ce nœud.
-  for (const root of [...nodeIds].sort()) {
-    if (disc.has(root)) continue
-    parent.set(root, null)
-    let rootChildren = 0
-
-    // Stack frames : { node, neighborIter, neighborsList }
-    type Frame = { node: string; neighbors: string[]; idx: number }
-    const stack: Frame[] = [{
-      node: root,
-      neighbors: [...adj.get(root)!].sort(),
-      idx: 0,
-    }]
-    disc.set(root, time)
-    low.set(root, time)
-    time++
-
-    while (stack.length > 0) {
-      const frame = stack[stack.length - 1]
-      if (frame.idx < frame.neighbors.length) {
-        const v = frame.neighbors[frame.idx]
-        frame.idx++
-        if (!disc.has(v)) {
-          // Nouveau child : push frame.
-          parent.set(v, frame.node)
-          if (frame.node === root) rootChildren++
-          disc.set(v, time)
-          low.set(v, time)
-          time++
-          stack.push({ node: v, neighbors: [...adj.get(v)!].sort(), idx: 0 })
-        } else if (v !== parent.get(frame.node)) {
-          // Back edge : update low[u].
-          low.set(frame.node, Math.min(low.get(frame.node)!, disc.get(v)!))
-        }
-      } else {
-        // Pop : on a fini ce nœud. Update parent's low + check AP.
-        const u = frame.node
-        stack.pop()
-        const parentU = parent.get(u)
-        if (parentU !== null && parentU !== undefined) {
-          low.set(parentU, Math.min(low.get(parentU)!, low.get(u)!))
-          // u-parent est articulation si low[u] >= disc[parentU] ET
-          // parentU n'est pas root.
-          if (parentU !== root && low.get(u)! >= disc.get(parentU)!) {
-            isAP.add(parentU)
-          }
-        }
-      }
-    }
-    // Root est AP si >= 2 enfants DFS.
-    if (rootChildren >= 2) isAP.add(root)
+/** Tarjan iterative DFS pour articulation points. Évite stack overflow. */
+function findApsViaDfs(
+  nodeIds: Set<string>,
+  adj: Map<string, Set<string>>,
+): Set<string> {
+  const state: DfsState = {
+    disc: new Map(),
+    low: new Map(),
+    parent: new Map(),
+    isAP: new Set(),
+    time: 0,
   }
+  for (const root of [...nodeIds].sort()) {
+    if (state.disc.has(root)) continue
+    runApDfsFrom(root, adj, state)
+  }
+  return state.isAP
+}
 
-  // Pour chaque AP, calcule severity = nombre de composantes connexes
-  // obtenues en retirant ce nœud.
+interface ApFrame { node: string; neighbors: string[]; idx: number }
+
+function runApDfsFrom(
+  root: string,
+  adj: Map<string, Set<string>>,
+  state: DfsState,
+): void {
+  state.parent.set(root, null)
+  let rootChildren = 0
+  const stack: ApFrame[] = [{
+    node: root,
+    neighbors: [...adj.get(root)!].sort(),
+    idx: 0,
+  }]
+  state.disc.set(root, state.time)
+  state.low.set(root, state.time)
+  state.time++
+
+  while (stack.length > 0) {
+    const frame = stack[stack.length - 1]
+    if (frame.idx < frame.neighbors.length) {
+      const v = frame.neighbors[frame.idx++]
+      rootChildren += processApNeighbor(frame, v, root, adj, state, stack)
+    } else {
+      stack.pop()
+      finalizeApFrame(frame.node, root, state)
+    }
+  }
+  if (rootChildren >= 2) state.isAP.add(root)
+}
+
+/**
+ * Process un voisin durant DFS : si non visité, push frame et retourne 1 si
+ * on est à la racine (compte comme child du root). Sinon update low[u] si
+ * back edge (et pas l'arc parent).
+ */
+function processApNeighbor(
+  frame: ApFrame,
+  v: string,
+  root: string,
+  adj: Map<string, Set<string>>,
+  state: DfsState,
+  stack: ApFrame[],
+): number {
+  if (!state.disc.has(v)) {
+    state.parent.set(v, frame.node)
+    state.disc.set(v, state.time)
+    state.low.set(v, state.time)
+    state.time++
+    stack.push({ node: v, neighbors: [...adj.get(v)!].sort(), idx: 0 })
+    return frame.node === root ? 1 : 0
+  }
+  if (v !== state.parent.get(frame.node)) {
+    // Back edge : update low[u]
+    state.low.set(frame.node, Math.min(state.low.get(frame.node)!, state.disc.get(v)!))
+  }
+  return 0
+}
+
+/**
+ * Pop : on a fini ce nœud. Update parent.low ; si low[u] >= disc[parent] et
+ * parent != root, alors parent est articulation point.
+ */
+function finalizeApFrame(u: string, root: string, state: DfsState): void {
+  const parentU = state.parent.get(u)
+  if (parentU === null || parentU === undefined) return
+  state.low.set(parentU, Math.min(state.low.get(parentU)!, state.low.get(u)!))
+  if (parentU !== root && state.low.get(u)! >= state.disc.get(parentU)!) {
+    state.isAP.add(parentU)
+  }
+}
+
+function rankArticulationPoints(
+  isAP: Set<string>,
+  nodeIds: Set<string>,
+  adj: Map<string, Set<string>>,
+): ArticulationPoint[] {
   const result: ArticulationPoint[] = []
   for (const ap of [...isAP].sort()) {
-    const severity = countComponentsWithout(nodeIds, adj, ap)
-    result.push({ file: ap, severity })
+    result.push({ file: ap, severity: countComponentsWithout(nodeIds, adj, ap) })
   }
   return result
 }
