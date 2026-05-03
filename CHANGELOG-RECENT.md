@@ -5,7 +5,7 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T19:28:00Z
+Last update : 2026-05-03T19:30:12Z
 
 ## By type
 
@@ -21,7 +21,7 @@ Last update : 2026-05-03T19:28:00Z
 - **5c78f3a** feat(runtime-graph): Phase γ.2a — Granger causality runtime + time-series infra — 2026-05-03
 
 
-### `fix` (11)
+### `fix` (10)
 
 - **50eb1f8** fix(toolkit): articulation-point rule — exclure package entry points (FP systemique) — 2026-05-03
 - **8844d31** fix(toolkit): FSM-ORPHAN 3→0 — fixture skip + Attribute API + satisfies unwrap — 2026-05-03
@@ -33,7 +33,6 @@ Last update : 2026-05-03T19:28:00Z
 - **866eb25** fix(toolkit): bugs #1 #2 #3 #4 trouvés via test externe Hono — 2026-05-03
 - **0146402** fix(toolkit): close P0+P1+P2+P3 — review credibility gap part 2 — 2026-05-03
 - **81b8fb9** fix(toolkit): self-detected defects via codegraph + runtime-graph — 2026-05-03
-- **e73e85d** fix(codegraph): break direct cycle sql-helpers ↔ sql-schema via type extraction — 2026-05-03
 
 
 ### `perf` (5)
@@ -45,8 +44,9 @@ Last update : 2026-05-03T19:28:00Z
 - **afd0965** perf(toolkit): self-discovered Salsa optimizations — warm runtime −40% — 2026-05-03
 
 
-### `refactor` (18)
+### `refactor` (19)
 
+- **a0add06** refactor(toolkit): split renderModuleFiche (cyclo 32→4) — 5 helpers section-by-section — 2026-05-03
 - **020e949** refactor(toolkit): split renderModules (cyclo 35→12) — 4 helpers index builders — 2026-05-03
 - **df1ee8c** refactor(toolkit): split renderEventFlows (cyclo 25→5, cog 63→4) — 5 helpers extraits — 2026-05-03
 - **64b3dcd** refactor(toolkit): split exportFacts batch 5 — eliminate ALL bombs in facts/index.ts (CrossDiscipline + Tier234) — 2026-05-03
@@ -85,6 +85,7 @@ Last update : 2026-05-03T19:28:00Z
 
 ## Full history
 
+- **a0add06** refactor(toolkit): split renderModuleFiche (cyclo 32→4) — 5 helpers section-by-section — 2026-05-03
 - **020e949** refactor(toolkit): split renderModules (cyclo 35→12) — 4 helpers index builders — 2026-05-03
 - **df1ee8c** refactor(toolkit): split renderEventFlows (cyclo 25→5, cog 63→4) — 5 helpers extraits — 2026-05-03
 - **50eb1f8** fix(toolkit): articulation-point rule — exclure package entry points (FP systemique) — 2026-05-03
@@ -134,4 +135,3 @@ Last update : 2026-05-03T19:28:00Z
 - **fc1c79d** feat(runtime-graph): Phase γ.2b — true time-series Lyapunov 1D — 2026-05-03
 - **5c78f3a** feat(runtime-graph): Phase γ.2a — Granger causality runtime + time-series infra — 2026-05-03
 - **81b8fb9** fix(toolkit): self-detected defects via codegraph + runtime-graph — 2026-05-03
-- **e73e85d** fix(codegraph): break direct cycle sql-helpers ↔ sql-schema via type extraction — 2026-05-03

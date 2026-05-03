@@ -1071,53 +1071,64 @@ function renderModuleFiche(args: RenderModuleFicheArgs): string {
 
 // ─── Section 6 : Index ──────────────────────────────────────────────────────
 
-function renderIndex(s: GraphSnapshot): string {
-  const lines: string[] = ['## 6. Index', '']
-
-  // Events.
-  const eventEmitters = new Map<string, Set<string>>()
-  const eventListeners = new Map<string, Set<string>>()
-  for (const e of s.edges) {
+function buildEventIndex(edges: GraphEdge[]): { emitters: Map<string, Set<string>>; listeners: Map<string, Set<string>> } {
+  const emitters = new Map<string, Set<string>>()
+  const listeners = new Map<string, Set<string>>()
+  for (const e of edges) {
     if (e.type !== 'event') continue
     const label = e.label ?? '(unknown)'
-    if (!eventEmitters.has(label)) eventEmitters.set(label, new Set())
-    eventEmitters.get(label)!.add(e.from)
-    if (!eventListeners.has(label)) eventListeners.set(label, new Set())
-    eventListeners.get(label)!.add(e.to)
+    if (!emitters.has(label)) emitters.set(label, new Set())
+    emitters.get(label)!.add(e.from)
+    if (!listeners.has(label)) listeners.set(label, new Set())
+    listeners.get(label)!.add(e.to)
   }
-  if (eventEmitters.size > 0) {
-    lines.push('### Events')
-    lines.push('')
-    const all = new Set([...eventEmitters.keys(), ...eventListeners.keys()])
-    for (const ev of [...all].sort()) {
-      const em = [...(eventEmitters.get(ev) ?? new Set<string>())].sort().map(path_basename)
-      const lis = [...(eventListeners.get(ev) ?? new Set<string>())].sort().map(path_basename)
-      lines.push(`- \`${ev}\` — emitters: ${em.slice(0, 3).join(', ') || '—'}${em.length > 3 ? ` +${em.length - 3}` : ''} | listeners: ${lis.slice(0, 3).join(', ') || '—'}${lis.length > 3 ? ` +${lis.length - 3}` : ''}`)
-    }
-    lines.push('')
-  }
+  return { emitters, listeners }
+}
 
-  // Tables.
-  const tableReaders = new Map<string, Set<string>>()
-  const tableWriters = new Map<string, Set<string>>()
-  for (const e of s.edges) {
+function buildTableIndex(edges: GraphEdge[]): { writers: Map<string, Set<string>>; readers: Map<string, Set<string>> } {
+  const readers = new Map<string, Set<string>>()
+  const writers = new Map<string, Set<string>>()
+  for (const e of edges) {
     if (e.type !== 'db-table') continue
     const label = e.label ?? ''
     const table = label.startsWith('table:') ? label.slice('table:'.length) : label
-    if (!tableWriters.has(table)) tableWriters.set(table, new Set())
-    tableWriters.get(table)!.add(e.from)
-    if (!tableReaders.has(table)) tableReaders.set(table, new Set())
-    tableReaders.get(table)!.add(e.to)
+    if (!writers.has(table)) writers.set(table, new Set())
+    writers.get(table)!.add(e.from)
+    if (!readers.has(table)) readers.set(table, new Set())
+    readers.get(table)!.add(e.to)
   }
-  if (tableReaders.size > 0) {
-    lines.push('### Tables')
-    lines.push('')
-    const all = new Set([...tableReaders.keys(), ...tableWriters.keys()])
-    for (const t of [...all].sort()) {
-      const w = [...(tableWriters.get(t) ?? new Set<string>())].sort().map(path_basename)
-      const r = [...(tableReaders.get(t) ?? new Set<string>())].sort().map(path_basename)
-      lines.push(`- \`${t}\` — writers: ${w.slice(0, 3).join(', ') || '—'}${w.length > 3 ? ` +${w.length - 3}` : ''} | readers: ${r.slice(0, 3).join(', ') || '—'}${r.length > 3 ? ` +${r.length - 3}` : ''}`)
-    }
+  return { writers, readers }
+}
+
+function renderIndexBucket(
+  fromMap: Map<string, Set<string>>,
+  toMap: Map<string, Set<string>>,
+  fromLabel: string,
+  toLabel: string,
+): string[] {
+  const all = new Set([...fromMap.keys(), ...toMap.keys()])
+  const out: string[] = []
+  for (const k of [...all].sort()) {
+    const f = [...(fromMap.get(k) ?? new Set<string>())].sort().map(path_basename)
+    const t = [...(toMap.get(k) ?? new Set<string>())].sort().map(path_basename)
+    const fStr = `${f.slice(0, 3).join(', ') || '—'}${f.length > 3 ? ` +${f.length - 3}` : ''}`
+    const tStr = `${t.slice(0, 3).join(', ') || '—'}${t.length > 3 ? ` +${t.length - 3}` : ''}`
+    out.push(`- \`${k}\` — ${fromLabel}: ${fStr} | ${toLabel}: ${tStr}`)
+  }
+  return out
+}
+
+function renderIndex(s: GraphSnapshot): string {
+  const lines: string[] = ['## 6. Index', '']
+
+  const { emitters, listeners } = buildEventIndex(s.edges)
+  if (emitters.size > 0) {
+    lines.push('### Events', '', ...renderIndexBucket(emitters, listeners, 'emitters', 'listeners'), '')
+  }
+
+  const { writers, readers } = buildTableIndex(s.edges)
+  if (readers.size > 0) {
+    lines.push('### Tables', '', ...renderIndexBucket(writers, readers, 'writers', 'readers'))
   }
 
   return lines.join('\n').trimEnd()
