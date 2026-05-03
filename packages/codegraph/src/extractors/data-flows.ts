@@ -949,6 +949,63 @@ function extractHost(url: string): string | null {
 
 // ─── BFS flow builder ───────────────────────────────────────────────────────
 
+interface BuildFlowCtx {
+  entry: DataFlowEntry
+  sigIndex: Map<string, TypedSignature>
+  edgesByFrom: Map<string, Array<{ from: string; to: string; argTypes: string[]; returnType: string; line: number }>>
+  sinksByContainer: Map<string, DataFlowSink[]>
+  inlineSinks: Map<string, DataFlowSink[]>
+  maxDepth: number
+}
+
+interface BfsState {
+  steps: DataFlowStep[]
+  sinks: DataFlowSink[]
+  visited: Set<string>
+}
+
+interface BfsItem {
+  node: string
+  depth: number
+  inputTypes: string[]
+  outputType?: string
+}
+
+function buildStepFromNode(item: BfsItem, ctx: BuildFlowCtx): DataFlowStep {
+  const sig = ctx.sigIndex.get(item.node)
+  const [file, symbol] = item.node.split(':')
+  return {
+    node: item.node,
+    file: file ?? ctx.entry.file,
+    symbol: symbol ?? item.node,
+    line: sig?.line ?? ctx.entry.line,
+    depth: item.depth,
+    inputTypes: item.inputTypes,
+    ...(item.outputType ? { outputType: item.outputType } : {}),
+  }
+}
+
+function enqueueOutEdges(item: BfsItem, queue: BfsItem[], state: BfsState, ctx: BuildFlowCtx): void {
+  if (item.depth >= ctx.maxDepth) return
+  const out = ctx.edgesByFrom.get(item.node) ?? []
+  for (const e of out) {
+    if (state.visited.has(e.to)) continue
+    queue.push({
+      node: e.to,
+      depth: item.depth + 1,
+      inputTypes: e.argTypes,
+      outputType: e.returnType,
+    })
+  }
+}
+
+function resolveHandlerInputType(entry: DataFlowEntry, sigIndex: Map<string, TypedSignature>): string | undefined {
+  if (!entry.handler) return undefined
+  const sig = sigIndex.get(entry.handler)
+  if (sig && sig.params.length > 0) return sig.params[0].type
+  return undefined
+}
+
 function buildFlow(
   entry: DataFlowEntry,
   sigIndex: Map<string, TypedSignature>,
@@ -957,66 +1014,32 @@ function buildFlow(
   inlineSinks: Map<string, DataFlowSink[]>,
   maxDepth: number,
 ): DataFlow {
-  const steps: DataFlowStep[] = []
-  const sinks: DataFlowSink[] = []
-  const visited = new Set<string>()
-  const queue: Array<{ node: string; depth: number; inputTypes: string[]; outputType?: string }> = []
+  const ctx: BuildFlowCtx = { entry, sigIndex, edgesByFrom, sinksByContainer, inlineSinks, maxDepth }
+  const state: BfsState = { steps: [], sinks: [], visited: new Set() }
+  const queue: BfsItem[] = []
 
-  if (entry.handler) {
-    queue.push({ node: entry.handler, depth: 0, inputTypes: [] })
-  }
+  if (entry.handler) queue.push({ node: entry.handler, depth: 0, inputTypes: [] })
 
   while (queue.length > 0) {
-    const { node, depth, inputTypes, outputType } = queue.shift()!
-    if (visited.has(node)) continue
-    visited.add(node)
+    const item = queue.shift()!
+    if (state.visited.has(item.node)) continue
+    state.visited.add(item.node)
 
-    const sig = sigIndex.get(node)
-    const [file, symbol] = node.split(':')
-    steps.push({
-      node,
-      file: file ?? entry.file,
-      symbol: symbol ?? node,
-      line: sig?.line ?? entry.line,
-      depth,
-      inputTypes,
-      ...(outputType ? { outputType } : {}),
-    })
+    state.steps.push(buildStepFromNode(item, ctx))
+    const contSinks = sinksByContainer.get(item.node) ?? inlineSinks.get(item.node) ?? []
+    for (const s of contSinks) state.sinks.push(s)
 
-    // Sinks attachés à cette fonction.
-    const contSinks = sinksByContainer.get(node) ?? inlineSinks.get(node) ?? []
-    for (const s of contSinks) sinks.push(s)
-
-    if (depth >= maxDepth) continue
-
-    const out = edgesByFrom.get(node) ?? []
-    for (const e of out) {
-      if (!visited.has(e.to)) {
-        queue.push({
-          node: e.to,
-          depth: depth + 1,
-          inputTypes: e.argTypes,
-          outputType: e.returnType,
-        })
-      }
-    }
+    enqueueOutEdges(item, queue, state, ctx)
   }
 
-  // Dédup sinks par (kind, target, file, line).
-  const dedupSinks = dedup(sinks, (s) => `${s.kind}|${s.target}|${s.file}|${s.line}`)
+  const dedupSinks = dedup(state.sinks, (s) => `${s.kind}|${s.target}|${s.file}|${s.line}`)
   dedupSinks.sort(cmpSink)
 
-  // inputType : first param du handler si détectable.
-  let inputType: string | undefined
-  if (entry.handler) {
-    const sig = sigIndex.get(entry.handler)
-    if (sig && sig.params.length > 0) inputType = sig.params[0].type
-  }
-
+  const inputType = resolveHandlerInputType(entry, sigIndex)
   return {
     entry,
     ...(inputType ? { inputType } : {}),
-    steps,
+    steps: state.steps,
     sinks: dedupSinks,
   }
 }

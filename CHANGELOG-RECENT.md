@@ -5,14 +5,13 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T20:04:44Z
+Last update : 2026-05-03T20:06:48Z
 
 ## By type
 
-### `feat` (2)
+### `feat` (1)
 
 - **af41582** feat(toolkit): symbolic simplification facts + 5 composite rules cross-discipline — 2026-05-03
-- **2f84a70** feat(toolkit): Niveau 5 effect-analysis + roadmap defers Niveaux 6/7 — 2026-05-03
 
 
 ### `fix` (8)
@@ -34,8 +33,9 @@ Last update : 2026-05-03T20:04:44Z
 - **7151cfd** perf(toolkit): Salsa-isolate 3 hot detectors (co-change, drift, const-expr) — 2026-05-03
 
 
-### `refactor` (31)
+### `refactor` (32)
 
+- **a5ac751** refactor(toolkit): split buildTestFilesIndex (cyclo 17→1) — 5 helpers + ImportIndices struct — 2026-05-03
 - **62de53a** refactor(toolkit): split analyzeScope (cyclo 17→3) — extract per-kind handlers — 2026-05-03
 - **6cfd2fe** refactor(toolkit): split analyzePackageDeps (cyclo 17→4) — 3 helpers — 2026-05-03
 - **69a032e** refactor(toolkit): split runPostSnapshotMetrics (cyclo 20→4) — generic metric step + 3 metric runners — 2026-05-03
@@ -55,7 +55,6 @@ Last update : 2026-05-03T20:04:44Z
 - **64b3dcd** refactor(toolkit): split exportFacts batch 5 — eliminate ALL bombs in facts/index.ts (CrossDiscipline + Tier234) — 2026-05-03
 - **fe16098** refactor(toolkit): split exportFacts batch 4 — eliminate 3 helper-bombs (Cycle, Security, Package) — 2026-05-03
 - **cbc6a6b** refactor(toolkit): split exportFacts batch 3 — exportFacts cyclo 84→4 (sous le seuil) — 2026-05-03
-- **5888c3e** refactor(toolkit): split exportFacts batch 2 — extract graph metrics + listeners (cyclomatic 102→84) — 2026-05-03
 
 
 ### `chore` (2)
@@ -74,6 +73,7 @@ Last update : 2026-05-03T20:04:44Z
 
 ## Full history
 
+- **a5ac751** refactor(toolkit): split buildTestFilesIndex (cyclo 17→1) — 5 helpers + ImportIndices struct — 2026-05-03
 - **62de53a** refactor(toolkit): split analyzeScope (cyclo 17→3) — extract per-kind handlers — 2026-05-03
 - **6cfd2fe** refactor(toolkit): split analyzePackageDeps (cyclo 17→4) — 3 helpers — 2026-05-03
 - **69a032e** refactor(toolkit): split runPostSnapshotMetrics (cyclo 20→4) — generic metric step + 3 metric runners — 2026-05-03
@@ -123,4 +123,3 @@ Last update : 2026-05-03T20:04:44Z
 - **a191d61** docs(validation): full-chain run #1 — 4 bugs trouvés sur Hono — 2026-05-03
 - **095661e** docs(validation): run #1 — Hono framework (186 files, 3.5s, 0 crash, 0 hallucination) — 2026-05-03
 - **2067d1f** chore(release): v0.3.0 consolidation — npm-publishable core, experimental gated — 2026-05-03
-- **2f84a70** feat(toolkit): Niveau 5 effect-analysis + roadmap defers Niveaux 6/7 — 2026-05-03
