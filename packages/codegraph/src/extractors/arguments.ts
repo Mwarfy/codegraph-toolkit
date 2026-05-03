@@ -75,6 +75,42 @@ function matchSource(text: string): TaintSourceKind | null {
   return null
 }
 
+interface FnScope {
+  name: string
+  fnNode: Node
+  params: ReadonlyArray<{ getName(): string }>
+}
+
+/**
+ * Itère les function-like scopes : décl, méthodes de classe, arrows assignés.
+ * Yield contient le nom symbolique + le node body + la liste de params.
+ * Skip les fn anonymes top-level (pas de name) — leurs params/args ne peuvent
+ * pas être attribués à un symbole stable.
+ */
+function* iterateFnScopes(sf: SourceFile): Generator<FnScope> {
+  for (const fn of sf.getFunctions()) {
+    const name = fn.getName()
+    if (!name) continue
+    yield { name, fnNode: fn, params: fn.getParameters() }
+  }
+  for (const cls of sf.getClasses()) {
+    const className = cls.getName() ?? '(anonymous)'
+    for (const method of cls.getMethods()) {
+      yield {
+        name: `${className}.${method.getName()}`,
+        fnNode: method,
+        params: method.getParameters(),
+      }
+    }
+  }
+  for (const v of sf.getVariableDeclarations()) {
+    const init = v.getInitializer()
+    if (!init) continue
+    if (!Node.isArrowFunction(init) && !Node.isFunctionExpression(init)) continue
+    yield { name: v.getName(), fnNode: init, params: init.getParameters() }
+  }
+}
+
 export function extractArgumentsFileBundle(
   sf: SourceFile,
   relPath: string,
@@ -83,116 +119,91 @@ export function extractArgumentsFileBundle(
   const taintedArgs: TaintedArgumentToCall[] = []
   const params: FunctionParam[] = []
 
-  // ─── Pass 1 : collecter les FunctionParam ────────────────────────
-  const collectParams = (
-    sym: string,
-    paramList: ReadonlyArray<{ getName(): string }>,
-  ): void => {
-    for (let i = 0; i < paramList.length; i++) {
-      const name = paramList[i].getName()
-      if (!name) continue
-      params.push({ file: relPath, symbol: sym, paramName: name, paramIndex: i })
-    }
-  }
-
-  for (const fn of sf.getFunctions()) {
-    const name = fn.getName()
-    if (name) collectParams(name, fn.getParameters())
-  }
-  for (const cls of sf.getClasses()) {
-    const className = cls.getName() ?? '(anonymous)'
-    for (const method of cls.getMethods()) {
-      collectParams(`${className}.${method.getName()}`, method.getParameters())
-    }
-  }
-  for (const v of sf.getVariableDeclarations()) {
-    const init = v.getInitializer()
-    if (!init) continue
-    if (!Node.isArrowFunction(init) && !Node.isFunctionExpression(init)) continue
-    collectParams(v.getName(), init.getParameters())
-  }
-
-  // ─── Pass 2 : collecter les tainted args dans chaque function scope.
-  // Pour chaque scope on construit un Map<varName, source> des vars
-  // taintées (re-detection par scope au lieu de partager l'extracteur
-  // tainted-vars — ici on fait fold-in pour rester self-contained).
-  const collectArgsInScope = (
-    fnNode: Node,
-    fnName: string,
-  ): void => {
-    // Build map of tainted vars in this scope (var = req.body.x).
-    const taintedVars = new Map<string, TaintSourceKind>()
-    for (const v of fnNode.getDescendantsOfKind(SyntaxKind.VariableDeclaration)) {
-      const init = v.getInitializer()
-      if (!init) continue
-      const src = matchSource(init.getText())
-      if (!src) continue
-      const nameNode = v.getNameNode()
-      if (!Node.isIdentifier(nameNode)) continue
-      taintedVars.set(nameNode.getText(), src)
-    }
-
-    // Pour chaque CallExpression, check chaque arg :
-    //   a) expression direct user-input (`req.body.X`)
-    //   b) identifier qui est dans taintedVars
-    for (const call of fnNode.getDescendantsOfKind(SyntaxKind.CallExpression)) {
-      const callee = call.getExpression()
-      let calleeText: string
-      if (Node.isIdentifier(callee)) calleeText = callee.getText()
-      else if (Node.isPropertyAccessExpression(callee)) calleeText = callee.getName()
-      else continue
-
-      const args = call.getArguments()
-      for (let i = 0; i < args.length; i++) {
-        const arg = args[i]
-        const argText = arg.getText()
-        // a) Direct user-input expression
-        const directSrc = matchSource(argText)
-        if (directSrc) {
-          taintedArgs.push({
-            callerFile: relPath,
-            callerSymbol: fnName,
-            callee: calleeText,
-            paramIndex: i,
-            source: directSrc,
-          })
-          continue
-        }
-        // b) Identifier matching tainted var
-        if (Node.isIdentifier(arg)) {
-          const varSrc = taintedVars.get(arg.getText())
-          if (varSrc) {
-            taintedArgs.push({
-              callerFile: relPath,
-              callerSymbol: fnName,
-              callee: calleeText,
-              paramIndex: i,
-              source: varSrc,
-            })
-          }
-        }
-      }
-    }
-  }
-
-  for (const fn of sf.getFunctions()) {
-    const name = fn.getName()
-    if (name) collectArgsInScope(fn, name)
-  }
-  for (const cls of sf.getClasses()) {
-    const className = cls.getName() ?? '(anonymous)'
-    for (const method of cls.getMethods()) {
-      collectArgsInScope(method, `${className}.${method.getName()}`)
-    }
-  }
-  for (const v of sf.getVariableDeclarations()) {
-    const init = v.getInitializer()
-    if (!init) continue
-    if (!Node.isArrowFunction(init) && !Node.isFunctionExpression(init)) continue
-    collectArgsInScope(init, v.getName())
+  for (const scope of iterateFnScopes(sf)) {
+    pushFunctionParams(scope, relPath, params)
+    collectArgsInScope(scope, relPath, taintedArgs)
   }
 
   return { taintedArgs, params }
+}
+
+// ─── Pass 1: FunctionParam emit ─────────────────────────────────────────────
+
+function pushFunctionParams(scope: FnScope, relPath: string, params: FunctionParam[]): void {
+  for (let i = 0; i < scope.params.length; i++) {
+    const name = scope.params[i].getName()
+    if (!name) continue
+    params.push({ file: relPath, symbol: scope.name, paramName: name, paramIndex: i })
+  }
+}
+
+// ─── Pass 2: tainted args dans le scope ─────────────────────────────────────
+
+/**
+ * Pour chaque scope, on construit un Map<varName, source> des vars taintées
+ * (var = req.body.x). On fold-in la détection au lieu de dépendre de
+ * l'extracteur tainted-vars — keeps cet extracteur self-contained.
+ */
+function collectArgsInScope(
+  scope: FnScope,
+  relPath: string,
+  taintedArgs: TaintedArgumentToCall[],
+): void {
+  const taintedVars = collectTaintedVarsLocally(scope.fnNode)
+  for (const call of scope.fnNode.getDescendantsOfKind(SyntaxKind.CallExpression)) {
+    const calleeText = readCalleeText(call.getExpression())
+    if (!calleeText) continue
+    scanArgsForTaint(call.getArguments(), calleeText, scope.name, relPath, taintedVars, taintedArgs)
+  }
+}
+
+function collectTaintedVarsLocally(fnNode: Node): Map<string, TaintSourceKind> {
+  const taintedVars = new Map<string, TaintSourceKind>()
+  for (const v of fnNode.getDescendantsOfKind(SyntaxKind.VariableDeclaration)) {
+    const init = v.getInitializer()
+    if (!init) continue
+    const src = matchSource(init.getText())
+    if (!src) continue
+    const nameNode = v.getNameNode()
+    if (!Node.isIdentifier(nameNode)) continue
+    taintedVars.set(nameNode.getText(), src)
+  }
+  return taintedVars
+}
+
+function readCalleeText(callee: Node): string | null {
+  if (Node.isIdentifier(callee)) return callee.getText()
+  if (Node.isPropertyAccessExpression(callee)) return callee.getName()
+  return null
+}
+
+/**
+ * Pour chaque arg : check (a) si c'est une expression user-input directe
+ * (req.body.X), sinon (b) si c'est un identifier dont la var est taintée
+ * dans ce scope. Push un TaintedArgumentToCall dans les deux cas.
+ */
+function scanArgsForTaint(
+  args: Node[],
+  calleeText: string,
+  callerSymbol: string,
+  relPath: string,
+  taintedVars: Map<string, TaintSourceKind>,
+  taintedArgs: TaintedArgumentToCall[],
+): void {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]
+    const directSrc = matchSource(arg.getText())
+    if (directSrc) {
+      taintedArgs.push({ callerFile: relPath, callerSymbol, callee: calleeText, paramIndex: i, source: directSrc })
+      continue
+    }
+    if (Node.isIdentifier(arg)) {
+      const varSrc = taintedVars.get(arg.getText())
+      if (varSrc) {
+        taintedArgs.push({ callerFile: relPath, callerSymbol, callee: calleeText, paramIndex: i, source: varSrc })
+      }
+    }
+  }
 }
 
 export async function analyzeArguments(
