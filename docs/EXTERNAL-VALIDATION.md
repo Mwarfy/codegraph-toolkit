@@ -82,13 +82,137 @@ des heuristiques tunables (config-driven), pas des bugs fondamentaux.
 C'est un signal honnête de portabilité — le toolkit n'a pas appris la
 forme spécifique de Sentinel par accident. Il généralise raisonnablement.
 
-## À venir
+## Run #1 — Hono FULL CHAIN test (codegraph + runtime-graph + datalog + MCP)
 
-- Run #2 : Cal.com sub-package (`packages/lib/` ou `packages/features/bookings/`)
-  pour stresser le pattern monorepo Turborepo + Prisma truth-points.
-- Run #3 : Trigger.dev sub-package pour valider sur un shape proche
-  de Sentinel (jobs orchestration) mais codebase indépendante.
+Ce run a testé toute la chaîne : pas seulement codegraph statique.
 
-Quand ces 3 runs passent sans crash + 0 hallucination, on aura un signal
-défendable que le toolkit est **portable au-delà de son projet de
-calibration**, pas juste un dogfood Sentinel.
+### ✓ Ce qui marche
+
+**Codegraph static analysis** (cf. section précédente) :
+  - 81 fact relations, 6724 tuples
+  - 5 cycles structurels détectés
+  - Hubs cohérents
+
+**Disciplines mathématiques rigoureuses** (à distinguer des heuristiques
+inspirées) :
+  - **Fiedler λ₂** (SpectralMetric) : 16 sous-graphes calculés via power
+    iteration sur Laplacien. Vrai calcul spectral. Déterministe (van der
+    Corput init).
+  - **Newman-Girvan modularity Q** : 1 score global + ImportCommunity (255
+    rows) — vraie détection de communautés.
+  - **Shannon entropy** (SymbolEntropy) : 77 rows — vraie entropie.
+  - **NCD compression distance** : 61 rows — vrai NCD via gzip.
+  - **Information Bottleneck heuristic** (407 rows) : log fan-in × log
+    fan-out. **Heuristique inspirée**, pas le vrai Tishby IB (cf. disclaimer
+    dans le code).
+
+**Datalog runner** : 90/100 rules tournent successfully sur Hono facts.
+**312 violations détectées** par 15 types de rules, dont :
+  - 74 COMPOSITE-MISPLACED-FILE
+  - 33 COMPOSITE-COGNITIVE-BOMB
+  - 31 NO-RETURN-THEN-ELSE (Sonar S1126 — vraies violations Hono)
+  - 28 COMPOSITE-CYCLOMATIC-BOMB
+  - 18 COMPOSITE-AWAIT-IN-LOOP
+  - 15 NO-NEW-ARTICULATION-POINT
+  - 12 COMPOSITE-BACK-EDGE
+  - 11 NO-FLOATING-PROMISE
+  - 11 CYCLES
+  - + autres
+
+**MCP tools** : 6/7 testés OK — `affected` (calcule reverse-deps),
+`context`, `truth-point`, `recent`, `changes-since`, `co-changed`. Le
+7e (`who-imports.ts`) est en réalité nommé `importers.ts` — bug naming
+mineur.
+
+### ✗ Ce qui pète (bugs trouvés sur Hono)
+
+**Bug #1 — knownFiles filter cassé sur projets avec tests `.tsx`**
+
+`extractors/co-change.ts` filtre les paires de co-change via `knownFiles`
+set. Si knownFiles ne contient que les `.ts` (cas Hono où les tests sont
+`.test.tsx` exclus du glob), TOUTES les paires test↔source sont rejetées.
+
+  **Impact cascade** : 7 disciplines git-historiques retournent 0 rows :
+  - LyapunovMetric, BayesianCoChange, GrangerCausality, FactKindStability,
+    PersistentCycle, CompressionDistance partial, et + le `CoChange.facts`
+    file lui-même est vide.
+
+  **Vérification** : `analyzeCoChange()` direct sans knownFiles retourne
+  bien des paires. Le bug est dans le filter.
+
+  **Fix proposé** : OR au lieu de AND — accepter si au moins UN des deux
+  côtés est dans knownFiles. Évite de filtrer les paires test↔source
+  légitimes.
+
+**Bug #2 — CLI datalog sans flag `--allow-recursion`**
+
+5 rules utilisent la récursion (`composite-fk-chain-without-index`,
+`composite-tainted-flow*`, `composite-cross-fn-*`, `composite-cross-function-taint`).
+Le runner Datalog supporte `allowRecursion: true` au niveau API mais
+**le CLI ne l'expose pas**. Ces rules sont mortes via CLI.
+
+  **Fix proposé** : ajouter `--allow-recursion` à la CLI `datalog run`.
+
+**Bug #3 — runtime-graph capture inutile sur tests unitaires**
+
+Le driver `replay-tests` lance `npx vitest run` sous OTel auto-instrument.
+Mais OTel capture HTTP/DB/Redis spans, **pas les appels JS internes**.
+Les tests unitaires Hono (parsing URL, JWT decode, etc.) ne déclenchent
+aucun span → 0 SymbolTouchedRuntime, 0 CallEdgeRuntime, 0 LatencySeries.
+
+  **Implication** : runtime-graph est utile sur des **apps live avec routes
+  HTTP**, pas sur les bibliothèques pures. Pour Hono lui-même, il faudrait
+  démarrer une app demo + driver synthetic curl.
+
+  **Action** : documenter cette limite. Pas un bug à fixer — design correct
+  d'OTel.
+
+**Bug #4 — `who-imports` nommé `importers` côté code MCP**
+
+Inconsistance naming : la doc mentionne `who-imports`, le fichier est
+`tools/importers.ts`. Mineur mais source de confusion.
+
+### Métriques résumées Hono
+
+  | Surface              | Status                               |
+  | ─────────────────── | ──────────────────────────────────── |
+  | Codegraph analyze    | ✓ 3.5s, 0 crash                      |
+  | Static disciplines   | ✓ Fiedler, Newman-Girvan, Shannon, NCD |
+  | Heuristiques         | ⚠ IB OK, Lyapunov-cochange/Granger morts (bug #1) |
+  | Datalog rules        | ✓ 90/100 (5 récursives mortes via CLI bug #2) |
+  | 312 violations real  | ✓ détectées sur Hono                 |
+  | Runtime-graph capture | ✗ 0 spans (architecture limit, bug #3) |
+  | MCP tools (6/7)      | ✓ affected, context, truth-point, etc. |
+
+### Priorités d'amélioration (ordre)
+
+1. **Bug #1 (knownFiles filter)** — débloque 7 disciplines git-historiques
+   sur tout projet avec tests .tsx. ~30 min fix.
+2. **Bug #2 (CLI --allow-recursion)** — débloque 5 rules sécurité
+   importantes (tainted flow, fk chains). ~15 min fix.
+3. **Bug #4 (naming who-imports)** — cosmétique, ~5 min.
+4. **Bug #3 (runtime-graph)** — pas un bug fixable, mais doc à updater
+   pour clarifier que runtime-graph nécessite app live HTTP, pas tests
+   unitaires de bibliothèque.
+
+### Verdict global
+
+**Le système marche à 70%** sur un projet externe :
+  - Static analysis ✓✓✓
+  - Math disciplines rigoureuses ✓✓
+  - Datalog rules ✓✓ (90/100)
+  - MCP tools ✓✓ (6/7)
+  - Heuristiques git-historiques ✗ (bug filter)
+  - Runtime-graph capture ✗ (architecture mismatch sur libraries)
+
+Les bugs trouvés sont **réparables** sans refactor majeur. Le toolkit
+n'a PAS été conçu accidentellement pour Sentinel uniquement — il
+**généralise**, mais 1 bug filter cause une cascade visible seulement sur
+un projet shape différent. C'est exactement ce qu'un test externe est
+censé révéler.
+
+## Run #2 / #3 (différés)
+
+Plus utile maintenant : fixer les 4 bugs trouvés que d'enchaîner Cal.com
++ Trigger.dev. Sans le bug #1 fix, ces runs montreront le même
+"7 disciplines mortes" sur les tests externes.

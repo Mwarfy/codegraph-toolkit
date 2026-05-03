@@ -186,6 +186,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+095661e docs(validation): run #1 — Hono framework (186 files, 3.5s, 0 crash, 0 hallucination)
 2067d1f chore(release): v0.3.0 consolidation — npm-publishable core, experimental gated
 2f84a70 feat(toolkit): Niveau 5 effect-analysis + roadmap defers Niveaux 6/7
 0146402 fix(toolkit): close P0+P1+P2+P3 — review credibility gap part 2
@@ -197,7 +198,6 @@ afd0965 perf(toolkit): self-discovered Salsa optimizations — warm runtime −4
 c484f1f refactor(codegraph): runDeterministicDetectors 279→108 LOC + git-fixture determinism
 173915c chore(toolkit): self-discipline pass — close credibility gap from external review
 03ef857 chore(runtime-graph): OSS launch prep — alpha.4 publish-ready
-79c4fed feat(runtime-graph): Phase γ.2c — TDA Persistent Homology dim-0
 ```
 
 ## Comment contribuer à ce brief
