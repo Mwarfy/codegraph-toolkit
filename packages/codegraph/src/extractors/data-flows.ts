@@ -863,6 +863,34 @@ function detectBullmqWorkerEntries(
  *     target = `<dynamic>`, tag utile mais potentiellement bruyant. Conservateur :
  *     on n'exige que le callee matche exactement, sans validation sémantique.
  */
+/**
+ * `fetch(url)` ou `<client>.<method>(url)` — match si l'expr de call
+ * matche les patterns http outbound configurés.
+ */
+function isHttpOutboundCall(expr: any, fns: Set<string>, clients: Set<string>): boolean {
+  if (expr.getKind() === SyntaxKind.Identifier) {
+    return fns.has(expr.getText())
+  }
+  if (expr.getKind() === SyntaxKind.PropertyAccessExpression) {
+    const obj = expr.getExpression?.()
+    const method = expr.getName?.()
+    if (!obj || obj.getKind() !== SyntaxKind.Identifier || !method) return false
+    return clients.has(obj.getText()) && HTTP_OUTBOUND_METHODS.has(method)
+  }
+  return false
+}
+
+function extractOutboundTarget(callArgs: any[]): string {
+  if (callArgs.length === 0) return '<dynamic>'
+  const firstArg = callArgs[0]
+  const k = firstArg.getKind?.()
+  if (k !== SyntaxKind.StringLiteral && k !== SyntaxKind.NoSubstitutionTemplateLiteral) {
+    return '<dynamic>'
+  }
+  const url = firstArg.getLiteralText?.() ?? ''
+  return extractHost(url) ?? '<dynamic>'
+}
+
 function scanHttpOutboundSinks(
   sf: SourceFile,
   file: string,
@@ -876,38 +904,9 @@ function scanHttpOutboundSinks(
     const call = node as any
     const expr = call.getExpression?.()
     if (!expr) return
+    if (!isHttpOutboundCall(expr, fns, clients)) return
 
-    let matched = false
-
-    if (expr.getKind() === SyntaxKind.Identifier) {
-      // Forme : `fetch(url, ...)`, `got(url, ...)`.
-      const name = expr.getText()
-      if (fns.has(name)) matched = true
-    } else if (expr.getKind() === SyntaxKind.PropertyAccessExpression) {
-      // Forme : `axios.get(url, ...)`, `http.post(url, ...)`.
-      const obj = expr.getExpression?.()
-      const method = expr.getName?.()
-      if (obj && obj.getKind() === SyntaxKind.Identifier && method) {
-        const clientName = obj.getText()
-        if (clients.has(clientName) && HTTP_OUTBOUND_METHODS.has(method)) {
-          matched = true
-        }
-      }
-    }
-
-    if (!matched) return
-
-    const args = call.getArguments?.() ?? []
-    let target = '<dynamic>'
-    if (args.length > 0) {
-      const firstArg = args[0]
-      const k = firstArg.getKind?.()
-      if (k === SyntaxKind.StringLiteral || k === SyntaxKind.NoSubstitutionTemplateLiteral) {
-        const url = firstArg.getLiteralText?.() ?? ''
-        target = extractHost(url) ?? '<dynamic>'
-      }
-    }
-
+    const target = extractOutboundTarget(call.getArguments?.() ?? [])
     const line = call.getStartLineNumber?.() ?? 0
     const container = findContainerAtLine(ranges, line)
     if (!container) return
