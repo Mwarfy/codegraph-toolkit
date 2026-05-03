@@ -178,9 +178,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 > pas verdict. Une tension non explorée n'est pas un bug — c'est un saut
 > latéral possible que le sol stable rend testable.
 
-- **ORPHELIN** `packages/datalog/src/cli.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/datalog/src/cli.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
@@ -208,6 +208,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+8a6e1e1 refactor(codegraph): split applyTransitiveReexportCoverage (cyclo 11→4, cog 26→4) — test-coverage.ts FULLY bomb-free
 2f99c5d refactor(codegraph): split analyzeTestCoverage (cyclo 27→1, cog 54→0) — analyzeTestCoverage bomb-free
 446c4b6 refactor(codegraph-mcp): split codegraphUncovered (cyclo 28→9, cog 29→3) — uncovered.ts bomb-free
 357636e refactor(codegraph): split scanImportsInSourceFile (cyclo 28→1, cog 45→0) — ts-imports.ts bomb-free
@@ -219,7 +220,6 @@ aa09cb1 refactor(codegraph): split runCrossDisciplineDetectors (cyclo 30→9, co
 bd1923f refactor(codegraph-mcp): split codegraphDatalogQuery (cyclo 31→7, cog 52→3) — datalog-query.ts bomb-free
 89be66f refactor(codegraph): split extractArgumentsFileBundle (cyclo 33→3, cog 53→2) — arguments.ts bomb-free
 c922d70 refactor(runtime-graph): split tdaPersistence (cyclo 33→5, cog 63→4) — tda-persistence.ts bomb-free
-a4bd164 refactor(adr-toolkit): split bootstrapAdrs (cyclo 34→10, cog 50→4) — bootstrap.ts bomb-free
 ```
 
 ## Comment contribuer à ce brief

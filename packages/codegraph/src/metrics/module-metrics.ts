@@ -47,78 +47,128 @@ export function computeModuleMetrics(
   const fileNodes = nodes.filter((n) => n.type === 'file')
   const fileIds = new Set(fileNodes.map((n) => n.id))
 
-  // ─── Build graphology Graph ────────────────────────────────────────
+  const { g, fanIn, fanOut } = buildModuleGraph(fileNodes, fileIds, edges, edgeTypes)
+  const prScores = runPageRank(g, alpha, tolerance)
+  const result = buildModuleMetricsRows(fileNodes, fanIn, fanOut, prScores)
 
+  result.sort(compareModuleMetrics)
+  return result
+}
+
+interface ModuleGraphResult {
+  g: any
+  fanIn: Map<string, number>
+  fanOut: Map<string, number>
+}
+
+/**
+ * Build le graphology Graph + maps fanIn/fanOut. Dédup multi-edges,
+ * skip self-loops, edge type filter.
+ */
+function buildModuleGraph(
+  fileNodes: GraphNode[],
+  fileIds: Set<string>,
+  edges: GraphEdge[],
+  edgeTypes: Set<GraphEdge['type']>,
+): ModuleGraphResult {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const GraphCtor = (Graph as any).default ?? Graph
   const g = new GraphCtor({ multi: false, type: 'directed', allowSelfLoops: false })
 
-  for (const n of fileNodes) {
-    g.addNode(n.id)
-  }
+  for (const n of fileNodes) g.addNode(n.id)
 
   const fanIn = new Map<string, number>()
   const fanOut = new Map<string, number>()
-  const addedEdges = new Set<string>()  // dedup pour multi-edges same pair
+  const addedEdges = new Set<string>()
 
   for (const e of edges) {
     if (!edgeTypes.has(e.type)) continue
     if (!fileIds.has(e.from) || !fileIds.has(e.to)) continue
-    if (e.from === e.to) continue  // self-loop → ignoré pour PageRank
+    if (e.from === e.to) continue
     const key = `${e.from}→${e.to}`
     if (addedEdges.has(key)) continue
     addedEdges.add(key)
-    try {
-      g.addDirectedEdge(e.from, e.to)
-      fanOut.set(e.from, (fanOut.get(e.from) ?? 0) + 1)
-      fanIn.set(e.to, (fanIn.get(e.to) ?? 0) + 1)
-    } catch {
-      // Edge déjà présent (race entre multi-edges) — skip.
-    }
+    addEdgeWithCounts(g, e.from, e.to, fanIn, fanOut)
   }
+  return { g, fanIn, fanOut }
+}
 
-  // ─── PageRank ──────────────────────────────────────────────────────
+function addEdgeWithCounts(
+  g: any,
+  from: string,
+  to: string,
+  fanIn: Map<string, number>,
+  fanOut: Map<string, number>,
+): void {
+  try {
+    g.addDirectedEdge(from, to)
+    fanOut.set(from, (fanOut.get(from) ?? 0) + 1)
+    fanIn.set(to, (fanIn.get(to) ?? 0) + 1)
+  } catch {
+    // Edge déjà présent (race entre multi-edges) — skip.
+  }
+}
 
+/**
+ * graphology-metrics v2 retourne un Record<node, score>. Si pagerank fail
+ * (graphe vide etc.) on continue avec un score nul.
+ */
+function runPageRank(
+  g: any,
+  alpha: number,
+  tolerance: number,
+): Record<string, number> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const prFn = (pagerank as any).default ?? pagerank
-  // graphology-metrics v2 retourne un `Record<node, score>` via l'option
-  // `getNodeCentrality` false (par défaut). On utilise la forme la plus
-  // stable : appeler avec options-objet.
-  let prScores: Record<string, number> = {}
   try {
-    prScores = prFn(g, { alpha, tolerance, maxIterations: 500 }) as Record<string, number>
+    return prFn(g, { alpha, tolerance, maxIterations: 500 }) as Record<string, number>
   } catch {
-    // Si pagerank échoue (graphe vide, etc.) on continue avec un score nul.
+    return {}
   }
+}
 
+function buildModuleMetricsRows(
+  fileNodes: GraphNode[],
+  fanIn: Map<string, number>,
+  fanOut: Map<string, number>,
+  prScores: Record<string, number>,
+): ModuleMetrics[] {
+  const maxPr = computeMaxPageRank(prScores)
+  return fileNodes.map((n) => buildOneRow(n, fanIn, fanOut, prScores, maxPr))
+}
+
+function computeMaxPageRank(prScores: Record<string, number>): number {
   let maxPr = 0
   for (const v of Object.values(prScores)) if (v > maxPr) maxPr = v
-  const normalize = (v: number): number => (maxPr > 0 ? v / maxPr : 0)
+  return maxPr
+}
 
-  // ─── Build ModuleMetrics[] ─────────────────────────────────────────
+function buildOneRow(
+  n: GraphNode,
+  fanIn: Map<string, number>,
+  fanOut: Map<string, number>,
+  prScores: Record<string, number>,
+  maxPr: number,
+): ModuleMetrics {
+  const fi = fanIn.get(n.id) ?? 0
+  const fo = fanOut.get(n.id) ?? 0
+  const loc = n.loc ?? 0
+  // Henry-Kafura : (fanIn × fanOut)² × loc. Quand fanIn ou fanOut = 0,
+  // la complexité informationnelle est 0 (aucun flux à travers le module).
+  const henryKafura = (fi * fo) * (fi * fo) * loc
+  const normalizedPr = maxPr > 0 ? (prScores[n.id] ?? 0) / maxPr : 0
+  return {
+    file: n.id,
+    fanIn: fi,
+    fanOut: fo,
+    pageRank: Number(normalizedPr.toFixed(6)),
+    henryKafura,
+    loc,
+  }
+}
 
-  const result: ModuleMetrics[] = fileNodes.map((n) => {
-    const fi = fanIn.get(n.id) ?? 0
-    const fo = fanOut.get(n.id) ?? 0
-    const loc = n.loc ?? 0
-    // Henry-Kafura : `(fanIn * fanOut)²  * loc`. Quand fanIn ou fanOut = 0,
-    // la complexité informationnelle est 0 (aucun flux à travers le module).
-    const henryKafura = (fi * fo) * (fi * fo) * loc
-    return {
-      file: n.id,
-      fanIn: fi,
-      fanOut: fo,
-      pageRank: Number(normalize(prScores[n.id] ?? 0).toFixed(6)),
-      henryKafura,
-      loc,
-    }
-  })
-
-  // Tri : PageRank desc, puis file asc (stabilité).
-  result.sort((a, b) => {
-    if (a.pageRank !== b.pageRank) return b.pageRank - a.pageRank
-    return a.file < b.file ? -1 : a.file > b.file ? 1 : 0
-  })
-
-  return result
+/** Tri : PageRank desc, puis file asc (stabilité). */
+function compareModuleMetrics(a: ModuleMetrics, b: ModuleMetrics): number {
+  if (a.pageRank !== b.pageRank) return b.pageRank - a.pageRank
+  return a.file < b.file ? -1 : a.file > b.file ? 1 : 0
 }
