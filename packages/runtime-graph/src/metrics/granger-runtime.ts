@@ -91,11 +91,13 @@ const DEFAULT_OPTIONS: Required<GrangerRuntimeOptions> = {
  * Complexité : O(N² × T) où N = nb séries, T = nb buckets. Pour ~50 séries
  * et 60 buckets (1 min @ 1s) → 180k ops. Négligeable.
  */
+type RequiredOptions = Required<GrangerRuntimeOptions>
+
 export function grangerRuntime(
   snap: RuntimeSnapshot,
   options: GrangerRuntimeOptions = {},
 ): GrangerRuntimeFact[] {
-  const opts = { ...DEFAULT_OPTIONS, ...options }
+  const opts: RequiredOptions = { ...DEFAULT_OPTIONS, ...options }
   const series = snap.latencySeries
   const bucketCount = snap.meta.bucketCount
 
@@ -103,7 +105,19 @@ export function grangerRuntime(
     return []
   }
 
-  // Reconstruct dense series : group sparse facts by (kind, key) → counts[bucketCount]
+  const densesByKey = buildDenseSeries(series, bucketCount)
+  const seriesIds = Array.from(densesByKey.keys()).sort()
+  const spikes = computeSpikes(densesByKey, seriesIds, bucketCount, opts.spikeMultiplier)
+  const out = scanGrangerPairs(seriesIds, spikes, bucketCount, opts)
+  out.sort(compareGrangerFact)
+  return out
+}
+
+/** Reconstruct dense series : sparse facts → counts[bucketCount] per (kind:key) id. */
+function buildDenseSeries(
+  series: ReadonlyArray<{ kind: string; key: string; bucketIdx: number; count: number }>,
+  bucketCount: number,
+): Map<string, number[]> {
   const densesByKey = new Map<string, number[]>()
   for (const f of series) {
     const id = `${f.kind}:${f.key}`
@@ -116,65 +130,86 @@ export function grangerRuntime(
       arr[f.bucketIdx] = f.count
     }
   }
+  return densesByKey
+}
 
-  // Compute spike thresholds per series
-  const seriesIds = Array.from(densesByKey.keys()).sort()
+/** Per series, threshold = max(1, mean × spikeMultiplier) → boolean[] mask. */
+function computeSpikes(
+  densesByKey: Map<string, number[]>,
+  seriesIds: string[],
+  bucketCount: number,
+  spikeMultiplier: number,
+): Map<string, boolean[]> {
   const spikes = new Map<string, boolean[]>()
   for (const id of seriesIds) {
     const arr = densesByKey.get(id)!
     const mean = arr.reduce((s, x) => s + x, 0) / bucketCount
-    const threshold = Math.max(1, mean * opts.spikeMultiplier)
-    spikes.set(id, arr.map(x => x >= threshold))
+    const threshold = Math.max(1, mean * spikeMultiplier)
+    spikes.set(id, arr.map((x) => x >= threshold))
   }
+  return spikes
+}
 
+/** Pour chaque pair (driver, follower), compute excess et émet si > seuil. */
+function scanGrangerPairs(
+  seriesIds: string[],
+  spikes: Map<string, boolean[]>,
+  bucketCount: number,
+  opts: RequiredOptions,
+): GrangerRuntimeFact[] {
   const out: GrangerRuntimeFact[] = []
-
   for (const driverId of seriesIds) {
     const driverSpikes = spikes.get(driverId)!
-    const driverSpikeCount = driverSpikes.filter(Boolean).length
-    if (driverSpikeCount < opts.minObservations) continue
-
+    if (driverSpikes.filter(Boolean).length < opts.minObservations) continue
     for (const followerId of seriesIds) {
       if (followerId === driverId) continue
       const followerSpikes = spikes.get(followerId)!
-      const followerSpikeCount = followerSpikes.filter(Boolean).length
-      if (followerSpikeCount === 0) continue
-
-      // P(B spike at t+lag) — baseline marginal
-      const followerMarginal = followerSpikeCount / bucketCount
-
-      // P(B spike at t+lag | A spike at t) — conditional
-      let coOccurrences = 0
-      let driverEligible = 0
-      for (let t = 0; t + opts.lagBuckets < bucketCount; t++) {
-        if (!driverSpikes[t]) continue
-        driverEligible++
-        if (followerSpikes[t + opts.lagBuckets]) coOccurrences++
-      }
-      if (driverEligible < opts.minObservations) continue
-
-      const conditional = coOccurrences / driverEligible
-      const excess = conditional - followerMarginal
-      if (excess < opts.minExcessConditional) continue
-
-      out.push({
-        driverSeries: driverId,
-        followerSeries: followerId,
-        observations: coOccurrences,
-        excessConditionalX1000: Math.floor(excess * 1000),
-        lagBuckets: opts.lagBuckets,
-      })
+      const fact = computePairFact(driverId, driverSpikes, followerId, followerSpikes, bucketCount, opts)
+      if (fact) out.push(fact)
     }
   }
-
-  // Determinism : sort by (excess desc, driver asc, follower asc)
-  out.sort((a, b) =>
-    b.excessConditionalX1000 - a.excessConditionalX1000
-      || a.driverSeries.localeCompare(b.driverSeries)
-      || a.followerSeries.localeCompare(b.followerSeries),
-  )
-
   return out
+}
+
+/** Compute le fact pour une paire (driver, follower). null si seuils non atteints. */
+function computePairFact(
+  driverId: string,
+  driverSpikes: boolean[],
+  followerId: string,
+  followerSpikes: boolean[],
+  bucketCount: number,
+  opts: RequiredOptions,
+): GrangerRuntimeFact | null {
+  const followerSpikeCount = followerSpikes.filter(Boolean).length
+  if (followerSpikeCount === 0) return null
+  const followerMarginal = followerSpikeCount / bucketCount
+
+  let coOccurrences = 0
+  let driverEligible = 0
+  for (let t = 0; t + opts.lagBuckets < bucketCount; t++) {
+    if (!driverSpikes[t]) continue
+    driverEligible++
+    if (followerSpikes[t + opts.lagBuckets]) coOccurrences++
+  }
+  if (driverEligible < opts.minObservations) return null
+
+  const excess = coOccurrences / driverEligible - followerMarginal
+  if (excess < opts.minExcessConditional) return null
+
+  return {
+    driverSeries: driverId,
+    followerSeries: followerId,
+    observations: coOccurrences,
+    excessConditionalX1000: Math.floor(excess * 1000),
+    lagBuckets: opts.lagBuckets,
+  }
+}
+
+/** Determinism : excess desc, driver asc, follower asc. */
+function compareGrangerFact(a: GrangerRuntimeFact, b: GrangerRuntimeFact): number {
+  return b.excessConditionalX1000 - a.excessConditionalX1000
+    || a.driverSeries.localeCompare(b.driverSeries)
+    || a.followerSeries.localeCompare(b.followerSeries)
 }
 
 /**
