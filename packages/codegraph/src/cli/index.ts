@@ -533,110 +533,141 @@ program
  * Approche regex-based (rapide, ~10ms/fichier sur Sentinel) — pas de
  * ts-morph load pour ça.
  */
-async function scanTestsImportingAffected(
+const TEST_DISCOVER_SKIP_DIRS = new Set(['node_modules', 'dist', '.git'])
+const IMPORT_PATH_RE = /^\s*(?:import|export)\s+(?:[^'"]+from\s+)?['"]([^'"]+)['"]/gm
+
+/**
+ * Walk recursive avec minimatch glob filter. Skip dirs blacklist
+ * (node_modules, dist, .git). Errors silencieuses (permissions, race).
+ */
+async function discoverTestCandidates(
   testsGlob: string,
-  affectedFiles: Set<string>,
+  cwd: string,
+  fastGlob: typeof import('node:fs/promises'),
+  pathMod: typeof import('node:path'),
+  minimatch: any,
 ): Promise<string[]> {
-  const fastGlob = await import('node:fs/promises')
-  const path = await import('node:path')
-
-  // Discover test files via simple recursive walk + minimatch
-  const minimatchMod = await import('minimatch')
-  const minimatch = (minimatchMod as any).minimatch ?? (minimatchMod as any).default
-  const cwd = process.cwd()
-
   const candidates: string[] = []
-  async function walk(dir: string): Promise<void> {
+  const walk = async (dir: string): Promise<void> => {
     try {
       const entries = await fastGlob.readdir(dir, { withFileTypes: true })
       for (const e of entries) {
-        const full = path.join(dir, e.name)
+        const full = pathMod.join(dir, e.name)
         if (e.isDirectory()) {
-          if (e.name === 'node_modules' || e.name === 'dist' || e.name === '.git') continue
-          // await-ok: walk récursif tests-discovery — séquentiel acceptable, perf non-critique CLI affected
+          if (TEST_DISCOVER_SKIP_DIRS.has(e.name)) continue
+          // await-ok: walk recursif tests-discovery — sequentiel acceptable, perf non-critique CLI affected.
           await walk(full)
         } else {
-          const rel = path.relative(cwd, full).replace(/\\/g, '/')
+          const rel = pathMod.relative(cwd, full).replace(/\\/g, '/')
           if (minimatch(rel, testsGlob)) candidates.push(rel)
         }
       }
     } catch { /* dir unreadable (permissions, race) — skip ce sous-arbre */ }
   }
   await walk(cwd)
+  return candidates
+}
 
-  // Pour chaque test, parse imports + résout. Lit en parallèle (N test files
-  // indépendants), parse séquentiellement après.
-  const importsRe = /^\s*(?:import|export)\s+(?:[^'"]+from\s+)?['"]([^'"]+)['"]/gm
-  const matchingTests: string[] = []
+function extractImportPaths(content: string): Set<string> {
+  const out = new Set<string>()
+  IMPORT_PATH_RE.lastIndex = 0
+  let m: RegExpExecArray | null
+  while ((m = IMPORT_PATH_RE.exec(content)) !== null) {
+    out.add(m[1])
+  }
+  return out
+}
+
+/**
+ * True si l'1 des candidats `<rel>.ts | <rel>.tsx | <rel>/index.ts`
+ * est dans le set affected. Strip `.js` extension (ESM-style imports
+ * d'un `.ts`).
+ */
+function importHitsAffectedFile(
+  importPath: string,
+  testDir: string,
+  affectedFiles: Set<string>,
+  pathMod: typeof import('node:path'),
+): boolean {
+  if (!importPath.startsWith('.')) return false
+  const stripped = importPath.replace(/\.js$/, '')
+  const resolvedNoExt = pathMod.normalize(pathMod.join(testDir, stripped)).replace(/\\/g, '/')
+  const candidates = [
+    resolvedNoExt + '.ts',
+    resolvedNoExt + '.tsx',
+    resolvedNoExt + '/index.ts',
+  ]
+  return candidates.some((c) => affectedFiles.has(c))
+}
+
+async function scanTestsImportingAffected(
+  testsGlob: string,
+  affectedFiles: Set<string>,
+): Promise<string[]> {
+  const fastGlob = await import('node:fs/promises')
+  const pathMod = await import('node:path')
+  const minimatchMod = await import('minimatch')
+  const minimatch = (minimatchMod as any).minimatch ?? (minimatchMod as any).default
+  const cwd = process.cwd()
+
+  const candidates = await discoverTestCandidates(testsGlob, cwd, fastGlob, pathMod, minimatch)
+
+  // Lit N test files en parallele (I/O independantes), parse sequentiel.
   const testContents = await Promise.all(
     candidates.map(async (test) => {
       try {
-        return { test, content: await fastGlob.readFile(path.join(cwd, test), 'utf-8') }
+        return { test, content: await fastGlob.readFile(pathMod.join(cwd, test), 'utf-8') }
       } catch { return null }
     }),
   )
+
+  const matchingTests: string[] = []
   for (const entry of testContents) {
     if (!entry) continue
     const { test, content } = entry
-    const importPaths = new Set<string>()
-    let m: RegExpExecArray | null
-    importsRe.lastIndex = 0
-    while ((m = importsRe.exec(content)) !== null) {
-      importPaths.add(m[1])
-    }
-    // Résolution simple : pour chaque import relatif, calcule le path résolu.
-    const testDir = path.dirname(test)
+    const importPaths = extractImportPaths(content)
+    const testDir = pathMod.dirname(test)
     for (const imp of importPaths) {
-      if (!imp.startsWith('.')) continue
-      // Strip .js extension (ESM-style imports d'un .ts)
-      const stripped = imp.replace(/\.js$/, '')
-      const resolvedNoExt = path.normalize(path.join(testDir, stripped)).replace(/\\/g, '/')
-      // Try .ts, .tsx, /index.ts
-      const candidatesResolved = [
-        resolvedNoExt + '.ts',
-        resolvedNoExt + '.tsx',
-        resolvedNoExt + '/index.ts',
-      ]
-      for (const c of candidatesResolved) {
-        if (affectedFiles.has(c)) {
-          matchingTests.push(test)
-          break
-        }
+      if (importHitsAffectedFile(imp, testDir, affectedFiles, pathMod)) {
+        matchingTests.push(test)
+        break
       }
-      if (matchingTests[matchingTests.length - 1] === test) break
     }
   }
   return [...new Set(matchingTests)].sort()
 }
 
-function computeAffectedFromCli(
-  snapshot: any,
-  files: string[],
-  options: { includeIndirect?: boolean; maxDepth?: number },
-): { affectedFiles: string[]; affectedTests: string[]; maxDepthReached: number; unknownInputs: string[] } {
-  const includeIndirect = options.includeIndirect ?? false
-  const maxDepth = options.maxDepth ?? Infinity
-  type Edge = { from: string; to: string; type: string }
-  const edges: Edge[] = snapshot.edges ?? []
-  const nodeIds = new Set<string>((snapshot.nodes ?? []).map((n: any) => n.id))
+type CliEdge = { from: string; to: string; type: string }
 
+const CLI_TEST_FILE_RE = /(\.test\.tsx?|\.spec\.tsx?|^tests?\/|\/tests?\/)/
+
+function buildCliImporterIndex(edges: CliEdge[], includeIndirect: boolean): Map<string, Set<string>> {
   const importerOf = new Map<string, Set<string>>()
   for (const e of edges) {
-    if (e.type !== 'import' && !(includeIndirect && (e.type === 'event' || e.type === 'queue' || e.type === 'db-table'))) continue
+    const isPrimary = e.type === 'import'
+    const isIndirect = includeIndirect && (e.type === 'event' || e.type === 'queue' || e.type === 'db-table')
+    if (!isPrimary && !isIndirect) continue
     if (!importerOf.has(e.to)) importerOf.set(e.to, new Set())
     importerOf.get(e.to)!.add(e.from)
   }
+  return importerOf
+}
 
+function bfsCliAffected(
+  inputs: string[],
+  nodeIds: Set<string>,
+  importerOf: Map<string, Set<string>>,
+  maxDepth: number,
+): { affected: Set<string>; unknownInputs: string[]; maxDepthReached: number } {
   const affected = new Set<string>()
   const unknownInputs: string[] = []
   const queue: Array<{ file: string; depth: number }> = []
-  for (const input of files) {
+  for (const input of inputs) {
     const norm = input.replace(/\\/g, '/')
     if (!nodeIds.has(norm)) { unknownInputs.push(norm); continue }
     affected.add(norm)
     queue.push({ file: norm, depth: 0 })
   }
-
   let maxDepthReached = 0
   while (queue.length > 0) {
     const { file, depth } = queue.shift()!
@@ -650,10 +681,24 @@ function computeAffectedFromCli(
       if (depth + 1 < maxDepth) queue.push({ file: importer, depth: depth + 1 })
     }
   }
+  return { affected, unknownInputs, maxDepthReached }
+}
+
+function computeAffectedFromCli(
+  snapshot: any,
+  files: string[],
+  options: { includeIndirect?: boolean; maxDepth?: number },
+): { affectedFiles: string[]; affectedTests: string[]; maxDepthReached: number; unknownInputs: string[] } {
+  const includeIndirect = options.includeIndirect ?? false
+  const maxDepth = options.maxDepth ?? Infinity
+  const edges: CliEdge[] = snapshot.edges ?? []
+  const nodeIds = new Set<string>((snapshot.nodes ?? []).map((n: any) => n.id))
+
+  const importerOf = buildCliImporterIndex(edges, includeIndirect)
+  const { affected, unknownInputs, maxDepthReached } = bfsCliAffected(files, nodeIds, importerOf, maxDepth)
 
   const affectedFiles = [...affected].sort()
-  const testRe = /(\.test\.tsx?|\.spec\.tsx?|^tests?\/|\/tests?\/)/
-  const affectedTests = affectedFiles.filter((f) => testRe.test(f))
+  const affectedTests = affectedFiles.filter((f) => CLI_TEST_FILE_RE.test(f))
   return { affectedFiles, affectedTests, maxDepthReached, unknownInputs }
 }
 

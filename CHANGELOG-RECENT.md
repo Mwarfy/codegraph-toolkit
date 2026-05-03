@@ -5,18 +5,18 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T21:15:23Z
+Last update : 2026-05-03T21:17:55Z
 
 ## By type
 
-### `fix` (2)
+### `fix` (1)
 
 - **50eb1f8** fix(toolkit): articulation-point rule — exclure package entry points (FP systemique) — 2026-05-03
-- **8844d31** fix(toolkit): FSM-ORPHAN 3→0 — fixture skip + Attribute API + satisfies unwrap — 2026-05-03
 
 
-### `refactor` (48)
+### `refactor` (49)
 
+- **e27c2be** refactor(toolkit): split codegraphAffected + dedup computeAffected — affected.ts ALL bombs cleared — 2026-05-03
 - **66cbcd7** refactor(toolkit): split findContainingSymbol + buildLineToSymbol — _shared/ast-helpers.ts ALL bombs cleared — 2026-05-03
 - **1ca9363** refactor(toolkit): split getTaintFromExpression + buildLineToSymbol — taint.ts ALL bombs cleared — 2026-05-03
 - **22ced53** refactor(toolkit): split walkForManifests + buildPackageDepsIssues — package-deps.ts ALL bombs cleared — 2026-05-03
@@ -36,11 +36,11 @@ Last update : 2026-05-03T21:15:23Z
 - **1bdb707** refactor(toolkit): split collectAstSignals (cyclo 29→3) — 3 per-domain collectors — 2026-05-03
 - **cde9741** refactor(toolkit): split collectSqlSignals (cyclo 33→3) — 5 helpers SQL pattern matching — 2026-05-03
 - **423bc96** refactor(toolkit): split evaluate (cyclo 40→7, cog 123→4) — eval.ts ALL bombs cleared — 2026-05-03
-- **c55801c** refactor(toolkit): split evaluateRule (cyclo 16→4) — 3 helpers (guards + head + proof) — 2026-05-03
 
 
 ## Full history
 
+- **e27c2be** refactor(toolkit): split codegraphAffected + dedup computeAffected — affected.ts ALL bombs cleared — 2026-05-03
 - **66cbcd7** refactor(toolkit): split findContainingSymbol + buildLineToSymbol — _shared/ast-helpers.ts ALL bombs cleared — 2026-05-03
 - **1ca9363** refactor(toolkit): split getTaintFromExpression + buildLineToSymbol — taint.ts ALL bombs cleared — 2026-05-03
 - **22ced53** refactor(toolkit): split walkForManifests + buildPackageDepsIssues — package-deps.ts ALL bombs cleared — 2026-05-03
@@ -90,4 +90,3 @@ Last update : 2026-05-03T21:15:23Z
 - **020e949** refactor(toolkit): split renderModules (cyclo 35→12) — 4 helpers index builders — 2026-05-03
 - **df1ee8c** refactor(toolkit): split renderEventFlows (cyclo 25→5, cog 63→4) — 5 helpers extraits — 2026-05-03
 - **50eb1f8** fix(toolkit): articulation-point rule — exclure package entry points (FP systemique) — 2026-05-03
-- **8844d31** fix(toolkit): FSM-ORPHAN 3→0 — fixture skip + Attribute API + satisfies unwrap — 2026-05-03
