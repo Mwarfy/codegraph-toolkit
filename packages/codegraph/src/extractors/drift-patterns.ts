@@ -85,195 +85,196 @@ const DEFAULT_MAX_NESTING_DEPTH = 5
  * Bundle per-file pour les patterns AST. Pattern 3 (TODO no-owner) est
  * traité dans l'aggregator car il n'a pas besoin d'AST.
  */
-export function extractDriftPatternsFileBundle(
-  sf: SourceFile,
-  relPath: string,
-  options: DriftPatternsOptions = {},
-): DriftPatternsFileBundle {
-  const optionalThreshold = options.optionalParamsThreshold ?? DEFAULT_OPTIONAL_PARAMS_THRESHOLD
-  const wrapperMinArgs = options.wrapperMinArgs ?? DEFAULT_WRAPPER_MIN_ARGS
-  const signals: DriftSignal[] = []
+type DriftIsExempt = (line: number) => boolean
+type FnLikeKind = 'function' | 'method' | 'arrow'
 
-  // Check `// drift-ok` exempt — la ligne PRÉCÉDANT le signal.
-  const isExempt = makeIsExemptForMarker(sf, 'drift-ok')
+const NESTING_KINDS = new Set([
+  SyntaxKind.IfStatement,
+  SyntaxKind.ForStatement,
+  SyntaxKind.ForInStatement,
+  SyntaxKind.ForOfStatement,
+  SyntaxKind.WhileStatement,
+  SyntaxKind.DoStatement,
+  SyntaxKind.SwitchStatement,
+  SyntaxKind.TryStatement,
+])
 
-  // Helper : check params optionnels sur n'importe quel "function-like".
-  const checkParams = (
-    name: string,
-    params: ReadonlyArray<{ isOptional(): boolean }>,
-    line: number,
-    kind: 'function' | 'method' | 'arrow',
-  ): void => {
-    if (isExempt(line)) return
-    const optionalCount = params.filter((p) => p.isOptional()).length
-    if (optionalCount > optionalThreshold) {
-      signals.push({
-        kind: 'excessive-optional-params',
-        file: relPath,
-        line,
-        message: `${name} a ${optionalCount} params optionnels (>${optionalThreshold}) — future-proof non demandé ?`,
-        severity: 2,
-        details: { name, optionalCount, kind },
-      })
-    }
+interface DriftCheckCtx {
+  relPath: string
+  isExempt: DriftIsExempt
+  optionalThreshold: number
+  wrapperMinArgs: number
+  maxNestingDepth: number
+  signals: DriftSignal[]
+}
+
+function checkOptionalParams(
+  name: string,
+  params: ReadonlyArray<{ isOptional(): boolean }>,
+  line: number,
+  kind: FnLikeKind,
+  ctx: DriftCheckCtx,
+): void {
+  if (ctx.isExempt(line)) return
+  const optionalCount = params.filter((p) => p.isOptional()).length
+  if (optionalCount <= ctx.optionalThreshold) return
+  ctx.signals.push({
+    kind: 'excessive-optional-params',
+    file: ctx.relPath,
+    line,
+    message: `${name} a ${optionalCount} params optionnels (>${ctx.optionalThreshold}) — future-proof non demandé ?`,
+    severity: 2,
+    details: { name, optionalCount, kind },
+  })
+}
+
+/**
+ * Extract le single ReturnStatement.expression d'un body Block, ou
+ * retourne directement l'expression d'un arrow concise body.
+ * Returns null si la shape n'est pas un single-return.
+ */
+function singleReturnExpr(body: Node): Node | null {
+  if (Node.isBlock(body)) {
+    const stmts = body.getStatements()
+    if (stmts.length !== 1) return null
+    const stmt = stmts[0]
+    if (!Node.isReturnStatement(stmt)) return null
+    return stmt.getExpression() ?? null
   }
+  return body
+}
 
-  // Helper : check wrapper superflu.
-  // Un wrapper superflu = body = single ReturnStatement qui call B avec
-  // EXACTEMENT les mêmes args (même ordre, mêmes noms d'identifiers).
-  const checkWrapper = (
-    name: string,
-    paramNames: string[],
-    body: Node | undefined,
-    line: number,
-    kind: 'function' | 'method' | 'arrow',
-  ): void => {
-    if (isExempt(line)) return
-    if (paramNames.length < wrapperMinArgs) return
-    if (!body) return
-
-    let returnExpr: Node | undefined
-    if (Node.isBlock(body)) {
-      const stmts = body.getStatements()
-      if (stmts.length !== 1) return
-      const stmt = stmts[0]
-      if (!Node.isReturnStatement(stmt)) return
-      returnExpr = stmt.getExpression()
-    } else {
-      // Arrow concise body — directement l'expression.
-      returnExpr = body
-    }
-    if (!returnExpr || !Node.isCallExpression(returnExpr)) return
-
-    const args = returnExpr.getArguments()
-    // Args doivent matcher les params un-pour-un (pas de spread,
-    // littéraux, transformations).
-    if (args.length !== paramNames.length) return
-    for (let i = 0; i < args.length; i++) {
-      const arg = args[i]
-      if (!Node.isIdentifier(arg)) return
-      if (arg.getText() !== paramNames[i]) return
-    }
-
-    const callee = returnExpr.getExpression().getText()
-    signals.push({
-      kind: 'wrapper-superfluous',
-      file: relPath,
-      line,
-      message: `${name} forward → ${callee} sans transformation — inliner ?`,
-      severity: 1,
-      details: { name, callee, kind },
-    })
+/**
+ * Args doivent matcher les params un-pour-un : meme ordre, memes noms
+ * d'identifiers (pas de spread, litteraux, transformations).
+ */
+function argsMatchParamsExactly(args: Node[], paramNames: string[]): boolean {
+  if (args.length !== paramNames.length) return false
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]
+    if (!Node.isIdentifier(arg)) return false
+    if (arg.getText() !== paramNames[i]) return false
   }
+  return true
+}
 
-  // FunctionDeclarations
+function checkSuperfluousWrapper(
+  name: string,
+  paramNames: string[],
+  body: Node | undefined,
+  line: number,
+  kind: FnLikeKind,
+  ctx: DriftCheckCtx,
+): void {
+  if (ctx.isExempt(line)) return
+  if (paramNames.length < ctx.wrapperMinArgs) return
+  if (!body) return
+  const returnExpr = singleReturnExpr(body)
+  if (!returnExpr || !Node.isCallExpression(returnExpr)) return
+  if (!argsMatchParamsExactly(returnExpr.getArguments(), paramNames)) return
+
+  const callee = returnExpr.getExpression().getText()
+  ctx.signals.push({
+    kind: 'wrapper-superfluous',
+    file: ctx.relPath,
+    line,
+    message: `${name} forward → ${callee} sans transformation — inliner ?`,
+    severity: 1,
+    details: { name, callee, kind },
+  })
+}
+
+function computeMaxNestingDepth(body: Node): number {
+  let maxDepth = 0
+  const walk = (n: Node, depth: number): void => {
+    if (NESTING_KINDS.has(n.getKind())) {
+      depth++
+      if (depth > maxDepth) maxDepth = depth
+    }
+    n.forEachChild((child) => walk(child, depth))
+  }
+  walk(body, 0)
+  return maxDepth
+}
+
+function checkDeepNesting(
+  name: string,
+  body: Node | undefined,
+  line: number,
+  ctx: DriftCheckCtx,
+): void {
+  if (!body || ctx.isExempt(line)) return
+  const maxDepth = computeMaxNestingDepth(body)
+  if (maxDepth <= ctx.maxNestingDepth) return
+  ctx.signals.push({
+    kind: 'deep-nesting',
+    file: ctx.relPath,
+    line,
+    message: `${name} : nesting profondeur ${maxDepth} (>${ctx.maxNestingDepth}) — guard-clauses ou extract-method ?`,
+    severity: 2,
+    details: { name, maxDepth },
+  })
+}
+
+interface FnLikeNode {
+  name: string
+  body: Node | undefined
+  line: number
+  paramNames: string[]
+  params: ReadonlyArray<{ isOptional(): boolean }>
+  kind: FnLikeKind
+}
+
+function* iterateFnLikes(sf: SourceFile): Generator<FnLikeNode> {
   for (const fn of sf.getFunctions()) {
-    const name = fn.getName() ?? '(anonymous)'
-    const line = fn.getStartLineNumber()
     const params = fn.getParameters()
-    checkParams(name, params, line, 'function')
-    checkWrapper(
-      name,
-      params.map((p) => p.getName()),
-      fn.getBody(),
-      line,
-      'function',
-    )
+    yield {
+      name: fn.getName() ?? '(anonymous)',
+      body: fn.getBody(),
+      line: fn.getStartLineNumber(),
+      paramNames: params.map((p) => p.getName()),
+      params,
+      kind: 'function',
+    }
   }
-
-  // ClassMethods
   for (const cls of sf.getClasses()) {
     const className = cls.getName() ?? '(anonymous)'
     for (const method of cls.getMethods()) {
-      const name = `${className}.${method.getName()}`
-      const line = method.getStartLineNumber()
       const params = method.getParameters()
-      checkParams(name, params, line, 'method')
-      checkWrapper(
-        name,
-        params.map((p) => p.getName()),
-        method.getBody(),
-        line,
-        'method',
-      )
-    }
-  }
-
-  // Arrow / Function expressions assignés à variable
-  for (const v of sf.getVariableDeclarations()) {
-    const initializer = v.getInitializer()
-    if (!initializer) continue
-    if (!Node.isArrowFunction(initializer) && !Node.isFunctionExpression(initializer)) continue
-    const name = v.getName()
-    const line = v.getStartLineNumber()
-    const params = initializer.getParameters()
-    checkParams(name, params, line, 'arrow')
-    checkWrapper(
-      name,
-      params.map((p) => p.getName()),
-      initializer.getBody(),
-      line,
-      'arrow',
-    )
-  }
-
-  // ─── Pattern 4 : deep-nesting (Tier 2) ────────────────────────────
-  // Profondeur de nesting (if/for/while/switch/try) > seuil. Pyramide
-  // de doom = candidat extract-method ou guard-clause.
-  const maxNestingDepth = options.maxNestingDepth ?? DEFAULT_MAX_NESTING_DEPTH
-  const NESTING_KINDS = new Set([
-    SyntaxKind.IfStatement,
-    SyntaxKind.ForStatement,
-    SyntaxKind.ForInStatement,
-    SyntaxKind.ForOfStatement,
-    SyntaxKind.WhileStatement,
-    SyntaxKind.DoStatement,
-    SyntaxKind.SwitchStatement,
-    SyntaxKind.TryStatement,
-  ])
-  const checkNesting = (
-    name: string,
-    body: Node | undefined,
-    line: number,
-  ): void => {
-    if (!body || isExempt(line)) return
-    let maxDepth = 0
-    const walk = (n: Node, depth: number): void => {
-      if (NESTING_KINDS.has(n.getKind())) {
-        depth++
-        if (depth > maxDepth) maxDepth = depth
+      yield {
+        name: `${className}.${method.getName()}`,
+        body: method.getBody(),
+        line: method.getStartLineNumber(),
+        paramNames: params.map((p) => p.getName()),
+        params,
+        kind: 'method',
       }
-      n.forEachChild((child) => walk(child, depth))
-    }
-    walk(body, 0)
-    if (maxDepth > maxNestingDepth) {
-      signals.push({
-        kind: 'deep-nesting',
-        file: relPath,
-        line,
-        message: `${name} : nesting profondeur ${maxDepth} (>${maxNestingDepth}) — guard-clauses ou extract-method ?`,
-        severity: 2,
-        details: { name, maxDepth },
-      })
     }
   }
+  for (const v of sf.getVariableDeclarations()) {
+    const init = v.getInitializer()
+    if (!init) continue
+    if (!Node.isArrowFunction(init) && !Node.isFunctionExpression(init)) continue
+    const params = init.getParameters()
+    yield {
+      name: v.getName(),
+      body: init.getBody(),
+      line: v.getStartLineNumber(),
+      paramNames: params.map((p) => p.getName()),
+      params,
+      kind: 'arrow',
+    }
+  }
+}
 
-  // ─── Pattern 5 : empty-catch sans commentaire (Tier 2) ─────────────
-  // try { ... } catch { /* nothing */ } ou catch (e) {} sans rationale.
-  // Avale silencieusement les erreurs — vrai bug-prone classique.
+function detectEmptyCatchNoComment(sf: SourceFile, relPath: string, isExempt: DriftIsExempt, signals: DriftSignal[]): void {
   for (const cat of sf.getDescendantsOfKind(SyntaxKind.CatchClause)) {
     const block = cat.getBlock()
-    const stmts = block.getStatements()
+    if (block.getStatements().length > 0) continue  // catch fait quelque chose → OK
     const line = cat.getStartLineNumber()
     if (isExempt(line)) continue
-    if (stmts.length > 0) continue   // catch fait quelque chose → OK
-
-    // Catch vide. Vérifier si un commentaire est présent dans le body
-    // (entre les `{` et `}`). On regarde le contenu textuel du block.
-    const bodyText = block.getFullText()
-    const hasComment = /\/\/|\/\*/.test(bodyText)
-    if (hasComment) continue          // commentaire = rationale présente
-
+    // Catch vide : check si un commentaire est dans le body (rationale).
+    if (/\/\/|\/\*/.test(block.getFullText())) continue
     signals.push({
       kind: 'empty-catch-no-comment',
       file: relPath,
@@ -282,25 +283,30 @@ export function extractDriftPatternsFileBundle(
       severity: 2,
     })
   }
+}
 
-  // Run nesting check sur toutes les fonctions découvertes.
-  for (const fn of sf.getFunctions()) {
-    checkNesting(fn.getName() ?? '(anonymous)', fn.getBody(), fn.getStartLineNumber())
-  }
-  for (const cls of sf.getClasses()) {
-    const className = cls.getName() ?? '(anonymous)'
-    for (const method of cls.getMethods()) {
-      checkNesting(`${className}.${method.getName()}`, method.getBody(), method.getStartLineNumber())
-    }
-  }
-  for (const v of sf.getVariableDeclarations()) {
-    const init = v.getInitializer()
-    if (!init) continue
-    if (!Node.isArrowFunction(init) && !Node.isFunctionExpression(init)) continue
-    checkNesting(v.getName(), init.getBody(), v.getStartLineNumber())
+export function extractDriftPatternsFileBundle(
+  sf: SourceFile,
+  relPath: string,
+  options: DriftPatternsOptions = {},
+): DriftPatternsFileBundle {
+  const ctx: DriftCheckCtx = {
+    relPath,
+    isExempt: makeIsExemptForMarker(sf, 'drift-ok'),
+    optionalThreshold: options.optionalParamsThreshold ?? DEFAULT_OPTIONAL_PARAMS_THRESHOLD,
+    wrapperMinArgs: options.wrapperMinArgs ?? DEFAULT_WRAPPER_MIN_ARGS,
+    maxNestingDepth: options.maxNestingDepth ?? DEFAULT_MAX_NESTING_DEPTH,
+    signals: [],
   }
 
-  return { signals }
+  for (const fn of iterateFnLikes(sf)) {
+    checkOptionalParams(fn.name, fn.params, fn.line, fn.kind, ctx)
+    checkSuperfluousWrapper(fn.name, fn.paramNames, fn.body, fn.line, fn.kind, ctx)
+    checkDeepNesting(fn.name, fn.body, fn.line, ctx)
+  }
+  detectEmptyCatchNoComment(sf, relPath, ctx.isExempt, ctx.signals)
+
+  return { signals: ctx.signals }
 }
 
 // ─── Pattern 3 : TODO no owner (regex sur snapshot.todos existant) ────────

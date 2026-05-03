@@ -178,26 +178,16 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 > pas verdict. Une tension non explorée n'est pas un bug — c'est un saut
 > latéral possible que le sol stable rend testable.
 
-- **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/datalog/src/cli.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/audit-listener.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/scheduler.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/b.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **FSM-ORPHAN** `ApprovalStatus#expired` — état déclaré mais jamais écrit dans le code  
-  _→ supprimer l'état OU ajouter la transition manquante_
-- **FSM-ORPHAN** `DocumentPhase#published` — état déclaré mais jamais écrit dans le code  
-  _→ supprimer l'état OU ajouter la transition manquante_
-- **FSM-ORPHAN** `DocumentPhase#archived` — état déclaré mais jamais écrit dans le code  
-  _→ supprimer l'état OU ajouter la transition manquante_
-- **FSM-ORPHAN** `NodeStatus#entry-point` — état déclaré mais jamais écrit dans le code  
-  _→ supprimer l'état OU ajouter la transition manquante_
-- **FSM-ORPHAN** `NodeStatus#uncertain` — état déclaré mais jamais écrit dans le code  
-  _→ supprimer l'état OU ajouter la transition manquante_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
 - **DEP-UNUSED** `test-only-in-deps` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
@@ -208,10 +198,17 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ inline les imports + supprimer le barrel_
 - **BARREL-LOW** `packages/codegraph/src/index.ts` — barrel à 8 re-export(s) pour 0 consumer(s)  
   _→ inline les imports + supprimer le barrel_
+- **BARREL-LOW** `packages/codegraph/tests/fixtures/package-deps/src/barrel.ts` — barrel à 2 re-export(s) pour 1 consumer(s)  
+  _→ inline les imports + supprimer le barrel_
+- **BARREL-LOW** `packages/datalog/src/index.ts` — barrel à 13 re-export(s) pour 0 consumer(s)  
+  _→ inline les imports + supprimer le barrel_
+- **BARREL-LOW** `packages/runtime-graph/src/capture/index.ts` — barrel à 3 re-export(s) pour 0 consumer(s)  
+  _→ inline les imports + supprimer le barrel_
 
 ## Activité récente (14 derniers jours)
 
 ```
+101b1b5 perf(toolkit): Salsa-iso boolean-params — 35ms → 0ms warm
 20b9ace perf(toolkit): Salsa-iso 5 taint chain detectors — 5×0ms warm
 231be93 perf(toolkit): Salsa-iso resource-balance detector — 82ms → 0ms warm
 c9e30bd perf(toolkit): Salsa-iso magic-numbers detector — 539ms → 0ms warm (top hot detector eliminé)
@@ -223,7 +220,6 @@ e27c2be refactor(toolkit): split codegraphAffected + dedup computeAffected — a
 1ca9363 refactor(toolkit): split getTaintFromExpression + buildLineToSymbol — taint.ts ALL bombs cleared
 22ced53 refactor(toolkit): split walkForManifests + buildPackageDepsIssues — package-deps.ts ALL bombs cleared
 3b1d650 refactor(toolkit): split scanObjectWrites + detectListenerTriggers — state-machines.ts ALL bombs cleared
-d534d97 refactor(toolkit): split constant-expressions (cyclo 35+23→under) — constant-expressions.ts ALL bombs cleared
 ```
 
 ## Comment contribuer à ce brief
