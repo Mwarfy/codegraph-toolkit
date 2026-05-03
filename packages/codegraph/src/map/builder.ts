@@ -886,37 +886,43 @@ function renderModules(s: GraphSnapshot, opts: Required<MapBuilderOptions>): str
   lines.push('')
 
   for (const file of selected) {
-    lines.push(renderModuleFiche(
+    lines.push(renderModuleFiche({
       file,
-      sigsByFile.get(file) ?? [],
-      callsOutByFile.get(file) ?? [],
-      byToEvent.get(file) ?? [],
-      byFromEvent.get(file) ?? [],
-      byToDb.get(file) ?? [],
-      byFromDb.get(file) ?? [],
-      cyclesByFile.get(file) ?? [],
-      tpByFile.get(file) ?? [],
-      smByFile.get(file) ?? [],
+      sigs: sigsByFile.get(file) ?? [],
+      callsOut: callsOutByFile.get(file) ?? [],
+      listens: byToEvent.get(file) ?? [],
+      emits: byFromEvent.get(file) ?? [],
+      reads: byToDb.get(file) ?? [],
+      writes: byFromDb.get(file) ?? [],
+      cycles: cyclesByFile.get(file) ?? [],
+      tpRoles: tpByFile.get(file) ?? [],
+      sms: smByFile.get(file) ?? [],
       opts,
-    ))
+    }))
   }
 
   return lines.join('\n').trimEnd()
 }
 
-function renderModuleFiche(
-  file: string,
-  sigs: TypedSignature[],
-  callsOut: TypedCallEdge[],
-  listens: GraphEdge[],
-  emits: GraphEdge[],
-  reads: GraphEdge[],
-  writes: GraphEdge[],
-  cycles: Cycle[],
-  tpRoles: Array<{ role: 'writer' | 'reader' | 'canonical' | 'mirror'; tp: TruthPoint }>,
-  sms: StateMachine[],
-  opts: Required<MapBuilderOptions>,
-): string {
+interface RenderModuleFicheArgs {
+  file: string
+  sigs: TypedSignature[]
+  callsOut: TypedCallEdge[]
+  listens: GraphEdge[]
+  emits: GraphEdge[]
+  reads: GraphEdge[]
+  writes: GraphEdge[]
+  cycles: Cycle[]
+  tpRoles: Array<{ role: 'writer' | 'reader' | 'canonical' | 'mirror'; tp: TruthPoint }>
+  sms: StateMachine[]
+  opts: Required<MapBuilderOptions>
+}
+
+function renderModuleFiche(args: RenderModuleFicheArgs): string {
+  const {
+    file, sigs, callsOut, listens, emits, reads, writes,
+    cycles, tpRoles, sms, opts,
+  } = args
   const anchor = anchorFor(file)
   const out: string[] = []
   out.push(`### ${file}  <a id="${anchor}"></a>`)

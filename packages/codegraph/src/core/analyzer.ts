@@ -350,7 +350,9 @@ export async function analyze(
 
   // ─── 6b. New deterministic detectors (Sprint 12) ───────────────────
   if (!factsOnly) {
-    await runDeterministicDetectors(config, files, readFile, sharedProject, snapshot, timing, { incremental })
+    await runDeterministicDetectors({
+      config, files, readFile, sharedProject, snapshot, timing, incremental,
+    })
   } else {
     // ─── factsOnly always-run subset ─────────────────────────────────
     // test-coverage est cheap (import-based mapping) ET load-bearing
@@ -671,16 +673,19 @@ interface DetectorPhaseContext {
   incremental: boolean
 }
 
-async function runDeterministicDetectors(
-  config: CodeGraphConfig,
-  files: string[],
-  readFile: (relativePath: string) => Promise<string>,
-  sharedProject: ReturnType<typeof createSharedProject>,
-  snapshot: GraphSnapshot,
-  timing: AnalyzeResult['timing'],
-  opts: { incremental?: boolean } = {},
-): Promise<void> {
-  const incremental = opts.incremental ?? false
+interface RunDetectorsArgs {
+  config: CodeGraphConfig
+  files: string[]
+  readFile: (relativePath: string) => Promise<string>
+  sharedProject: ReturnType<typeof createSharedProject>
+  snapshot: GraphSnapshot
+  timing: AnalyzeResult['timing']
+  incremental?: boolean
+}
+
+async function runDeterministicDetectors(args: RunDetectorsArgs): Promise<void> {
+  const { config, files, readFile, sharedProject, snapshot, timing } = args
+  const incremental = args.incremental ?? false
   const ctx: DetectorPhaseContext = {
     config, files, readFile, sharedProject, snapshot, timing, incremental,
   }

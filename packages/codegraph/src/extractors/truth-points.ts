@@ -176,10 +176,10 @@ export async function analyzeTruthPoints(
     exportedFns.push(...bundle.exportedFns)
   }
 
-  return buildTruthPointsFromSignals(
+  return buildTruthPointsFromSignals({
     files, sqlSignals, redisSignals, memorySignals, exportedFns,
     allEdges, fileSet, aliases, memSuffixes,
-  )
+  })
 }
 
 /**
@@ -210,14 +210,17 @@ export function extractTruthPointsFileBundle(
     collectOrmSignals(sf, relPath, orm, sql)
   }
 
-  collectAstSignals(
-    sf, relPath,
-    redisVars as Set<string>,
+  collectAstSignals({
+    sf,
+    file: relPath,
+    redisVars: redisVars as Set<string>,
     memSuffixes,
-    memCtors as Set<string>,
+    memCtors: memCtors as Set<string>,
     exposedPrefixes,
-    redis, memory, exportedFns,
-  )
+    redisSignals: redis,
+    memorySignals: memory,
+    exportedFns,
+  })
 
   return { sql, redis, memory, exportedFns }
 }
@@ -227,17 +230,23 @@ export function extractTruthPointsFileBundle(
  * construit les `TruthPoint[]`. Réutilisé côté Salsa après agrégation
  * des bundles per-file.
  */
-export function buildTruthPointsFromSignals(
-  files: string[],
-  sqlSignals: SqlSignal[],
-  redisSignals: RedisSignal[],
-  memorySignals: MemorySignal[],
-  exportedFns: ExportedFnSignal[],
-  allEdges: GraphEdge[],
-  fileSet: ReadonlySet<string>,
-  aliases: Record<string, string[]>,
-  memSuffixes: string[],
-): TruthPoint[] {
+export interface BuildTruthPointsArgs {
+  files: string[]
+  sqlSignals: SqlSignal[]
+  redisSignals: RedisSignal[]
+  memorySignals: MemorySignal[]
+  exportedFns: ExportedFnSignal[]
+  allEdges: GraphEdge[]
+  fileSet: ReadonlySet<string>
+  aliases: Record<string, string[]>
+  memSuffixes: string[]
+}
+
+export function buildTruthPointsFromSignals(args: BuildTruthPointsArgs): TruthPoint[] {
+  const {
+    files, sqlSignals, redisSignals, memorySignals, exportedFns,
+    allEdges, fileSet, aliases, memSuffixes,
+  } = args
   const mcpToolFiles = new Set(files.filter((f) => /\/mcp\/tools\//.test(f)))
 
   // Routes HTTP GET : on les tire des edges `route` existants (label = path).
@@ -527,17 +536,23 @@ function buildLineToSymbol(sf: SourceFile): Map<number, string> {
 
 // ─── AST signal collection ──────────────────────────────────────────────────
 
-function collectAstSignals(
-  sf: SourceFile,
-  file: string,
-  redisVars: Set<string>,
-  memSuffixes: string[],
-  memCtors: Set<string>,
-  exposedPrefixes: string[],
-  redisSignals: RedisSignal[],
-  memorySignals: MemorySignal[],
-  exportedFns: ExportedFnSignal[],
-): void {
+interface CollectAstSignalsArgs {
+  sf: SourceFile
+  file: string
+  redisVars: Set<string>
+  memSuffixes: string[]
+  memCtors: Set<string>
+  exposedPrefixes: string[]
+  redisSignals: RedisSignal[]
+  memorySignals: MemorySignal[]
+  exportedFns: ExportedFnSignal[]
+}
+
+function collectAstSignals(args: CollectAstSignalsArgs): void {
+  const {
+    sf, file, redisVars, memSuffixes, memCtors, exposedPrefixes,
+    redisSignals, memorySignals, exportedFns,
+  } = args
   const lineToSymbol = buildLineToSymbol(sf)
 
   // Redis : `redis.set(key, val, 'EX', ttl)` / `redis.setex(key, ttl, val)` etc.

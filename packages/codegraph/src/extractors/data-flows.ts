@@ -279,8 +279,14 @@ export function extractDataFlowsFileBundle(
   const ranges = collectFunctionRanges(sf)
 
   const sinksByContainer = new Map<string, DataFlowSink[]>()
-  scanSinks(sf, relPath, ranges, opts.queryFns as Set<string>, opts.emitFns as Set<string>,
-            opts.httpRespFns as Set<string>, opts.bullmqFns as Set<string>, sinksByContainer)
+  scanSinks({
+    sf, file: relPath, ranges,
+    queryFns: opts.queryFns as Set<string>,
+    emitFns: opts.emitFns as Set<string>,
+    httpRespFns: opts.httpRespFns as Set<string>,
+    bullmqFns: opts.bullmqFns as Set<string>,
+    out: sinksByContainer,
+  })
   scanHttpOutboundSinks(sf, relPath, ranges, opts.httpOutboundFns as Set<string>,
                         opts.httpOutboundClients as Set<string>, sinksByContainer)
 
@@ -288,13 +294,15 @@ export function extractDataFlowsFileBundle(
   const inlineListenerSinks = new Map<string, DataFlowSink[]>()
 
   detectHttpEntries(sf, relPath, ranges, entries)
-  detectListenerEntries(sf, relPath, ranges,
-    opts.listenFns as Set<string>,
-    opts.queryFns as Set<string>,
-    opts.emitFns as Set<string>,
-    opts.httpRespFns as Set<string>,
-    opts.bullmqFns as Set<string>,
-    entries, inlineListenerSinks)
+  detectListenerEntries({
+    sf, file: relPath, ranges,
+    listenFns: opts.listenFns as Set<string>,
+    queryFns: opts.queryFns as Set<string>,
+    emitFns: opts.emitFns as Set<string>,
+    httpRespFns: opts.httpRespFns as Set<string>,
+    bullmqFns: opts.bullmqFns as Set<string>,
+    entries, inlineSinks: inlineListenerSinks,
+  })
   if (relPath.includes(opts.mcpFragment)) {
     detectMcpToolEntries(sf, relPath, entries)
   }
@@ -319,16 +327,19 @@ export const DEFAULT_DATA_FLOWS_OPTS: DataFlowFileBundleOptions = {
 
 // ─── Sink scanning ──────────────────────────────────────────────────────────
 
-function scanSinks(
-  sf: SourceFile,
-  file: string,
-  ranges: FnRange[],
-  queryFns: Set<string>,
-  emitFns: Set<string>,
-  httpRespFns: Set<string>,
-  bullmqFns: Set<string>,
-  out: Map<string, DataFlowSink[]>,
-): void {
+interface ScanSinksArgs {
+  sf: SourceFile
+  file: string
+  ranges: FnRange[]
+  queryFns: Set<string>
+  emitFns: Set<string>
+  httpRespFns: Set<string>
+  bullmqFns: Set<string>
+  out: Map<string, DataFlowSink[]>
+}
+
+function scanSinks(args: ScanSinksArgs): void {
+  const { sf, file, ranges, queryFns, emitFns, httpRespFns, bullmqFns, out } = args
   sf.forEachDescendant((node) => {
     if (node.getKind() !== SyntaxKind.CallExpression) return
     const call = node as any
@@ -536,18 +547,24 @@ function regexToPathTemplate(raw: string): string | null {
 
 // ─── Entry detection : event listeners ──────────────────────────────────────
 
-function detectListenerEntries(
-  sf: SourceFile,
-  file: string,
-  ranges: FnRange[],
-  listenFns: Set<string>,
-  queryFns: Set<string>,
-  emitFns: Set<string>,
-  httpRespFns: Set<string>,
-  bullmqFns: Set<string>,
-  entries: DataFlowEntry[],
-  inlineSinks: Map<string, DataFlowSink[]>,
-): void {
+interface DetectListenerEntriesArgs {
+  sf: SourceFile
+  file: string
+  ranges: FnRange[]
+  listenFns: Set<string>
+  queryFns: Set<string>
+  emitFns: Set<string>
+  httpRespFns: Set<string>
+  bullmqFns: Set<string>
+  entries: DataFlowEntry[]
+  inlineSinks: Map<string, DataFlowSink[]>
+}
+
+function detectListenerEntries(args: DetectListenerEntriesArgs): void {
+  const {
+    sf, file, ranges, listenFns, queryFns, emitFns, httpRespFns, bullmqFns,
+    entries, inlineSinks,
+  } = args
   sf.forEachDescendant((node) => {
     if (node.getKind() !== SyntaxKind.CallExpression) return
     const call = node as any
@@ -624,23 +641,29 @@ function detectListenerEntries(
       if (body) {
         const sinks: DataFlowSink[] = []
         const fakeRange: FnRange = { start: line, end: (body as any).getEndLineNumber?.() ?? line, name: `<anon@${line}>` }
-        scanInlineSinks(body, file, fakeRange, queryFns, emitFns, httpRespFns, bullmqFns, sinks)
+        scanInlineSinks({
+          body, file, fakeRange,
+          queryFns, emitFns, httpRespFns, bullmqFns, out: sinks,
+        })
         if (sinks.length > 0) inlineSinks.set(entryId, sinks)
       }
     }
   })
 }
 
-function scanInlineSinks(
-  body: Node,
-  file: string,
-  fakeRange: FnRange,
-  queryFns: Set<string>,
-  emitFns: Set<string>,
-  httpRespFns: Set<string>,
-  bullmqFns: Set<string>,
-  out: DataFlowSink[],
-): void {
+interface ScanInlineSinksArgs {
+  body: Node
+  file: string
+  fakeRange: FnRange
+  queryFns: Set<string>
+  emitFns: Set<string>
+  httpRespFns: Set<string>
+  bullmqFns: Set<string>
+  out: DataFlowSink[]
+}
+
+function scanInlineSinks(args: ScanInlineSinksArgs): void {
+  const { body, file, fakeRange, queryFns, emitFns, httpRespFns, bullmqFns, out } = args
   const containerKey = `${file}:${fakeRange.name}`
   const walk = (n: Node) => {
     if (n.getKind() === SyntaxKind.CallExpression) {

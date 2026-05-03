@@ -85,10 +85,10 @@ export const syntheticDriver: Driver = {
     }
 
     try {
-      const result = await runSyntheticRequests(
+      const result = await runSyntheticRequests({
         baseUrl, staticFactsDir, requestDelayMs,
-        excludeMethods, excludePaths, opts.durationMs, warnings,
-      )
+        excludeMethods, excludePaths, durationMs: opts.durationMs, warnings,
+      })
       return result
     } finally {
       // Toujours kill le spawn — sinon l'app fuit entre les runs.
@@ -102,15 +102,21 @@ export const syntheticDriver: Driver = {
   },
 }
 
-async function runSyntheticRequests(
-  baseUrl: string,
-  staticFactsDir: string,
-  requestDelayMs: number,
-  excludeMethods: Set<string>,
-  excludePaths: string[],
-  durationMs: number,
-  warnings: string[],
-): Promise<DriverRunResult> {
+interface SyntheticRequestsArgs {
+  baseUrl: string
+  staticFactsDir: string
+  requestDelayMs: number
+  excludeMethods: Set<string>
+  excludePaths: string[]
+  durationMs: number
+  warnings: string[]
+}
+
+async function runSyntheticRequests(args: SyntheticRequestsArgs): Promise<DriverRunResult> {
+  const {
+    baseUrl, staticFactsDir, requestDelayMs,
+    excludeMethods, excludePaths, durationMs, warnings,
+  } = args
     const entryPoints = await readEntryPoints(staticFactsDir)
     if (entryPoints.length === 0) {
       warnings.push(`No EntryPoint facts found in ${staticFactsDir}. Run \`npx codegraph analyze\` first.`)

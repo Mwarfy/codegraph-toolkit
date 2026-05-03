@@ -77,9 +77,16 @@ export const allTruthPoints = derived<string, TruthPoint[]>(
     }
 
     const fileSet = new Set(files)
-    return buildTruthPointsFromSignals(
-      [...files], sql, redis, memory, exportedFns,
-      edges, fileSet, {}, DEFAULT_MEM_SUFFIXES,
-    )
+    return buildTruthPointsFromSignals({
+      files: [...files],
+      sqlSignals: sql,
+      redisSignals: redis,
+      memorySignals: memory,
+      exportedFns,
+      allEdges: edges,
+      fileSet,
+      aliases: {},
+      memSuffixes: DEFAULT_MEM_SUFFIXES,
+    })
   },
 )

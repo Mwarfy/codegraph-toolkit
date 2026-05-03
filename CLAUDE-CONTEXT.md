@@ -175,9 +175,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/env-usage/config.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/b.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **FSM-ORPHAN** `ApprovalStatus#expired` — état déclaré mais jamais écrit dans le code  
   _→ supprimer l'état OU ajouter la transition manquante_
@@ -203,6 +203,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+96048d7 refactor(toolkit): extract NCD duplicates → ast-helpers + drivers/_common (NCD: 16→12)
 dcf47d4 perf(toolkit): split stat-from-read en prebuild + layered allDeprecatedUsage
 f55039d perf(toolkit): Salsa-iso compression-similarity (per-file snippets cached)
 c24fb16 refactor(toolkit): tame AWAIT-IN-LOOP batch 6 — 33→0, AWAIT-IN-LOOP éliminé
@@ -214,7 +215,6 @@ fbebea4 refactor(toolkit): extract makeIsExempt helper (NCD: 25→16, total 434�
 70afbdc fix(toolkit): clean 93 violations (534→441, −17.4%) sans bypass
 b0f2c9a refactor(toolkit): split cli/index.ts god-file (2190→1520 LOC, −30%)
 c613ac7 refactor(toolkit): split analyzer.ts:runDeterministicDetectors en 5 phases
-7151cfd perf(toolkit): Salsa-isolate 3 hot detectors (co-change, drift, const-expr)
 ```
 
 ## Comment contribuer à ce brief

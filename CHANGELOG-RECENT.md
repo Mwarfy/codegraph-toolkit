@@ -5,7 +5,7 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T18:07:49Z
+Last update : 2026-05-03T18:18:06Z
 
 ## By type
 
@@ -49,6 +49,7 @@ Last update : 2026-05-03T18:07:49Z
 
 ### `refactor` (15)
 
+- **96048d7** refactor(toolkit): extract NCD duplicates → ast-helpers + drivers/_common (NCD: 16→12) — 2026-05-03
 - **c24fb16** refactor(toolkit): tame AWAIT-IN-LOOP batch 6 — 33→0, AWAIT-IN-LOOP éliminé — 2026-05-03
 - **2b4ebc0** refactor(toolkit): tame AWAIT-IN-LOOP batch 3+4+5 — detectors + extractors (58→33) — 2026-05-03
 - **9a86461** refactor(toolkit): tame AWAIT-IN-LOOP batch 2 — _shared, regenerate-anchors, drivers (70→58) — 2026-05-03
@@ -63,7 +64,6 @@ Last update : 2026-05-03T18:07:49Z
 - **51d7e5f** refactor(toolkit): sql-naming exemptions + ADD/RENAME ordering + edge-case patterns — 2026-05-01
 - **7362f13** refactor(invariants): raffiner composite-orphan-file (Next.js framework-routed) — 2026-05-01
 - **84544b9** refactor(invariants): raffiner extractor empty-catch + rule passthrough-fn — 2026-05-01
-- **8eb80b8** refactor(invariants): raffiner composite-async-sink-with-swallow — 2026-05-01
 
 
 ### `chore` (4)
@@ -89,6 +89,7 @@ Last update : 2026-05-03T18:07:49Z
 
 ## Full history
 
+- **96048d7** refactor(toolkit): extract NCD duplicates → ast-helpers + drivers/_common (NCD: 16→12) — 2026-05-03
 - **dcf47d4** perf(toolkit): split stat-from-read en prebuild + layered allDeprecatedUsage — 2026-05-03
 - **f55039d** perf(toolkit): Salsa-iso compression-similarity (per-file snippets cached) — 2026-05-03
 - **c24fb16** refactor(toolkit): tame AWAIT-IN-LOOP batch 6 — 33→0, AWAIT-IN-LOOP éliminé — 2026-05-03
@@ -138,4 +139,3 @@ Last update : 2026-05-03T18:07:49Z
 - **bbfa9d6** feat(toolkit): SQL ALTER TABLE tracking + CrossDisciplineDetector POC — 2026-05-01
 - **7362f13** refactor(invariants): raffiner composite-orphan-file (Next.js framework-routed) — 2026-05-01
 - **84544b9** refactor(invariants): raffiner extractor empty-catch + rule passthrough-fn — 2026-05-01
-- **8eb80b8** refactor(invariants): raffiner composite-async-sink-with-swallow — 2026-05-01

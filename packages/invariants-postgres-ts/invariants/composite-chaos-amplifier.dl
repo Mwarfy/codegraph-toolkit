@@ -21,8 +21,14 @@
 
 .decl ChaosAmplifierGrandfathered(file: symbol)
 
+// Filter to TypeScript source files only — File(F) n'est emit que pour
+// les .ts/.tsx du snapshot. Sans ce filter, la rule fire sur les .md /
+// .dl / .test.ts qui co-évoluent avec leur source mais ne propagent PAS
+// de cascade refactor (ils sont récepteurs, pas amplificateurs).
 Violation("COMPOSITE-CHAOS-AMPLIFIER", F, 0,
   "λ Lyapunov > 2 — file amplifie chaos (cascade refactor automatique a chaque touche)") :-
     LyapunovMetric(F, _, _, L),
     L > 2000,
+    File(F),
+    !FileTag(F, "test-fixture"),
     !ChaosAmplifierGrandfathered(F).
