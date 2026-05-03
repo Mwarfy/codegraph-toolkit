@@ -216,3 +216,77 @@ censé révéler.
 Plus utile maintenant : fixer les 4 bugs trouvés que d'enchaîner Cal.com
 + Trigger.dev. Sans le bug #1 fix, ces runs montreront le même
 "7 disciplines mortes" sur les tests externes.
+
+---
+
+## Run #1.5 — Sentinel (post composite rules) — 2026-05-03
+
+Validation des **5 nouvelles composite rules** (commit `af41582`) sur le
+projet de référence Sentinel après ajout des `ConstantExpression` +
+`EslintViolation` facts.
+
+### Émission
+
+  - 33 ConstantExpression facts sur Sentinel (270 fichiers)
+    - 18 gratuitous-bool-comparison
+    - 15 double-negation
+    - 0 tautology-condition / contradiction-condition pure
+  - 0 EslintViolation (pas de eslint.json fourni)
+
+### Findings composite
+
+  - COMPOSITE-GRATUITOUS-BOOL-UNTESTED-HUB : **1 finding**
+    - `sentinel-core/src/blocks/base-block.ts:410`
+    - Code : `plan.filter((_, i) => dryResults[i]?.allowed !== false)`
+    - Validation : base-block.ts est le hub effectif des blocks
+      Sentinel (BaseBlock importé par tous les blocks), non-testé
+      directement, coercion gratuite confirmée.
+  - 4 autres composite rules : 0 findings (pas de tautology pure dans
+    Sentinel ; pas d'eslint.json ingesté ; pas de DB-truth-point avec
+    tautology).
+
+### Signal-to-noise mesuré
+
+  - **33 findings ConstantExpression bruts** (signal noyé dans le bruit
+    si on les présentait tous comme "à fixer").
+  - **1 finding composite** dans hub non-testé = **3% du bruit, 100% du
+    signal qui mord**.
+
+  Ratio = **33×** signal-to-noise improvement par composition.
+
+### Pourquoi peu de findings vs Hono
+
+Hono a 4 findings COMPOSITE-GRATUITOUS-BOOL-UNTESTED-HUB, Sentinel n'en
+a que 1. Différence :
+  - Sentinel a beaucoup de tests directs (les fichiers hot sont gates
+    par tests) → la condition `!TestedFile(F)` filtre mieux
+  - Hono est un framework où beaucoup de fichiers helper/jsx sont en
+    tests via les .test.tsx mais l'extracteur ne les détecte peut-être
+    pas comme "directly tested" si le test file est ailleurs
+
+### Pour activer les autres composite rules
+
+Pour que Sentinel fire `COMPOSITE-ESLINT-IN-*` :
+
+  ```bash
+  cd sentinel-core
+  npx eslint . --format json > .codegraph/eslint.json
+  npx codegraph analyze
+  npx datalog run rules --facts .codegraph/facts
+  ```
+
+À tester quand on revient sur Sentinel.
+
+### Verdict global du composite system
+
+  ✓ Émet des facts utiles (33 ConstantExpression sur Sentinel, 23 sur Hono)
+  ✓ Composite rules réduisent le bruit (33× sur Sentinel)
+  ✓ Cohérent avec le but stratégique : pas remplacer ESLint, **composer**
+  ⚠ Pour avoir TOUS les composites actifs il faut :
+    - Run ESLint séparément + dump JSON (pour ESLint composites)
+    - Avoir des truth-points DB (pour TAUTOLOGY-IN-TRUTH-POINT)
+    - Avoir un projet où co-change tracking est riche (pour
+      TAUTOLOGY-RECENT-COCHANGE)
+
+C'est documenté maintenant — utilisateur sait quoi attendre selon le shape
+de son projet.

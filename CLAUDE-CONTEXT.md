@@ -188,6 +188,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+af41582 feat(toolkit): symbolic simplification facts + 5 composite rules cross-discipline
 866eb25 fix(toolkit): bugs #1 #2 #3 #4 trouvés via test externe Hono
 a191d61 docs(validation): full-chain run #1 — 4 bugs trouvés sur Hono
 095661e docs(validation): run #1 — Hono framework (186 files, 3.5s, 0 crash, 0 hallucination)
@@ -199,7 +200,6 @@ a191d61 docs(validation): full-chain run #1 — 4 bugs trouvés sur Hono
 ce4e6e8 perf(toolkit): deprecated-usage Salsa-isolation + math regression gate
 afd0965 perf(toolkit): self-discovered Salsa optimizations — warm runtime −40%
 67c5581 feat(toolkit): mathematical self-governance — 100% load-bearing files governed
-c484f1f refactor(codegraph): runDeterministicDetectors 279→108 LOC + git-fixture determinism
 ```
 
 ## Comment contribuer à ce brief
