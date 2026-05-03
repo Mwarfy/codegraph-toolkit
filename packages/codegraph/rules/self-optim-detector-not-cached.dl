@@ -1,0 +1,27 @@
+// rule: self-optim-detector-not-cached
+// fires: a detector with λ_lyap ≈ 1.00 (mean ≈ p95) AND mean ≥ 200ms.
+//        λ ≈ 1 means the warm path is NOT shortcut by cache (cold ≈ warm).
+//        Combined with high mean → strong candidate for Salsa-isolation.
+// signal: this detector lacks an `incremental/<name>.ts` Salsa wrapper.
+//         Salsa-iser le mettrait en cache hit ~99% sur warm runs, gain
+//         estimé = mean × 0.99 sur warm. Pour le toolkit lui-même, les 4
+//         détecteurs flaggés (deprecated-usage, security-patterns,
+//         code-quality-patterns, dead-code) totalisent ~2.4s/run warm.
+// action: create `packages/codegraph/src/incremental/<detector>.ts`
+//         following ADR-007 contract (sharedDb + derived + fileContent).
+//
+// Mathematical justification :
+//   For a detector D, the Lyapunov-like proxy λ_D = log(p95+1)/log(median+1).
+//   - λ_D ≫ 1 : p95 ≫ median → cold runs slow, warm fast → cache works.
+//   - λ_D ≈ 1 : p95 ≈ median → no cliff → no cache benefit → optimization candidate.
+//
+//   On a stable system (variance bounded), this distinguishes cached
+//   detectors (high λ) from non-cached (low λ).
+
+.decl SelfOptimNotCached(detector: symbol, meanMs: number, p95Ms: number, lambdaX1000: number)
+.output SelfOptimNotCached
+
+SelfOptimNotCached(D, Mean, P95, Lambda) :-
+  DetectorTiming(D, _, Mean, P95, _, Lambda),
+  Mean >= 200,
+  Lambda <= 1100.    // λ ≤ 1.1 = warm not significantly faster than cold

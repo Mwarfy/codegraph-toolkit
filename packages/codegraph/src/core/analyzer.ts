@@ -107,6 +107,9 @@ import {
   type WriteSignal as StateMachineWriteSignal,
 } from '../extractors/state-machines.js'
 import { allTsImports as incAllTsImports } from '../incremental/ts-imports.js'
+import { allCodeQualityPatterns as incAllCodeQualityPatterns } from '../incremental/code-quality-patterns.js'
+import { allSecurityPatterns as incAllSecurityPatterns } from '../incremental/security-patterns.js'
+import { allDeadCode as incAllDeadCode } from '../incremental/dead-code.js'
 import { setTsImportPrebuiltProject } from '../detectors/ts-imports.js'
 import {
   allModuleMetrics as incAllModuleMetrics,
@@ -316,7 +319,7 @@ export async function analyze(
 
   // ─── 6b. New deterministic detectors (Sprint 12) ───────────────────
   if (!factsOnly) {
-    await runDeterministicDetectors(config, files, readFile, sharedProject, snapshot, timing)
+    await runDeterministicDetectors(config, files, readFile, sharedProject, snapshot, timing, incremental)
   } else {
     // ─── factsOnly always-run subset ─────────────────────────────────
     // test-coverage est cheap (import-based mapping) ET load-bearing
@@ -601,6 +604,7 @@ async function runDeterministicDetectors(
   sharedProject: ReturnType<typeof createSharedProject>,
   snapshot: GraphSnapshot,
   timing: AnalyzeResult['timing'],
+  incremental: boolean = false,
 ): Promise<void> {
   // Phase 1 : détecteurs indépendants (pas de cross-deps).
   const todos = await runDetectorTimed(timing, 'todos',
@@ -625,12 +629,18 @@ async function runDeterministicDetectors(
     () => analyzeEvalCalls(config.rootDir, files, sharedProject))
   const cryptoCalls = await runDetectorTimed(timing, 'crypto-algo',
     () => analyzeCryptoCalls(config.rootDir, files, sharedProject))
+  // Self-optim discovery : Salsa-isolation post-λ_lyap analysis.
+  // Cold path identique au legacy ; warm path = cache hit ~99%.
   const securityPatterns = await runDetectorTimed(timing, 'security-patterns',
-    () => analyzeSecurityPatterns(config.rootDir, files, sharedProject))
+    () => incremental
+      ? Promise.resolve(incAllSecurityPatterns.get('all'))
+      : analyzeSecurityPatterns(config.rootDir, files, sharedProject))
   const eventListenerSites = await runDetectorTimed(timing, 'event-listener-sites',
     () => analyzeEventListenerSites(config.rootDir, files, sharedProject))
   const codeQualityPatterns = await runDetectorTimed(timing, 'code-quality-patterns',
-    () => analyzeCodeQualityPatterns(config.rootDir, files, sharedProject))
+    () => incremental
+      ? Promise.resolve(incAllCodeQualityPatterns.get('all'))
+      : analyzeCodeQualityPatterns(config.rootDir, files, sharedProject))
   const functionComplexity = await runDetectorTimed(timing, 'function-complexity',
     () => analyzeFunctionComplexity(config.rootDir, files, sharedProject))
 
@@ -651,7 +661,9 @@ async function runDeterministicDetectors(
   const booleanParams = await runDetectorTimed(timing, 'boolean-params',
     () => analyzeBooleanParams(config.rootDir, files, sharedProject))
   const deadCode = await runDetectorTimed(timing, 'dead-code',
-    () => analyzeDeadCode(config.rootDir, files, sharedProject))
+    () => incremental
+      ? Promise.resolve(incAllDeadCode.get('all'))
+      : analyzeDeadCode(config.rootDir, files, sharedProject))
   // floating-promises : dep sur snapshot.typedCalls (déjà patché Phase 5).
   const floatingPromises = await runDetectorTimed(timing, 'floating-promises',
     () => analyzeFloatingPromises(config.rootDir, files, sharedProject, snapshot.typedCalls))

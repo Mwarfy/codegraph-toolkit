@@ -77,10 +77,12 @@
 - `packages/codegraph/src/extractors/state-machines.ts` → ADR-005
 - `packages/codegraph/src/extractors/unused-exports.ts` → ADR-005
 - `packages/codegraph/src/incremental/barrels.ts` → ADR-007
+- `packages/codegraph/src/incremental/code-quality-patterns.ts` → ADR-007
 - `packages/codegraph/src/incremental/complexity.ts` → ADR-007
 - `packages/codegraph/src/incremental/cycles.ts` → ADR-007
 - `packages/codegraph/src/incremental/data-flows.ts` → ADR-007
 - `packages/codegraph/src/incremental/database.ts` → ADR-007
+- `packages/codegraph/src/incremental/dead-code.ts` → ADR-007
 - `packages/codegraph/src/incremental/env-usage.ts` → ADR-007
 - `packages/codegraph/src/incremental/event-emit-sites.ts` → ADR-007
 - `packages/codegraph/src/incremental/metrics.ts` → ADR-007
@@ -89,6 +91,7 @@
 - `packages/codegraph/src/incremental/persistence.ts` → ADR-007
 - `packages/codegraph/src/incremental/project-cache.ts` → ADR-007
 - `packages/codegraph/src/incremental/queries.ts` → ADR-007
+- `packages/codegraph/src/incremental/security-patterns.ts` → ADR-007
 - `packages/codegraph/src/incremental/state-machines.ts` → ADR-007
 - `packages/codegraph/src/incremental/symbol-refs.ts` → ADR-007
 - `packages/codegraph/src/incremental/taint.ts` → ADR-007
@@ -180,6 +183,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+67c5581 feat(toolkit): mathematical self-governance — 100% load-bearing files governed
 c484f1f refactor(codegraph): runDeterministicDetectors 279→108 LOC + git-fixture determinism
 173915c chore(toolkit): self-discipline pass — close credibility gap from external review
 03ef857 chore(runtime-graph): OSS launch prep — alpha.4 publish-ready
@@ -191,7 +195,6 @@ e73e85d fix(codegraph): break direct cycle sql-helpers ↔ sql-schema via type e
 e9a2b44 feat(runtime-graph): Phase γ — 4 mathematical disciplines runtime + composite rules
 f642620 fix(runtime-graph): CLI rulesDir resolution via __dirname (no package.json export)
 cd9a769 feat(runtime-graph): Phase β — replay-tests + chaos + Express + MongoDB + config-driven
-ca252d2 fix(runtime-graph): retire grandfathers + refine rules + self-probe E2E validated
 ```
 
 ## Comment contribuer à ce brief

@@ -51,10 +51,12 @@ DB via `new SalsaDatabase()` LOCAL au test, jamais exporté.
 <!-- AUTO-GÉNÉRÉ depuis les marqueurs ADR-NNN du code source. Voir @liby-tools/adr-toolkit. NE PAS éditer à la main. -->
 
 - `packages/codegraph/src/incremental/barrels.ts`
+- `packages/codegraph/src/incremental/code-quality-patterns.ts`
 - `packages/codegraph/src/incremental/complexity.ts`
 - `packages/codegraph/src/incremental/cycles.ts`
 - `packages/codegraph/src/incremental/data-flows.ts`
 - `packages/codegraph/src/incremental/database.ts`
+- `packages/codegraph/src/incremental/dead-code.ts`
 - `packages/codegraph/src/incremental/env-usage.ts`
 - `packages/codegraph/src/incremental/event-emit-sites.ts`
 - `packages/codegraph/src/incremental/metrics.ts`
@@ -63,6 +65,7 @@ DB via `new SalsaDatabase()` LOCAL au test, jamais exporté.
 - `packages/codegraph/src/incremental/persistence.ts`
 - `packages/codegraph/src/incremental/project-cache.ts`
 - `packages/codegraph/src/incremental/queries.ts`
+- `packages/codegraph/src/incremental/security-patterns.ts`
 - `packages/codegraph/src/incremental/state-machines.ts`
 - `packages/codegraph/src/incremental/symbol-refs.ts`
 - `packages/codegraph/src/incremental/taint.ts`
