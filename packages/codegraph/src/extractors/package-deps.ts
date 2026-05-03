@@ -72,6 +72,64 @@ const DEFAULT_TEST_RES: RegExp[] = [
   /(^|\/)__tests__\//,
 ]
 
+/**
+ * Filtre les manifests sans aucun fichier source dans leur scope pour
+ * eviter un faux positif "declarations toutes unused" sur un package.json
+ * dans un dossier exclu de l'analyse.
+ */
+function filterActiveManifests(manifests: PackageManifest[], rootDir: string, files: string[]): PackageManifest[] {
+  const scopeFileCount = new Map<string, number>()
+  for (const m of manifests) scopeFileCount.set(m.abs, 0)
+  for (const rel of files) {
+    const abs = path.join(rootDir, rel)
+    const m = findClosestManifest(abs, manifests)
+    if (m) scopeFileCount.set(m.abs, (scopeFileCount.get(m.abs) ?? 0) + 1)
+  }
+  return manifests.filter((m) => (scopeFileCount.get(m.abs) ?? 0) > 0)
+}
+
+interface ManifestImportBuckets {
+  importsByManifest: Map<string, Map<string, Set<string>>>
+  runtimeAssetsByManifest: Map<string, Map<string, Set<string>>>
+}
+
+function emptyManifestBuckets(active: PackageManifest[]): ManifestImportBuckets {
+  const importsByManifest = new Map<string, Map<string, Set<string>>>()
+  const runtimeAssetsByManifest = new Map<string, Map<string, Set<string>>>()
+  for (const m of active) {
+    importsByManifest.set(m.abs, new Map())
+    runtimeAssetsByManifest.set(m.abs, new Map())
+  }
+  return { importsByManifest, runtimeAssetsByManifest }
+}
+
+function recordPackageRefs(
+  sf: import('ts-morph').SourceFile,
+  rootDir: string,
+  fileSet: Set<string>,
+  active: PackageManifest[],
+  buckets: ManifestImportBuckets,
+): void {
+  const absPath = sf.getFilePath() as string
+  const relPath = path.relative(rootDir, absPath).replace(/\\/g, '/')
+  if (!fileSet.has(relPath)) return
+
+  const manifest = findClosestManifest(absPath, active)
+  if (!manifest) return
+
+  const refs = collectPackageRefsInSourceFile(sf)
+  const importBucket = buckets.importsByManifest.get(manifest.abs)!
+  for (const pkg of refs.imports) {
+    if (!importBucket.has(pkg)) importBucket.set(pkg, new Set())
+    importBucket.get(pkg)!.add(relPath)
+  }
+  const assetBucket = buckets.runtimeAssetsByManifest.get(manifest.abs)!
+  for (const pkg of refs.runtimeAssets) {
+    if (!assetBucket.has(pkg)) assetBucket.set(pkg, new Set())
+    assetBucket.get(pkg)!.add(relPath)
+  }
+}
+
 export async function analyzePackageDeps(
   rootDir: string,
   files: string[],
@@ -83,59 +141,21 @@ export async function analyzePackageDeps(
   const manifests = await discoverManifests(rootDir)
   if (manifests.length === 0) return []
 
-  // Tri décroissant par longueur de `dir` pour que `findClosest` prenne le
-  // premier match = ancêtre le plus proche.
+  // Tri décroissant par longueur de `dir` : findClosest prend le 1er
+  // match = ancetre le plus proche.
   manifests.sort((a, b) => b.dir.length - a.dir.length)
 
-  // Filtrer les manifests qui n'ont aucun fichier source dans leur scope :
-  // éviterait un faux positif « déclarations toutes unused » pour un
-  // package.json situé dans un dossier exclu de l'analyse.
-  const scopeFileCount = new Map<string, number>()
-  for (const m of manifests) scopeFileCount.set(m.abs, 0)
-  for (const rel of files) {
-    const abs = path.join(rootDir, rel)
-    const m = findClosestManifest(abs, manifests)
-    if (m) scopeFileCount.set(m.abs, (scopeFileCount.get(m.abs) ?? 0) + 1)
-  }
-  const active = manifests.filter((m) => (scopeFileCount.get(m.abs) ?? 0) > 0)
+  const active = filterActiveManifests(manifests, rootDir, files)
   if (active.length === 0) return []
 
   const fileSet = new Set(files)
-
-  // importsByManifest : manifest.abs → Map<packageName, Set<file>>
-  const importsByManifest = new Map<string, Map<string, Set<string>>>()
-  // runtimeAssetsByManifest : manifest.abs → Map<packageName, Set<file>>
-  // Détecté via regex `node_modules/<pkg>/` dans le source — pour identifier
-  // les deps utilisées en runtime asset (p5.min.js, etc.) et éviter de les
-  // flagger declared-unused à tort.
-  const runtimeAssetsByManifest = new Map<string, Map<string, Set<string>>>()
-  for (const m of active) {
-    importsByManifest.set(m.abs, new Map())
-    runtimeAssetsByManifest.set(m.abs, new Map())
-  }
+  const buckets = emptyManifestBuckets(active)
 
   for (const sf of project.getSourceFiles()) {
-    const absPath = sf.getFilePath() as string
-    const relPath = path.relative(rootDir, absPath).replace(/\\/g, '/')
-    if (!fileSet.has(relPath)) continue
-
-    const manifest = findClosestManifest(absPath, active)
-    if (!manifest) continue
-
-    const refs = collectPackageRefsInSourceFile(sf)
-    const importBucket = importsByManifest.get(manifest.abs)!
-    for (const pkg of refs.imports) {
-      if (!importBucket.has(pkg)) importBucket.set(pkg, new Set())
-      importBucket.get(pkg)!.add(relPath)
-    }
-    const assetBucket = runtimeAssetsByManifest.get(manifest.abs)!
-    for (const pkg of refs.runtimeAssets) {
-      if (!assetBucket.has(pkg)) assetBucket.set(pkg, new Set())
-      assetBucket.get(pkg)!.add(relPath)
-    }
+    recordPackageRefs(sf, rootDir, fileSet, active, buckets)
   }
 
-  return buildPackageDepsIssues(active, importsByManifest, runtimeAssetsByManifest, testREs)
+  return buildPackageDepsIssues(active, buckets.importsByManifest, buckets.runtimeAssetsByManifest, testREs)
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

@@ -5,16 +5,15 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-03T19:58:15Z
+Last update : 2026-05-03T20:01:41Z
 
 ## By type
 
-### `feat` (4)
+### `feat` (3)
 
 - **af41582** feat(toolkit): symbolic simplification facts + 5 composite rules cross-discipline — 2026-05-03
 - **2f84a70** feat(toolkit): Niveau 5 effect-analysis + roadmap defers Niveaux 6/7 — 2026-05-03
 - **0485ce4** feat(toolkit): self-optim Niveau 2A + Niveau 4 — math cost predict + auto-synth Salsa — 2026-05-03
-- **3ca2f45** feat(toolkit): self-optim auto-loop — connect probe → diag → brief → scaffold — 2026-05-03
 
 
 ### `fix` (9)
@@ -37,8 +36,9 @@ Last update : 2026-05-03T19:58:15Z
 - **7151cfd** perf(toolkit): Salsa-isolate 3 hot detectors (co-change, drift, const-expr) — 2026-05-03
 
 
-### `refactor` (28)
+### `refactor` (29)
 
+- **69a032e** refactor(toolkit): split runPostSnapshotMetrics (cyclo 20→4) — generic metric step + 3 metric runners — 2026-05-03
 - **3e30c42** refactor(toolkit): split buildTruthPointsFromSignals (cyclo 34→3) — 4 helpers per-table — 2026-05-03
 - **6190869** refactor(toolkit): split state-machines top-level — analyze + buildFromBundles — 2026-05-03
 - **bddfb2a** refactor(toolkit): split data-flows top-level (analyzeDataFlows + buildDataFlowsFromBundles) — 2026-05-03
@@ -58,7 +58,6 @@ Last update : 2026-05-03T19:58:15Z
 - **5888c3e** refactor(toolkit): split exportFacts batch 2 — extract graph metrics + listeners (cyclomatic 102→84) — 2026-05-03
 - **f8e2fdd** refactor(toolkit): split exportFacts en 5 emit helpers (cyclomatic 142→102) — 2026-05-03
 - **7c6668c** refactor(toolkit): kill LONG-FN-BY-PARAMS (5→0) + fix CHAOS-AMPLIFIER FP (6→3) — 2026-05-03
-- **96048d7** refactor(toolkit): extract NCD duplicates → ast-helpers + drivers/_common (NCD: 16→12) — 2026-05-03
 
 
 ### `chore` (2)
@@ -77,6 +76,7 @@ Last update : 2026-05-03T19:58:15Z
 
 ## Full history
 
+- **69a032e** refactor(toolkit): split runPostSnapshotMetrics (cyclo 20→4) — generic metric step + 3 metric runners — 2026-05-03
 - **3e30c42** refactor(toolkit): split buildTruthPointsFromSignals (cyclo 34→3) — 4 helpers per-table — 2026-05-03
 - **6190869** refactor(toolkit): split state-machines top-level — analyze + buildFromBundles — 2026-05-03
 - **bddfb2a** refactor(toolkit): split data-flows top-level (analyzeDataFlows + buildDataFlowsFromBundles) — 2026-05-03
@@ -126,4 +126,3 @@ Last update : 2026-05-03T19:58:15Z
 - **2f84a70** feat(toolkit): Niveau 5 effect-analysis + roadmap defers Niveaux 6/7 — 2026-05-03
 - **0146402** fix(toolkit): close P0+P1+P2+P3 — review credibility gap part 2 — 2026-05-03
 - **0485ce4** feat(toolkit): self-optim Niveau 2A + Niveau 4 — math cost predict + auto-synth Salsa — 2026-05-03
-- **3ca2f45** feat(toolkit): self-optim auto-loop — connect probe → diag → brief → scaffold — 2026-05-03
