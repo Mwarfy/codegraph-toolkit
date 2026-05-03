@@ -139,6 +139,17 @@ function emptyStore(rootDir: string): MemoryStore {
 }
 
 function validateStore(raw: any, rootDir: string): MemoryStore {
+  validateStoreShape(raw)
+  return {
+    version: 1,
+    project: typeof raw.project === 'string' ? raw.project : path.basename(path.resolve(rootDir)),
+    rootDir: typeof raw.rootDir === 'string' ? raw.rootDir : path.resolve(rootDir),
+    lastUpdated: typeof raw.lastUpdated === 'string' ? raw.lastUpdated : new Date().toISOString(),
+    entries: validateEntries(raw.entries),
+  }
+}
+
+function validateStoreShape(raw: any): void {
   if (typeof raw !== 'object' || raw === null) {
     throw new Error('memory store: not an object')
   }
@@ -148,31 +159,34 @@ function validateStore(raw: any, rootDir: string): MemoryStore {
   if (!Array.isArray(raw.entries)) {
     throw new Error('memory store: entries is not an array')
   }
-  // Soft-validate entries — ignore corrupted ones plutôt que tout perdre.
-  const validEntries: MemoryEntry[] = []
-  for (const e of raw.entries) {
-    if (!e || typeof e !== 'object') continue
-    if (typeof e.id !== 'string' || typeof e.kind !== 'string') continue
-    if (typeof e.fingerprint !== 'string' || typeof e.reason !== 'string') continue
-    if (typeof e.addedAt !== 'string') continue
-    if (e.obsoleteAt !== null && typeof e.obsoleteAt !== 'string') continue
-    if (!isValidKind(e.kind)) continue
-    validEntries.push({
-      id: e.id,
-      kind: e.kind,
-      fingerprint: e.fingerprint,
-      reason: e.reason,
-      scope: e.scope && typeof e.scope === 'object' ? e.scope : undefined,
-      addedAt: e.addedAt,
-      obsoleteAt: e.obsoleteAt ?? null,
-    })
+}
+
+/** Soft-validate : ignore corrupted entries plutôt que tout perdre. */
+function validateEntries(rawEntries: unknown[]): MemoryEntry[] {
+  const valid: MemoryEntry[] = []
+  for (const e of rawEntries) {
+    const entry = validateOneEntry(e)
+    if (entry) valid.push(entry)
   }
+  return valid
+}
+
+function validateOneEntry(e: unknown): MemoryEntry | null {
+  if (!e || typeof e !== 'object') return null
+  const r = e as any
+  if (typeof r.id !== 'string' || typeof r.kind !== 'string') return null
+  if (typeof r.fingerprint !== 'string' || typeof r.reason !== 'string') return null
+  if (typeof r.addedAt !== 'string') return null
+  if (r.obsoleteAt !== null && typeof r.obsoleteAt !== 'string') return null
+  if (!isValidKind(r.kind)) return null
   return {
-    version: 1,
-    project: typeof raw.project === 'string' ? raw.project : path.basename(path.resolve(rootDir)),
-    rootDir: typeof raw.rootDir === 'string' ? raw.rootDir : path.resolve(rootDir),
-    lastUpdated: typeof raw.lastUpdated === 'string' ? raw.lastUpdated : new Date().toISOString(),
-    entries: validEntries,
+    id: r.id,
+    kind: r.kind,
+    fingerprint: r.fingerprint,
+    reason: r.reason,
+    scope: r.scope && typeof r.scope === 'object' ? r.scope : undefined,
+    addedAt: r.addedAt,
+    obsoleteAt: r.obsoleteAt ?? null,
   }
 }
 
