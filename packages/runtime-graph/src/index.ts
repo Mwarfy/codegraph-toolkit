@@ -33,6 +33,23 @@ export type { ExpressLikeApp, DiscoveredRoute } from './adapters/frameworks/expr
 export { loadConfig, defineConfig } from './core/config-loader.js'
 export type { LoadedConfig } from './core/config-loader.js'
 
+// Phase γ — runtime mathematical disciplines
+export {
+  hammingStaticRuntime,
+  informationBottleneckRuntime,
+  newmanGirvanRuntime,
+  lyapunovRuntime,
+  computeAllDisciplines,
+} from './metrics/runtime-disciplines.js'
+export type {
+  StaticCallEdge,
+  InformationBottleneckRuntimeFact,
+  NewmanGirvanRuntimeFact,
+  LyapunovRuntimeFact,
+  AllDisciplinesResult,
+} from './metrics/runtime-disciplines.js'
+export { exportDisciplineFacts } from './facts/discipline-exporter.js'
+
 export type {
   Driver,
   DriverRunOptions,

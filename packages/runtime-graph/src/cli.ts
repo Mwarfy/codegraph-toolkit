@@ -31,8 +31,10 @@ import { syntheticDriver } from './drivers/synthetic.js'
 import { replayTestsDriver } from './drivers/replay-tests.js'
 import { chaosDriver } from './drivers/chaos.js'
 import { exportFactsRuntime } from './facts/exporter.js'
+import { exportDisciplineFacts } from './facts/discipline-exporter.js'
 import { attachRuntimeCapture } from './capture/otel-attach.js'
 import { aggregateSpans } from './capture/span-aggregator.js'
+import { computeAllDisciplines, type StaticCallEdge } from './metrics/runtime-disciplines.js'
 import type { RuntimeSnapshot } from './core/types.js'
 
 const program = new Command()
@@ -40,7 +42,7 @@ const program = new Command()
 program
   .name('liby-runtime-graph')
   .description('Runtime observability framework — captures actual execution graph, joins with codegraph statique via datalog')
-  .version('0.1.0-alpha.2')
+  .version('0.1.0-alpha.3')
 
 program
   .command('run')
@@ -159,6 +161,19 @@ program
     // 5. Generate RuntimeRouteExpected.facts (parsed from EntryPoint.facts)
     await generateRuntimeRouteExpected(projectRoot, outDir)
 
+    // 5b. Phase γ — compute mathematical disciplines from runtime facts
+    //     + static SymbolCallEdge for Hamming distance.
+    //     Le compute est PURE (pas d'I/O réseau), juste des aggregations
+    //     in-memory. Output : 5 nouveaux .facts (HammingStaticRuntime,
+    //     IBScoreRuntime, NgGlobalQ, NgFileQ, LyapunovRuntime).
+    const staticEdges = await readStaticCallEdges(projectRoot)
+    const disciplines = computeAllDisciplines(snapshot, staticEdges)
+    const discResult = await exportDisciplineFacts(disciplines, outDir)
+    console.log(chalk.gray(`  ✓ Phase γ disciplines computed (${discResult.relations.length} relations)`))
+    for (const rel of discResult.relations) {
+      console.log(chalk.gray(`    ${rel.name.padEnd(28)} ${String(rel.tuples).padStart(5)} tuples`))
+    }
+
     // 6. Ensure RuntimeRuleExempt.facts exists (empty if no project exemptions)
     //    Datalog runner requires every .input relation to have a file (or empty file).
     await ensureRuntimeRuleExempt(projectRoot, outDir)
@@ -269,6 +284,35 @@ async function ensureRuntimeRuleExempt(projectRoot: string, outDir: string): Pro
   } catch {
     // Pas d'exemptions utilisateur → fichier vide
     await fs.writeFile(dst, '', 'utf-8')
+  }
+}
+
+/**
+ * Lit SymbolCallEdge.facts statique → array StaticCallEdge.
+ * Utilisé par computeAllDisciplines pour calculer la distance de Hamming
+ * statique↔runtime. Retourne [] si .codegraph/facts absent (Phase γ
+ * tolérant — Hamming juste skip si pas de facts statiques).
+ */
+async function readStaticCallEdges(projectRoot: string): Promise<StaticCallEdge[]> {
+  const file = path.join(projectRoot, '.codegraph/facts/SymbolCallEdge.facts')
+  try {
+    const content = await fs.readFile(file, 'utf-8')
+    return content
+      .split('\n')
+      .filter(l => l.trim().length > 0)
+      .map(line => {
+        const cols = line.split('\t')
+        // Schema : (fromFile, fromSymbol, toFile, toSymbol, line)
+        return {
+          fromFile: cols[0] ?? '',
+          fromFn: cols[1] ?? '',
+          toFile: cols[2] ?? '',
+          toFn: cols[3] ?? '',
+        }
+      })
+      .filter(e => e.fromFile && e.fromFn && e.toFile && e.toFn)
+  } catch {
+    return []
   }
 }
 

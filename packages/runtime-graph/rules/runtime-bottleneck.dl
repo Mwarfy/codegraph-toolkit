@@ -1,0 +1,21 @@
+// BOTTLENECK — Information Bottleneck score élevé sur un node hot
+//
+// Pourquoi : un symbol avec beaucoup d'inflow et peu d'outflow est un
+// CHOKEPOINT structurel — toute information passant par lui est compressée
+// vers un sous-ensemble de callees. Trois interprétations :
+//   1. C'est un dispatcher (route handler, validator) → légitime mais
+//      bonne candidate pour split si elle grossit
+//   2. C'est un goulot perf (sync DB call dans path hot) → réduire
+//      l'IB en ajoutant cache / async
+//   3. C'est une dette : single-point dispatcher qui devrait être
+//      décomposé en plus petits handlers spécialisés
+//
+// Threshold 850 permille (= 0.85 score) ET inflow >= 5 (filter le bruit
+// sur fonctions rarement appelées qui ont juste 1 caller).
+
+RuntimeAlert("BOTTLENECK", File, Fn,
+    "I/O compression score > 0.85 with high inflow — runtime chokepoint") :-
+    IBScoreRuntime(File, Fn, Inflow, _, Score),
+    Inflow >= 5,
+    Score > 850,
+    !RuntimeRuleExempt("BOTTLENECK", File, Fn).

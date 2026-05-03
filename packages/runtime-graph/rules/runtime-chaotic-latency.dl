@@ -1,0 +1,21 @@
+// CHAOTIC_LATENCY — Lyapunov approximation > seuil sur un hot symbol
+//
+// Pourquoi : si log(p95+1) est élevé sur un symbol fréquemment touché,
+// la latence est instable / sensible aux conditions (chaos local).
+// Sources typiques :
+//   1. queue contention / lock contention sous charge
+//   2. cache miss intermittent (warm vs cold path)
+//   3. external dependency avec SLO instable
+//
+// Phase γ.1 — approximation par log(p95). Phase γ.2 ajoutera vrai
+// Lyapunov sur time series (besoin de sampling).
+//
+// Threshold 6900 permille = log(1000) ≈ p95 > 1000ms (1s). Sur un hot
+// path (count >= 10), une p95 > 1s est généralement actionnable.
+
+RuntimeAlert("CHAOTIC_LATENCY", File, Fn,
+    "p95 latency > 1s on hot symbol — runtime instability suspect") :-
+    LyapunovRuntime(File, Fn, _, Count, Lambda),
+    Count >= 10,
+    Lambda > 6900,
+    !RuntimeRuleExempt("CHAOTIC_LATENCY", File, Fn).

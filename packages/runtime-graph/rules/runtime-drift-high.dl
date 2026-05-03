@@ -1,0 +1,19 @@
+// DRIFT_HIGH — Hamming distance entre call graph statique et runtime > seuil
+//
+// Pourquoi : alarme globale "le runtime ne ressemble pas au code". Si
+// > 30% des edges divergent (présents dans l'un mais pas l'autre), c'est
+// un signal fort que :
+//   1. le code a beaucoup de feature flags conditionnels jamais activés
+//   2. OU le driver couvre mal le code (Phase γ : seuil à tuner par projet)
+//   3. OU le code a beaucoup de dynamic dispatch que le statique rate
+//
+// Threshold 300 permille (= 0.30 de Hamming). Les utilisateurs peuvent
+// définir RuntimeRuleExempt pour ce signal s'ils acceptent un drift haut
+// (ex: feature flag heavy SaaS).
+
+RuntimeAlert("DRIFT_HIGH", "global", "graph",
+    "static call graph diverges >30% from runtime call graph") :-
+    HammingStaticRuntime(D, _, _, Total),
+    Total >= 50,
+    D > 300,
+    !RuntimeRuleExempt("DRIFT_HIGH", "global", "graph").

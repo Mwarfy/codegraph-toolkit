@@ -1,0 +1,26 @@
+// COMPOSITE_HUB_BOTTLENECK — fichier hub statique ET chokepoint runtime
+//
+// Pourquoi : codegraph statique flag déjà les hubs (>=20 importers). Mais
+// "hub" ≠ "bottleneck runtime". Si un hub statique a AUSSI un IB score
+// runtime élevé, c'est un signal CRITIQUE :
+//   - Beaucoup de fichiers en dépendent (statique)
+//   - Beaucoup d'appels y passent au runtime (dynamique)
+//   - Mais peu d'outflow → goulot effectif
+//
+// Cette intersection est plus précise que statique seul (un hub utility
+// distribué peut être ok) ou runtime seul (un chokepoint local est ok
+// si peu de fichiers en dépendent). Composite = vraie dette structurelle.
+//
+// Réutilise ModuleFanIn (codegraph statique fact) + IBScoreRuntime (γ).
+
+.decl ModuleFanIn(file: symbol, n: number)
+.input ModuleFanIn
+
+RuntimeAlert("COMPOSITE_HUB_BOTTLENECK", File, Fn,
+    "high static fan-in (>=20) AND high runtime bottleneck (>0.85) — critical chokepoint") :-
+    ModuleFanIn(File, FanIn),
+    FanIn >= 20,
+    IBScoreRuntime(File, Fn, Inflow, _, Score),
+    Inflow >= 5,
+    Score > 850,
+    !RuntimeRuleExempt("COMPOSITE_HUB_BOTTLENECK", File, Fn).

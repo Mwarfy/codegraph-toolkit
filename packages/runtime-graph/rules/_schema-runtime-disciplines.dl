@@ -1,0 +1,18 @@
+// Phase γ runtime disciplines facts schema.
+// All continuous metrics scaled ×1000 (permille) — datalog is integer-only.
+// Rules normalize the threshold via plain compare (e.g. > 850 means > 0.85).
+
+.decl HammingStaticRuntime(distancePermille: number, staticOnly: number, runtimeOnly: number, total: number)
+.input HammingStaticRuntime
+
+.decl IBScoreRuntime(file: symbol, fn: symbol, inflow: number, outflow: number, scorePermille: number)
+.input IBScoreRuntime
+
+.decl NgGlobalQ(qPermille: number)
+.input NgGlobalQ
+
+.decl NgFileQ(file: symbol, qPermille: number, symbolsCount: number)
+.input NgFileQ
+
+.decl LyapunovRuntime(file: symbol, fn: symbol, p95LatencyMs: number, count: number, lambdaPermille: number)
+.input LyapunovRuntime

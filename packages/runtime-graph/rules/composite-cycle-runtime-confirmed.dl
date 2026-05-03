@@ -1,0 +1,25 @@
+// COMPOSITE_CYCLE_RUNTIME_CONFIRMED — cycle statique ET runtime
+//
+// Pourquoi : codegraph statique détecte des cycles d'imports
+// (CycleNode). Mais beaucoup de cycles statiques ne se manifestent
+// jamais en runtime (modules importés mais leurs symboles jamais
+// utilisés en cyclical pattern).
+//
+// Si on observe un edge runtime A→B ET un edge runtime B→A (ou cycle
+// transitif), le cycle est CONFIRMÉ runtime. Ces cycles sont
+// prioritaires à casser.
+//
+// Réutilise CycleNode (codegraph statique fact) + CallEdgeRuntime (β).
+
+// codegraph schema : CycleNode(file, cycleId, gated)
+.decl CycleNode(file: symbol, cycleId: symbol, gated: symbol)
+.input CycleNode
+
+.decl RuntimeReverseEdge(fromFile: symbol, toFile: symbol)
+RuntimeReverseEdge(F, T) :- CallEdgeRuntime(F, _, T, _, _), CallEdgeRuntime(T, _, F, _, _).
+
+RuntimeAlert("COMPOSITE_CYCLE_RUNTIME_CONFIRMED", File, "",
+    "static cycle CONFIRMED runtime — observed bidirectional calls") :-
+    CycleNode(File, _, _),
+    RuntimeReverseEdge(File, _),
+    !RuntimeRuleExempt("COMPOSITE_CYCLE_RUNTIME_CONFIRMED", File, "").

@@ -100,8 +100,40 @@ await exportFactsRuntime(snapshot, { outDir: '.codegraph/facts-runtime' })
 | Phase | Scope | Status |
 |---|---|---|
 | **α** | OTel attach + 7 facts + 5 rules + synthetic driver + CLI | ✅ shipped (alpha.1) |
-| **β (now)** | replay-tests driver + chaos driver + Express adapter + MongoDB support + config-driven | ✅ shipped (alpha.2) |
-| **γ** | 11 disciplines mathématiques runtime (TDA, Information Bottleneck, Lyapunov, etc.) | 8-12 weeks |
+| **β** | replay-tests + chaos + Express + MongoDB + config-driven | ✅ shipped (alpha.2) |
+| **γ (now)** | 4 mathematical disciplines runtime (Hamming, IB, Newman-Girvan, Lyapunov) + composites cross-statique×runtime | ✅ shipped (alpha.3) |
+| **γ.2** | TDA persistence, Granger causality, Bayesian co-execution + time-series Lyapunov | future |
+
+## Phase γ additions (alpha.3)
+
+**4 disciplines mathématiques runtime** projetées en facts datalog :
+
+- **Hamming distance** statique↔runtime — quantifie le drift entre code
+  déclaré et code exécuté. `HammingStaticRuntime(distancePermille, ...)`.
+- **Information Bottleneck** — score 0..1 par symbol détectant les
+  chokepoints (high inflow, low outflow). `IBScoreRuntime(file, fn, inflow, outflow, scorePermille)`.
+- **Newman-Girvan modularity** — Q ∈ [-1,1] global + per-file. Mesure
+  si les communautés (= files) sont bien définies au runtime. `NgGlobalQ(qPermille)`, `NgFileQ(file, qPermille, n)`.
+- **Lyapunov approximation** — log(p95+1) sur hot symbols. Approxime le
+  chaos local. `LyapunovRuntime(file, fn, p95, count, lambdaPermille)`.
+
+**4 rules runtime** + **2 composite rules** (statique × runtime) :
+
+| Rule | Signal |
+|---|---|
+| `DRIFT_HIGH` | Hamming > 0.30 sur graph total ≥ 50 edges |
+| `BOTTLENECK` | IB score > 0.85 + inflow ≥ 5 |
+| `MODULARITY_COLLAPSE` | Q < 0.30 + ≥ 10 files participating |
+| `CHAOTIC_LATENCY` | log(p95) > 6.9 (= p95 > 1s) sur hot symbol |
+| **`COMPOSITE_HUB_BOTTLENECK`** | Hub statique (fan-in ≥20) **ET** chokepoint runtime (IB > 0.85) |
+| **`COMPOSITE_CYCLE_RUNTIME_CONFIRMED`** | Cycle statique **ET** edges bidirectionnels observés runtime |
+
+Les composites sont LE saut qualitatif unique : aucun APM ne calcule
+ces intersections. Datalog comme query language permet de les composer
+en quelques lignes par discipline.
+
+**16 nouveaux tests unitaires** sur les disciplines (math validée
+sur snapshots synthétiques). 50/50 dans runtime-graph, 563/563 toolkit.
 
 ## Phase β additions (alpha.2)
 

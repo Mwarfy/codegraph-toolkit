@@ -1,0 +1,22 @@
+// MODULARITY_COLLAPSE — Newman-Girvan Q effondré au runtime
+//
+// Pourquoi : Q runtime mesure si les communautés (= files) sont bien
+// définies dans le call graph effectif. Si Q < 0.3, le runtime mélange
+// les communautés : le code est statiquement bien organisé en modules
+// mais à l'exécution tout s'appelle entre files (suggère cross-cutting
+// concerns mal isolés, dépendances circulaires masquées par DI, etc.).
+//
+// Threshold 300 permille (= 0.30 Q). Au-dessus = communautés saines.
+// La rule ne fire que si on a au moins 10 fichiers participant pour
+// éviter de flagger un projet trop petit pour avoir une vraie modularité.
+
+// `.count` auto-declares result. Tous wildcards = global count (1 group).
+.count FilesParticipating(n: number) by NgFileQ(_, _, _)
+
+RuntimeAlert("MODULARITY_COLLAPSE", "global", "graph",
+    "runtime modularity Q < 0.30 — files exhibit cross-cutting call patterns") :-
+    NgGlobalQ(Q),
+    FilesParticipating(N),
+    N >= 10,
+    Q < 300,
+    !RuntimeRuleExempt("MODULARITY_COLLAPSE", "global", "graph").
