@@ -56,7 +56,23 @@ export function diffDataFlows(before: GraphSnapshot, after: GraphSnapshot): Data
   const beforeMap = new Map((before.dataFlows ?? []).map((f) => [flowKey(f), f]))
   const afterMap = new Map((after.dataFlows ?? []).map((f) => [flowKey(f), f]))
 
-  const added = []
+  const { added, changed } = scanAfterDataFlows(beforeMap, afterMap)
+  const removed = collectRemovedFlows(beforeMap, afterMap)
+
+  added.sort(compareEntry)
+  removed.sort(compareEntry)
+  changed.sort(compareDataFlowChange)
+
+  return { added, removed, changed }
+}
+
+type FlowEntry = DataFlow['entry']
+
+function scanAfterDataFlows(
+  beforeMap: Map<string, DataFlow>,
+  afterMap: Map<string, DataFlow>,
+): { added: FlowEntry[]; changed: DataFlowChange[] } {
+  const added: FlowEntry[] = []
   const changed: DataFlowChange[] = []
   for (const [key, afterFlow] of afterMap) {
     const prev = beforeMap.get(key)
@@ -67,22 +83,26 @@ export function diffDataFlows(before: GraphSnapshot, after: GraphSnapshot): Data
     const delta = diffFlow(prev, afterFlow)
     if (delta) changed.push(delta)
   }
+  return { added, changed }
+}
 
-  const removed = []
+function collectRemovedFlows(
+  beforeMap: Map<string, DataFlow>,
+  afterMap: Map<string, DataFlow>,
+): FlowEntry[] {
+  const removed: FlowEntry[] = []
   for (const [key, beforeFlow] of beforeMap) {
     if (!afterMap.has(key)) removed.push(beforeFlow.entry)
   }
+  return removed
+}
 
-  const byEntry = <T extends { kind: string; id: string }>(a: T, b: T): number => {
-    if (a.kind !== b.kind) return a.kind < b.kind ? -1 : 1
-    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
-  }
-  added.sort(byEntry)
-  removed.sort(byEntry)
-  changed.sort((a, b) => {
-    if (a.entryKind !== b.entryKind) return a.entryKind < b.entryKind ? -1 : 1
-    return a.entryId < b.entryId ? -1 : a.entryId > b.entryId ? 1 : 0
-  })
+function compareEntry<T extends { kind: string; id: string }>(a: T, b: T): number {
+  if (a.kind !== b.kind) return a.kind < b.kind ? -1 : 1
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+}
 
-  return { added, removed, changed }
+function compareDataFlowChange(a: DataFlowChange, b: DataFlowChange): number {
+  if (a.entryKind !== b.entryKind) return a.entryKind < b.entryKind ? -1 : 1
+  return a.entryId < b.entryId ? -1 : a.entryId > b.entryId ? 1 : 0
 }
