@@ -15,6 +15,7 @@
  *   DEP-UNUSED  — dépendance package.json déclarée jamais importée
  *   BARREL-LOW  — barrel index.ts à 1-2 exports (faible valeur)
  *   BACK-EDGE   — edge cross-container qui inverse l'ordre architectural
+ *   BIN-SHEBANG — entrée bin sans shebang (npm publish la stripperait)
  */
 
 // ADR-001: synopsis builder pur, zéro LLM, déterministe — tensions inclus
@@ -28,6 +29,7 @@ export type TensionKind =
   | 'dep-unused'
   | 'barrel-low'
   | 'back-edge'
+  | 'bin-shebang'
 
 export interface Tension {
   /** Verbe court (CYCLE, ORPHELIN, etc.) — convocation */
@@ -63,6 +65,7 @@ export function extractTensions(
   if (!skip.has('dep-unused')) extractDepUnusedTensions(snapshot, maxPerKind, out)
   if (!skip.has('barrel-low')) extractBarrelLowTensions(snapshot, maxPerKind, out)
   if (!skip.has('back-edge')) extractBackEdgeTensions(snapshot, maxPerKind, out)
+  if (!skip.has('bin-shebang')) extractBinShebangTensions(snapshot, maxPerKind, out)
 
   return out
 }
@@ -193,6 +196,35 @@ function extractBackEdgeTensions(snapshot: GraphSnapshot, max: number, out: Tens
       coordinates: `${be.from} → ${be.to}`,
       note: 'edge inverse l\'ordre architectural attendu',
       testHint: 'inverser la dépendance OU extraire un module partagé',
+    })
+  }
+}
+
+// ─── Bin entries que npm publish stripperait ───────────────────────────────
+
+function extractBinShebangTensions(snapshot: GraphSnapshot, max: number, out: Tension[]): void {
+  const issues = (snapshot.binShebangIssues ?? []).slice(0, max)
+  for (const i of issues) {
+    let note: string
+    let testHint: string
+    if (i.kind === 'missing-shebang') {
+      note = `${i.resolvedPath} — pas de shebang, \`npx\` va casser côté consumer`
+      testHint = `ajouter '#!/usr/bin/env node' en 1ère ligne de ${i.resolvedPath}`
+    } else if (i.kind === 'bin-target-missing') {
+      note = `${i.resolvedPath} — fichier introuvable (oubli de build ?)`
+      testHint = `npm run build OU corriger bin.${i.binName} dans ${i.packageJson}`
+    } else if (i.kind === 'bin-path-leading-dot') {
+      note = `\`${i.binPath}\` commence par \`./\` — npm publish warning bruyant`
+      testHint = `dans ${i.packageJson}, remplacer "${i.binPath}" par "${i.binPath.slice(2)}"`
+    } else {
+      note = `${i.resolvedPath} — shebang non-node (${i.observedShebang ?? '?'})`
+      testHint = `vérifier le shebang en tête de ${i.resolvedPath}`
+    }
+    out.push({
+      kind: 'bin-shebang',
+      coordinates: `${i.packageJson}#${i.binName}`,
+      note,
+      testHint,
     })
   }
 }

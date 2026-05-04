@@ -279,6 +279,14 @@ export interface GraphSnapshot {
   packageDeps?: PackageDepsIssue[]
 
   /**
+   * Publish hygiene — bin entries de package.json sans shebang ou cible
+   * absente. npm publish strip silencieusement les bins sans shebang →
+   * package livré incomplet, `npx <pkg>` casse côté consumer.
+   * Optionnel.
+   */
+  binShebangIssues?: BinShebangIssue[]
+
+  /**
    * Structural Map — barrel files à faible valeur (phase 3.8 #7).
    * Un fichier dont 100 % des statements sont des ré-exports (`export * from`
    * / `export { ... } from`). Si ses consumers < `threshold` (default 2),
@@ -1129,6 +1137,47 @@ export interface PackageDepsIssue {
   declaredIn?: 'dependencies' | 'devDependencies' | 'peerDependencies'
   /** Fichiers où un usage runtime asset a été détecté (pour declared-runtime-asset). */
   runtimeAssetReferences?: string[]
+}
+
+// ─── Bin Shebangs (publish hygiene) ────────────────────────────────────────
+
+/**
+ * Diagnostic d'une entrée `bin` de `package.json`.
+ *
+ * - `missing-shebang`     : fichier existe mais 1ère ligne ≠ shebang. Côté
+ *                           consumer (Linux/macOS), `npx <bin>` casse en
+ *                           "Permission denied" / interpreter introuvable.
+ * - `bin-target-missing`  : déclaré mais fichier absent du disque (oubli de
+ *                           build, mauvais path).
+ * - `wrong-shebang`       : shebang présent mais ne pointe pas vers node.
+ * - `bin-path-leading-dot`: chemin déclaré avec `./` initial. Cosmétique
+ *                           (npm le strip auto au publish via `secureAndUnixifyPath`)
+ *                           mais déclenche un `npm warn publish errors corrected`
+ *                           bruyant à chaque release. Fix : `dist/cli.js`
+ *                           plutôt que `./dist/cli.js`.
+ *
+ * Cas vécu codegraph-toolkit 0.3.0 : 5 bins déclarés `./dist/...` ont
+ * tous déclenché le warning npm. Bins fonctionnent quand même (path stripped
+ * et published proprement) mais le warning pollue le log de release.
+ */
+export type BinShebangIssueKind =
+  | 'missing-shebang'
+  | 'bin-target-missing'
+  | 'wrong-shebang'
+  | 'bin-path-leading-dot'
+
+export interface BinShebangIssue {
+  kind: BinShebangIssueKind
+  /** `package.json` de rattachement (relatif à rootDir). */
+  packageJson: string
+  /** Nom du bin (clé de l'objet `bin`, ou nom du package si `bin` est une string). */
+  binName: string
+  /** Chemin tel que déclaré dans `bin` (relatif au package.json). */
+  binPath: string
+  /** Chemin résolu relatif à rootDir (utile pour pointer le fichier à fixer). */
+  resolvedPath: string
+  /** Pour `wrong-shebang` : la 1ère ligne observée, telle quelle. */
+  observedShebang?: string
 }
 
 // ─── Taint Analysis (structural map, phase 3.8 #3) ─────────────────────────

@@ -31,6 +31,7 @@ import { OauthScopeLiteralsDetector } from './detectors/oauth-scope-literals-det
 import { EventEmitSitesDetector } from './detectors/event-emit-sites-detector.js'
 import { EnvUsageDetector } from './detectors/env-usage-detector.js'
 import { PackageDepsDetector } from './detectors/package-deps-detector.js'
+import { BinShebangsDetector } from './detectors/bin-shebangs-detector.js'
 import { BarrelsDetector } from './detectors/barrels-detector.js'
 import { UnusedExportsDetector } from './detectors/unused-exports-detector.js'
 import { ComplexityDetector } from './detectors/complexity-detector.js'
@@ -430,6 +431,7 @@ function buildDetectorRegistry(): DetectorRegistry {
     .register(new StateMachinesDetector())
     .register(new EnvUsageDetector())
     .register(new PackageDepsDetector())
+    .register(new BinShebangsDetector())
     .register(new BarrelsDetector())
     .register(new EventEmitSitesDetector())
     .register(new OauthScopeLiteralsDetector())
@@ -1055,6 +1057,7 @@ function patchSnapshotWithDetectorResults(
     ['state-machines', 'stateMachines'],
     ['env-usage', 'envUsage'],
     ['package-deps', 'packageDeps'],
+    ['bin-shebangs', 'binShebangIssues'],
     ['barrels', 'barrels'],
     ['taint', 'taintViolations'],
     ['event-emit-sites', 'eventEmitSites'],

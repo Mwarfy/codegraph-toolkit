@@ -194,6 +194,7 @@ function renderTensionsForBrief(tensions: SynopsisTension[]): string {
     'dep-unused': 'DEP-UNUSED',
     'barrel-low': 'BARREL-LOW',
     'back-edge': 'BACK-EDGE',
+    'bin-shebang': 'BIN-SHEBANG',
   }
   return tensions.slice(0, 15).map(t => {
     const label = labels[t.kind] ?? t.kind.toUpperCase()

@@ -156,12 +156,12 @@
 
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
-- `packages/codegraph/src/core/types.ts` (in: 77) · gov by ADR-006
+- `packages/codegraph/src/core/types.ts` (in: 79) · gov by ADR-006
 - `packages/codegraph/src/incremental/queries.ts` (in: 41) · gov by ADR-007
 - `packages/codegraph/src/incremental/database.ts` (in: 39) · gov by ADR-007
 - `packages/salsa/dist/index.d.ts` (in: 38)
 - `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 25) · gov by ADR-012
-- `packages/codegraph/src/core/detector-registry.ts` (in: 18) · gov by ADR-008
+- `packages/codegraph/src/core/detector-registry.ts` (in: 19) · gov by ADR-008
 - `packages/runtime-graph/src/core/types.ts` (in: 13) · gov by ADR-009
 - `packages/adr-toolkit/src/config.ts` (in: 10) · gov by ADR-002
 
@@ -178,9 +178,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 > pas verdict. Une tension non explorée n'est pas un bug — c'est un saut
 > latéral possible que le sol stable rend testable.
 
-- **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/datalog/src/cli.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
@@ -208,6 +208,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+da5f643 chore(invariants-postgres-ts): bump codegraph/datalog peer dep ^0.2.0 → ^0.3.0
 ca5ec9f chore(codegraph-mcp): bump 0.2.0 → 0.3.0 (align workspace)
 9c34a58 chore(release): hygiène 0.3.0 — INDEX auto-régen, LICENSE, CI, ADR drift gate
 edb3764 refactor(toolkit): zero drift signals — 23 → 0 (-100%)
@@ -219,7 +220,6 @@ e0715bf refactor(codegraph): split detectHttpEntries (cyclo 12→1, cog 27→0) 
 e20b3fb refactor(adr-toolkit): split collectMarkers (cyclo 13→1, cog 28→0) — regenerate-anchors.ts cleared
 bc2d6c5 refactor(codegraph): split extractTryCatchSwallows (cyclo 13→5, cog 29→7) — try-catch-swallow.ts cleared
 69a75bc refactor(codegraph): split extractTaintSinksFileBundle (cyclo 14→4, cog 31→4) — taint-sinks.ts cleared
-3660fdc refactor(codegraph): split collectImportSpecifiers (cyclo 15→4, cog 28→4) — package-deps.ts cleared
 ```
 
 ## Comment contribuer à ce brief
