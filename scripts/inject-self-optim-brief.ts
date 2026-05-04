@@ -115,10 +115,30 @@ async function loadRuntimeDiff(): Promise<string> {
   }
 }
 
+/**
+ * Compute mathematical optim suggestions depuis les facts runtime.
+ * Lyapunov/IB/variance heuristics — voir runtime-graph/src/optim/suggest.ts.
+ * Skip silencieusement si le module ou les facts ne sont pas dispo.
+ */
+async function loadOptimSuggestions(): Promise<string> {
+  try {
+    const mod = await import('../packages/runtime-graph/dist/optim/suggest.js')
+    const result = await mod.suggestOptimizations({
+      factsDir: path.join(REPO_ROOT, '.codegraph/facts-self-runtime'),
+      topN: 3,
+    })
+    if (result.candidates.length === 0) return ''
+    return mod.renderSuggestionsMarkdown(result)
+  } catch {
+    return ''
+  }
+}
+
 async function main(): Promise<void> {
   const candidates = await loadCandidates()
   const section = renderSection(candidates)
   const runtimeDiff = await loadRuntimeDiff()
+  const optimSuggestions = await loadOptimSuggestions()
 
   let brief = ''
   try {
@@ -131,12 +151,14 @@ async function main(): Promise<void> {
   const MARKER_START = '<!-- SELF-OPTIM-START -->'
   const MARKER_END = '<!-- SELF-OPTIM-END -->'
 
-  // Section combinée : self-optim candidates + runtime diff (si présent).
-  // Le diff vient juste après les candidates dans le même bloc marker pour
-  // que tout l'auto-injecté reste dans la même région.
-  const combined = runtimeDiff
-    ? `${section}\n\n${runtimeDiff.trim()}\n`
-    : section
+  // Section combinée : self-optim candidates + runtime diff + math optim
+  // suggestions. Tout auto-injecté reste dans la même région marker.
+  // Ordre : Salsa-optim candidates (cache focus) → runtime diff (perf shift) →
+  // math suggestions (Lyapunov/IB/variance ranking, vraie analyse).
+  const parts = [section]
+  if (runtimeDiff) parts.push(runtimeDiff.trim())
+  if (optimSuggestions) parts.push(optimSuggestions.trim())
+  const combined = parts.join('\n\n') + '\n'
   const wrapped = `${MARKER_START}\n${combined}${MARKER_END}`
 
   if (brief.includes(MARKER_START) && brief.includes(MARKER_END)) {
