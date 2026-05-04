@@ -33,6 +33,7 @@
 
 import type { Monoid } from './monoid.js'
 import { foldMonoid } from './monoid.js'
+import { getGlobalPool, type WorkerPool } from './worker-pool.js'
 
 export interface ParallelMapOptions<Item, Result> {
   /** Items à traiter en parallel — typiquement la liste des fichiers. */
@@ -43,6 +44,33 @@ export interface ParallelMapOptions<Item, Result> {
   monoid: Monoid<Result>
   /** Concurrence max simultanée. Default = N items (no limit). */
   concurrency?: number
+}
+
+/**
+ * Variante worker-pool du parallelMap. La closure workerFn est remplacée
+ * par un module path + export name (sérialisable cross-thread). Items et
+ * results doivent être structuredClone-able.
+ *
+ * Usage typique :
+ *   parallelMapWorkers({
+ *     items: filePaths,
+ *     workerModule: import.meta.resolve('./extractors/todos.worker.js'),
+ *     workerExport: 'extractTodosWorker',
+ *     monoid: appendSortedMonoid(...),
+ *   })
+ *
+ * Gain attendu : × N cores sur CPU-bound work. Crossover ROI ~5ms par task.
+ */
+export interface ParallelMapWorkersOptions<Item, Result> {
+  items: Item[]
+  /** Path absolu vers le module compilé qui exporte le worker fn. */
+  workerModule: string
+  /** Nom de l'export du module. La fn doit être (item) => Promise<Result>. */
+  workerExport: string
+  /** Monoïde pour fusionner. */
+  monoid: Monoid<Result>
+  /** Pool optionnel — sinon utilise le global pool. */
+  pool?: WorkerPool
 }
 
 export interface ParallelMapResult<Result> {
@@ -134,4 +162,63 @@ async function timed<Item, Result>(
   const r = await fn(item)
   workerMs.push(performance.now() - t)
   return r
+}
+
+/**
+ * Map + Reduce monoïdal sur worker_threads. Variante worker-pool de
+ * `parallelMap` — exploite N cores réels (vs main thread Promise.all).
+ *
+ * Théorème : si workerExport est pure et le monoïde commutatif,
+ * `parallelMapWorkers` ≡ `parallelMap` ≡ fold séquentiel. Confluence
+ * Church-Rosser préservée car le pool ne maintient aucun état partagé
+ * et chaque worker est isolé (par design Node worker_threads).
+ *
+ * Coût overhead :
+ *   - Pool init : ~30-100ms (one-shot, amortisable via getGlobalPool)
+ *   - postMessage par task : ~50-200μs (structuredClone des items)
+ *   - Crossover ROI : task ≥ 5ms pour rentabiliser. Pour < 5ms, utiliser
+ *     parallelMap classique (Promise.all main thread).
+ */
+export async function parallelMapWorkers<Item, Result>(
+  opts: ParallelMapWorkersOptions<Item, Result>,
+): Promise<ParallelMapResult<Result>> {
+  const t0 = performance.now()
+  const pool = opts.pool ?? getGlobalPool()
+  const workerMs: number[] = []
+
+  if (opts.items.length === 0) {
+    return {
+      result: opts.monoid.empty,
+      stats: {
+        itemCount: 0,
+        durationMs: performance.now() - t0,
+        maxWorkerMs: 0,
+        totalWorkerMs: 0,
+        speedup: 0,
+      },
+    }
+  }
+
+  const promises = opts.items.map(async (item) => {
+    const t = performance.now()
+    const r = await pool.dispatch<Result>(opts.workerModule, opts.workerExport, [item])
+    workerMs.push(performance.now() - t)
+    return r
+  })
+  const results = await Promise.all(promises)
+  const fused = foldMonoid(results, opts.monoid)
+  const durationMs = performance.now() - t0
+  const totalWorkerMs = workerMs.reduce((s, w) => s + w, 0)
+  const maxWorkerMs = workerMs.length > 0 ? Math.max(...workerMs) : 0
+
+  return {
+    result: fused,
+    stats: {
+      itemCount: opts.items.length,
+      durationMs,
+      maxWorkerMs,
+      totalWorkerMs,
+      speedup: durationMs > 0 ? totalWorkerMs / durationMs : 0,
+    },
+  }
 }

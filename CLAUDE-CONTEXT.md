@@ -134,6 +134,8 @@
 - `packages/codegraph/src/parallel/monoid.ts` → ADR-024
 - `packages/codegraph/src/parallel/per-file-extractor.ts` → ADR-024
 - `packages/codegraph/src/parallel/per-source-file-extractor.ts` → ADR-024
+- `packages/codegraph/src/parallel/worker-pool.ts` → ADR-024
+- `packages/codegraph/src/parallel/worker-runner.ts` → ADR-024
 - `packages/codegraph/src/synopsis/builder.ts` → ADR-001
 - `packages/codegraph/src/synopsis/tensions.ts` → ADR-001
 - `packages/datalog/src/canonical.ts` → ADR-010
@@ -214,6 +216,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+3399c54 feat(codegraph): Phase 2.4 — sanitizers + taint-sinks portés (8/65)
 f066d43 feat(codegraph): Phase 2.3 — 3 détecteurs portés (boolean-params, eval-calls, crypto-algo)
 84b2f76 docs(adr-024): anchor markers sur les 3 helpers BSP
 190b979 feat(codegraph): Phase 2.2 — hardcoded-secrets porté + ADR-024
@@ -225,7 +228,6 @@ e1b0a02 feat(runtime-graph): 5 nouvelles disciplines pluridisciplinaires
 410daa0 feat(runtime-graph): static↔runtime divergence — KL + Pareto + coverage drift
 fc9449a perf(co-change): --no-merges --no-renames sur git log
 c626690 perf(codegraph): parallelize delta reads in applyDeltasInOrder
-b4959d9 feat(runtime-graph): math optim suggester — universel pour toute app
 ```
 
 ## Comment contribuer à ce brief
