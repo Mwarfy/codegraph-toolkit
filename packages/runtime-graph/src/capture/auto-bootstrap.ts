@@ -24,6 +24,7 @@ import { writeFileSync, mkdirSync } from 'node:fs'
 import { register } from 'node:module'
 import { attachRuntimeCapture } from './otel-attach.js'
 import { aggregateSpans } from './span-aggregator.js'
+import { startCpuProfile, aggregateProfile, type CpuProfileHandle } from './cpu-profile.js'
 
 // CRITIQUE — register le ESM loader hook AVANT tout `attachRuntimeCapture`.
 //
@@ -73,6 +74,20 @@ const capture = attachRuntimeCapture({
   // override via env si tests pure-fonction.
   enableAutoInstruments: process.env.LIBY_RUNTIME_AUTO_INSTRUMENTS !== 'false',
 })
+
+// CPU profile opt-in : LIBY_RUNTIME_CPU_PROFILE=1 → V8 sampling profiler
+// démarre en parallèle d'OTel. Capture les hot paths + call edges du code
+// applicatif pendant le run (pas juste les I/O). Crucial pour les apps
+// pure-CPU où OTel ne voit rien (analyzers, transformers, batch jobs).
+//
+// Coût ~5-10% overhead pendant le run. Skip par défaut pour pas pénaliser
+// les apps qui veulent juste les spans I/O.
+let cpuProfileHandle: CpuProfileHandle | null = null
+if (process.env.LIBY_RUNTIME_CPU_PROFILE === '1') {
+  // Best-effort — si l'inspector module fail (env CI restrictif, etc.),
+  // on continue avec la capture OTel seule.
+  startCpuProfile().then((h) => { cpuProfileHandle = h }).catch(() => undefined)
+}
 
 // Sur exit, flush + write facts. Best-effort — si crash, capture peek
 // quand même via signal handlers en β2 (Phase α : exit-only suffisant).
@@ -126,6 +141,27 @@ const flushOnExit = (): void => {
   }
 }
 
+// Async flush du CPU profile via beforeExit (process.on('exit') est sync, ne
+// supporte pas await — l'inspector.stop() est async). beforeExit fire sur
+// natural exit (script termine main scope). Pas appelé sur process.exit()
+// explicit — pour ces cas, set LIBY_SKIP_CPU_PROFILE=1 ou déclencher manuellement.
+let cpuFlushed = false
+async function flushCpuProfile(): Promise<void> {
+  if (cpuFlushed || !cpuProfileHandle) return
+  cpuFlushed = true
+  try {
+    const profile = await cpuProfileHandle.stop()
+    const facts = aggregateProfile(profile, { projectRoot })
+    mkdirSync(factsOutDir, { recursive: true })
+    writeRelationSync(factsOutDir, 'SymbolTouchedRuntime',
+      facts.symbolsTouched.map((s) => [s.file, s.fn, String(s.count), String(s.p95LatencyMs)]))
+    writeRelationSync(factsOutDir, 'CallEdgeRuntime',
+      facts.callEdges.map((e) => [e.fromFile, e.fromFn, e.toFile, e.toFn, String(e.count)]))
+  } catch {
+    // CPU profile stop failed — keep OTel facts intact.
+  }
+}
+
 function writeRelationSync(dir: string, name: string, rows: string[][]): void {
   const lines = rows.map(cols => cols.join('\t').replace(/[\n\r]/g, ' '))
   lines.sort()
@@ -137,6 +173,10 @@ function writeRelationSync(dir: string, name: string, rows: string[][]): void {
 }
 
 process.on('exit', flushOnExit)
+// beforeExit pour les async work (CPU profile stop). Fire sur natural exit
+// uniquement (pas process.exit). Pour les apps qui exit explicitement,
+// override via LIBY_SKIP_CPU_PROFILE=1.
+process.on('beforeExit', () => { void flushCpuProfile() })
 // Pour les SIGINT/SIGTERM qui contournent process.on('exit'), forcer le flush.
 process.on('SIGINT', () => { flushOnExit(); process.exit(130) })
 process.on('SIGTERM', () => { flushOnExit(); process.exit(143) })

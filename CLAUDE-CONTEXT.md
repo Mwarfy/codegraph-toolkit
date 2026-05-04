@@ -184,9 +184,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/env-usage/config.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/b.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/audit-listener.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
@@ -208,6 +208,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+924a064 feat(toolkit): wire Claude Code hooks pour le toolkit lui-même
 706725f feat(toolkit): runtime-diff dans la chain post-commit
 2a7d3cf fix(codegraph): bayesian-cochange reads param, not snapshot — 0 → 175 rows
 4db23a0 feat(canary-project): expand to 51/83 (61%) fact coverage
@@ -219,7 +220,6 @@ da5f643 chore(invariants-postgres-ts): bump codegraph/datalog peer dep ^0.2.0 �
 ca5ec9f chore(codegraph-mcp): bump 0.2.0 → 0.3.0 (align workspace)
 9c34a58 chore(release): hygiène 0.3.0 — INDEX auto-régen, LICENSE, CI, ADR drift gate
 edb3764 refactor(toolkit): zero drift signals — 23 → 0 (-100%)
-8374745 refactor(datalog): split Lexer.readString (cyclo 10→4, cog 26→3) — parser.ts cleared
 ```
 
 ## Comment contribuer à ce brief

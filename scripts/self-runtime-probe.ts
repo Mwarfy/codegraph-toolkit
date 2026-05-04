@@ -26,6 +26,7 @@ import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { analyze } from '../packages/codegraph/src/core/analyzer.js'
+import { startCpuProfile, aggregateProfile } from '../packages/runtime-graph/src/capture/cpu-profile.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(__dirname, '..')
@@ -74,7 +75,16 @@ async function main(): Promise<void> {
   const cold = process.env.LIBY_PROBE_COLD === '1'
   console.log(`[self-runtime-probe] mode: ${cold ? 'COLD (no cache)' : 'WARM (Salsa cache)'}`)
 
+  // CPU profile sur le DERNIER run uniquement (pour éviter overhead × N).
+  // Le profile capture les hot fns + call edges réels du toolkit pendant
+  // un cycle analyze complet. Skip si LIBY_SKIP_CPU_PROFILE=1.
+  const captureCpu = process.env.LIBY_SKIP_CPU_PROFILE !== '1'
+  let cpuProfile: Awaited<ReturnType<typeof startCpuProfile>> | null = null
+
   for (let run = 0; run < N_RUNS; run++) {
+    if (captureCpu && run === N_RUNS - 1) {
+      cpuProfile = await startCpuProfile()
+    }
     const t0 = Date.now()
     const result = await analyze(
       {
@@ -101,6 +111,32 @@ async function main(): Promise<void> {
     console.log(
       `  run ${run + 1}/${N_RUNS}: ${dt}ms ` +
         `(${result.snapshot.nodes.length} nodes, ${result.snapshot.edges.length} edges)`,
+    )
+  }
+
+  // Stop CPU profile + agrège en facts SymbolTouchedRuntime + CallEdgeRuntime.
+  // Filtre vers packages/ uniquement (le code applicatif du toolkit, pas les
+  // libs ts-morph etc.). Ces facts permettent les rules join statique×runtime
+  // — DEAD_FN_RUNTIME, HOT_FN_UNTESTED, etc.
+  let cpuFacts: { symbolsTouched: Array<{ file: string; fn: string; count: number; p95LatencyMs: number }>; callEdges: Array<{ fromFile: string; fromFn: string; toFile: string; toFn: string; count: number }> } = { symbolsTouched: [], callEdges: [] }
+  if (cpuProfile) {
+    const profile = await cpuProfile.stop()
+    cpuFacts = aggregateProfile(profile, {
+      projectRoot: REPO_ROOT,
+      excludePatterns: [
+        /^node_modules\//,
+        /^dist\//,
+        /^build\//,
+        /^coverage\//,
+        /^\.codegraph\//,
+        /^\.git\//,
+        /^scripts\//,  // self-runtime-probe lui-même
+        /^examples\//,
+      ],
+    })
+    console.log(
+      `[self-runtime-probe] CPU profile : ${cpuFacts.symbolsTouched.length} symbols, ` +
+        `${cpuFacts.callEdges.length} call edges (last run only)`,
     )
   }
 
@@ -177,11 +213,34 @@ async function main(): Promise<void> {
     '.decl DetectorTiming(detector:symbol, runs:number, meanMs:number, p95Ms:number, stdDevX1000:number, lambdaX1000:number)',
     '.input DetectorTiming',
     '',
+    '// CPU profile facts (V8 sampling — agrégat du dernier run)',
+    '.decl SymbolTouchedRuntime(file:symbol, fn:symbol, count:number, p95LatencyMs:number)',
+    '.input SymbolTouchedRuntime',
+    '.decl CallEdgeRuntime(fromFile:symbol, fromFn:symbol, toFile:symbol, toFn:symbol, count:number)',
+    '.input CallEdgeRuntime',
+    '',
   ].join('\n')
   await fs.writeFile(path.join(FACTS_OUT, 'schema-self-runtime.dl'), schema)
 
+  // CPU facts : SymbolTouchedRuntime + CallEdgeRuntime depuis le profile V8.
+  // Format TSV : (file, fn, count, p95LatencyMs).
+  const symLines = cpuFacts.symbolsTouched
+    .map((s) => [s.file, s.fn, String(s.count), String(s.p95LatencyMs)].join('\t'))
+    .sort()
+  await fs.writeFile(
+    path.join(FACTS_OUT, 'SymbolTouchedRuntime.facts'),
+    symLines.length > 0 ? symLines.join('\n') + '\n' : '',
+  )
+  const edgeLines = cpuFacts.callEdges
+    .map((e) => [e.fromFile, e.fromFn, e.toFile, e.toFn, String(e.count)].join('\t'))
+    .sort()
+  await fs.writeFile(
+    path.join(FACTS_OUT, 'CallEdgeRuntime.facts'),
+    edgeLines.length > 0 ? edgeLines.join('\n') + '\n' : '',
+  )
+
   console.log(
-    `\n[self-runtime-probe] wrote ${lines.length} DetectorTiming facts to ${path.relative(REPO_ROOT, FACTS_OUT)}`,
+    `\n[self-runtime-probe] wrote ${lines.length} DetectorTiming + ${symLines.length} SymbolTouched + ${edgeLines.length} CallEdge facts to ${path.relative(REPO_ROOT, FACTS_OUT)}`,
   )
 }
 
