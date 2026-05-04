@@ -26,6 +26,7 @@
 
 import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
 import { findContainingSymbol, makeIsExemptForMarker } from './_shared/ast-helpers.js'
+import { runPerSourceFileExtractor } from '../parallel/per-source-file-extractor.js'
 
 export interface CryptoCall {
   file: string
@@ -105,20 +106,15 @@ export async function analyzeCryptoCalls(
   files: string[],
   project: Project,
 ): Promise<CryptoCall[]> {
-  const fileSet = new Set(files)
-  const all: CryptoCall[] = []
-
-  for (const sf of project.getSourceFiles()) {
-    const rel = relativize(sf.getFilePath(), rootDir)
-    if (!rel || !fileSet.has(rel)) continue
-    const bundle = extractCryptoCallsFileBundle(sf, rel)
-    all.push(...bundle.calls)
-  }
-
-  all.sort((a, b) =>
-    a.file !== b.file ? (a.file < b.file ? -1 : 1) : a.line - b.line,
-  )
-  return all
+  const r = await runPerSourceFileExtractor<CryptoCallsFileBundle, CryptoCall>({
+    project,
+    files,
+    rootDir,
+    extractor: extractCryptoCallsFileBundle,
+    selectItems: (b) => b.calls,
+    sortKey: (c) => `${c.file}:${String(c.line).padStart(8, '0')}`,
+  })
+  return r.items
 }
 
 function relativize(absPath: string, rootDir: string): string | null {

@@ -24,6 +24,7 @@
 
 import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
 import { makeIsExemptForMarker } from './_shared/ast-helpers.js'
+import { runPerSourceFileExtractor } from '../parallel/per-source-file-extractor.js'
 
 export interface BooleanParamSite {
   file: string
@@ -148,21 +149,15 @@ export async function analyzeBooleanParams(
   files: string[],
   project: Project,
 ): Promise<BooleanParamSite[]> {
-  const fileSet = new Set(files)
-  const all: BooleanParamSite[] = []
-
-  for (const sf of project.getSourceFiles()) {
-    const rel = relativize(sf.getFilePath(), rootDir)
-    if (!rel || !fileSet.has(rel)) continue
-    const bundle = extractBooleanParamsFileBundle(sf, rel)
-    all.push(...bundle.sites)
-  }
-
-  all.sort((a, b) => {
-    if (a.file !== b.file) return a.file < b.file ? -1 : 1
-    return a.line - b.line
+  const r = await runPerSourceFileExtractor<BooleanParamsFileBundle, BooleanParamSite>({
+    project,
+    files,
+    rootDir,
+    extractor: extractBooleanParamsFileBundle,
+    selectItems: (b) => b.sites,
+    sortKey: (s) => `${s.file}:${String(s.line).padStart(8, '0')}`,
   })
-  return all
+  return r.items
 }
 
 function relativize(absPath: string, rootDir: string): string | null {
