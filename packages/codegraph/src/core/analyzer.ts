@@ -278,23 +278,7 @@ export async function analyze(
   }
 
   // ─── 3. Load disk cache (Sprint 7) ──────────────────────────────────
-  // Si on a un .codegraph/salsa-cache.json valide, on restaure les
-  // cells + mtimes AVANT toute autre étape. Permet le warm cross-process
-  // via CLI : 2e `codegraph analyze --incremental` benéficie du cache
-  // disque même dans un nouveau process.
-  //
-  // Sprint 9 : skipPersistenceLoad permet au watcher de ne pas relire
-  // le disque entre analyzes (la DB reste en RAM).
-  if (incremental && !skipPersistenceLoad) {
-    try {
-      const loaded = await incLoadPersistedCache(config.rootDir, incSharedDb)
-      if (loaded) {
-        incLoadMtimeMap(loaded.mtimes)
-      }
-    } catch {
-      // Cache corrompu — on continue cold, save écrasera au final.
-    }
-  }
+  await loadDiskCacheIfIncremental(config, incremental, skipPersistenceLoad)
 
   // ─── 3b. Pre-build shared Project (incremental mode only, Sprint 6) ──
   let preBuiltSharedProject: ReturnType<typeof createSharedProject> | null = null
@@ -321,23 +305,7 @@ export async function analyze(
   // L'ordre d'enregistrement détermine l'ordre d'exécution : typed-calls
   // doit tourner avant data-flows (qui le lit via ctx.results).
 
-  const detectorRegistry = new DetectorRegistry()
-    .register(new UnusedExportsDetector())
-    .register(new ComplexityDetector())
-    .register(new SymbolRefsDetector())
-    .register(new TypedCallsDetector())
-    .register(new CyclesDetector())
-    .register(new TruthPointsDetector())
-    .register(new DataFlowsDetector())
-    .register(new StateMachinesDetector())
-    .register(new EnvUsageDetector())
-    .register(new PackageDepsDetector())
-    .register(new BarrelsDetector())
-    .register(new EventEmitSitesDetector())
-    .register(new OauthScopeLiteralsDetector())
-    .register(new TaintDetector())
-    .register(new SqlSchemaDetector())
-    .register(new DrizzleSchemaDetector())
+  const detectorRegistry = buildDetectorRegistry()
 
   const detectorCtx: DetectorRunContext = {
     config,
@@ -362,22 +330,7 @@ export async function analyze(
       config, files, readFile, sharedProject, snapshot, timing, incremental,
     })
   } else {
-    // ─── factsOnly always-run subset ─────────────────────────────────
-    // test-coverage est cheap (import-based mapping) ET load-bearing
-    // pour la rule composite-hub-untested (CI gate datalog). Sans lui,
-    // tout fichier hub testé apparaît comme untested → faux positifs
-    // bloquants au pre-commit. Cf. Sentinel pre-commit hook qui fait
-    // `codegraph facts --regen` (mode factsOnly) puis exécute
-    // datalog-invariants test : hub testé sans TestedFile → fail.
-    const tCovFO = performance.now()
-    try {
-      const testCoverageFO = await analyzeTestCoverage(config.rootDir, files, snapshot.edges)
-      snapshot.testCoverage = testCoverageFO
-      timing.detectors['test-coverage'] = performance.now() - tCovFO
-    } catch (err) {
-      timing.detectors['test-coverage'] = performance.now() - tCovFO
-      console.error(`  ✗ test-coverage (factsOnly) failed: ${err}`)
-    }
+    await runFactsOnlyTestCoverage(config, files, snapshot, timing)
   }
 
   // ─── 7. Post-snapshot metrics phase ────────────────────────────────
@@ -386,23 +339,103 @@ export async function analyze(
   await runPostSnapshotMetrics(config, snapshot, timing, { factsOnly, incremental })
 
   // ─── Persist disk cache (Sprint 7) ───────────────────────────────────
-  // À la fin d'un run incremental, sauve cells + mtimes pour qu'un
-  // process ultérieur (CLI) bénéficie du warm.
-  //
-  // Sprint 9 : skipPersistenceSave permet au watcher de ne pas écrire
-  // ~3 MB à chaque change. Le caller du watcher save périodiquement
-  // ou au stop.
-  if (incremental && !skipPersistenceSave) {
-    try {
-      await incSavePersistedCache(config.rootDir, incGetMtimeMap(), incSharedDb)
-    } catch {
-      // Échec de save = pas bloquant. Le run a réussi.
-    }
-  }
+  await persistDiskCacheIfIncremental(config, incremental, skipPersistenceSave)
 
   timing.total = performance.now() - t0
 
   return { snapshot, timing }
+}
+
+/**
+ * Si on a un .codegraph/salsa-cache.json valide, restaure les cells + mtimes
+ * AVANT toute autre étape. Permet le warm cross-process via CLI : 2e
+ * `codegraph analyze --incremental` benéficie du cache disque même dans
+ * un nouveau process.
+ *
+ * Sprint 9 : skipPersistenceLoad permet au watcher de ne pas relire le
+ * disque entre analyzes (la DB reste en RAM).
+ */
+async function loadDiskCacheIfIncremental(
+  config: CodeGraphConfig,
+  incremental: boolean,
+  skipPersistenceLoad: boolean,
+): Promise<void> {
+  if (!incremental || skipPersistenceLoad) return
+  try {
+    const loaded = await incLoadPersistedCache(config.rootDir, incSharedDb)
+    if (loaded) incLoadMtimeMap(loaded.mtimes)
+  } catch {
+    // Cache corrompu — on continue cold, save écrasera au final.
+  }
+}
+
+/**
+ * À la fin d'un run incremental, sauve cells + mtimes pour qu'un process
+ * ultérieur (CLI) bénéficie du warm.
+ *
+ * Sprint 9 : skipPersistenceSave permet au watcher de ne pas écrire ~3 MB
+ * à chaque change. Le caller du watcher save périodiquement ou au stop.
+ */
+async function persistDiskCacheIfIncremental(
+  config: CodeGraphConfig,
+  incremental: boolean,
+  skipPersistenceSave: boolean,
+): Promise<void> {
+  if (!incremental || skipPersistenceSave) return
+  try {
+    await incSavePersistedCache(config.rootDir, incGetMtimeMap(), incSharedDb)
+  } catch {
+    // Échec de save = pas bloquant. Le run a réussi.
+  }
+}
+
+/**
+ * Always-run subset en mode factsOnly : test-coverage est cheap (import-based
+ * mapping) ET load-bearing pour la rule composite-hub-untested (CI gate
+ * datalog). Sans lui, tout fichier hub testé apparaît comme untested → faux
+ * positifs bloquants au pre-commit. Cf. Sentinel pre-commit hook qui fait
+ * `codegraph facts --regen` (mode factsOnly) puis exécute datalog-invariants
+ * test : hub testé sans TestedFile → fail.
+ */
+async function runFactsOnlyTestCoverage(
+  config: CodeGraphConfig,
+  files: string[],
+  snapshot: GraphSnapshot,
+  timing: AnalyzeResult['timing'],
+): Promise<void> {
+  const tCovFO = performance.now()
+  try {
+    snapshot.testCoverage = await analyzeTestCoverage(config.rootDir, files, snapshot.edges)
+  } catch (err) {
+    console.error(`  ✗ test-coverage (factsOnly) failed: ${err}`)
+  } finally {
+    timing.detectors['test-coverage'] = performance.now() - tCovFO
+  }
+}
+
+/**
+ * Build le DetectorRegistry. L'ordre d'enregistrement détermine l'ordre
+ * d'exécution : typed-calls doit tourner avant data-flows (qui le lit
+ * via ctx.results).
+ */
+function buildDetectorRegistry(): DetectorRegistry {
+  return new DetectorRegistry()
+    .register(new UnusedExportsDetector())
+    .register(new ComplexityDetector())
+    .register(new SymbolRefsDetector())
+    .register(new TypedCallsDetector())
+    .register(new CyclesDetector())
+    .register(new TruthPointsDetector())
+    .register(new DataFlowsDetector())
+    .register(new StateMachinesDetector())
+    .register(new EnvUsageDetector())
+    .register(new PackageDepsDetector())
+    .register(new BarrelsDetector())
+    .register(new EventEmitSitesDetector())
+    .register(new OauthScopeLiteralsDetector())
+    .register(new TaintDetector())
+    .register(new SqlSchemaDetector())
+    .register(new DrizzleSchemaDetector())
 }
 
 /**
