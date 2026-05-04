@@ -130,9 +130,13 @@ export async function runCrossDisciplineDetectors(
   })
 
   // Bayesian co-change conditional P(B|A) — 9e discipline.
+  // Lit le param `coChangePairs` (pas `snapshot.coChangePairs`) — au moment
+  // où l'orchestrator tourne, le snapshot n'a pas encore été patché avec les
+  // résultats de Phase 1. Le param est l'output direct de phase1.coChangePairs.
+  // Bug fixé 2026-05-04 : avant lisait snapshot → toujours undefined → 0 rows.
   await runDetector(timing, 'bayesian-cochange', () => {
-    if (snapshot.coChangePairs) {
-      results.bayesianCoChanges = computeBayesianCoChanges(snapshot.coChangePairs)
+    if (coChangePairs) {
+      results.bayesianCoChanges = computeBayesianCoChanges(coChangePairs)
     }
   })
 

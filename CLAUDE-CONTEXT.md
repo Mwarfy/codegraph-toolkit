@@ -208,6 +208,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+4db23a0 feat(canary-project): expand to 51/83 (61%) fact coverage
 c41f911 feat(examples): canary-project ground-truth fixture for codegraph
 cbb861f fix(runtime-graph): ESM project capture + ground-truth fixture
 f4d87b3 chore(packages): strip leading './' from bin paths
@@ -219,7 +220,6 @@ edb3764 refactor(toolkit): zero drift signals — 23 → 0 (-100%)
 8374745 refactor(datalog): split Lexer.readString (cyclo 10→4, cog 26→3) — parser.ts cleared
 0796ef1 refactor(codegraph): split extractAllocationInLoops (cyclo 11→4, cog 27→6) — allocation-in-loop.ts cleared
 7c57543 refactor(datalog): split unify (cyclo 11→8, cog 34→17) — eval.ts unify cleared
-e0715bf refactor(codegraph): split detectHttpEntries (cyclo 12→1, cog 27→0) — data-flows.ts cleared
 ```
 
 ## Comment contribuer à ce brief
