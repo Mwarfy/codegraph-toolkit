@@ -77,50 +77,75 @@ function printAnalyzeStats(snapshot: import('../../core/types.js').GraphSnapshot
   console.log()
 }
 
+interface ExportConfidenceCounts {
+  safe: number
+  test: number
+  dynamic: number
+  local: number
+}
+
 function printExportsSummary(snapshot: import('../../core/types.js').GraphSnapshot): void {
   const filesWithExports = snapshot.nodes.filter((n) => n.exports && n.exports.length > 0)
   if (filesWithExports.length === 0) return
 
   const totalExports = filesWithExports.reduce((s, n) => s + n.exports!.length, 0)
-  const conf = { safe: 0, test: 0, dynamic: 0, local: 0 }
-  for (const n of filesWithExports) {
-    for (const e of n.exports!) {
-      if ((e as any).confidence === 'safe-to-remove') conf.safe++
-      else if ((e as any).confidence === 'test-only') conf.test++
-      else if ((e as any).confidence === 'possibly-dynamic') conf.dynamic++
-      else if ((e as any).confidence === 'local-only') conf.local++
-    }
-  }
+  const conf = countExportsByConfidence(filesWithExports)
   const totalUnused = conf.safe + conf.test + conf.dynamic + conf.local
 
   console.log(chalk.bold('  Exports:'))
   console.log(`    Analyzed:     ${totalExports} symbols across ${filesWithExports.length} files`)
-  if (totalUnused > 0) {
-    console.log(
-      `    ${chalk.red(String(conf.safe))} safe to remove · ` +
-      `${chalk.magenta(String(conf.local))} local-only · ` +
-      `${chalk.blue(String(conf.test))} test-only · ` +
-      `${chalk.yellow(String(conf.dynamic))} possibly dynamic`,
-    )
-    const ranked = filesWithExports
-      .map((n) => ({
-        file: n.id,
-        safe: n.exports!.filter((e: any) => e.confidence === 'safe-to-remove').length,
-        total: n.exports!.length,
-      }))
-      .filter((r) => r.safe > 0)
-      .sort((a, b) => b.safe - a.safe)
-      .slice(0, 5)
-    if (ranked.length > 0) {
-      console.log(chalk.dim('    Top dead-export files:'))
-      for (const r of ranked) {
-        console.log(chalk.dim(`      ${r.safe}/${r.total} safe  ${r.file}`))
-      }
-    }
-  } else {
+  if (totalUnused === 0) {
     console.log(`    Unused:       ${chalk.green('0')} — all exports are consumed!`)
+    console.log()
+    return
   }
+  printUnusedBreakdown(conf)
+  printTopDeadExportFiles(filesWithExports)
   console.log()
+}
+
+function countExportsByConfidence(
+  filesWithExports: import('../../core/types.js').GraphSnapshot['nodes'],
+): ExportConfidenceCounts {
+  const conf: ExportConfidenceCounts = { safe: 0, test: 0, dynamic: 0, local: 0 }
+  for (const n of filesWithExports) {
+    for (const e of n.exports!) {
+      const c = (e as any).confidence
+      if (c === 'safe-to-remove') conf.safe++
+      else if (c === 'test-only') conf.test++
+      else if (c === 'possibly-dynamic') conf.dynamic++
+      else if (c === 'local-only') conf.local++
+    }
+  }
+  return conf
+}
+
+function printUnusedBreakdown(conf: ExportConfidenceCounts): void {
+  console.log(
+    `    ${chalk.red(String(conf.safe))} safe to remove · ` +
+    `${chalk.magenta(String(conf.local))} local-only · ` +
+    `${chalk.blue(String(conf.test))} test-only · ` +
+    `${chalk.yellow(String(conf.dynamic))} possibly dynamic`,
+  )
+}
+
+function printTopDeadExportFiles(
+  filesWithExports: import('../../core/types.js').GraphSnapshot['nodes'],
+): void {
+  const ranked = filesWithExports
+    .map((n) => ({
+      file: n.id,
+      safe: n.exports!.filter((e: any) => e.confidence === 'safe-to-remove').length,
+      total: n.exports!.length,
+    }))
+    .filter((r) => r.safe > 0)
+    .sort((a, b) => b.safe - a.safe)
+    .slice(0, 5)
+  if (ranked.length === 0) return
+  console.log(chalk.dim('    Top dead-export files:'))
+  for (const r of ranked) {
+    console.log(chalk.dim(`      ${r.safe}/${r.total} safe  ${r.file}`))
+  }
 }
 
 function printTiming(timing: import('../../core/analyzer.js').AnalyzeResult['timing']): void {
