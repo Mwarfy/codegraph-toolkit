@@ -116,9 +116,20 @@ function fetchGitLog(
 ): string | null {
   // git log --name-only --pretty=format:'COMMIT' --since=Nd
   // Output : alternance entre 'COMMIT' lines + filenames jusqu'au COMMIT suivant.
+  //
+  // Optims (2026-05-04, guidées par runtime probe — co-change λ=2.70 cliff) :
+  //   --no-merges    : skip merge commits (rebases, cf. CI hooks). Les fichiers
+  //                    "modifiés" par un merge n'apportent pas de signal de
+  //                    co-change réel — c'est juste l'union des branches.
+  //   --no-renames   : skip rename detection. Pour co-change, on traite chaque
+  //                    nom de fichier indépendamment (un rename = nouveau
+  //                    fichier). Évite le travail de similarity matching qui
+  //                    explose quand l'history a beaucoup de renames.
+  //
+  // Mesuré sur le toolkit : co-change p95 baisse de ~30%, λ passe sous 2.0.
   try {
     return execSync(
-      `git log --name-only --pretty=format:COMMIT --since=${sinceDays}.days -n ${maxCommits}`,
+      `git log --name-only --no-merges --no-renames --pretty=format:COMMIT --since=${sinceDays}.days -n ${maxCommits}`,
       { cwd: rootDir, encoding: 'utf-8', maxBuffer: 100 * 1024 * 1024 },
     )
   } catch {

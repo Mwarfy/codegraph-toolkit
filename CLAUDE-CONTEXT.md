@@ -184,9 +184,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/runtime-graph/src/optim/suggest.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/env-usage/config.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/b.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
@@ -208,6 +208,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+c626690 perf(codegraph): parallelize delta reads in applyDeltasInOrder
 b4959d9 feat(runtime-graph): math optim suggester — universel pour toute app
 7d4d382 feat(runtime-graph): fn-wrap iitm — capture exacte des call edges cross-module
 e936121 feat(runtime-graph): CPU profile capture pour apps pure-CPU
@@ -219,7 +220,6 @@ c41f911 feat(examples): canary-project ground-truth fixture for codegraph
 cbb861f fix(runtime-graph): ESM project capture + ground-truth fixture
 f4d87b3 chore(packages): strip leading './' from bin paths
 acd31ff feat(codegraph): bin-shebangs detector — publish hygiene
-da5f643 chore(invariants-postgres-ts): bump codegraph/datalog peer dep ^0.2.0 → ^0.3.0
 ```
 
 ## Comment contribuer à ce brief
