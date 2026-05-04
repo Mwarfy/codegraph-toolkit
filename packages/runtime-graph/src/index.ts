@@ -53,6 +53,16 @@ export type { FnWrapOptions } from './capture/fn-wrap.js'
 // Math optim suggester — Lyapunov / IB / variance heuristics
 export { suggestOptimizations, renderSuggestionsMarkdown } from './optim/suggest.js'
 export type { OptimSuggestOptions, OptimCandidate, OptimSuggestion } from './optim/suggest.js'
+
+// Static↔runtime divergence — KL divergence (info theory) + Pareto + coverage drift
+export { analyzeDivergence, renderDivergenceMarkdown } from './optim/divergence.js'
+export type {
+  DivergenceOptions,
+  DivergenceResult,
+  FileDivergence,
+  ParetoResult,
+  CoverageDrift,
+} from './optim/divergence.js'
 export type {
   StaticCallEdge,
   InformationBottleneckRuntimeFact,

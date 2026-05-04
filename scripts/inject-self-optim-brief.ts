@@ -134,11 +134,62 @@ async function loadOptimSuggestions(): Promise<string> {
   }
 }
 
+/**
+ * Static↔runtime divergence : KL divergence per file + Pareto cumulative
+ * + coverage drift. Disciplines : info theory (Kullback-Leibler 1951),
+ * econometric (Pareto 1896), set theory.
+ *
+ * Lit le statique depuis .codegraph/facts/SymbolCallEdge.facts et le
+ * runtime depuis .codegraph/facts-self-runtime/. Skip si l'un manque.
+ */
+async function loadDivergenceAnalysis(): Promise<string> {
+  try {
+    const mod = await import('../packages/runtime-graph/dist/optim/divergence.js')
+
+    const staticFacts = await fs.readFile(
+      path.join(REPO_ROOT, '.codegraph/facts/SymbolCallEdge.facts'),
+      'utf-8',
+    ).catch(() => '')
+    const runtimeEdgesFacts = await fs.readFile(
+      path.join(REPO_ROOT, '.codegraph/facts-self-runtime/CallEdgeRuntime.facts'),
+      'utf-8',
+    ).catch(() => '')
+    const runtimeSymbolsFacts = await fs.readFile(
+      path.join(REPO_ROOT, '.codegraph/facts-self-runtime/SymbolTouchedRuntime.facts'),
+      'utf-8',
+    ).catch(() => '')
+
+    if (!staticFacts.trim() || !runtimeEdgesFacts.trim()) return ''
+
+    const staticEdges = staticFacts.trim().split('\n').map((l) => {
+      const c = l.split('\t')
+      return { fromFile: c[0], fromFn: c[1], toFile: c[2], toFn: c[3], count: 1 }
+    })
+    const runtimeEdges = runtimeEdgesFacts.trim().split('\n').map((l) => {
+      const c = l.split('\t')
+      return {
+        fromFile: c[0], fromFn: c[1], toFile: c[2], toFn: c[3],
+        count: parseInt(c[4], 10),
+      }
+    })
+    const runtimeSymbols = runtimeSymbolsFacts.trim().split('\n').filter(Boolean).map((l) => {
+      const c = l.split('\t')
+      return { file: c[0], fn: c[1], count: parseInt(c[2], 10) }
+    })
+
+    const result = mod.analyzeDivergence({ staticEdges, runtimeEdges, runtimeSymbols, topN: 5 })
+    return mod.renderDivergenceMarkdown(result)
+  } catch {
+    return ''
+  }
+}
+
 async function main(): Promise<void> {
   const candidates = await loadCandidates()
   const section = renderSection(candidates)
   const runtimeDiff = await loadRuntimeDiff()
   const optimSuggestions = await loadOptimSuggestions()
+  const divergenceAnalysis = await loadDivergenceAnalysis()
 
   let brief = ''
   try {
@@ -158,6 +209,7 @@ async function main(): Promise<void> {
   const parts = [section]
   if (runtimeDiff) parts.push(runtimeDiff.trim())
   if (optimSuggestions) parts.push(optimSuggestions.trim())
+  if (divergenceAnalysis) parts.push(divergenceAnalysis.trim())
   const combined = parts.join('\n\n') + '\n'
   const wrapped = `${MARKER_START}\n${combined}${MARKER_END}`
 

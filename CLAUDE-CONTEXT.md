@@ -178,9 +178,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 > pas verdict. Une tension non explorée n'est pas un bug — c'est un saut
 > latéral possible que le sol stable rend testable.
 
-- **ORPHELIN** `packages/datalog/src/cli.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/datalog/src/cli.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
@@ -208,6 +208,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+fc9449a perf(co-change): --no-merges --no-renames sur git log
 c626690 perf(codegraph): parallelize delta reads in applyDeltasInOrder
 b4959d9 feat(runtime-graph): math optim suggester — universel pour toute app
 7d4d382 feat(runtime-graph): fn-wrap iitm — capture exacte des call edges cross-module
@@ -219,7 +220,6 @@ e936121 feat(runtime-graph): CPU profile capture pour apps pure-CPU
 c41f911 feat(examples): canary-project ground-truth fixture for codegraph
 cbb861f fix(runtime-graph): ESM project capture + ground-truth fixture
 f4d87b3 chore(packages): strip leading './' from bin paths
-acd31ff feat(codegraph): bin-shebangs detector — publish hygiene
 ```
 
 ## Comment contribuer à ce brief
