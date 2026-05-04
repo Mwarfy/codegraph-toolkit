@@ -41,43 +41,49 @@ export function extractAllocationInLoops(
   isExempt: IsExempt,
 ): AllocationInLoopFact[] {
   const out: AllocationInLoopFact[] = []
-
   for (const candidate of ALLOC_CANDIDATES) {
     for (const node of sf.getDescendantsOfKind(candidate.kind)) {
-      const line = node.getStartLineNumber()
-      if (isExempt(line, 'alloc-ok')) continue
-
-      // Trouve le premier loop ancestor (en s'arrêtant à toute fn nested).
-      let cur: Node | undefined = node.getParent()
-      let loopAncestor: Node | undefined
-      while (cur) {
-        if (FN_KINDS.has(cur.getKind())) break
-        if (LOOP_KINDS.has(cur.getKind())) {
-          loopAncestor = cur
-          break
-        }
-        cur = cur.getParent()
-      }
-      if (!loopAncestor) continue
-
-      // FP : ObjectLiteral dans un TypeNode (parsing artifact pour types inline).
-      if (
-        candidate.alias === 'object-literal'
-        && node.getFirstAncestorByKind(SyntaxKind.TypeReference)
-      ) continue
-
-      // FP : l'allocation EST l'init/condition/incrementor du loop, pas
-      // par-iteration.
-      if (isDescendantOfLoopInit(node, loopAncestor)) continue
-
-      out.push({
-        file: relPath,
-        line,
-        allocKind: candidate.alias,
-        containingSymbol: findContainingSymbol(node),
-      })
+      const fact = analyzeAllocCandidate(node, relPath, candidate.alias, isExempt)
+      if (fact) out.push(fact)
     }
   }
-
   return out
+}
+
+function analyzeAllocCandidate(
+  node: Node,
+  relPath: string,
+  alias: string,
+  isExempt: IsExempt,
+): AllocationInLoopFact | null {
+  const line = node.getStartLineNumber()
+  if (isExempt(line, 'alloc-ok')) return null
+
+  const loopAncestor = findEnclosingLoop(node)
+  if (!loopAncestor) return null
+
+  // FP : ObjectLiteral dans un TypeNode (parsing artifact pour types inline).
+  if (alias === 'object-literal' && node.getFirstAncestorByKind(SyntaxKind.TypeReference)) {
+    return null
+  }
+  // FP : l'allocation EST l'init/condition/incrementor du loop, pas par-iteration.
+  if (isDescendantOfLoopInit(node, loopAncestor)) return null
+
+  return {
+    file: relPath,
+    line,
+    allocKind: alias,
+    containingSymbol: findContainingSymbol(node),
+  }
+}
+
+/** Trouve le premier loop ancestor en s'arrêtant à toute fn nested. */
+function findEnclosingLoop(node: Node): Node | undefined {
+  let cur: Node | undefined = node.getParent()
+  while (cur) {
+    if (FN_KINDS.has(cur.getKind())) return undefined
+    if (LOOP_KINDS.has(cur.getKind())) return cur
+    cur = cur.getParent()
+  }
+  return undefined
 }
