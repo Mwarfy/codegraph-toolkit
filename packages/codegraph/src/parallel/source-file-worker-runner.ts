@@ -127,6 +127,60 @@ export async function extractInWorker(input: WorkerInput): Promise<unknown> {
   return result
 }
 
+// ─── Phase γ.3b — Batch dispatch ────────────────────────────────────────────
+
+interface BatchDetectorSpec {
+  /** Clé unique pour le fanout main-thread. */
+  key: string
+  extractorModule: string
+  extractorExport: string
+  extractorOptions?: unknown
+}
+
+interface BatchInput {
+  absPath: string
+  content: string
+  relPath: string
+  detectors: BatchDetectorSpec[]
+}
+
+interface BatchOutput {
+  /** Map de detector key → résultat brut (Item[] typiquement). */
+  results: Record<string, unknown>
+}
+
+/**
+ * Phase γ.3b — Worker batch entrypoint. Parse le fichier UNE fois, exécute
+ * tous les détecteurs sur le même SourceFile, retourne map { key → Item[] }.
+ *
+ * Cuts dispatches × N (N = nb détecteurs) → 1 IPC + 1 parse au lieu de
+ * N × IPC + N × parse (au pire) ou N × IPC + 1 parse (avec affinity LRU).
+ *
+ * Le main thread fan-out via runBatchedSourceFileDetectors dans
+ * per-source-file-extractor.ts.
+ */
+export async function extractBatchInWorker(input: BatchInput): Promise<BatchOutput> {
+  const sf = getOrCreateSourceFile(input.absPath, input.content)
+
+  // Charge en parallèle tous les modules détecteurs (cache cross-tasks).
+  const mods = await Promise.all(
+    input.detectors.map((d) => loadExtractorModule(d.extractorModule)),
+  )
+
+  const results: Record<string, unknown> = {}
+  for (let i = 0; i < input.detectors.length; i++) {
+    const d = input.detectors[i]
+    const fn = mods[i][d.extractorExport]
+    if (typeof fn !== 'function') {
+      throw new Error(`Worker batch extractor "${d.extractorExport}" is not a function`)
+    }
+    results[d.key] = d.extractorOptions !== undefined
+      ? (fn as (...a: unknown[]) => unknown)(sf, input.relPath, d.extractorOptions)
+      : (fn as (...a: unknown[]) => unknown)(sf, input.relPath)
+  }
+  return { results }
+}
+
 /**
  * Hook test/observabilité — exposé pour vérifier le hit rate du cache LRU
  * dans les benchmarks. Pas appelé en prod.

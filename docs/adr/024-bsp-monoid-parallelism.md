@@ -59,6 +59,7 @@ output bit-identique entre runs, déterminisme garanti.
 - `packages/codegraph/src/parallel/cost-model.ts`
 - `packages/codegraph/src/parallel/monoid.ts`
 - `packages/codegraph/src/parallel/per-file-extractor.ts`
+- `packages/codegraph/src/parallel/per-source-file-batch-extractor.ts`
 - `packages/codegraph/src/parallel/per-source-file-extractor.ts`
 - `packages/codegraph/src/parallel/source-file-worker-runner.ts`
 - `packages/codegraph/src/parallel/worker-pool.ts`
@@ -105,6 +106,24 @@ Coût : ~10-30ms re-parse par fichier × N cores. Crossover ROI ~50 fichiers.
 Le mini-Project ne contient QUE le file traité — donc pas de cross-file
 type resolution. Détecteurs dépendant du symbol table cross-file (ts-imports,
 deprecated-usage) restent main-thread.
+
+**Phase γ.3a** (livrée) : affinity routing + LRU cache intra-worker.
+`WorkerPool.dispatch(modulePath, exportName, args, affinityKey?)` route
+deterministically (FNV-1a hash → worker idx) — même file toujours sur
+même worker. Cache LRU dans source-file-worker-runner par
+(absPath, sha1-content-prefix), 256 entries / worker. Cross-detector
+cache hit garanti sur même fichier. Bench toolkit : user-time 30s → 19s.
+
+**Phase γ.3b** (infrastructure ready, non-wired) : batch dispatch.
+Le worker entrypoint `extractBatchInWorker({absPath, content, relPath,
+detectors[]})` exécute N détecteurs en 1 message → 1 parse + N extracts
+au lieu de N × dispatches. Helper main-thread
+`runBatchedSourceFileDetectorsViaWorkers(opts)` dans
+`per-source-file-batch-extractor.ts`. Réduit IPC de N×files → files.
+Pour activer : refactorer `analyzer.ts` pour grouper les analyzeXxx()
+dans un seul batch — non fait dans cette session (analyzer.ts a 6
+phases, incremental cache, timing instrumentation, refactor invasif
+qui mérite un PR dédié).
 
 **Pourquoi pas full Salsa parallelism (mutable shared state)** :
 - Race conditions possibles → heisenbugs

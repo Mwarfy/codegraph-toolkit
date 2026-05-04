@@ -22,7 +22,7 @@
 | [010](010-datalog-pure-deterministic.md) | Le package `@liby-tools/datalog` est un interpréteur Datalog pure-TS, ZÉRO binary externe (pas de Soufflé, ... | `packages/codegraph/src/facts/index.ts`, `packages/datalog/src/canonical.ts` +4 |
 | [011](011-runtime-graph-capture-pipeline.md) | Le pipeline runtime capture est en 2 couches strictement séparées : (1) `otel-attach.ts` configure OTel SDK... | `packages/runtime-graph/src/capture/auto-bootstrap.ts`, `packages/runtime-graph/src/capture/otel-attach.ts` +7 |
 | [012](012-extractor-shared-helpers.md) | Les helpers ts-morph utilisés par 2+ extractors vivent dans `packages/codegraph/src/extractors/_shared/`. P... | `packages/codegraph/src/extractors/_shared/ast-helpers.ts`, `packages/codegraph/src/extractors/_shared/sql-helpers.ts` +1 |
-| [024](024-bsp-monoid-parallelism.md) | Tout détecteur per-file (cf. ADR-005) DOIT exposer un `extractFileBundle` pure et son orchestrateur passe p... | `packages/codegraph/src/detectors/ts-imports.ts`, `packages/codegraph/src/extractors/_template.monoid.ts` +10 |
+| [024](024-bsp-monoid-parallelism.md) | Tout détecteur per-file (cf. ADR-005) DOIT exposer un `extractFileBundle` pure et son orchestrateur passe p... | `packages/codegraph/src/detectors/ts-imports.ts`, `packages/codegraph/src/extractors/_template.monoid.ts` +11 |
 | [025](025-detectors-must-use-bsp-pattern.md) | Tout NOUVEAU détecteur ajouté à `extractors/` (readFile-based) DOIT partir du template `_template.monoid.ts... | _(pas de marker)_ |
 
 
