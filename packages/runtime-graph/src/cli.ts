@@ -188,6 +188,196 @@ program
     console.log(chalk.bold(`\n✓ Run complete. Facts in ${path.relative(projectRoot, outDir)}`))
   })
 
+// ─── probe : press-button capture pour n'importe quelle app TS ─────────────
+//
+// Auto-détecte CJS/ESM via package.json `type`, choisit --import ou --require,
+// configure les env vars, lance la commande user sous bootstrap. Produit
+// les facts runtime + (optionnel) datalog rules + divergence analysis.
+//
+// Usage typique :
+//   npx liby-runtime-graph probe -- npm test
+//   npx liby-runtime-graph probe --cpu-profile -- node app.mjs
+//   npx liby-runtime-graph probe --fn-wrap -- npx tsx scripts/foo.ts
+program
+  .command('probe')
+  .description('Auto-configure runtime capture + lance la commande user (press-button)')
+  .argument('<userCmd...>', 'commande à lancer sous bootstrap (utilise -- pour passer des flags)')
+  .option('--project-root <path>', 'project root', process.cwd())
+  .option('--out-dir <path>', 'facts output dir', '')
+  .option('--cpu-profile', 'enable V8 CPU profile capture')
+  .option('--fn-wrap', 'enable iitm function wrapping (exact call edges, dev-only)')
+  .option('--no-divergence', 'skip post-run divergence analysis')
+  .allowUnknownOption()  // pour passer flags arbitraires à la cmd user via `--`
+  .action(async (userCommand: string[], opts) => {
+    const projectRoot = path.resolve(opts.projectRoot)
+    if (userCommand.length === 0) {
+      console.error(chalk.red('  ✗ Provide a command after `--`. Example : probe -- npm test'))
+      process.exit(1)
+    }
+
+    const outDir = opts.outDir
+      ? path.resolve(opts.outDir)
+      : path.join(projectRoot, '.codegraph/facts-runtime-bootstrap')
+
+    // Auto-détecte CJS vs ESM via package.json
+    const pkgType = await detectPackageType(projectRoot)
+    const bootstrapPath = await resolveBootstrapAbsolutePath(projectRoot)
+    if (!bootstrapPath) {
+      console.error(chalk.red('  ✗ Cannot find @liby-tools/runtime-graph bootstrap. Install it.'))
+      process.exit(1)
+    }
+
+    const flag = pkgType === 'module' ? `--import file://${bootstrapPath}` : `--require ${bootstrapPath}`
+    console.log(chalk.cyan(`  ⓘ detected package type: ${pkgType} → using ${flag.split(' ')[0]}`))
+
+    const env: Record<string, string> = {
+      ...process.env as Record<string, string>,
+      NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} ${flag}`.trim(),
+      LIBY_RUNTIME_PROJECT_ROOT: projectRoot,
+      LIBY_RUNTIME_FACTS_OUT: outDir,
+    }
+    if (opts.cpuProfile) env.LIBY_RUNTIME_CPU_PROFILE = '1'
+    if (opts.fnWrap) env.LIBY_RUNTIME_FN_WRAP = '1'
+
+    console.log(chalk.cyan(`  ⓘ running: ${userCommand.join(' ')}`))
+    const t0 = Date.now()
+
+    const { spawn } = await import('node:child_process')
+    const exitCode = await new Promise<number>((resolve) => {
+      const child = spawn(userCommand[0], userCommand.slice(1), {
+        cwd: projectRoot,
+        env,
+        stdio: 'inherit',
+      })
+      child.on('exit', (code) => resolve(code ?? 0))
+    })
+
+    const elapsedMs = Date.now() - t0
+    console.log(chalk.gray(`  ⓘ command finished in ${(elapsedMs / 1000).toFixed(1)}s with exit ${exitCode}`))
+
+    // Compute totals across pid-* subdirs (auto-bootstrap writes per-PID).
+    const totals = await summarizeProbeOutput(outDir)
+    console.log(chalk.green(`  ✓ ${totals.totalSpans} spans captured across ${totals.subDirs} sub-process(es) → ${path.relative(projectRoot, outDir)}`))
+
+    if (opts.divergence !== false) {
+      try {
+        const divModule = await import('./optim/divergence.js')
+        const staticDir = path.join(projectRoot, '.codegraph/facts')
+        const result = await loadAndAnalyzeDivergence(staticDir, outDir, divModule.analyzeDivergence)
+        if (result) {
+          console.log()
+          console.log(divModule.renderDivergenceMarkdown(result as Parameters<typeof divModule.renderDivergenceMarkdown>[0]))
+        }
+      } catch (err) {
+        console.log(chalk.gray(`  ⓘ divergence analysis skipped: ${err instanceof Error ? err.message : err}`))
+      }
+    }
+
+    process.exit(exitCode)
+  })
+
+/**
+ * Résout le path absolu vers `auto-bootstrap.js` du package runtime-graph.
+ * Cherche dans plusieurs layers (project node_modules, workspace root,
+ * fallback path relatif depuis ce CLI). Retourne null si introuvable.
+ */
+async function resolveBootstrapAbsolutePath(projectRoot: string): Promise<string | null> {
+  const candidates = [
+    path.join(projectRoot, 'node_modules/@liby-tools/runtime-graph/dist/capture/auto-bootstrap.js'),
+    path.join(projectRoot, '../node_modules/@liby-tools/runtime-graph/dist/capture/auto-bootstrap.js'),
+    // Fallback : depuis ce module compilé, on connaît le chemin relatif
+    path.resolve(path.dirname(new URL(import.meta.url).pathname), './capture/auto-bootstrap.js'),
+  ]
+  for (const c of candidates) {
+    try {
+      await fs.access(c)
+      return c
+    } catch {
+      continue
+    }
+  }
+  return null
+}
+
+/**
+ * Walk les sub-dirs pid-* dans outDir, somme totalSpans depuis chaque
+ * RuntimeRunMeta.facts. Sert au reporting du probe — pas de merge fichiers,
+ * juste un compte rapide.
+ */
+async function summarizeProbeOutput(outDir: string): Promise<{ totalSpans: number; subDirs: number }> {
+  let totalSpans = 0
+  let subDirs = 0
+  try {
+    const entries = await fs.readdir(outDir, { withFileTypes: true })
+    for (const e of entries) {
+      if (!e.isDirectory() || !e.name.startsWith('pid-')) continue
+      subDirs++
+      const metaPath = path.join(outDir, e.name, 'RuntimeRunMeta.facts')
+      try {
+        const text = await fs.readFile(metaPath, 'utf-8')
+        const cols = text.trim().split('\n')[0]?.split('\t') ?? []
+        const spans = parseInt(cols[3] ?? '0', 10)
+        if (Number.isFinite(spans)) totalSpans += spans
+      } catch {
+        // missing meta — skip
+      }
+    }
+  } catch {
+    // outDir doesn't exist — return zeros
+  }
+  return { totalSpans, subDirs }
+}
+
+async function detectPackageType(projectRoot: string): Promise<'module' | 'commonjs'> {
+  try {
+    const pkgPath = path.join(projectRoot, 'package.json')
+    const raw = await fs.readFile(pkgPath, 'utf-8')
+    const pkg = JSON.parse(raw)
+    return pkg.type === 'module' ? 'module' : 'commonjs'
+  } catch {
+    return 'commonjs'  // safest default
+  }
+}
+
+async function loadAndAnalyzeDivergence(
+  staticDir: string,
+  runtimeDir: string,
+  analyzeDivergence: (opts: {
+    staticEdges: Array<{ fromFile: string; fromFn: string; toFile: string; toFn: string; count: number }>
+    runtimeEdges: Array<{ fromFile: string; fromFn: string; toFile: string; toFn: string; count: number }>
+    runtimeSymbols: Array<{ file: string; fn: string; count: number }>
+    topN?: number
+  }) => unknown,
+): Promise<unknown | null> {
+  const staticFile = path.join(staticDir, 'SymbolCallEdge.facts')
+  const runtimeEdgesFile = path.join(runtimeDir, 'CallEdgeRuntime.facts')
+  const runtimeSymbolsFile = path.join(runtimeDir, 'SymbolTouchedRuntime.facts')
+
+  const staticText = await fs.readFile(staticFile, 'utf-8').catch(() => '')
+  const runtimeEdgesText = await fs.readFile(runtimeEdgesFile, 'utf-8').catch(() => '')
+  const runtimeSymbolsText = await fs.readFile(runtimeSymbolsFile, 'utf-8').catch(() => '')
+
+  if (!staticText.trim() || !runtimeEdgesText.trim()) return null
+
+  const staticEdges = staticText.trim().split('\n').map((l) => {
+    const c = l.split('\t')
+    return { fromFile: c[0], fromFn: c[1], toFile: c[2], toFn: c[3], count: 1 }
+  })
+  const runtimeEdges = runtimeEdgesText.trim().split('\n').map((l) => {
+    const c = l.split('\t')
+    return {
+      fromFile: c[0], fromFn: c[1], toFile: c[2], toFn: c[3],
+      count: parseInt(c[4], 10),
+    }
+  })
+  const runtimeSymbols = runtimeSymbolsText.trim().split('\n').filter(Boolean).map((l) => {
+    const c = l.split('\t')
+    return { file: c[0], fn: c[1], count: parseInt(c[2], 10) }
+  })
+
+  return analyzeDivergence({ staticEdges, runtimeEdges, runtimeSymbols, topN: 5 })
+}
+
 program
   .command('check')
   .description('Run datalog rules on existing runtime facts (no capture)')

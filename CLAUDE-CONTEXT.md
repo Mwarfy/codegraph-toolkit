@@ -208,6 +208,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+e1b0a02 feat(runtime-graph): 5 nouvelles disciplines pluridisciplinaires
 410daa0 feat(runtime-graph): static↔runtime divergence — KL + Pareto + coverage drift
 fc9449a perf(co-change): --no-merges --no-renames sur git log
 c626690 perf(codegraph): parallelize delta reads in applyDeltasInOrder
@@ -219,7 +220,6 @@ e936121 feat(runtime-graph): CPU profile capture pour apps pure-CPU
 2a7d3cf fix(codegraph): bayesian-cochange reads param, not snapshot — 0 → 175 rows
 4db23a0 feat(canary-project): expand to 51/83 (61%) fact coverage
 c41f911 feat(examples): canary-project ground-truth fixture for codegraph
-cbb861f fix(runtime-graph): ESM project capture + ground-truth fixture
 ```
 
 ## Comment contribuer à ce brief

@@ -142,29 +142,48 @@ function computeTemporalDirection(
 ): { score: number; aBefore: number; bBefore: number } {
   let aBefore = 0
   let bBefore = 0
-  let lastSeen: { a?: number; b?: number } = {}
+  const lastSeen: { a?: number; b?: number } = {}
   for (let i = 0; i < commits.length; i++) {
-    const files = commits[i].files
-    const hasA = files.includes(a)
-    const hasB = files.includes(b)
-    if (hasA && !hasB) lastSeen.a = i
-    else if (hasB && !hasA) lastSeen.b = i
-    else if (hasA && hasB) {
-      // Both in same commit — count direction by previous solo appearance
-      if (lastSeen.a !== undefined && lastSeen.b === undefined) aBefore++
-      else if (lastSeen.b !== undefined && lastSeen.a === undefined) bBefore++
-      else if (lastSeen.a !== undefined && lastSeen.b !== undefined) {
-        if (lastSeen.a > lastSeen.b) bBefore++
-        else aBefore++
-      }
-    }
+    const direction = updateLastSeenAndDirection(commits[i].files, a, b, i, lastSeen)
+    if (direction === 'a') aBefore++
+    else if (direction === 'b') bBefore++
   }
   const total = aBefore + bBefore
-  return {
-    score: total > 0 ? aBefore / total : 0.5,
-    aBefore,
-    bBefore,
+  return { score: total > 0 ? aBefore / total : 0.5, aBefore, bBefore }
+}
+
+/**
+ * Examine 1 commit, met à jour `lastSeen` et retourne quel fichier a été
+ * "vu en premier" si les 2 sont co-présents. Sinon undefined.
+ */
+function updateLastSeenAndDirection(
+  files: string[],
+  a: string,
+  b: string,
+  commitIdx: number,
+  lastSeen: { a?: number; b?: number },
+): 'a' | 'b' | undefined {
+  const hasA = files.includes(a)
+  const hasB = files.includes(b)
+  if (hasA && !hasB) {
+    lastSeen.a = commitIdx
+    return undefined
   }
+  if (hasB && !hasA) {
+    lastSeen.b = commitIdx
+    return undefined
+  }
+  if (hasA && hasB) return resolveDirection(lastSeen)
+  return undefined
+}
+
+function resolveDirection(lastSeen: { a?: number; b?: number }): 'a' | 'b' | undefined {
+  if (lastSeen.a !== undefined && lastSeen.b === undefined) return 'a'
+  if (lastSeen.b !== undefined && lastSeen.a === undefined) return 'b'
+  if (lastSeen.a !== undefined && lastSeen.b !== undefined) {
+    return lastSeen.a > lastSeen.b ? 'b' : 'a'
+  }
+  return undefined
 }
 
 /**

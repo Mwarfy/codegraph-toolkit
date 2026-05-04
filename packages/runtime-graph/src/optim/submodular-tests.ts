@@ -61,64 +61,103 @@ export interface TestRecommendation {
  */
 export function selectTestsGreedy(opts: SubmodularOptions): TestRecommendation[] {
   const budget = opts.budget ?? 5
-  const weightMap = new Map<string, number>()
-  for (const w of opts.weights ?? []) weightMap.set(w.file, w.weight)
-  const w = (f: string): number => weightMap.get(f) ?? 1
+  const weightOf = buildWeightFn(opts.weights ?? [])
+  const coverageOf = buildCoverageMap(opts.coverageEdges)
+  const candidates = buildCandidateSet(coverageOf, opts.alreadyTested)
+  const covered = buildInitialCovered(coverageOf, opts.alreadyTested)
 
-  // Build coverage map : from file F → set of files reachable
-  const coverageOf = new Map<string, Set<string>>()
-  for (const e of opts.coverageEdges) {
-    let s = coverageOf.get(e.from)
+  const recs: TestRecommendation[] = []
+  for (let k = 0; k < budget; k++) {
+    const best = findBestCandidate(candidates, coverageOf, covered, weightOf)
+    if (!best) break
+    recs.push(best.recommendation)
+    candidates.delete(best.recommendation.file)
+    for (const f of best.recommendation.newlyCovered) covered.add(f)
+  }
+  return recs
+}
+
+function buildWeightFn(weights: FileWeight[]): (f: string) => number {
+  const map = new Map<string, number>()
+  for (const w of weights) map.set(w.file, w.weight)
+  return (f) => map.get(f) ?? 1
+}
+
+function buildCoverageMap(edges: CoverageEdge[]): Map<string, Set<string>> {
+  const out = new Map<string, Set<string>>()
+  for (const e of edges) {
+    let s = out.get(e.from)
     if (!s) {
       s = new Set<string>()
-      coverageOf.set(e.from, s)
+      out.set(e.from, s)
     }
     s.add(e.from)  // F couvre F lui-même
     s.add(e.to)
   }
+  return out
+}
 
-  // Set des candidats : fichiers qui peuvent être testés (= keys de coverageOf)
-  // moins ceux déjà testés
+function buildCandidateSet(
+  coverageOf: Map<string, Set<string>>,
+  alreadyTested: string[],
+): Set<string> {
   const candidates = new Set<string>(coverageOf.keys())
-  for (const t of opts.alreadyTested) candidates.delete(t)
+  for (const t of alreadyTested) candidates.delete(t)
+  return candidates
+}
 
-  // Ensemble couvert initial = union des coverage des already-tested
+function buildInitialCovered(
+  coverageOf: Map<string, Set<string>>,
+  alreadyTested: string[],
+): Set<string> {
   const covered = new Set<string>()
-  for (const t of opts.alreadyTested) {
+  for (const t of alreadyTested) {
     const c = coverageOf.get(t)
     if (c) for (const f of c) covered.add(f)
   }
+  return covered
+}
 
-  const recs: TestRecommendation[] = []
-  for (let k = 0; k < budget; k++) {
-    let bestFile: string | null = null
-    let bestGain = 0
-    let bestNew: string[] = []
-
-    for (const cand of candidates) {
-      const c = coverageOf.get(cand)
-      if (!c) continue
-      const newlyCovered: string[] = []
-      let gain = 0
-      for (const f of c) {
-        if (!covered.has(f)) {
-          newlyCovered.push(f)
-          gain += w(f)
-        }
-      }
-      if (gain > bestGain) {
-        bestGain = gain
-        bestFile = cand
-        bestNew = newlyCovered
-      }
+function findBestCandidate(
+  candidates: Set<string>,
+  coverageOf: Map<string, Set<string>>,
+  covered: Set<string>,
+  weightOf: (f: string) => number,
+): { recommendation: TestRecommendation } | null {
+  let bestFile: string | null = null
+  let bestGain = 0
+  let bestNew: string[] = []
+  for (const cand of candidates) {
+    const evaluated = evaluateCandidate(cand, coverageOf, covered, weightOf)
+    if (evaluated.gain > bestGain) {
+      bestGain = evaluated.gain
+      bestFile = cand
+      bestNew = evaluated.newlyCovered
     }
-
-    if (!bestFile || bestGain === 0) break
-    recs.push({ file: bestFile, marginalGain: bestGain, newlyCovered: bestNew.sort() })
-    candidates.delete(bestFile)
-    for (const f of bestNew) covered.add(f)
   }
-  return recs
+  if (!bestFile || bestGain === 0) return null
+  return {
+    recommendation: { file: bestFile, marginalGain: bestGain, newlyCovered: bestNew.sort() },
+  }
+}
+
+function evaluateCandidate(
+  cand: string,
+  coverageOf: Map<string, Set<string>>,
+  covered: Set<string>,
+  weightOf: (f: string) => number,
+): { gain: number; newlyCovered: string[] } {
+  const c = coverageOf.get(cand)
+  if (!c) return { gain: 0, newlyCovered: [] }
+  const newlyCovered: string[] = []
+  let gain = 0
+  for (const f of c) {
+    if (!covered.has(f)) {
+      newlyCovered.push(f)
+      gain += weightOf(f)
+    }
+  }
+  return { gain, newlyCovered }
 }
 
 export function renderSubmodularMarkdown(recs: TestRecommendation[]): string {
