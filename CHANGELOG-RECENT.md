@@ -5,12 +5,13 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-04T00:33:56Z
+Last update : 2026-05-04T00:36:24Z
 
 ## By type
 
 ### `refactor` (50)
 
+- **43a9785** refactor(codegraph): split collectAdrMarkers (cyclo 16→3, cog 35→0) — adr-markers.ts cleared — 2026-05-04
 - **97128ab** refactor(runtime-graph): split lyapunovTimeseries (cyclo 17→7, cog 24→7) — lyapunov-timeseries.ts cleared — 2026-05-04
 - **5ea3ad1** refactor(codegraph-mcp): split codegraphMemoryRecall (cyclo 17→5, cog 25→3) — memory.ts cleared — 2026-05-04
 - **fae254e** refactor(codegraph): split extractFunctionComplexityFileBundle (cyclo 17→4, cog 25→4) — function-complexity.ts cleared — 2026-05-04
@@ -30,11 +31,11 @@ Last update : 2026-05-04T00:33:56Z
 - **600fdb0** refactor(codegraph): split BullmqQueueDetector.detect (cyclo 20→2, cog 42→1) — bullmq-queues.ts cleared — 2026-05-04
 - **fb50d40** refactor(codegraph): split EventBusDetector.detect (cyclo 20→1, cog 48→0) — event-bus.ts cleared — 2026-05-04
 - **fcb7141** refactor(codegraph): split findReachablePaths (cyclo 21→3, cog 34→1) — reachability.ts cleared — 2026-05-04
-- **0047e61** refactor(codegraph): split validateStore (cyclo 22→4, cog 27→3) — store.ts cleared — 2026-05-04
 
 
 ## Full history
 
+- **43a9785** refactor(codegraph): split collectAdrMarkers (cyclo 16→3, cog 35→0) — adr-markers.ts cleared — 2026-05-04
 - **97128ab** refactor(runtime-graph): split lyapunovTimeseries (cyclo 17→7, cog 24→7) — lyapunov-timeseries.ts cleared — 2026-05-04
 - **5ea3ad1** refactor(codegraph-mcp): split codegraphMemoryRecall (cyclo 17→5, cog 25→3) — memory.ts cleared — 2026-05-04
 - **fae254e** refactor(codegraph): split extractFunctionComplexityFileBundle (cyclo 17→4, cog 25→4) — function-complexity.ts cleared — 2026-05-04
@@ -84,4 +85,3 @@ Last update : 2026-05-04T00:33:56Z
 - **1d0518d** refactor(codegraph): split extractTensions (cyclo 34→10, cog 52→7) — tensions.ts bomb-free — 2026-05-04
 - **8ae0127** refactor(codegraph): split computeCommunityDetection (cyclo 36→7, cog 43→6) — community-detection.ts bomb-free — 2026-05-04
 - **e02af8d** refactor(codegraph): split computeComponentMetrics (cyclo 36→4, cog 44→0) — component-metrics.ts bomb-free — 2026-05-04
-- **13162d1** refactor(codegraph): split extractTaintedVarsFileBundle (cyclo 37→6, cog 62→7) — tainted-vars.ts bomb-free — 2026-05-04

@@ -39,65 +39,69 @@ const DEFAULT_THRESHOLD = 100
 /**
  * Bundle per-file : extrait les fonctions au-delà du seuil.
  */
+interface LongFnScope {
+  name: string
+  body: Node
+  line: number
+  kind: LongFunction['kind']
+}
+
+function* iterateLongFnScopes(sf: SourceFile): Generator<LongFnScope> {
+  for (const fn of sf.getFunctions()) {
+    const body = fn.getBody()
+    if (!body) continue
+    yield {
+      name: fn.getName() ?? '(anonymous)',
+      body,
+      line: fn.getStartLineNumber(),
+      kind: 'function',
+    }
+  }
+  for (const cls of sf.getClasses()) {
+    const className = cls.getName() ?? '(anonymous)'
+    for (const method of cls.getMethods()) {
+      const body = method.getBody()
+      if (!body) continue
+      yield {
+        name: `${className}.${method.getName()}`,
+        body,
+        line: method.getStartLineNumber(),
+        kind: 'method',
+      }
+    }
+  }
+  for (const v of sf.getVariableDeclarations()) {
+    const init = v.getInitializer()
+    if (!init) continue
+    if (!Node.isArrowFunction(init) && !Node.isFunctionExpression(init)) continue
+    const body = init.getBody()
+    if (!body) continue
+    yield {
+      name: v.getName(),
+      body,
+      line: v.getStartLineNumber(),
+      kind: 'arrow',
+    }
+  }
+}
+
 export function extractLongFunctionsFileBundle(
   sf: SourceFile,
   relPath: string,
   threshold: number = DEFAULT_THRESHOLD,
 ): LongFunctionsFileBundle {
   const functions: LongFunction[] = []
-
-  // FunctionDeclarations
-  for (const fn of sf.getFunctions()) {
-    const body = fn.getBody()
-    if (!body) continue
-    const loc = countLoc(body.getText())
-    if (loc < threshold) continue
-    const name = fn.getName() ?? '(anonymous)'
-    functions.push({
-      file: relPath,
-      name,
-      line: fn.getStartLineNumber(),
-      loc,
-      kind: 'function',
-    })
-  }
-
-  // ClassMethods
-  for (const cls of sf.getClasses()) {
-    for (const method of cls.getMethods()) {
-      const body = method.getBody()
-      if (!body) continue
-      const loc = countLoc(body.getText())
-      if (loc < threshold) continue
-      const className = cls.getName() ?? '(anonymous)'
-      functions.push({
-        file: relPath,
-        name: `${className}.${method.getName()}`,
-        line: method.getStartLineNumber(),
-        loc,
-        kind: 'method',
-      })
-    }
-  }
-
-  // Arrow functions assignées à des const/let exportés
-  for (const v of sf.getVariableDeclarations()) {
-    const initializer = v.getInitializer()
-    if (!initializer) continue
-    if (!Node.isArrowFunction(initializer) && !Node.isFunctionExpression(initializer)) continue
-    const body = initializer.getBody()
-    if (!body) continue
-    const loc = countLoc(body.getText())
+  for (const fn of iterateLongFnScopes(sf)) {
+    const loc = countLoc(fn.body.getText())
     if (loc < threshold) continue
     functions.push({
       file: relPath,
-      name: v.getName(),
-      line: v.getStartLineNumber(),
+      name: fn.name,
+      line: fn.line,
       loc,
-      kind: 'arrow',
+      kind: fn.kind,
     })
   }
-
   return { functions }
 }
 

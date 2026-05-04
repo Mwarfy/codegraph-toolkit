@@ -208,6 +208,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+43a9785 refactor(codegraph): split collectAdrMarkers (cyclo 16→3, cog 35→0) — adr-markers.ts cleared
 97128ab refactor(runtime-graph): split lyapunovTimeseries (cyclo 17→7, cog 24→7) — lyapunov-timeseries.ts cleared
 5ea3ad1 refactor(codegraph-mcp): split codegraphMemoryRecall (cyclo 17→5, cog 25→3) — memory.ts cleared
 fae254e refactor(codegraph): split extractFunctionComplexityFileBundle (cyclo 17→4, cog 25→4) — function-complexity.ts cleared
@@ -219,7 +220,6 @@ fae254e refactor(codegraph): split extractFunctionComplexityFileBundle (cyclo 17
 194452b refactor(adr-toolkit): split detectFsmCandidates (cyclo 18→3, cog 29→1) — bootstrap-fsm.ts detectFsmCandidates cleared
 0e97abd refactor(runtime-graph): split newmanGirvanRuntime (cyclo 20→2, cog 17→1) — runtime-disciplines.ts cleared
 de0af83 refactor(codegraph): split extractBooleanParamsFileBundle (cyclo 19→4, cog 19→4) — boolean-params.ts cleared
-1898604 refactor(codegraph-mcp): split codegraphDrift (cyclo 19→5, cog 28→1) — drift.ts cleared
 ```
 
 ## Comment contribuer à ce brief
