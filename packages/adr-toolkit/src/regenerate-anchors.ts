@@ -35,42 +35,70 @@ async function collectMarkers(config: AdrToolkitConfig): Promise<Marker[]> {
   const markers: Marker[] = []
   const skipDirs = new Set(config.skipDirs)
   const exts = new Set(config.anchorMarkerExtensions)
-  const extRe = new RegExp(`\\.(${[...exts].map(e => e.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`)
+  const extRe = new RegExp(`\\.(${[...exts].map((e) => e.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`)
 
-  async function walk(dir: string): Promise<void> {
-    let entries
-    try { entries = await readdir(dir, { withFileTypes: true }) } catch { return }
-    for (const e of entries) {
-      if (e.name.startsWith('.') && e.name !== '.github') continue
-      if (skipDirs.has(e.name)) continue
-      const full = path.join(dir, e.name)
-      if (e.isDirectory()) {
-        // await-ok: walk récursif — séquentiel délibéré (ordre stable + simple)
-        await walk(full)
-      } else if (e.isFile() && extRe.test(e.name)) {
-        // await-ok: scan one-shot regenerate-anchors, perf non-critique
-        const content = await readFile(full, 'utf-8')
-        const lines = content.split('\n')
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i]
-          const m = line.match(ANCHOR_LINE)
-          if (!m) continue
-          const adrTokens = [...m[1].matchAll(ADR_NUM)].map(t => t[1])
-          const role = m[2]?.trim().replace(/[\s*\/+]+$/, '') || undefined
-          for (const adr of adrTokens) {
-            markers.push({
-              adr,
-              role,
-              file: path.relative(config.rootDir, full),
-              line: i + 1,
-            })
-          }
-        }
-      }
+  await walkDirForMarkers(config.rootDir, config.rootDir, skipDirs, extRe, markers)
+  return markers
+}
+
+async function walkDirForMarkers(
+  dir: string,
+  rootDir: string,
+  skipDirs: Set<string>,
+  extRe: RegExp,
+  markers: Marker[],
+): Promise<void> {
+  let entries: import('node:fs').Dirent[]
+  try {
+    entries = await readdir(dir, { withFileTypes: true })
+  } catch {
+    return
+  }
+  for (const e of entries) {
+    if (e.name.startsWith('.') && e.name !== '.github') continue
+    if (skipDirs.has(e.name)) continue
+    const full = path.join(dir, e.name)
+    if (e.isDirectory()) {
+      // await-ok: walk récursif — séquentiel délibéré (ordre stable + simple)
+      await walkDirForMarkers(full, rootDir, skipDirs, extRe, markers)
+    } else if (e.isFile() && extRe.test(e.name)) {
+      // await-ok: scan one-shot regenerate-anchors, perf non-critique
+      await scanFileForMarkers(full, rootDir, markers)
     }
   }
-  await walk(config.rootDir)
-  return markers
+}
+
+async function scanFileForMarkers(
+  full: string,
+  rootDir: string,
+  markers: Marker[],
+): Promise<void> {
+  const content = await readFile(full, 'utf-8')
+  const lines = content.split('\n')
+  for (let i = 0; i < lines.length; i++) {
+    extractMarkersFromLine(lines[i], i + 1, full, rootDir, markers)
+  }
+}
+
+function extractMarkersFromLine(
+  line: string,
+  lineNumber: number,
+  full: string,
+  rootDir: string,
+  markers: Marker[],
+): void {
+  const m = line.match(ANCHOR_LINE)
+  if (!m) return
+  const adrTokens = [...m[1].matchAll(ADR_NUM)].map((t) => t[1])
+  const role = m[2]?.trim().replace(/[\s*\/+]+$/, '') || undefined
+  for (const adr of adrTokens) {
+    markers.push({
+      adr,
+      role,
+      file: path.relative(rootDir, full),
+      line: lineNumber,
+    })
+  }
 }
 
 async function loadADRs(config: AdrToolkitConfig): Promise<ADR[]> {
