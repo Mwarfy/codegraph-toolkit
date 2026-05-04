@@ -69,49 +69,58 @@ export const allCompressionSimilarity = derived<string, NormalizedCompressionDis
  * Si tu modifies l'algo upstream, mirror ici (un test d'équivalence
  * garantirait la parité — TODO).
  */
+const FN_LIKE_KINDS = new Set([
+  'FunctionDeclaration',
+  'MethodDeclaration',
+  'ArrowFunction',
+  'FunctionExpression',
+])
+
 function extractFunctionSnippetsLocal(
   sf: SourceFile,
   relPath: string,
 ): FunctionTextSnippet[] {
   const out: FunctionTextSnippet[] = []
   sf.forEachDescendant((node) => {
-    const kind = node.getKindName()
-    if (
-      kind !== 'FunctionDeclaration' &&
-      kind !== 'MethodDeclaration' &&
-      kind !== 'ArrowFunction' &&
-      kind !== 'FunctionExpression'
-    ) {
-      return
-    }
-    const body = (node as unknown as { getBody?: () => { getText: () => string } | undefined }).getBody?.()
-    if (!body) return
-    const bodyText = body.getText()
-    if (bodyText.length < 80) return
-
-    let name = ''
-    const nameNode = (node as unknown as { getName?: () => string | undefined }).getName?.()
-    if (nameNode) name = nameNode
-    if (!name) {
-      const parent = node.getParent()
-      const parentKind = parent?.getKindName() ?? ''
-      if (parentKind === 'VariableDeclaration') {
-        const vname = (parent as unknown as { getName?: () => string | undefined }).getName?.()
-        if (vname) name = vname
-      } else if (parentKind === 'PropertyAssignment') {
-        const pname = (parent as unknown as { getName?: () => string | undefined }).getName?.()
-        if (pname) name = pname
-      }
-    }
-    if (!name) return
-
-    const text = normalizeFunctionText(bodyText)
-    if (text.length < 80) return
-    out.push({
-      symbol: `${relPath}:${name}`,
-      text,
-      size: text.length,
-    })
+    if (!FN_LIKE_KINDS.has(node.getKindName())) return
+    const snippet = buildSnippetForFnNode(node, relPath)
+    if (snippet) out.push(snippet)
   })
   return out
+}
+
+interface FnNodeAccessors {
+  getBody?: () => { getText: () => string } | undefined
+  getName?: () => string | undefined
+}
+
+function buildSnippetForFnNode(
+  node: import('ts-morph').Node,
+  relPath: string,
+): FunctionTextSnippet | null {
+  const bodyText = readBodyText(node)
+  if (!bodyText || bodyText.length < 80) return null
+
+  const name = resolveFnName(node)
+  if (!name) return null
+
+  const text = normalizeFunctionText(bodyText)
+  if (text.length < 80) return null
+  return { symbol: `${relPath}:${name}`, text, size: text.length }
+}
+
+function readBodyText(node: import('ts-morph').Node): string | null {
+  const body = (node as unknown as FnNodeAccessors).getBody?.()
+  return body ? body.getText() : null
+}
+
+/** Direct getName() OR remonte au parent (VariableDeclaration/PropertyAssignment). */
+function resolveFnName(node: import('ts-morph').Node): string {
+  const direct = (node as unknown as FnNodeAccessors).getName?.()
+  if (direct) return direct
+  const parent = node.getParent()
+  if (!parent) return ''
+  const parentKind = parent.getKindName()
+  if (parentKind !== 'VariableDeclaration' && parentKind !== 'PropertyAssignment') return ''
+  return (parent as unknown as FnNodeAccessors).getName?.() ?? ''
 }
