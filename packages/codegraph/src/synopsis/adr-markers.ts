@@ -47,39 +47,73 @@ export async function collectAdrMarkers(
   const skipDirs = options.skipDirs ?? DEFAULT_SKIP
   const extensions = options.extensions ?? DEFAULT_EXT
   const out = new Map<string, string[]>()
-
-  async function walk(dir: string): Promise<void> {
-    let entries
-    try { entries = await readdir(dir, { withFileTypes: true }) } catch { return }
-    // Sub-dirs récursés en parallèle, files lus en parallèle (push partagé OK).
-    const subdirs: string[] = []
-    const fileTasks: Array<Promise<void>> = []
-    for (const e of entries) {
-      if (e.name.startsWith('.') && e.name !== '.github') continue
-      if (skipDirs.has(e.name)) continue
-      const full = path.join(dir, e.name)
-      if (e.isDirectory()) {
-        subdirs.push(full)
-      } else if (e.isFile()) {
-        const ext = e.name.split('.').pop() || ''
-        if (!extensions.has(ext)) continue
-        fileTasks.push((async () => {
-          const content = await readFile(full, 'utf-8')
-          const adrs = new Set<string>()
-          for (const line of content.split('\n')) {
-            const m = line.match(ANCHOR_LINE)
-            if (!m) continue
-            for (const tok of m[1].matchAll(ADR_NUM)) adrs.add(tok[1])
-          }
-          if (adrs.size > 0) {
-            const rel = path.relative(repoRoot, full)
-            out.set(rel, [...adrs].sort())
-          }
-        })())
-      }
-    }
-    await Promise.all([...fileTasks, ...subdirs.map((sd) => walk(sd))])
-  }
-  await walk(repoRoot)
+  await walkDirForAdrMarkers(repoRoot, repoRoot, skipDirs, extensions, out)
   return out
+}
+
+/**
+ * Walk d'un dir : récursé sub-dirs + lit files en parallèle (push partagé
+ * vers `out` thread-safe car JS single-thread).
+ */
+async function walkDirForAdrMarkers(
+  dir: string,
+  repoRoot: string,
+  skipDirs: Set<string>,
+  extensions: Set<string>,
+  out: Map<string, string[]>,
+): Promise<void> {
+  let entries: import('node:fs').Dirent[]
+  try {
+    entries = await readdir(dir, { withFileTypes: true })
+  } catch {
+    return
+  }
+
+  const subdirs: string[] = []
+  const fileTasks: Array<Promise<void>> = []
+  for (const e of entries) {
+    if (shouldSkipEntry(e.name, skipDirs)) continue
+    const full = path.join(dir, e.name)
+    if (e.isDirectory()) {
+      subdirs.push(full)
+    } else if (e.isFile() && hasExtension(e.name, extensions)) {
+      fileTasks.push(scanFileForAdrMarkers(full, repoRoot, out))
+    }
+  }
+  await Promise.all([
+    ...fileTasks,
+    ...subdirs.map((sd) => walkDirForAdrMarkers(sd, repoRoot, skipDirs, extensions, out)),
+  ])
+}
+
+function shouldSkipEntry(name: string, skipDirs: Set<string>): boolean {
+  if (name.startsWith('.') && name !== '.github') return true
+  return skipDirs.has(name)
+}
+
+function hasExtension(name: string, extensions: Set<string>): boolean {
+  const ext = name.split('.').pop() || ''
+  return extensions.has(ext)
+}
+
+async function scanFileForAdrMarkers(
+  full: string,
+  repoRoot: string,
+  out: Map<string, string[]>,
+): Promise<void> {
+  const content = await readFile(full, 'utf-8')
+  const adrs = extractAdrNumbersFromContent(content)
+  if (adrs.size > 0) {
+    out.set(path.relative(repoRoot, full), [...adrs].sort())
+  }
+}
+
+function extractAdrNumbersFromContent(content: string): Set<string> {
+  const adrs = new Set<string>()
+  for (const line of content.split('\n')) {
+    const m = line.match(ANCHOR_LINE)
+    if (!m) continue
+    for (const tok of m[1].matchAll(ADR_NUM)) adrs.add(tok[1])
+  }
+  return adrs
 }
