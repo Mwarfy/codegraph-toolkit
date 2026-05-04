@@ -25,6 +25,7 @@ import { register } from 'node:module'
 import { attachRuntimeCapture } from './otel-attach.js'
 import { aggregateSpans } from './span-aggregator.js'
 import { startCpuProfile, aggregateProfile, type CpuProfileHandle } from './cpu-profile.js'
+import { attachFnWrap } from './fn-wrap.js'
 
 // CRITIQUE — register le ESM loader hook AVANT tout `attachRuntimeCapture`.
 //
@@ -87,6 +88,15 @@ if (process.env.LIBY_RUNTIME_CPU_PROFILE === '1') {
   // Best-effort — si l'inspector module fail (env CI restrictif, etc.),
   // on continue avec la capture OTel seule.
   startCpuProfile().then((h) => { cpuProfileHandle = h }).catch(() => undefined)
+}
+
+// Function-wrap opt-in : LIBY_RUNTIME_FN_WRAP=1 → iitm hook wrap chaque
+// export function avec un span OTel. Capture EXACTE des call edges (vs
+// CPU profile qui sample). Coût ~30-50% overhead, dev-only. Le pipeline
+// span-aggregator existant projette les spans en SymbolTouchedRuntime +
+// CallEdgeRuntime — mêmes facts que CPU profile mais 100% précis.
+if (process.env.LIBY_RUNTIME_FN_WRAP === '1') {
+  attachFnWrap({ projectRoot })
 }
 
 // Sur exit, flush + write facts. Best-effort — si crash, capture peek
