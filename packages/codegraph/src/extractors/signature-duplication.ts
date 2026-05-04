@@ -70,53 +70,70 @@ function hammingDistance(a: number, b: number): number {
   return count
 }
 
+interface DupOptions {
+  hammingThreshold: number
+  sameKindOnly: boolean
+  /** Si true, ne retient que les paires avec exportName identique
+   *  (= copy-paste avec renaming inter-file). Rejette les coincidences
+   *  structurelles entre fonctions sémantiquement différentes. */
+  sameNameOnly: boolean
+}
+
+interface EncodedSig { sig: TypedSignature; bits: number }
+
 export function detectSignatureDuplicates(
   signatures: TypedSignature[],
-  options: {
-    hammingThreshold?: number
-    sameKindOnly?: boolean
-    /** Si true, ne retient que les paires avec exportName identique
-     *  (= copy-paste avec renaming inter-file). Rejette les coincidences
-     *  structurelles entre fonctions sémantiquement différentes. */
-    sameNameOnly?: boolean
-  } = {},
+  options: Partial<DupOptions> = {},
 ): SignatureDuplicate[] {
-  const hammingT = options.hammingThreshold ?? 1
-  const sameKindOnly = options.sameKindOnly ?? true
-  const sameNameOnly = options.sameNameOnly ?? false
-  const encoded: Array<{ sig: TypedSignature; bits: number }> = []
-  for (const s of signatures) {
-    encoded.push({ sig: s, bits: encodeSignature(s) })
+  const opts: DupOptions = {
+    hammingThreshold: options.hammingThreshold ?? 1,
+    sameKindOnly: options.sameKindOnly ?? true,
+    sameNameOnly: options.sameNameOnly ?? false,
   }
-  // Bucket by exact match first, then refine by Hamming
+  const encoded: EncodedSig[] = signatures.map((sig) => ({ sig, bits: encodeSignature(sig) }))
+
   const out: SignatureDuplicate[] = []
   const seen = new Set<string>()
   for (let i = 0; i < encoded.length; i++) {
     for (let j = i + 1; j < encoded.length; j++) {
-      const a = encoded[i]
-      const b = encoded[j]
-      if (sameKindOnly && a.sig.kind !== b.sig.kind) continue
-      if (sameNameOnly && a.sig.exportName !== b.sig.exportName) continue
-      const d = hammingDistance(a.bits, b.bits)
-      if (d > hammingT) continue
-      // Skip si même file (souvent legitimes : overloads)
-      if (a.sig.file === b.sig.file) continue
-      // Skip si paramCount different (le bit-encoding est lossy au-dela de 15)
-      if ((a.sig.params?.length ?? 0) !== (b.sig.params?.length ?? 0)) continue
-      const idA = `${a.sig.file}:${a.sig.exportName}`
-      const idB = `${b.sig.file}:${b.sig.exportName}`
-      const key = idA < idB ? `${idA}|${idB}` : `${idB}|${idA}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      out.push({
-        symbolA: idA,
-        symbolB: idB,
-        hamming: d,
-        signatureA: a.bits.toString(16),
-        signatureB: b.bits.toString(16),
-      })
+      const dup = matchPair(encoded[i], encoded[j], opts, seen)
+      if (dup) out.push(dup)
     }
   }
   out.sort((a, b) => a.hamming - b.hamming)
   return out
+}
+
+/**
+ * Compute le SignatureDuplicate pour 1 paire (a, b) si toutes les conditions
+ * sont rempies. Retourne null sinon. Mute `seen` pour dédupliquer les paires
+ * symétriques.
+ */
+function matchPair(
+  a: EncodedSig,
+  b: EncodedSig,
+  opts: DupOptions,
+  seen: Set<string>,
+): SignatureDuplicate | null {
+  if (opts.sameKindOnly && a.sig.kind !== b.sig.kind) return null
+  if (opts.sameNameOnly && a.sig.exportName !== b.sig.exportName) return null
+  const d = hammingDistance(a.bits, b.bits)
+  if (d > opts.hammingThreshold) return null
+  // Skip si même file (souvent legitimes : overloads).
+  if (a.sig.file === b.sig.file) return null
+  // Skip si paramCount different (le bit-encoding est lossy au-dela de 15).
+  if ((a.sig.params?.length ?? 0) !== (b.sig.params?.length ?? 0)) return null
+
+  const idA = `${a.sig.file}:${a.sig.exportName}`
+  const idB = `${b.sig.file}:${b.sig.exportName}`
+  const key = idA < idB ? `${idA}|${idB}` : `${idB}|${idA}`
+  if (seen.has(key)) return null
+  seen.add(key)
+  return {
+    symbolA: idA,
+    symbolB: idB,
+    hamming: d,
+    signatureA: a.bits.toString(16),
+    signatureB: b.bits.toString(16),
+  }
 }

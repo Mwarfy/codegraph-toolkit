@@ -208,6 +208,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+860b688 refactor(adr-toolkit): split findWriteSites (cyclo 15→2, cog 32→1) — bootstrap-fsm.ts FULLY cleared
 194452b refactor(adr-toolkit): split detectFsmCandidates (cyclo 18→3, cog 29→1) — bootstrap-fsm.ts detectFsmCandidates cleared
 0e97abd refactor(runtime-graph): split newmanGirvanRuntime (cyclo 20→2, cog 17→1) — runtime-disciplines.ts cleared
 de0af83 refactor(codegraph): split extractBooleanParamsFileBundle (cyclo 19→4, cog 19→4) — boolean-params.ts cleared
@@ -219,7 +220,6 @@ b431f2f refactor(codegraph): split getOrBuildSharedProject (cyclo 20→2, cog 33
 600fdb0 refactor(codegraph): split BullmqQueueDetector.detect (cyclo 20→2, cog 42→1) — bullmq-queues.ts cleared
 fb50d40 refactor(codegraph): split EventBusDetector.detect (cyclo 20→1, cog 48→0) — event-bus.ts cleared
 fcb7141 refactor(codegraph): split findReachablePaths (cyclo 21→3, cog 34→1) — reachability.ts cleared
-0047e61 refactor(codegraph): split validateStore (cyclo 22→4, cog 27→3) — store.ts cleared
 ```
 
 ## Comment contribuer à ce brief
