@@ -288,15 +288,27 @@ async function resolveBootstrapAbsolutePath(projectRoot: string): Promise<string
     // Fallback : depuis ce module compilé, on connaît le chemin relatif
     path.resolve(path.dirname(new URL(import.meta.url).pathname), './capture/auto-bootstrap.js'),
   ]
-  for (const c of candidates) {
-    try {
-      await fs.access(c)
-      return c
-    } catch {
-      continue
-    }
+  // Probe des candidates en parallèle — first-match-wins.
+  const checks = await Promise.all(
+    candidates.map(async (c) => ({ path: c, exists: await fileExists(c) })),
+  )
+  return checks.find((r) => r.exists)?.path ?? null
+}
+
+async function fileExists(p: string): Promise<boolean> {
+  try { await fs.access(p); return true } catch { return false }
+}
+
+/** Lit le RuntimeRunMeta.facts d'un pid-dir, retourne totalSpans (col 4). */
+async function readPidSpans(metaPath: string): Promise<number> {
+  try {
+    const text = await fs.readFile(metaPath, 'utf-8')
+    const cols = text.trim().split('\n')[0]?.split('\t') ?? []
+    const spans = parseInt(cols[3] ?? '0', 10)
+    return Number.isFinite(spans) ? spans : 0
+  } catch {
+    return 0
   }
-  return null
 }
 
 /**
@@ -309,19 +321,13 @@ async function summarizeProbeOutput(outDir: string): Promise<{ totalSpans: numbe
   let subDirs = 0
   try {
     const entries = await fs.readdir(outDir, { withFileTypes: true })
-    for (const e of entries) {
-      if (!e.isDirectory() || !e.name.startsWith('pid-')) continue
-      subDirs++
-      const metaPath = path.join(outDir, e.name, 'RuntimeRunMeta.facts')
-      try {
-        const text = await fs.readFile(metaPath, 'utf-8')
-        const cols = text.trim().split('\n')[0]?.split('\t') ?? []
-        const spans = parseInt(cols[3] ?? '0', 10)
-        if (Number.isFinite(spans)) totalSpans += spans
-      } catch {
-        // missing meta — skip
-      }
-    }
+    const pidDirs = entries.filter((e) => e.isDirectory() && e.name.startsWith('pid-'))
+    subDirs = pidDirs.length
+    // Reads en parallèle — chaque pid-dir indépendant.
+    const spans = await Promise.all(
+      pidDirs.map((e) => readPidSpans(path.join(outDir, e.name, 'RuntimeRunMeta.facts'))),
+    )
+    for (const s of spans) totalSpans += s
   } catch {
     // outDir doesn't exist — return zeros
   }
@@ -433,9 +439,8 @@ export { program }
  */
 async function mergeFactsDirs(srcDir: string, dstDir: string): Promise<void> {
   const sourceDirs = await listSourceDirs(srcDir)
-  // CLI one-shot fact merge — séquentiel acceptable (<100ms total).
-  // Promise.all sur la double boucle nested rendrait le code dur à lire pour
-  // gain négligeable côté CLI tool.
+  // drift-ok : CLI one-shot fact merge — séquentiel délibéré (<100ms total),
+  // Promise.all rendrait le code dur à lire pour gain négligeable.
   for (const sd of sourceDirs) {
     await mergeOneSourceDir(sd, dstDir)
   }

@@ -82,7 +82,37 @@ program
     'Use Salsa-cached path (Phase 1). Sub-2x speedup on warm runs in the ' +
     'same process. Outputs identical to legacy mode (verified bit-for-bit ' +
     'on Sentinel).')
-  .action(runAnalyzeCommand)
+  .option('--with-runtime <cmd>',
+    'Run analyze + spawn runtime probe via `liby-runtime-graph probe -- <cmd>`. ' +
+    'Captures statique × runtime en une commande. Exemple : ' +
+    '--with-runtime "npm test" ou --with-runtime "node app.mjs".')
+  .action(async (opts) => {
+    await runAnalyzeCommand(opts)
+    if (opts.withRuntime) {
+      await runRuntimeProbeWrapper(opts.withRuntime)
+    }
+  })
+
+/**
+ * Wrapper sur `liby-runtime-graph probe -- <cmd>` pour le flag --with-runtime.
+ * Lance le binaire si dispo dans node_modules, sinon log un hint.
+ */
+async function runRuntimeProbeWrapper(cmdString: string): Promise<void> {
+  const { spawn } = await import('node:child_process')
+  const args = cmdString.split(' ').filter(Boolean)
+  if (args.length === 0) {
+    console.log(chalk.yellow('  ⚠ --with-runtime needs a command, e.g. "npm test"'))
+    return
+  }
+  console.log(chalk.cyan(`\n  ⓘ running runtime probe: ${cmdString}`))
+  await new Promise<void>((resolve) => {
+    const child = spawn('npx', ['liby-runtime-graph', 'probe', '--cpu-profile', ...args], {
+      stdio: 'inherit',
+      shell: false,
+    })
+    child.on('exit', () => resolve())
+  })
+}
 
 // ─── watch ────────────────────────────────────────────────────────────────
 
