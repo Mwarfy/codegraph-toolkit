@@ -89,66 +89,72 @@ const HIGH_CONFIDENCE_OBJECTS: Record<TaintSinkKind, RegExp> = {
   'redirect': /^(res|response|ctx|reply)$/i,
 }
 
+interface CalleeInfo {
+  methodName: string
+  objectName: string | null
+  calleeText: string
+}
+
 export function extractTaintSinksFileBundle(
   sf: SourceFile,
   relPath: string,
 ): TaintSinksFileBundle {
   if (TEST_FILE_RE.test(relPath)) return { sinks: [] }
   const sinks: TaintSink[] = []
-
   const isExempt = makeIsExemptForMarker(sf, 'taint-ok')
 
   for (const call of sf.getDescendantsOfKind(SyntaxKind.CallExpression)) {
-    const callee = call.getExpression()
-    let methodName: string | null = null
-    let objectName: string | null = null
-    let calleeText: string
-
-    if (Node.isIdentifier(callee)) {
-      methodName = callee.getText()
-      calleeText = methodName
-    } else if (Node.isPropertyAccessExpression(callee)) {
-      methodName = callee.getName()
-      const exprNode = callee.getExpression()
-      if (Node.isIdentifier(exprNode)) objectName = exprNode.getText()
-      else if (Node.isPropertyAccessExpression(exprNode)) {
-        // ex: childProcess.execSync — on prend le LAST segment de
-        // l'objet (childProcess) ou le full text si plusieurs niveaux.
-        objectName = exprNode.getName()
-      }
-      calleeText = callee.getText()
-    } else {
-      continue
-    }
-
-    if (!methodName) continue
-    const kind = METHOD_TO_KIND.get(methodName)
-    if (!kind) continue
-
-    // Filtre par confiance : si pas de préfixe objet de haute confiance,
-    // on skip — sinon on flaggerait `arr.exec()` comme command exec.
-    if (objectName) {
-      const re = HIGH_CONFIDENCE_OBJECTS[kind]
-      if (!re.test(objectName)) continue
-    } else {
-      // Identifier seul (eval, fetch, etc.). Seuls eval, fetch sont
-      // suffisamment uniques pour être confiance haute sans préfixe.
-      if (methodName !== 'eval' && methodName !== 'fetch') continue
-    }
-
-    const line = call.getStartLineNumber()
-    if (isExempt(line)) continue
-
-    sinks.push({
-      file: relPath,
-      line,
-      kind,
-      callee: calleeText,
-      containingSymbol: findContainingSymbol(call),
-    })
+    const sink = analyzeOneCallForSink(call, relPath, isExempt)
+    if (sink) sinks.push(sink)
   }
-
   return { sinks }
+}
+
+function analyzeOneCallForSink(
+  call: import('ts-morph').CallExpression,
+  relPath: string,
+  isExempt: (line: number) => boolean,
+): TaintSink | null {
+  const info = readCalleeInfo(call.getExpression())
+  if (!info) return null
+  const kind = METHOD_TO_KIND.get(info.methodName)
+  if (!kind) return null
+  if (!isHighConfidenceCall(info, kind)) return null
+  const line = call.getStartLineNumber()
+  if (isExempt(line)) return null
+  return {
+    file: relPath,
+    line,
+    kind,
+    callee: info.calleeText,
+    containingSymbol: findContainingSymbol(call),
+  }
+}
+
+function readCalleeInfo(callee: Node): CalleeInfo | null {
+  if (Node.isIdentifier(callee)) {
+    const name = callee.getText()
+    return { methodName: name, objectName: null, calleeText: name }
+  }
+  if (Node.isPropertyAccessExpression(callee)) {
+    const exprNode = callee.getExpression()
+    let objectName: string | null = null
+    if (Node.isIdentifier(exprNode)) objectName = exprNode.getText()
+    // ex: childProcess.execSync — on prend le LAST segment de l'objet.
+    else if (Node.isPropertyAccessExpression(exprNode)) objectName = exprNode.getName()
+    return { methodName: callee.getName(), objectName, calleeText: callee.getText() }
+  }
+  return null
+}
+
+/**
+ * Filtre par confiance : sans préfixe objet de haute confiance, skip — sinon
+ * on flaggerait `arr.exec()` comme command exec. Sans préfixe : seuls eval
+ * et fetch sont uniques sans contexte.
+ */
+function isHighConfidenceCall(info: CalleeInfo, kind: TaintSink['kind']): boolean {
+  if (info.objectName) return HIGH_CONFIDENCE_OBJECTS[kind].test(info.objectName)
+  return info.methodName === 'eval' || info.methodName === 'fetch'
 }
 
 export async function analyzeTaintSinks(
