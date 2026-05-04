@@ -50,6 +50,7 @@ output bit-identique entre runs, déterminisme garanti.
 
 <!-- AUTO-GÉNÉRÉ depuis les marqueurs ADR-NNN du code source. Voir @liby-tools/adr-toolkit. NE PAS éditer à la main. -->
 
+- `packages/codegraph/src/detectors/ts-imports.ts`
 - `packages/codegraph/src/extractors/_template.monoid.ts`
 - `packages/codegraph/src/extractors/_template.monoid.worker.ts`
 - `packages/codegraph/src/extractors/todos.ts`

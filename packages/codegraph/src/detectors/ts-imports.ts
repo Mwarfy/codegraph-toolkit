@@ -1,4 +1,4 @@
-// ADR-008
+// ADR-008, ADR-024
 /**
  * TypeScript Import/Export Detector
  *
@@ -13,6 +13,7 @@ import { Project, SyntaxKind, type SourceFile } from 'ts-morph'
 import * as path from 'node:path'
 import * as fs from 'node:fs/promises'
 import type { Detector, DetectorContext, DetectedLink } from '../core/types.js'
+import { runPerSourceFileExtractor } from '../parallel/per-source-file-extractor.js'
 
 export class TsImportDetector implements Detector {
   name = 'ts-imports'
@@ -77,11 +78,23 @@ export class TsImportDetector implements Detector {
       this.project = createdProject
     }
 
-    for (const sourceFile of this.project.getSourceFiles()) {
-      const fromPath = this.relativize(sourceFile.getFilePath(), ctx.rootDir)
-      if (!fromPath) continue
-      links.push(...scanImportsInSourceFile(sourceFile, fromPath, this.project, ctx.rootDir, ctx.files))
-    }
+    // BSP monoïdal (ADR-024) — extractor pure per-file, fusion ordonnée
+    // par sortKey canonique. Project ts-morph reste main thread (non
+    // sérialisable cross-thread, cf. ADR-025). Gain Promise.all sur les
+    // 175 SourceFiles — overlap I/O / CPU AST scan.
+    const project = this.project
+    const r = await runPerSourceFileExtractor<{ links: DetectedLink[] }, DetectedLink>({
+      project,
+      files: ctx.files,
+      rootDir: ctx.rootDir,
+      extractor: (sf, rel) => ({
+        links: scanImportsInSourceFile(sf, rel, project, ctx.rootDir, ctx.files),
+      }),
+      selectItems: (b) => b.links,
+      sortKey: (l) =>
+        `${l.from}:${String(l.line ?? 0).padStart(8, '0')}:${l.to}:${l.type}`,
+    })
+    links.push(...r.items)
 
     // Si on a créé un Project local, le release pour libérer la RAM.
     // Si on a réutilisé le sharedProject, le laisser intact (il
