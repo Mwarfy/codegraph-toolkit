@@ -1,3 +1,4 @@
+// ADR-024
 /**
  * drift-ok: extracteur des markers de dette — mentions docstring-only.
  *

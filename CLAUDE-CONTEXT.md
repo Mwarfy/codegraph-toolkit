@@ -34,6 +34,8 @@
   → [`Extractors `_shared/` — helpers ts-morph mutualisés`](docs/adr/012-extractor-shared-helpers.md)
 - **ADR-024** — Tout détecteur per-file (cf. ADR-005) DOIT exposer un `extractFileBundle` > pure et son orchestrateur passe par `runPerFileExtractor` (readFile-based) > ou `runPerSourceFileExtractor` (Project ts-morph) — pas de boucle séquentielle.
   → [`Parallélisme déterministe par algèbre monoïdale (BSP)`](docs/adr/024-bsp-monoid-parallelism.md)
+- **ADR-025** — Tout NOUVEAU détecteur ajouté à `extractors/` (readFile-based) DOIT > partir du template `_template.monoid.ts` + `_template.monoid.worker.ts` > et utiliser `runPerFileExtractor`. Aucun for-loop séquentiel + > sort manuel — pattern interdit.
+  → [`Tout nouveau détecteur per-file doit suivre le pattern BSP monoïdal`](docs/adr/025-detectors-must-use-bsp-pattern.md)
 
 ## Fichiers gouvernés par un ADR (lookup pré-calculé)
 
@@ -78,6 +80,8 @@
 - `packages/codegraph/src/extractors/_shared/ast-helpers.ts` → ADR-012
 - `packages/codegraph/src/extractors/_shared/sql-helpers.ts` → ADR-012
 - `packages/codegraph/src/extractors/_shared/sql-types.ts` → ADR-012
+- `packages/codegraph/src/extractors/_template.monoid.ts` → ADR-024
+- `packages/codegraph/src/extractors/_template.monoid.worker.ts` → ADR-024
 - `packages/codegraph/src/extractors/co-change.ts` → ADR-005
 - `packages/codegraph/src/extractors/compression-similarity.ts` → ADR-005
 - `packages/codegraph/src/extractors/constant-expressions.ts` → ADR-005
@@ -86,6 +90,7 @@
 - `packages/codegraph/src/extractors/sql-schema.ts` → ADR-005
 - `packages/codegraph/src/extractors/state-machines.ts` → ADR-005
 - `packages/codegraph/src/extractors/tainted-vars.ts` → ADR-007
+- `packages/codegraph/src/extractors/todos.ts` → ADR-024
 - `packages/codegraph/src/extractors/todos.worker.ts` → ADR-024
 - `packages/codegraph/src/extractors/unused-exports.ts` → ADR-005
 - `packages/codegraph/src/facts/index.ts` → ADR-010
@@ -216,6 +221,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+7dc918b feat(codegraph): Phase β.2 — worker mode opt-in pour analyzeTodos
 de8b02a feat(codegraph): Phase β — worker_threads dispatch via WorkerPool
 3399c54 feat(codegraph): Phase 2.4 — sanitizers + taint-sinks portés (8/65)
 f066d43 feat(codegraph): Phase 2.3 — 3 détecteurs portés (boolean-params, eval-calls, crypto-algo)
@@ -227,7 +233,6 @@ abd6ad7 feat(codegraph): Phase 2.1 — 2 détecteurs portés au pattern BSP mono
 c17c0c1 feat(runtime-graph): press-button CLI `probe` + refactor 2 bombs
 e1b0a02 feat(runtime-graph): 5 nouvelles disciplines pluridisciplinaires
 410daa0 feat(runtime-graph): static↔runtime divergence — KL + Pareto + coverage drift
-fc9449a perf(co-change): --no-merges --no-renames sur git log
 ```
 
 ## Comment contribuer à ce brief
