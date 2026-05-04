@@ -31,6 +31,7 @@
 import { Project, SyntaxKind, type SourceFile, type Node } from 'ts-morph'
 import * as path from 'node:path'
 import { buildLineToSymbol } from './_shared/ast-helpers.js'
+import { runPerSourceFileExtractor } from '../parallel/per-source-file-extractor.js'
 
 export interface EventEmitSite {
   /** Chemin relatif au rootDir. */
@@ -71,20 +72,15 @@ export async function analyzeEventEmitSites(
   const targetNames = options.emitFnNames
     ? new Set(options.emitFnNames)
     : EMIT_NAMES
-  const fileSet = new Set(files)
-  const out: EventEmitSite[] = []
-
-  for (const sf of project.getSourceFiles()) {
-    const relPath = relativize(sf.getFilePath(), rootDir)
-    if (!relPath || !fileSet.has(relPath)) continue
-    out.push(...scanEmitSitesInSourceFile(sf, relPath, targetNames))
-  }
-
-  out.sort((a, b) => {
-    if (a.file !== b.file) return a.file < b.file ? -1 : 1
-    return a.line - b.line
+  const r = await runPerSourceFileExtractor<{ items: EventEmitSite[] }, EventEmitSite>({
+    project,
+    files,
+    rootDir,
+    extractor: (sf, rel) => ({ items: scanEmitSitesInSourceFile(sf, rel, targetNames) }),
+    selectItems: (b) => b.items,
+    sortKey: (s) => `${s.file}:${String(s.line).padStart(8, '0')}`,
   })
-  return out
+  return r.items
 }
 
 /**

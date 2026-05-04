@@ -177,7 +177,7 @@
 - `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 25) · gov by ADR-012
 - `packages/codegraph/src/core/detector-registry.ts` (in: 19) · gov by ADR-008
 - `packages/runtime-graph/src/core/types.ts` (in: 14) · gov by ADR-009
-- `packages/adr-toolkit/src/config.ts` (in: 10) · gov by ADR-002
+- `packages/codegraph/src/parallel/per-source-file-extractor.ts` (in: 11) · gov by ADR-024
 
 ## ⚠ ADR anchor suggestions
 
@@ -222,6 +222,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+07b0dcf feat(codegraph): Phase 2.7 — function-complexity + long-functions portés (12/65)
 7366782 feat(codegraph): Phase γ.1 — cost-model auto-tuning LIBY_BSP_WORKERS=auto
 896219e feat(codegraph): Phase 2.6 — oauth-scope-literals porté (10/65)
 76362ea feat(codegraph): Phase 2.5 — ts-imports porté au pattern BSP monoïdal
@@ -233,7 +234,6 @@ f066d43 feat(codegraph): Phase 2.3 — 3 détecteurs portés (boolean-params, ev
 84b2f76 docs(adr-024): anchor markers sur les 3 helpers BSP
 190b979 feat(codegraph): Phase 2.2 — hardcoded-secrets porté + ADR-024
 abd6ad7 feat(codegraph): Phase 2.1 — 2 détecteurs portés au pattern BSP monoïdal
-415d382 feat(codegraph): Phase 1 BSP — monoid algebra + scheduler déterministe
 ```
 
 ## Comment contribuer à ce brief

@@ -22,6 +22,7 @@
 
 import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
 import { makeIsExemptForMarker } from './_shared/ast-helpers.js'
+import { runPerSourceFileExtractor } from '../parallel/per-source-file-extractor.js'
 
 export type DeadCodeKind =
   | 'identical-subexpressions'
@@ -281,22 +282,15 @@ export async function analyzeDeadCode(
   files: string[],
   project: Project,
 ): Promise<DeadCodeFinding[]> {
-  const fileSet = new Set(files)
-  const all: DeadCodeFinding[] = []
-
-  for (const sf of project.getSourceFiles()) {
-    const rel = relativize(sf.getFilePath(), rootDir)
-    if (!rel || !fileSet.has(rel)) continue
-    const bundle = extractDeadCodeFileBundle(sf, rel)
-    all.push(...bundle.findings)
-  }
-
-  all.sort((a, b) => {
-    if (a.file !== b.file) return a.file < b.file ? -1 : 1
-    if (a.line !== b.line) return a.line - b.line
-    return a.kind < b.kind ? -1 : 1
+  const r = await runPerSourceFileExtractor<{ findings: DeadCodeFinding[] }, DeadCodeFinding>({
+    project,
+    files,
+    rootDir,
+    extractor: extractDeadCodeFileBundle,
+    selectItems: (b) => b.findings,
+    sortKey: (f) => `${f.file}:${String(f.line).padStart(8, '0')}:${f.kind}`,
   })
-  return all
+  return r.items
 }
 
 function relativize(absPath: string, rootDir: string): string | null {
