@@ -190,9 +190,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/env-usage/config.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/audit-listener.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/event-emit-sites/sample.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/scheduler.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
@@ -214,6 +214,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+f066d43 feat(codegraph): Phase 2.3 — 3 détecteurs portés (boolean-params, eval-calls, crypto-algo)
 84b2f76 docs(adr-024): anchor markers sur les 3 helpers BSP
 190b979 feat(codegraph): Phase 2.2 — hardcoded-secrets porté + ADR-024
 abd6ad7 feat(codegraph): Phase 2.1 — 2 détecteurs portés au pattern BSP monoïdal
@@ -225,7 +226,6 @@ e1b0a02 feat(runtime-graph): 5 nouvelles disciplines pluridisciplinaires
 fc9449a perf(co-change): --no-merges --no-renames sur git log
 c626690 perf(codegraph): parallelize delta reads in applyDeltasInOrder
 b4959d9 feat(runtime-graph): math optim suggester — universel pour toute app
-7d4d382 feat(runtime-graph): fn-wrap iitm — capture exacte des call edges cross-module
 ```
 
 ## Comment contribuer à ce brief

@@ -23,6 +23,7 @@
 
 import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
 import { findContainingSymbol, makeIsExemptForMarker } from './_shared/ast-helpers.js'
+import { runPerSourceFileExtractor } from '../parallel/per-source-file-extractor.js'
 
 export type TaintSinkKind =
   | 'sql'
@@ -162,21 +163,15 @@ export async function analyzeTaintSinks(
   files: string[],
   project: Project,
 ): Promise<TaintSink[]> {
-  const fileSet = new Set(files)
-  const all: TaintSink[] = []
-
-  for (const sf of project.getSourceFiles()) {
-    const rel = relativize(sf.getFilePath(), rootDir)
-    if (!rel || !fileSet.has(rel)) continue
-    const bundle = extractTaintSinksFileBundle(sf, rel)
-    all.push(...bundle.sinks)
-  }
-
-  all.sort((a, b) => {
-    if (a.file !== b.file) return a.file < b.file ? -1 : 1
-    return a.line - b.line
+  const r = await runPerSourceFileExtractor<TaintSinksFileBundle, TaintSink>({
+    project,
+    files,
+    rootDir,
+    extractor: extractTaintSinksFileBundle,
+    selectItems: (b) => b.sinks,
+    sortKey: (s) => `${s.file}:${String(s.line).padStart(8, '0')}`,
   })
-  return all
+  return r.items
 }
 
 function relativize(absPath: string, rootDir: string): string | null {

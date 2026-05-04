@@ -19,6 +19,7 @@
 
 import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
 import { findContainingSymbol } from './_shared/ast-helpers.js'
+import { runPerSourceFileExtractor } from '../parallel/per-source-file-extractor.js'
 
 export interface Sanitizer {
   file: string
@@ -104,21 +105,15 @@ export async function analyzeSanitizers(
   files: string[],
   project: Project,
 ): Promise<Sanitizer[]> {
-  const fileSet = new Set(files)
-  const all: Sanitizer[] = []
-
-  for (const sf of project.getSourceFiles()) {
-    const rel = relativize(sf.getFilePath(), rootDir)
-    if (!rel || !fileSet.has(rel)) continue
-    const bundle = extractSanitizersFileBundle(sf, rel)
-    all.push(...bundle.sanitizers)
-  }
-
-  all.sort((a, b) => {
-    if (a.file !== b.file) return a.file < b.file ? -1 : 1
-    return a.line - b.line
+  const r = await runPerSourceFileExtractor<SanitizersFileBundle, Sanitizer>({
+    project,
+    files,
+    rootDir,
+    extractor: extractSanitizersFileBundle,
+    selectItems: (b) => b.sanitizers,
+    sortKey: (s) => `${s.file}:${String(s.line).padStart(8, '0')}`,
   })
-  return all
+  return r.items
 }
 
 function relativize(absPath: string, rootDir: string): string | null {
