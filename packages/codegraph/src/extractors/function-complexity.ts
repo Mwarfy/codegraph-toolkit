@@ -15,8 +15,6 @@
  * Pattern exempt : `// complexity-ok: <reason>` ligne precedente.
  */
 
-import { fileURLToPath } from 'node:url'
-import * as path from 'node:path'
 import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
 import { makeIsExemptForMarker } from './_shared/ast-helpers.js'
 import { runPerSourceFileExtractor } from '../parallel/per-source-file-extractor.js'
@@ -182,11 +180,6 @@ function computeCognitive(node: Node): number {
   return total
 }
 
-const FN_COMPLEXITY_WORKER_MODULE = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  'function-complexity.js',
-)
-
 export async function analyzeFunctionComplexity(
   rootDir: string,
   files: string[],
@@ -199,11 +192,6 @@ export async function analyzeFunctionComplexity(
     extractor: extractFunctionComplexityFileBundle,
     selectItems: (items) => items,
     sortKey: (c) => `${c.file}:${String(c.line).padStart(8, '0')}`,
-    // Phase γ.2 : opt-in worker mode. extractFunctionComplexityFileBundle
-    // retourne déjà Item[] directement (pas de bundle wrapper) → exporté
-    // tel quel comme worker entrypoint.
-    workerModule: FN_COMPLEXITY_WORKER_MODULE,
-    workerExport: 'extractFunctionComplexityFileBundle',
   })
   return r.items
 }

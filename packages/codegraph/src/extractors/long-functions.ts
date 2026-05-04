@@ -14,8 +14,6 @@
  */
 
 import { type Project, type SourceFile, Node } from 'ts-morph'
-import { fileURLToPath } from 'node:url'
-import * as path from 'node:path'
 import { runPerSourceFileExtractor } from '../parallel/per-source-file-extractor.js'
 
 export interface LongFunction {
@@ -126,24 +124,6 @@ function countLoc(bodyText: string): number {
 }
 
 /**
- * Worker entrypoint Phase γ.2 — wrap extract + select pour retourner Item[]
- * directement. Loadé depuis source-file-worker-runner.ts en worker.
- */
-export function extractLongFunctionsForWorker(
-  sf: SourceFile,
-  relPath: string,
-  options?: { threshold?: number },
-): LongFunction[] {
-  const threshold = options?.threshold ?? DEFAULT_THRESHOLD
-  return extractLongFunctionsFileBundle(sf, relPath, threshold).functions
-}
-
-const LONG_FUNCTIONS_WORKER_MODULE = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  'long-functions.js',
-)
-
-/**
  * Analyze all files, retourne les long-functions triées par LOC descendant.
  */
 export async function analyzeLongFunctions(
@@ -164,9 +144,6 @@ export async function analyzeLongFunctions(
     extractor: (sf, rel) => ({ items: extractLongFunctionsFileBundle(sf, rel, threshold).functions }),
     selectItems: (b) => b.items,
     sortKey: (l) => `${l.file}:${String(l.line).padStart(8, '0')}`,
-    workerModule: LONG_FUNCTIONS_WORKER_MODULE,
-    workerExport: 'extractLongFunctionsForWorker',
-    workerExtractorOptions: { threshold },
   })
   // Re-sort par loc desc — pure JS sort, déterministe (loc ties broken par
   // l'ordre canonique injecté ci-dessus).
@@ -180,4 +157,3 @@ function relativize(absPath: string, rootDir: string): string | null {
   return normalized.slice(rootNormalized.length + 1)
 }
 
-void path

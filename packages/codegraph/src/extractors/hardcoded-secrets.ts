@@ -24,8 +24,6 @@
  * deux : regex pour le contexte, entropy pour le contenu.
  */
 
-import { fileURLToPath } from 'node:url'
-import * as path from 'node:path'
 import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
 import { makeIsExemptForMarker } from './_shared/ast-helpers.js'
 import { runPerSourceFileExtractor } from '../parallel/per-source-file-extractor.js'
@@ -171,22 +169,6 @@ function shannonEntropy(s: string): number {
   return h
 }
 
-/**
- * Worker entrypoint Phase γ.2 — wrap extract + select pour retourner Item[]
- * directement. Loadé depuis source-file-worker-runner.ts en worker.
- */
-export function extractHardcodedSecretsForWorker(
-  sf: SourceFile,
-  relPath: string,
-  options?: HardcodedSecretsOptions,
-): HardcodedSecret[] {
-  return extractHardcodedSecretsFileBundle(sf, relPath, options ?? {}).secrets
-}
-
-const HARDCODED_SECRETS_WORKER_MODULE = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  'hardcoded-secrets.js',
-)
 
 export async function analyzeHardcodedSecrets(
   rootDir: string,
@@ -201,9 +183,6 @@ export async function analyzeHardcodedSecrets(
     extractor: (sf, rel) => extractHardcodedSecretsFileBundle(sf, rel, options),
     selectItems: (b) => b.secrets,
     sortKey: (s) => `${s.file}:${String(s.line).padStart(8, '0')}`,
-    workerModule: HARDCODED_SECRETS_WORKER_MODULE,
-    workerExport: 'extractHardcodedSecretsForWorker',
-    workerExtractorOptions: options,
   })
   return r.items
 }

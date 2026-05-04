@@ -56,11 +56,6 @@ export async function runAnalyzeCommand(opts: AnalyzeOpts): Promise<void> {
     process.stdout.write(JSON.stringify(snapshot, null, 2))
   }
 
-  // Cleanup worker pool si LIBY_BSP_WORKERS=1 a spawné des workers — sinon
-  // le process reste alive (workers sont des références non garbage-collectables).
-  // No-op si le pool global n'a jamais été créé.
-  const { terminateGlobalPool } = await import('../../parallel/worker-pool.js')
-  await terminateGlobalPool()
 }
 
 function printAnalyzeStats(snapshot: import('../../core/types.js').GraphSnapshot): void {

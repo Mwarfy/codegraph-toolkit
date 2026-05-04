@@ -82,8 +82,6 @@
 - `packages/codegraph/src/extractors/_shared/ast-helpers.ts` → ADR-012
 - `packages/codegraph/src/extractors/_shared/sql-helpers.ts` → ADR-012
 - `packages/codegraph/src/extractors/_shared/sql-types.ts` → ADR-012
-- `packages/codegraph/src/extractors/_template.monoid.ts` → ADR-024
-- `packages/codegraph/src/extractors/_template.monoid.worker.ts` → ADR-024
 - `packages/codegraph/src/extractors/co-change.ts` → ADR-005
 - `packages/codegraph/src/extractors/compression-similarity.ts` → ADR-005
 - `packages/codegraph/src/extractors/constant-expressions.ts` → ADR-005
@@ -93,7 +91,6 @@
 - `packages/codegraph/src/extractors/state-machines.ts` → ADR-005
 - `packages/codegraph/src/extractors/tainted-vars.ts` → ADR-007
 - `packages/codegraph/src/extractors/todos.ts` → ADR-024
-- `packages/codegraph/src/extractors/todos.worker.ts` → ADR-024
 - `packages/codegraph/src/extractors/unused-exports.ts` → ADR-005
 - `packages/codegraph/src/facts/index.ts` → ADR-010
 - `packages/codegraph/src/incremental/arguments.ts` → ADR-007
@@ -139,13 +136,9 @@
 - `packages/codegraph/src/map/dsm-renderer.ts` → ADR-008
 - `packages/codegraph/src/memory/store.ts` → ADR-002
 - `packages/codegraph/src/parallel/bsp-scheduler.ts` → ADR-024
-- `packages/codegraph/src/parallel/cost-model.ts` → ADR-024
 - `packages/codegraph/src/parallel/monoid.ts` → ADR-024
 - `packages/codegraph/src/parallel/per-file-extractor.ts` → ADR-024
-- `packages/codegraph/src/parallel/per-source-file-batch-extractor.ts` → ADR-024
 - `packages/codegraph/src/parallel/per-source-file-extractor.ts` → ADR-024
-- `packages/codegraph/src/parallel/source-file-worker-runner.ts` → ADR-024
-- `packages/codegraph/src/parallel/worker-pool.ts` → ADR-024
 - `packages/codegraph/src/synopsis/builder.ts` → ADR-001
 - `packages/codegraph/src/synopsis/tensions.ts` → ADR-001
 - `packages/datalog/src/canonical.ts` → ADR-010
@@ -178,7 +171,7 @@
 - `packages/codegraph/src/incremental/queries.ts` (in: 41) · gov by ADR-007
 - `packages/codegraph/src/incremental/database.ts` (in: 39) · gov by ADR-007
 - `packages/salsa/dist/index.d.ts` (in: 38)
-- `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 25) · gov by ADR-012
+- `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 26) · gov by ADR-012
 - `packages/codegraph/src/core/detector-registry.ts` (in: 19) · gov by ADR-008
 - `packages/runtime-graph/src/core/types.ts` (in: 14) · gov by ADR-009
 - `packages/codegraph/src/parallel/per-source-file-extractor.ts` (in: 13) · gov by ADR-024
@@ -202,9 +195,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/codegraph/src/datalog-detectors/runner.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/src/extractors/_template.monoid.worker.ts` — aucun importeur  
+- **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/src/extractors/todos.worker.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
@@ -226,6 +219,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+a2bc182 feat(codegraph): Phase γ.4c — 5 derniers détecteurs ts-morph portés Datalog
 b2a709e feat(codegraph): Phase γ.4b — consolide + 3 nouveaux détecteurs Datalog
 3175c64 feat(codegraph): Phase γ.4 — prototype Datalog detectors (magic-numbers + dead-code)
 06c21b1 feat(codegraph): Phase γ.3b — wire batch warmup dans analyzer.ts
@@ -237,7 +231,6 @@ d94cab1 feat(codegraph): Phase γ.2 — workers ts-morph via mini-Project local
 9a741e3 feat(codegraph): Phase 2.8 — dead-code + event-emit-sites portés (14/65)
 07b0dcf feat(codegraph): Phase 2.7 — function-complexity + long-functions portés (12/65)
 7366782 feat(codegraph): Phase γ.1 — cost-model auto-tuning LIBY_BSP_WORKERS=auto
-896219e feat(codegraph): Phase 2.6 — oauth-scope-literals porté (10/65)
 ```
 
 ## Comment contribuer à ce brief

@@ -14,8 +14,6 @@
  * fileContent → cacheable Salsa.
  */
 
-import { fileURLToPath } from 'node:url'
-import * as path from 'node:path'
 import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
 import { findContainingSymbol } from './_shared/ast-helpers.js'
 import { runPerSourceFileExtractor } from '../parallel/per-source-file-extractor.js'
@@ -88,17 +86,6 @@ export function extractEvalCallsFileBundle(
 /**
  * Aggregator : tous les eval/Function calls du projet, triés.
  */
-/**
- * Worker entrypoint Phase γ.2.
- */
-export function extractEvalCallsForWorker(sf: SourceFile, relPath: string): EvalCall[] {
-  return extractEvalCallsFileBundle(sf, relPath).calls
-}
-
-const EVAL_CALLS_WORKER_MODULE = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  'eval-calls.js',
-)
 
 export async function analyzeEvalCalls(
   rootDir: string,
@@ -112,8 +99,6 @@ export async function analyzeEvalCalls(
     extractor: extractEvalCallsFileBundle,
     selectItems: (b) => b.calls,
     sortKey: (c) => `${c.file}:${String(c.line).padStart(8, '0')}`,
-    workerModule: EVAL_CALLS_WORKER_MODULE,
-    workerExport: 'extractEvalCallsForWorker',
   })
   return r.items
 }

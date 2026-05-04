@@ -15,12 +15,7 @@
 
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { minimatch } from 'minimatch'
-import {
-  runBatchedSourceFileDetectorsViaWorkers,
-  type BatchDetectorConfig,
-} from '../parallel/per-source-file-batch-extractor.js'
 import { CodeGraph } from './graph.js'
 import { discoverFiles } from './file-discovery.js'
 import type {
@@ -725,155 +720,6 @@ interface DetectorPhaseContext {
   snapshot: GraphSnapshot
   timing: AnalyzeResult['timing']
   incremental: boolean
-  /**
-   * Phase γ.3b — résultats du batch warmup. Si présent, les analyzeXxx()
-   * concernés court-circuitent en lisant ici plutôt que de re-dispatch.
-   * Populated par runBatchWarmupPhase quand LIBY_BSP_WORKERS=1 et
-   * !incremental. undefined sinon → fallback sur les analyze*() legacy.
-   */
-  batchResults?: Map<string, unknown[]>
-}
-
-// ─── Phase γ.3b — Batch warmup ──────────────────────────────────────────────
-
-const ANALYZER_DIR = path.dirname(fileURLToPath(import.meta.url))
-const EXTRACTORS_DIR = path.resolve(ANALYZER_DIR, '../extractors')
-
-/**
- * Clés stables pour le fanout main-thread du batch. Doivent matcher les
- * `BatchDetectorConfig.key` à 1 lettre près (pas de typo silencieuse).
- */
-const BATCH_KEYS = {
-  longFunctions: 'long-functions',
-  magicNumbers: 'magic-numbers',
-  functionComplexity: 'function-complexity',
-  evalCalls: 'eval-calls',
-  cryptoCalls: 'crypto-algo',
-  hardcodedSecrets: 'hardcoded-secrets',
-  booleanParams: 'boolean-params',
-  deadCode: 'dead-code',
-  taintSinks: 'taint-sinks',
-  sanitizers: 'sanitizers',
-} as const
-
-/**
- * Configs des 10 détecteurs ts-morph batch-able. ts-imports exclu (cross-file
- * type resolution → main-thread only). oauth-scope-literals exclu (registry-
- * based, code path différent).
- */
-function buildBatchConfigs(): BatchDetectorConfig<unknown>[] {
-  const xpath = (name: string): string => path.join(EXTRACTORS_DIR, `${name}.js`)
-  const lineSort = (i: { file: string; line: number }): string =>
-    `${i.file}:${String(i.line).padStart(8, '0')}`
-  return [
-    {
-      key: BATCH_KEYS.longFunctions,
-      workerModule: xpath('long-functions'),
-      workerExport: 'extractLongFunctionsForWorker',
-      sortKey: lineSort as (i: unknown) => string,
-    },
-    {
-      key: BATCH_KEYS.magicNumbers,
-      workerModule: xpath('magic-numbers'),
-      workerExport: 'extractMagicNumbersForWorker',
-      workerExtractorOptions: { minMagnitude: 1000 },
-      sortKey: lineSort as (i: unknown) => string,
-      skipFile: (rel: string) => rel.includes('/tests/') || rel.includes('/__tests__/') || rel.endsWith('.test.ts'),
-    },
-    {
-      key: BATCH_KEYS.functionComplexity,
-      workerModule: xpath('function-complexity'),
-      workerExport: 'extractFunctionComplexityFileBundle',
-      sortKey: lineSort as (i: unknown) => string,
-    },
-    {
-      key: BATCH_KEYS.evalCalls,
-      workerModule: xpath('eval-calls'),
-      workerExport: 'extractEvalCallsForWorker',
-      sortKey: lineSort as (i: unknown) => string,
-    },
-    {
-      key: BATCH_KEYS.cryptoCalls,
-      workerModule: xpath('crypto-algo'),
-      workerExport: 'extractCryptoCallsForWorker',
-      sortKey: lineSort as (i: unknown) => string,
-    },
-    {
-      key: BATCH_KEYS.hardcodedSecrets,
-      workerModule: xpath('hardcoded-secrets'),
-      workerExport: 'extractHardcodedSecretsForWorker',
-      sortKey: lineSort as (i: unknown) => string,
-    },
-    {
-      key: BATCH_KEYS.booleanParams,
-      workerModule: xpath('boolean-params'),
-      workerExport: 'extractBooleanParamsForWorker',
-      sortKey: lineSort as (i: unknown) => string,
-    },
-    {
-      key: BATCH_KEYS.deadCode,
-      workerModule: xpath('dead-code'),
-      workerExport: 'extractDeadCodeForWorker',
-      sortKey: ((f: { file: string; line: number; kind: string }) =>
-        `${f.file}:${String(f.line).padStart(8, '0')}:${f.kind}`) as (i: unknown) => string,
-    },
-    {
-      key: BATCH_KEYS.taintSinks,
-      workerModule: xpath('taint-sinks'),
-      workerExport: 'extractTaintSinksForWorker',
-      sortKey: lineSort as (i: unknown) => string,
-    },
-    {
-      key: BATCH_KEYS.sanitizers,
-      workerModule: xpath('sanitizers'),
-      workerExport: 'extractSanitizersForWorker',
-      sortKey: lineSort as (i: unknown) => string,
-    },
-  ]
-}
-
-/**
- * Phase γ.3b — gate d'activation. Skip si :
- *   - mode incremental (cache layer Salsa prend le relais)
- *   - LIBY_BSP_WORKERS pas activé (= main-thread, pas de gain à batcher)
- *   - moins de 50 fichiers (overhead pool/IPC > gain)
- */
-function shouldRunBatchWarmup(ctx: DetectorPhaseContext): boolean {
-  if (ctx.incremental) return false
-  const env = process.env.LIBY_BSP_WORKERS
-  if (env !== '1' && env !== 'auto') return false
-  return ctx.files.length >= 50
-}
-
-/**
- * Run le batch dispatch ts-morph cross-detector (1 IPC + 1 parse par file
- * pour 10 détecteurs). Stocke les résultats dans ctx.batchResults pour les
- * analyzeXxx() suivants.
- */
-async function runBatchWarmupPhase(ctx: DetectorPhaseContext): Promise<void> {
-  if (!shouldRunBatchWarmup(ctx)) return
-  await runDetectorTimed(ctx.timing, 'batch-warmup-y3b', async () => {
-    const cfgs = buildBatchConfigs()
-    const results = await runBatchedSourceFileDetectorsViaWorkers({
-      project: ctx.sharedProject,
-      files: ctx.files,
-      rootDir: ctx.config.rootDir,
-      detectors: cfgs,
-    })
-    ctx.batchResults = new Map(Object.entries(results))
-    return undefined
-  })
-}
-
-/** Lookup batch result avec fallback legacy. Type-cast côté caller. */
-function batchOr<T>(
-  ctx: DetectorPhaseContext,
-  key: string,
-  fallback: () => Promise<T>,
-): Promise<T> {
-  const cached = ctx.batchResults?.get(key)
-  if (cached !== undefined) return Promise.resolve(cached as T)
-  return fallback()
 }
 
 interface RunDetectorsArgs {
@@ -892,10 +738,6 @@ async function runDeterministicDetectors(args: RunDetectorsArgs): Promise<void> 
   const ctx: DetectorPhaseContext = {
     config, files, readFile, sharedProject, snapshot, timing, incremental,
   }
-
-  // Phase γ.3b — batch warmup AVANT les phases. No-op si workers off ou
-  // incremental. Populated ctx.batchResults pour les analyzeXxx() à suivre.
-  await runBatchWarmupPhase(ctx)
 
   const phase1 = await runPhase1IndependentDetectors(ctx)
   const phase2 = await runPhase2Phase1Dependent(ctx, phase1.todos)
@@ -944,17 +786,11 @@ async function runPhase1IndependentDetectors(ctx: DetectorPhaseContext) {
   const todos = await runDetectorTimed(timing, 'todos',
     () => analyzeTodos(config.rootDir, files, readFile))
   const longFunctions = await runDetectorTimed(timing, 'long-functions',
-    () => batchOr<LongFunction[]>(ctx, BATCH_KEYS.longFunctions,
-      () => analyzeLongFunctions(config.rootDir, files, sharedProject))
-      // Le batch path retourne items sortés par sortKey (file:line). Le legacy
-      // analyzeLongFunctions re-sort par loc desc — restaure ce post-sort ici
-      // pour que snapshot.longFunctions reste identique entre modes.
-      .then((arr) => [...arr].sort((a, b) => b.loc - a.loc)))
+    () => analyzeLongFunctions(config.rootDir, files, sharedProject))
   const magicNumbers = await runDetectorTimed(timing, 'magic-numbers',
     () => incremental
       ? Promise.resolve(incAllMagicNumbers.get('all'))
-      : batchOr<MagicNumber[]>(ctx, BATCH_KEYS.magicNumbers,
-          () => analyzeMagicNumbers(config.rootDir, files, sharedProject)))
+      : analyzeMagicNumbers(config.rootDir, files, sharedProject))
   const testCoverage = await runDetectorTimed(timing, 'test-coverage',
     () => analyzeTestCoverage(config.rootDir, files, snapshot.edges))
   const coChangePairs = await runDetectorTimed(timing, 'co-change',
@@ -1007,13 +843,11 @@ async function runPhase2Phase1Dependent(
   const evalCalls = await runDetectorTimed(timing, 'eval-calls',
     () => incremental
       ? Promise.resolve(incAllEvalCalls.get('all'))
-      : batchOr<EvalCall[]>(ctx, BATCH_KEYS.evalCalls,
-          () => analyzeEvalCalls(config.rootDir, files, sharedProject)))
+      : analyzeEvalCalls(config.rootDir, files, sharedProject))
   const cryptoCalls = await runDetectorTimed(timing, 'crypto-algo',
     () => incremental
       ? Promise.resolve(incAllCryptoCalls.get('all'))
-      : batchOr<CryptoCall[]>(ctx, BATCH_KEYS.cryptoCalls,
-          () => analyzeCryptoCalls(config.rootDir, files, sharedProject)))
+      : analyzeCryptoCalls(config.rootDir, files, sharedProject))
   // Self-optim discovery : Salsa-isolation post-λ_lyap analysis.
   // Cold path identique au legacy ; warm path = cache hit ~99%.
   const securityPatterns = await runDetectorTimed(timing, 'security-patterns',
@@ -1029,8 +863,7 @@ async function runPhase2Phase1Dependent(
   const functionComplexity = await runDetectorTimed(timing, 'function-complexity',
     () => incremental
       ? Promise.resolve(incAllFunctionComplexity.get('all'))
-      : batchOr<FunctionComplexity[]>(ctx, BATCH_KEYS.functionComplexity,
-          () => analyzeFunctionComplexity(config.rootDir, files, sharedProject)))
+      : analyzeFunctionComplexity(config.rootDir, files, sharedProject))
 
   return {
     driftSignals, evalCalls, cryptoCalls, securityPatterns, eventListenerSites,
@@ -1049,18 +882,15 @@ async function runPhase4SecurityAndQuality(ctx: DetectorPhaseContext) {
   const hardcodedSecrets = await runDetectorTimed(timing, 'hardcoded-secrets',
     () => incremental
       ? Promise.resolve(incAllHardcodedSecrets.get('all'))
-      : batchOr<HardcodedSecret[]>(ctx, BATCH_KEYS.hardcodedSecrets,
-          () => analyzeHardcodedSecrets(config.rootDir, files, sharedProject)))
+      : analyzeHardcodedSecrets(config.rootDir, files, sharedProject))
   const booleanParams = await runDetectorTimed(timing, 'boolean-params',
     () => incremental
       ? Promise.resolve(incAllBooleanParams.get('all'))
-      : batchOr<BooleanParamSite[]>(ctx, BATCH_KEYS.booleanParams,
-          () => analyzeBooleanParams(config.rootDir, files, sharedProject)))
+      : analyzeBooleanParams(config.rootDir, files, sharedProject))
   const deadCode = await runDetectorTimed(timing, 'dead-code',
     () => incremental
       ? Promise.resolve(incAllDeadCode.get('all'))
-      : batchOr<DeadCodeFinding[]>(ctx, BATCH_KEYS.deadCode,
-          () => analyzeDeadCode(config.rootDir, files, sharedProject)))
+      : analyzeDeadCode(config.rootDir, files, sharedProject))
   // floating-promises : dep sur snapshot.typedCalls (Phase 5 graph build).
   const floatingPromises = await runDetectorTimed(timing, 'floating-promises',
     () => analyzeFloatingPromises(config.rootDir, files, sharedProject, snapshot.typedCalls))
@@ -1116,13 +946,11 @@ async function runPhase6TaintChain(ctx: DetectorPhaseContext) {
   const taintSinks = await runDetectorTimed(timing, 'taint-sinks',
     () => incremental
       ? Promise.resolve(incAllTaintSinks.get('all'))
-      : batchOr<TaintSink[]>(ctx, BATCH_KEYS.taintSinks,
-          () => analyzeTaintSinks(config.rootDir, files, sharedProject)))
+      : analyzeTaintSinks(config.rootDir, files, sharedProject))
   const sanitizerCalls = await runDetectorTimed(timing, 'sanitizers',
     () => incremental
       ? Promise.resolve(incAllSanitizers.get('all'))
-      : batchOr<Sanitizer[]>(ctx, BATCH_KEYS.sanitizers,
-          () => analyzeSanitizers(config.rootDir, files, sharedProject)))
+      : analyzeSanitizers(config.rootDir, files, sharedProject))
   const taintedVars = await runDetectorTimed(timing, 'tainted-vars',
     () => incremental
       ? Promise.resolve(incAllTaintedVars.get('all'))

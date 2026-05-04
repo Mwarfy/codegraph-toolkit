@@ -24,8 +24,6 @@
  * Pattern exempt : `// crypto-ok: <reason>` ligne precedente.
  */
 
-import { fileURLToPath } from 'node:url'
-import * as path from 'node:path'
 import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
 import { findContainingSymbol, makeIsExemptForMarker } from './_shared/ast-helpers.js'
 import { runPerSourceFileExtractor } from '../parallel/per-source-file-extractor.js'
@@ -103,17 +101,6 @@ export function extractCryptoCallsFileBundle(
   return { calls }
 }
 
-/**
- * Worker entrypoint Phase γ.2.
- */
-export function extractCryptoCallsForWorker(sf: SourceFile, relPath: string): CryptoCall[] {
-  return extractCryptoCallsFileBundle(sf, relPath).calls
-}
-
-const CRYPTO_ALGO_WORKER_MODULE = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  'crypto-algo.js',
-)
 
 export async function analyzeCryptoCalls(
   rootDir: string,
@@ -127,8 +114,6 @@ export async function analyzeCryptoCalls(
     extractor: extractCryptoCallsFileBundle,
     selectItems: (b) => b.calls,
     sortKey: (c) => `${c.file}:${String(c.line).padStart(8, '0')}`,
-    workerModule: CRYPTO_ALGO_WORKER_MODULE,
-    workerExport: 'extractCryptoCallsForWorker',
   })
   return r.items
 }

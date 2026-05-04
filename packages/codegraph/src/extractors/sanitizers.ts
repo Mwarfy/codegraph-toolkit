@@ -17,8 +17,6 @@
  * détecté et le composite peut grandfather le site individuellement.
  */
 
-import { fileURLToPath } from 'node:url'
-import * as path from 'node:path'
 import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
 import { findContainingSymbol } from './_shared/ast-helpers.js'
 import { runPerSourceFileExtractor } from '../parallel/per-source-file-extractor.js'
@@ -102,17 +100,6 @@ export function extractSanitizersFileBundle(
   return { sanitizers }
 }
 
-/**
- * Worker entrypoint Phase γ.2.
- */
-export function extractSanitizersForWorker(sf: SourceFile, relPath: string): Sanitizer[] {
-  return extractSanitizersFileBundle(sf, relPath).sanitizers
-}
-
-const SANITIZERS_WORKER_MODULE = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  'sanitizers.js',
-)
 
 export async function analyzeSanitizers(
   rootDir: string,
@@ -126,8 +113,6 @@ export async function analyzeSanitizers(
     extractor: extractSanitizersFileBundle,
     selectItems: (b) => b.sanitizers,
     sortKey: (s) => `${s.file}:${String(s.line).padStart(8, '0')}`,
-    workerModule: SANITIZERS_WORKER_MODULE,
-    workerExport: 'extractSanitizersForWorker',
   })
   return r.items
 }

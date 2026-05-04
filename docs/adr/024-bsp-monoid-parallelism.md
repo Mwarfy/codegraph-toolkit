@@ -51,18 +51,11 @@ output bit-identique entre runs, déterminisme garanti.
 <!-- AUTO-GÉNÉRÉ depuis les marqueurs ADR-NNN du code source. Voir @liby-tools/adr-toolkit. NE PAS éditer à la main. -->
 
 - `packages/codegraph/src/detectors/ts-imports.ts`
-- `packages/codegraph/src/extractors/_template.monoid.ts`
-- `packages/codegraph/src/extractors/_template.monoid.worker.ts`
 - `packages/codegraph/src/extractors/todos.ts`
-- `packages/codegraph/src/extractors/todos.worker.ts`
 - `packages/codegraph/src/parallel/bsp-scheduler.ts`
-- `packages/codegraph/src/parallel/cost-model.ts`
 - `packages/codegraph/src/parallel/monoid.ts`
 - `packages/codegraph/src/parallel/per-file-extractor.ts`
-- `packages/codegraph/src/parallel/per-source-file-batch-extractor.ts`
 - `packages/codegraph/src/parallel/per-source-file-extractor.ts`
-- `packages/codegraph/src/parallel/source-file-worker-runner.ts`
-- `packages/codegraph/src/parallel/worker-pool.ts`
 
 
 ## Tested by
