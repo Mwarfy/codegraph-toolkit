@@ -14,7 +14,7 @@
     "./rules": "./dist/rules/index.js"
   },
   "bin": {
-    "liby-runtime-graph": "./dist/cli.js"
+    "liby-runtime-graph": "dist/cli.js"
   },
   "files": [
     "dist",

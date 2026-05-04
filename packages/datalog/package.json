@@ -11,7 +11,7 @@
     "./eval": "./dist/eval.js"
   },
   "bin": {
-    "datalog": "./dist/cli.js"
+    "datalog": "dist/cli.js"
   },
   "files": [
     "dist",

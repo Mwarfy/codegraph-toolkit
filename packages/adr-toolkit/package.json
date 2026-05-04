@@ -9,7 +9,7 @@
     ".": "./dist/index.js"
   },
   "bin": {
-    "adr-toolkit": "./dist/cli/index.js"
+    "adr-toolkit": "dist/cli/index.js"
   },
   "files": [
     "dist",
