@@ -162,6 +162,10 @@ async function runViaWorkers<Bundle, Item>(
     workerModule: resolveRunnerPath(),
     workerExport: 'extractInWorker',
     monoid: appendSortedMonoid<Item>(opts.sortKey),
+    // Phase γ.3 : affinity sur absPath → même fichier toujours sur même
+    // worker → cache LRU intra-worker hit cross-detector (1× parse au lieu
+    // de N× parse sur N détecteurs same-file).
+    affinityKey: (item) => item.absPath,
   })
 
   return {

@@ -71,6 +71,13 @@ export interface ParallelMapWorkersOptions<Item, Result> {
   monoid: Monoid<Result>
   /** Pool optionnel — sinon utilise le global pool. */
   pool?: WorkerPool
+  /**
+   * Phase γ.3 : extracteur de la clé d'affinity pour chaque item. Si fourni,
+   * chaque item est routé vers le worker hash(key) → idx. Permet aux caches
+   * intra-worker (mini-Project parsé) de hit sur les calls subséquents.
+   * Si omis, fallback round-robin (Phase β).
+   */
+  affinityKey?: (item: Item) => string
 }
 
 export interface ParallelMapResult<Result> {
@@ -199,9 +206,11 @@ export async function parallelMapWorkers<Item, Result>(
     }
   }
 
+  const affinityFn = opts.affinityKey
   const promises = opts.items.map(async (item) => {
     const t = performance.now()
-    const r = await pool.dispatch<Result>(opts.workerModule, opts.workerExport, [item])
+    const key = affinityFn ? affinityFn(item) : undefined
+    const r = await pool.dispatch<Result>(opts.workerModule, opts.workerExport, [item], key)
     workerMs.push(performance.now() - t)
     return r
   })
