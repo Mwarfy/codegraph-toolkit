@@ -67,7 +67,7 @@ export const allCompressionSimilarity = derived<string, NormalizedCompressionDis
  * Copie locale de `extractFunctionSnippets` privée du extractor — logique
  * strictement identique au original (cf. compression-similarity.ts L200-247).
  * Si tu modifies l'algo upstream, mirror ici (un test d'équivalence
- * garantirait la parité — TODO).
+ * garantirait la parité — TODO @codegraph-toolkit: parity-test).
  */
 const FN_LIKE_KINDS = new Set([
   'FunctionDeclaration',

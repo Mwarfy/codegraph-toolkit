@@ -82,6 +82,7 @@ export class Database {
     this.dirtyKeys.add(cell.queryId + '\x00' + cell.encodedKey)
   }
 
+  // drift-ok: encapsulation classique class.method → privateField (registered, derivedFns).
   hasQuery(queryId: QueryId): boolean {
     return this.registered.has(queryId)
   }
@@ -97,6 +98,7 @@ export class Database {
   }
 
   /** Récupère la fonction d'une derived query. undefined si c'est un input. */
+  // drift-ok: encapsulation class.method → privateField.
   getDerivedFn(queryId: QueryId): ((key: unknown) => unknown) | undefined {
     return this.derivedFns.get(queryId)
   }

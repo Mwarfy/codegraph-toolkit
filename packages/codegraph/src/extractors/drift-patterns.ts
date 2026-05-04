@@ -28,6 +28,8 @@
  * section Mémoire avec la raison.
  */
 
+import * as fs from 'node:fs'
+import * as path from 'node:path'
 import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
 import { makeIsExemptForMarker } from './_shared/ast-helpers.js'
 import type { TodoMarker } from './todos.js'
@@ -82,6 +84,7 @@ const DEFAULT_MAX_NESTING_DEPTH = 5
 // ─── Pattern 1 + 2 : AST per-file ─────────────────────────────────────────
 
 /**
+ * drift-ok: docstring décrit le pattern, pas un to-do actionnable.
  * Bundle per-file pour les patterns AST. Pattern 3 (TODO no-owner) est
  * traité dans l'aggregator car il n'a pas besoin d'AST.
  */
@@ -309,9 +312,11 @@ export function extractDriftPatternsFileBundle(
   return { signals: ctx.signals }
 }
 
+// drift-ok: section-header description du pattern, pas un to-do actionnable.
 // ─── Pattern 3 : TODO no owner (regex sur snapshot.todos existant) ────────
 
 /**
+ * drift-ok: docstring décrit les patterns reconnus, pas un to-do actionnable.
  * Détecte les TODO/FIXME/HACK/XXX/NOTE sans `@username` (owner) ni
  * `#NNN` (issue ref). Un TODO sans propriétaire est un fantôme : il
  * dérive sans qu'on s'en aperçoive.
@@ -339,6 +344,56 @@ export function todoToDriftSignal(todo: TodoMarker): DriftSignal | null {
   }
 }
 
+/**
+ * drift-ok: docstring décrit la sémantique du marker, pas un to-do.
+ * Check `// drift-ok` exemption for a to-do marker :
+ *   - line immédiatement précédente, OR
+ *   - n'importe quelle ligne du JSDoc englobant (si le marker est dans un
+ *     `/** ... *​/` block et le block s'ouvre avec `/** drift-ok` ou est
+ *     précédé par `// drift-ok`).
+ *
+ * Cache : 1 readFileSync par fichier (les markers sont triés implicitement
+ * dans la boucle de l'aggregator, mais on lit en lazy via fileLinesCache).
+ */
+const fileLinesCache = new Map<string, string[]>()
+
+function isTodoExempt(rootDir: string, todo: TodoMarker): boolean {
+  let lines = fileLinesCache.get(todo.file)
+  if (!lines) {
+    try {
+      lines = fs.readFileSync(path.join(rootDir, todo.file), 'utf-8').split('\n')
+    } catch {
+      return false
+    }
+    fileLinesCache.set(todo.file, lines)
+  }
+  const idx = todo.line - 1  // 0-based
+
+  // 1. Direct preceding line : `// drift-ok` ou docblock continuation `* drift-ok`.
+  if (idx > 0 && /\/\/\s*drift-ok\b/.test(lines[idx - 1])) return true
+
+  // 2. JSDoc englobant : si le marker est dans un block /** ... */, scanner
+  //    toutes les lignes du block (de l'ouverture jusqu'au marker) pour
+  //    `drift-ok`. Permet la convention "marker dans le bloc lui-même".
+  return isTodoInsideExemptedJsdoc(lines, idx)
+}
+
+function isTodoInsideExemptedJsdoc(lines: string[], idx: number): boolean {
+  // Walk upward jusqu'à trouver `/**` ou sortir du block (line non-`*`).
+  for (let j = idx - 1; j >= 0; j--) {
+    const l = lines[j]
+    if (/drift-ok\b/.test(l)) return true       // marker dans une ligne du block
+    if (/^\s*\/\*\*/.test(l)) {
+      // Atteint l'ouverture sans trouver de marker dans le block.
+      // Dernière chance : `// drift-ok` sur la ligne JUSTE avant `/**`.
+      return j > 0 && /\/\/\s*drift-ok\b/.test(lines[j - 1])
+    }
+    // Pas une continuation docblock (`* ...`) → on n'est pas dans un JSDoc.
+    if (!/^\s*\*/.test(l)) return false
+  }
+  return false
+}
+
 // ─── Aggregator ────────────────────────────────────────────────────────────
 
 export async function analyzeDriftPatterns(
@@ -362,9 +417,14 @@ export async function analyzeDriftPatterns(
     all.push(...bundle.signals)
   }
 
-  // Pattern 3 : TODO no-owner depuis snapshot.todos
+  // drift-ok: section-header description du pattern, pas un to-do.
+  // Pattern 3 : to-do markers no-owner depuis snapshot.todos
+  // Exemption : `// drift-ok` sur la ligne immédiatement précédente OU
+  // les mentions dans des JSDoc dont la 1ère ligne `/**` a un marker.
+  // Pour le cas docblock, on regarde aussi la 1ère ligne du bloc englobant.
   if (todos) {
     for (const todo of todos) {
+      if (isTodoExempt(rootDir, todo)) continue
       const signal = todoToDriftSignal(todo)
       if (signal) all.push(signal)
     }

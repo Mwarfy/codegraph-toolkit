@@ -104,17 +104,22 @@ function printExportsSummary(snapshot: import('../../core/types.js').GraphSnapsh
   console.log()
 }
 
+/** Mapping confidence string → ExportConfidenceCounts bucket key. */
+const CONFIDENCE_TO_BUCKET: Record<string, keyof ExportConfidenceCounts | undefined> = {
+  'safe-to-remove': 'safe',
+  'test-only': 'test',
+  'possibly-dynamic': 'dynamic',
+  'local-only': 'local',
+}
+
 function countExportsByConfidence(
   filesWithExports: import('../../core/types.js').GraphSnapshot['nodes'],
 ): ExportConfidenceCounts {
   const conf: ExportConfidenceCounts = { safe: 0, test: 0, dynamic: 0, local: 0 }
   for (const n of filesWithExports) {
     for (const e of n.exports!) {
-      const c = (e as any).confidence
-      if (c === 'safe-to-remove') conf.safe++
-      else if (c === 'test-only') conf.test++
-      else if (c === 'possibly-dynamic') conf.dynamic++
-      else if (c === 'local-only') conf.local++
+      const bucket = CONFIDENCE_TO_BUCKET[(e as any).confidence]
+      if (bucket) conf[bucket]++
     }
   }
   return conf

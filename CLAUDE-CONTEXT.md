@@ -184,9 +184,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/audit-listener.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/b.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/scheduler.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
@@ -208,6 +208,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+8374745 refactor(datalog): split Lexer.readString (cyclo 10→4, cog 26→3) — parser.ts cleared
 0796ef1 refactor(codegraph): split extractAllocationInLoops (cyclo 11→4, cog 27→6) — allocation-in-loop.ts cleared
 7c57543 refactor(datalog): split unify (cyclo 11→8, cog 34→17) — eval.ts unify cleared
 e0715bf refactor(codegraph): split detectHttpEntries (cyclo 12→1, cog 27→0) — data-flows.ts cleared
@@ -219,7 +220,6 @@ bc2d6c5 refactor(codegraph): split extractTryCatchSwallows (cyclo 13→5, cog 29
 a7bbb0c refactor(codegraph): split computePackageMinCuts (cyclo 15→6, cog 28→8) — package-mincut.ts cleared
 5309e21 refactor(codegraph): split loadPersistedCache (cyclo 16→2, cog 18→1) — incremental/persistence.ts cleared
 119cfd4 refactor(codegraph): split diffDataFlows (cyclo 16→3, cog 20→0) — diff/data-flows.ts cleared
-da2fe20 refactor(codegraph): split diffCycles (cyclo 16→5, cog 21→3) — diff/cycles.ts cleared
 ```
 
 ## Comment contribuer à ce brief

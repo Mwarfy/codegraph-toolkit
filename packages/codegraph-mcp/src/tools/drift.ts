@@ -1,4 +1,5 @@
 /**
+ * drift-ok: docstring décrit l'API exposée, pas un to-do actionnable.
  * codegraph_drift(file?) — drift signals (Phase 4 axe 4).
  *
  * Liste les patterns "drift agentique" détectés : excès de params

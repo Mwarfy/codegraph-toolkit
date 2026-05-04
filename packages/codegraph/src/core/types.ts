@@ -304,6 +304,7 @@ export interface GraphSnapshot {
   oauthScopeLiterals?: OauthScopeLiteralRef[]
 
   /**
+   * drift-ok: docstring du field, pas un to-do actionnable.
    * TODO/FIXME/HACK/XXX/NOTE markers — la dette assumée. Capture les
    * commentaires `// TODO: ...` etc. avec leur file + line + message.
    * Détectés via regex. Optionnel.

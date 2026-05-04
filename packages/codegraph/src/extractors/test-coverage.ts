@@ -161,6 +161,8 @@ async function walkForTests(dir: string, rootDir: string, result: string[]): Pro
   await Promise.all(subdirs.map((s) => walkForTests(s, rootDir, result)))
 }
 
+// Predicate nommé pour la lisibilité (utilisé 3× dans walkForTests).
+// drift-ok: named predicate intentional
 function isTestFile(basename: string): boolean {
   return /\.(test|spec)\.(ts|tsx|js|jsx)$/.test(basename)
 }

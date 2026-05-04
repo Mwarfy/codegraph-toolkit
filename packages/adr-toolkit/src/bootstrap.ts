@@ -1,5 +1,7 @@
 // ADR-004: 3 rôles séparés (codegraph détecte / LLM rédige / humain valide)
 /**
+ * drift-ok: docstring décrit le contrat anti-dérive — mentions des tags de
+ * dette sont conceptuelles, pas actionnables.
  * `adr-toolkit bootstrap` — auto-rédaction de drafts ADR via agents Sonnet ciblés.
  *
  * Architecture en 3 rôles séparés (la clé du cadrage) :
@@ -204,6 +206,7 @@ export interface AdrDraft {
   title?: string
   /** Rule (1 phrase, ≤120 chars, présent indicatif) */
   rule?: string
+  // drift-ok: doc-string explique la convention de citation, pas actionnable.
   /** Why (2 phrases max, doit citer source ou TODO) */
   why?: string
   /** Asserts ts-morph */
@@ -402,7 +405,9 @@ const GENERIC_RULE_PHRASES = [
 function calculateConfidence(draft: AdrDraft): 'low' | 'medium' | 'high' {
   if (draft.verdict !== 'propose') return 'low'
   if (!draft.rule || !draft.why) return 'low'
+  // drift-ok: 3 lignes ci-dessous décrivent le pattern, pas un to-do actionnable.
   // TODO/anywhere = low (pas juste startsWith — le LLM peut dire
+  // drift-ok: ce string est un EXEMPLE de sortie LLM, pas un marker code.
   // "Aucun commentaire trouvé. TODO: ..." → essentiellement vide).
   if (/\bTODO\b/i.test(draft.why)) return 'low'
   // Why trop court = sans substance utile

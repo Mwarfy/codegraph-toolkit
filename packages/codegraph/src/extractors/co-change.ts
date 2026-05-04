@@ -65,6 +65,9 @@ export interface CoChangeOptions {
   maxFilesPerCommit?: number
 }
 
+// Signature async maintenue pour le contrat des détecteurs (cf. analyzer.ts:805
+// + 13 call-sites tests). Le sync délégué est un helper interne pour Salsa.
+// drift-ok: contrat async backward-compat
 export async function analyzeCoChange(
   rootDir: string,
   options: CoChangeOptions = {},

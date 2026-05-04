@@ -49,6 +49,7 @@ export const projectFiles = input<string, readonly string[]>(db, 'projectFiles')
  */
 const mtimeCache = new Map<string, number>()
 
+// drift-ok: encapsulation get/set/clear sur mtimeCache module-private
 export function getCachedMtime(filePath: string): number | undefined {
   return mtimeCache.get(filePath)
 }

@@ -1,4 +1,6 @@
 /**
+ * drift-ok: extracteur des markers de dette — mentions docstring-only.
+ *
  * TODO/FIXME tracker — déterministe, regex per-file.
  *
  * Scanne tous les fichiers TS pour les commentaires `// TODO`, `// FIXME`,
@@ -38,6 +40,7 @@ export interface TodosFileBundle {
 const TAG_PATTERN = /(?:^|[^\w])\b(TODO|FIXME|HACK|XXX|NOTE)\b\s*:?\s*(.*)/
 
 /**
+ * drift-ok: docstring du détecteur — mention concept-only.
  * Bundle per-file : extrait les markers TODO/FIXME du contenu source.
  *
  * Regex-only, pas d'AST — les markers vivent dans des commentaires, pas
