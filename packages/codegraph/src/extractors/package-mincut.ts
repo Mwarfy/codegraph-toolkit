@@ -117,7 +117,25 @@ export function computePackageMinCuts(
   const fileNodes = nodes.filter((n) => n.type === 'file')
   if (fileNodes.length < 4) return []
 
-  // Group files by package
+  const pkgFiles = groupFilesByPackage(fileNodes)
+  if (pkgFiles.size < 2) return []
+
+  const importEdges = edges.filter((e) => e.type === 'import')
+    .map((e) => ({ from: e.from, to: e.to }))
+
+  const pkgs = [...pkgFiles.keys()].sort()
+  const out: PackageMinCut[] = []
+  for (let i = 0; i < pkgs.length; i++) {
+    for (let j = i + 1; j < pkgs.length; j++) {
+      const cut = computeOnePairCut(pkgs[i], pkgs[j], pkgFiles, importEdges)
+      if (cut) out.push(cut)
+    }
+  }
+  out.sort((a, b) => a.minCut - b.minCut)
+  return out
+}
+
+function groupFilesByPackage(fileNodes: GraphNode[]): Map<string, string[]> {
   const pkgFiles = new Map<string, string[]>()
   for (const n of fileNodes) {
     const p = packageOf(n.id)
@@ -125,40 +143,43 @@ export function computePackageMinCuts(
     if (!pkgFiles.has(p)) pkgFiles.set(p, [])
     pkgFiles.get(p)!.push(n.id)
   }
-  if (pkgFiles.size < 2) return []
+  return pkgFiles
+}
 
-  // Filter import edges only
-  const importEdges = edges.filter((e) => e.type === 'import')
-    .map((e) => ({ from: e.from, to: e.to }))
+/** Compute min-cut + sample edges pour une paire (p1, p2). null si pas de crossing edges. */
+function computeOnePairCut(
+  p1: string,
+  p2: string,
+  pkgFiles: Map<string, string[]>,
+  importEdges: Array<{ from: string; to: string }>,
+): PackageMinCut | null {
+  const { edgeCount, crossing } = countCrossingEdges(p1, p2, importEdges)
+  if (edgeCount === 0) return null  // Packages indépendants — pas de min-cut à calculer
+  const source = new Set(pkgFiles.get(p1)!)
+  const target = new Set(pkgFiles.get(p2)!)
+  return {
+    fromPackage: p1,
+    toPackage: p2,
+    edgeCount,
+    minCut: maxFlow(importEdges, source, target),
+    sampleEdges: crossing,
+  }
+}
 
-  // For each pair of packages, compute min cut
-  const out: PackageMinCut[] = []
-  const pkgs = [...pkgFiles.keys()].sort()
-  for (let i = 0; i < pkgs.length; i++) {
-    for (let j = i + 1; j < pkgs.length; j++) {
-      const p1 = pkgs[i], p2 = pkgs[j]
-      const source = new Set(pkgFiles.get(p1)!)
-      const target = new Set(pkgFiles.get(p2)!)
-      // Sample edges that cross
-      const crossing: string[] = []
-      let edgeCount = 0
-      for (const e of importEdges) {
-        const fp = packageOf(e.from)
-        const tp = packageOf(e.to)
-        if ((fp === p1 && tp === p2) || (fp === p2 && tp === p1)) {
-          edgeCount++
-          if (crossing.length < 5) crossing.push(`${e.from}→${e.to}`)
-        }
-      }
-      if (edgeCount === 0) continue  // Packages independants — pas de min-cut a calculer
-      // Min-cut = max-flow source→target
-      const mc = maxFlow(importEdges, source, target)
-      out.push({
-        fromPackage: p1, toPackage: p2,
-        edgeCount, minCut: mc, sampleEdges: crossing,
-      })
+function countCrossingEdges(
+  p1: string,
+  p2: string,
+  importEdges: ReadonlyArray<{ from: string; to: string }>,
+): { edgeCount: number; crossing: string[] } {
+  const crossing: string[] = []
+  let edgeCount = 0
+  for (const e of importEdges) {
+    const fp = packageOf(e.from)
+    const tp = packageOf(e.to)
+    if ((fp === p1 && tp === p2) || (fp === p2 && tp === p1)) {
+      edgeCount++
+      if (crossing.length < 5) crossing.push(`${e.from}→${e.to}`)
     }
   }
-  out.sort((a, b) => a.minCut - b.minCut)
-  return out
+  return { edgeCount, crossing }
 }
