@@ -103,71 +103,98 @@ interface Classification {
   capture: boolean
 }
 
+const SKIP_CLASSIFICATION: Classification = { context: '', category: 'other', capture: false }
+const COMPARISON_OPS = new Set(['>', '<', '>=', '<=', '===', '==', '!==', '!='])
+
 function classifyLiteral(
   _lit: Node,
   parent: Node,
   value: number,
   minMagnitude: number,
 ): Classification {
-  // Case 1 : argument d'un appel — setInterval(fn, 30000) etc.
   if (Node.isCallExpression(parent)) {
-    const expr = parent.getExpression()
-    const callName = getCallName(expr)
-    if (callName && TIMEOUT_FN_NAMES.has(callName)) {
-      return { context: callName, category: 'timeout', capture: true }
-    }
-    // Magnitude check pour les autres calls
-    if (Math.abs(value) >= minMagnitude) {
-      return {
-        context: callName ?? 'call',
-        category: 'large-int',
-        capture: true,
-      }
-    }
+    return classifyCallArgument(parent, value, minMagnitude)
   }
-
-  // Case 2 : property assignment — { timeoutMs: 30000 }
   if (Node.isPropertyAssignment(parent)) {
-    const propName = parent.getName()
-    if (TIMEOUT_PROPERTY_NAMES.has(propName)) {
-      return { context: propName, category: 'timeout', capture: true }
-    }
-    if (THRESHOLD_PROPERTY_NAMES.has(propName)) {
-      return { context: propName, category: 'threshold', capture: true }
-    }
-    // Ratio (0 < value < 1)
-    if (value > 0 && value < 1) {
-      return { context: propName, category: 'ratio', capture: true }
-    }
-    if (Math.abs(value) >= minMagnitude) {
-      return { context: propName, category: 'large-int', capture: true }
-    }
+    return classifyPropertyAssignment(parent, value, minMagnitude)
   }
-
-  // Case 3 : variable initializer — `const TIMEOUT_MS = 30000`
-  // (La constante elle-même est OK — c'est l'idée — mais on la signale
-  // quand même pour audit, sauf si SCREAMING_SNAKE convention claire.)
   if (Node.isVariableDeclaration(parent)) {
-    const name = parent.getName()
-    // Skip si SCREAMING_SNAKE (déjà extracté en const)
-    if (/^[A-Z][A-Z0-9_]*$/.test(name)) return { context: '', category: 'other', capture: false }
-    if (Math.abs(value) >= minMagnitude) {
-      return { context: name, category: 'large-int', capture: true }
-    }
+    return classifyVarDeclaration(parent, value, minMagnitude)
   }
-
-  // Case 4 : binary expression (`x > 5000` ou `x === 200`)
   if (Node.isBinaryExpression(parent)) {
-    const op = parent.getOperatorToken().getText()
-    if (['>', '<', '>=', '<=', '===', '==', '!==', '!='].includes(op)) {
-      if (Math.abs(value) >= minMagnitude) {
-        return { context: `compare ${op}`, category: 'large-int', capture: true }
-      }
-    }
+    return classifyBinaryComparison(parent, value, minMagnitude)
   }
+  return SKIP_CLASSIFICATION
+}
 
-  // Default : skip
-  return { context: '', category: 'other', capture: false }
+/** Case 1 : argument d'un appel — setInterval(fn, 30000) etc. */
+function classifyCallArgument(
+  call: import('ts-morph').CallExpression,
+  value: number,
+  minMagnitude: number,
+): Classification {
+  const callName = getCallName(call.getExpression())
+  if (callName && TIMEOUT_FN_NAMES.has(callName)) {
+    return { context: callName, category: 'timeout', capture: true }
+  }
+  if (Math.abs(value) >= minMagnitude) {
+    return { context: callName ?? 'call', category: 'large-int', capture: true }
+  }
+  return SKIP_CLASSIFICATION
+}
+
+/** Case 2 : property assignment — { timeoutMs: 30000 }. */
+function classifyPropertyAssignment(
+  prop: import('ts-morph').PropertyAssignment,
+  value: number,
+  minMagnitude: number,
+): Classification {
+  const propName = prop.getName()
+  if (TIMEOUT_PROPERTY_NAMES.has(propName)) {
+    return { context: propName, category: 'timeout', capture: true }
+  }
+  if (THRESHOLD_PROPERTY_NAMES.has(propName)) {
+    return { context: propName, category: 'threshold', capture: true }
+  }
+  if (value > 0 && value < 1) {
+    return { context: propName, category: 'ratio', capture: true }
+  }
+  if (Math.abs(value) >= minMagnitude) {
+    return { context: propName, category: 'large-int', capture: true }
+  }
+  return SKIP_CLASSIFICATION
+}
+
+/**
+ * Case 3 : variable initializer — `const TIMEOUT_MS = 30000`. La constante
+ * elle-même est OK, mais on la signale pour audit sauf si SCREAMING_SNAKE
+ * convention claire (déjà extracté en const).
+ */
+function classifyVarDeclaration(
+  v: import('ts-morph').VariableDeclaration,
+  value: number,
+  minMagnitude: number,
+): Classification {
+  const name = v.getName()
+  if (/^[A-Z][A-Z0-9_]*$/.test(name)) return SKIP_CLASSIFICATION
+  if (Math.abs(value) >= minMagnitude) {
+    return { context: name, category: 'large-int', capture: true }
+  }
+  return SKIP_CLASSIFICATION
+}
+
+/** Case 4 : binary expression (`x > 5000` ou `x === 200`). */
+function classifyBinaryComparison(
+  ba: import('ts-morph').BinaryExpression,
+  value: number,
+  minMagnitude: number,
+): Classification {
+  const op = ba.getOperatorToken().getText()
+  if (!COMPARISON_OPS.has(op)) return SKIP_CLASSIFICATION
+  if (Math.abs(value) >= minMagnitude) {
+    return { context: `compare ${op}`, category: 'large-int', capture: true }
+  }
+  return SKIP_CLASSIFICATION
 }
 
 function getCallName(expr: Node): string | null {
