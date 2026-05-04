@@ -36,21 +36,33 @@ async function exists(p) {
 //      node_modules) → multi-dir [toolkit-canonical, project-local].
 //   2. Sinon fallback : un seul dir local.
 async function resolveRulesDirs(root) {
-  const local = await exists(path.join(root, 'sentinel-core/invariants'))
-    ? path.join(root, 'sentinel-core/invariants')
-    : path.join(root, 'invariants')
+  // Local path (project-specific overrides) — ajoute uniquement s'il existe.
+  let local = null
+  if (await exists(path.join(root, 'sentinel-core/invariants'))) {
+    local = path.join(root, 'sentinel-core/invariants')
+  } else if (await exists(path.join(root, 'invariants'))) {
+    local = path.join(root, 'invariants')
+  }
 
-  // Cherche le pkg toolkit dans plusieurs node_modules layers
+  // Cherche le pkg toolkit dans plusieurs layers, par ordre de preference :
+  //   1. node_modules (project consumer)
+  //   2. sentinel-core/node_modules (Sentinel-specific layout)
+  //   3. packages/invariants-postgres-ts/invariants (workspace path —
+  //      cas du toolkit lui-meme qui s'auto-checke)
   const candidates = [
     path.join(root, 'node_modules/@liby-tools/invariants-postgres-ts/invariants'),
     path.join(root, 'sentinel-core/node_modules/@liby-tools/invariants-postgres-ts/invariants'),
+    path.join(root, 'packages/invariants-postgres-ts/invariants'),
   ]
   for (const c of candidates) {
     if (await exists(c)) {
-      return [c, local] // canonical first, project-local second
+      // Si local existe ET differe du canonical, multi-dir.
+      if (local && path.resolve(c) !== path.resolve(local)) return [c, local]
+      return [c]
     }
   }
-  return [local]
+  // Pas de canonical trouve, fallback sur local s'il existe.
+  return local ? [local] : []
 }
 
 const rulesDirs = await resolveRulesDirs(root)
