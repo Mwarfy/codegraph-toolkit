@@ -112,6 +112,10 @@ export const SCHEMA_DL = `// AST primitive facts — extraits par ast-facts-visi
   message:symbol, exprRepr:symbol)
 .input ConstantExpressionCandidate
 
+.decl TaintedArgumentCandidate(callerFile:symbol, callerSymbol:symbol,
+  callee:symbol, paramIndex:number, source:symbol)
+.input TaintedArgumentCandidate
+
 // ─── Hybrid outputs ─────────────────────────────────────────────────────────
 
 .decl SanitizerOut(file:symbol, line:number, callee:symbol, containingSymbol:symbol)
@@ -151,6 +155,14 @@ export const SCHEMA_DL = `// AST primitive facts — extraits par ast-facts-visi
 .decl ConstantExpressionOut(file:symbol, line:number, kind:symbol,
   message:symbol, exprRepr:symbol)
 .output ConstantExpressionOut
+
+.decl TaintedArgumentToCallOut(callerFile:symbol, callerSymbol:symbol,
+  callee:symbol, paramIndex:number, source:symbol)
+.output TaintedArgumentToCallOut
+
+.decl ArgumentsFunctionParamOut(file:symbol, sym:symbol,
+  paramName:symbol, paramIndex:number)
+.output ArgumentsFunctionParamOut
 `
 
 // Convention engine : variables capitalisées, literals (numbers, strings) inline.
@@ -332,6 +344,20 @@ ConstantExpressionOut(F, L, K, Msg, ER) :-
   !ExemptionLine(F, L, "const-expr-ok").
 `
 
+// Arguments — cross-fn taint facts. Pass-through (visitor pré-skip test files).
+// FunctionParam-for-args dérivé via join FunctionScope+FunctionParam, filtre
+// les anonymes (legacy iterateFnScopes skip les fns sans nom).
+export const ARGUMENTS_DL = `
+TaintedArgumentToCallOut(CF, CS, Callee, Idx, Src) :-
+  TaintedArgumentCandidate(CF, CS, Callee, Idx, Src).
+
+ArgumentsFunctionParamOut(F, S, P, Idx) :-
+  FunctionScope(F, L, S, _, _),
+  FunctionParam(F, L, Idx, P, _),
+  S != "(anonymous)",
+  !FileTag(F, "test").
+`
+
 export const ALL_RULES_DL = [
   SCHEMA_DL,
   MAGIC_NUMBERS_DL,
@@ -348,4 +374,5 @@ export const ALL_RULES_DL = [
   BARRELS_DL,
   ENV_USAGE_DL,
   CONSTANT_EXPRESSIONS_DL,
+  ARGUMENTS_DL,
 ].join('\n')

@@ -22,6 +22,7 @@ import { scanListenerSitesInSourceFile } from '../dist/extractors/event-listener
 import { analyzeBarrels } from '../dist/extractors/barrels.js'
 import { analyzeEnvUsage } from '../dist/extractors/env-usage.js'
 import { extractConstantExpressionsFileBundle } from '../dist/extractors/constant-expressions.js'
+import { analyzeArguments } from '../dist/extractors/arguments.js'
 import { runDatalogDetectors } from '../dist/datalog-detectors/runner.js'
 import { resolve } from 'node:path'
 
@@ -83,8 +84,9 @@ for (const sf of project.getSourceFiles()) {
 // reçoivent rootDir, files, project, et font leur propre cross-file scan).
 const legacyBarrels = await analyzeBarrels(rootDir, files, project)
 const legacyEnvUsage = await analyzeEnvUsage(rootDir, files, project)
+const legacyArguments = await analyzeArguments(rootDir, files, project)
 const legacyMs = performance.now() - tLegacy0
-console.log(`  legacy 14 detectors (${legacyMs.toFixed(1)}ms)`)
+console.log(`  legacy 15 detectors (${legacyMs.toFixed(1)}ms)`)
 
 // DATALOG
 const tDl0 = performance.now()
@@ -151,7 +153,12 @@ const envNorm = (u) => {
 const ok13 = bidirDiff(legacyEnvUsage, dl.envUsage, envNorm, 'EnvUsage')
 const ok14 = bidirDiff(legacyConstExpr, dl.constantExpressions,
   (c) => `${c.file}\t${c.line}\t${c.kind}\t${c.message}\t${c.exprRepr}`, 'ConstantExpression')
+const ok15a = bidirDiff(legacyArguments.taintedArgs, dl.arguments.taintedArgs,
+  (a) => `${a.callerFile}\t${a.callerSymbol}\t${a.callee}\t${a.paramIndex}\t${a.source}`,
+  'TaintedArgumentToCall')
+const ok15b = bidirDiff(legacyArguments.params, dl.arguments.params,
+  (p) => `${p.file}\t${p.symbol}\t${p.paramName}\t${p.paramIndex}`, 'ArgumentsFunctionParam')
 
-const allOk = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10 && ok11 && ok12 && ok13 && ok14
+const allOk = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10 && ok11 && ok12 && ok13 && ok14 && ok15a && ok15b
 console.log(`\n  Total: legacy=${legacyMs.toFixed(0)}ms vs datalog=${dlMs.toFixed(0)}ms (ratio: ${(dlMs/legacyMs).toFixed(2)}x)${allOk ? ' ✓' : ' ✗'}`)
 if (!allOk) process.exit(1)

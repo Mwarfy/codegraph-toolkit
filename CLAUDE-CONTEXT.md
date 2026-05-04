@@ -189,9 +189,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 > pas verdict. Une tension non explorée n'est pas un bug — c'est un saut
 > latéral possible que le sol stable rend testable.
 
-- **ORPHELIN** `packages/datalog/src/cli.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/datalog/src/cli.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/codegraph/src/datalog-detectors/runner.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
@@ -219,6 +219,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+dad7dc1 feat(codegraph): Phase γ.8 — port constant-expressions au pattern Datalog
 393fc2c feat(codegraph): Phase γ.7 — port barrels + env-usage au pattern Datalog
 14fe493 feat(codegraph): Phase γ.6 — port event-listener-sites au pattern Datalog
 be79c7b refactor(codegraph): Phase γ.5 — cleanup workers cold code (Phase β/γ.2/γ.3)
@@ -230,7 +231,6 @@ b2a709e feat(codegraph): Phase γ.4b — consolide + 3 nouveaux détecteurs Data
 444bc98 feat(codegraph): Phase γ.3a — affinity routing + LRU cache intra-worker
 c2ab5c7 feat(codegraph): Phase γ.2c — wire les 6 ts-morph détecteurs restants aux workers
 5a40459 feat(codegraph): Phase γ.2b — wire long-functions + dead-code aux workers
-d94cab1 feat(codegraph): Phase γ.2 — workers ts-morph via mini-Project local
 ```
 
 ## Comment contribuer à ce brief

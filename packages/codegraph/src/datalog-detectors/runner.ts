@@ -131,6 +131,21 @@ export interface DatalogDetectorResults {
     message: string
     exprRepr: string
   }>
+  arguments: {
+    taintedArgs: Array<{
+      callerFile: string
+      callerSymbol: string
+      callee: string
+      paramIndex: number
+      source: string
+    }>
+    params: Array<{
+      file: string
+      symbol: string
+      paramName: string
+      paramIndex: number
+    }>
+  }
   stats: {
     extractMs: number
     evalMs: number
@@ -169,6 +184,7 @@ export async function runDatalogDetectors(
     importEdges: [],
     envVarReads: [],
     constantExpressionCandidates: [],
+    taintedArgumentCandidates: [],
   }
   for (const sf of opts.project.getSourceFiles()) {
     const rel = relativize(sf.getFilePath(), opts.rootDir)
@@ -191,6 +207,7 @@ export async function runDatalogDetectors(
     merged.importEdges.push(...b.importEdges)
     merged.envVarReads.push(...b.envVarReads)
     merged.constantExpressionCandidates.push(...b.constantExpressionCandidates)
+    merged.taintedArgumentCandidates.push(...b.taintedArgumentCandidates)
   }
   const extractMs = performance.now() - t0
 
@@ -284,6 +301,11 @@ export async function runDatalogDetectors(
   factsByRelation.set('ConstantExpressionCandidate',
     merged.constantExpressionCandidates.map((c) =>
       [c.file, c.line, c.kind, safe(c.message), safe(c.exprRepr)].join('\t'),
+    ).join('\n'),
+  )
+  factsByRelation.set('TaintedArgumentCandidate',
+    merged.taintedArgumentCandidates.map((a) =>
+      [a.callerFile, safe(a.callerSymbol), safe(a.callee), a.paramIndex, a.source].join('\t'),
     ).join('\n'),
   )
 
@@ -467,6 +489,37 @@ export async function runDatalogDetectors(
   }
   envUsage.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
 
+  // ─── Arguments — taintedArgs + params ──────────────────────────────────────
+  const taintedArgsRaw = (result.outputs.get('TaintedArgumentToCallOut') ?? []).map((t: Tuple) => ({
+    callerFile: String(t[0]),
+    callerSymbol: String(t[1]),
+    callee: String(t[2]),
+    paramIndex: Number(t[3]),
+    source: String(t[4]),
+  }))
+  taintedArgsRaw.sort((a, b) =>
+    a.callerFile !== b.callerFile
+      ? (a.callerFile < b.callerFile ? -1 : 1)
+      : a.callerSymbol < b.callerSymbol ? -1 : a.callerSymbol > b.callerSymbol ? 1 : 0,
+  )
+
+  const argParamsRaw = (result.outputs.get('ArgumentsFunctionParamOut') ?? []).map((t: Tuple) => ({
+    file: String(t[0]),
+    symbol: String(t[1]),
+    paramName: String(t[2]),
+    paramIndex: Number(t[3]),
+  }))
+  argParamsRaw.sort((a, b) =>
+    a.file !== b.file
+      ? (a.file < b.file ? -1 : 1)
+      : a.symbol < b.symbol ? -1 : a.symbol > b.symbol ? 1 : a.paramIndex - b.paramIndex,
+  )
+
+  const argumentsResult: DatalogDetectorResults['arguments'] = {
+    taintedArgs: taintedArgsRaw,
+    params: argParamsRaw,
+  }
+
   const constantExpressions = (result.outputs.get('ConstantExpressionOut') ?? []).map((t: Tuple) => ({
     file: String(t[0]),
     line: Number(t[1]),
@@ -520,7 +573,8 @@ export async function runDatalogDetectors(
     merged.barrelFiles.length +
     merged.importEdges.length +
     merged.envVarReads.length +
-    merged.constantExpressionCandidates.length
+    merged.constantExpressionCandidates.length +
+    merged.taintedArgumentCandidates.length
   const tuplesOut =
     magicNumbers.length +
     deadCodeIdenticalSubexpressions.length +
@@ -535,7 +589,9 @@ export async function runDatalogDetectors(
     eventListenerSites.length +
     barrels.length +
     envUsage.length +
-    constantExpressions.length
+    constantExpressions.length +
+    argumentsResult.taintedArgs.length +
+    argumentsResult.params.length
 
   return {
     magicNumbers,
@@ -552,6 +608,7 @@ export async function runDatalogDetectors(
     barrels,
     envUsage,
     constantExpressions,
+    arguments: argumentsResult,
     stats: { extractMs, evalMs, tuplesIn, tuplesOut },
   }
 }
