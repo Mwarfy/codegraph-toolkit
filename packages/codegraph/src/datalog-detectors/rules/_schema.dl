@@ -1,0 +1,40 @@
+// AST primitive facts — extraits par ast-facts-visitor.ts
+
+.decl NumericLiteralAst(
+  file:symbol, line:number, valueText:symbol, valueAbs:number,
+  parentKind:symbol, parentName:symbol, parentArgIdx:number,
+  isScreamingSnake:number, isRatio:number, isTrivial:number)
+.input NumericLiteralAst
+
+.decl BinaryExpressionAst(
+  file:symbol, line:number, op:symbol, leftText:symbol, rightText:symbol,
+  leftIsShortLiteral:number)
+.input BinaryExpressionAst
+
+.decl ExemptionLine(file:symbol, line:number, marker:symbol)
+.input ExemptionLine
+
+.decl FileTag(file:symbol, tag:symbol)
+.input FileTag
+
+// ─── Lookup tables — facts statiques (charged inline depuis lookups.ts) ────
+
+.decl TimeoutFnName(name:symbol)
+.input TimeoutFnName
+
+.decl TimeoutPropertyName(name:symbol)
+.input TimeoutPropertyName
+
+.decl ThresholdPropertyName(name:symbol)
+.input ThresholdPropertyName
+
+.decl SuspectBinaryOp(op:symbol)
+.input SuspectBinaryOp
+
+// ─── Output relations (final detectors) ────────────────────────────────────
+
+.decl MagicNumber(file:symbol, line:number, valueText:symbol, context:symbol, category:symbol)
+.output MagicNumber
+
+.decl DeadCode(file:symbol, line:number, kind:symbol, message:symbol, op:symbol, expr:symbol)
+.output DeadCode

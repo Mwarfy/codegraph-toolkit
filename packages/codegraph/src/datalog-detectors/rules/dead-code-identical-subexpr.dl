@@ -1,0 +1,19 @@
+// Dead Code — identical sub-expressions (Sonar S1764, SpotBugs).
+//
+// Pattern : `if (a > 0 && a > 0)`, `Math.min(x, x)`, `x === x`. Les 2 côtés
+// d'un BinaryExpression sont textuellement identiques sur un opérateur
+// SUSPECT (logical / equality / comparison). Reproduit detectIdentical-
+// Subexpressions (extractors/dead-code.ts).
+//
+// Skip :
+//   - test files (FileTag "test")
+//   - leftIsShortLiteral=1 (constantes triviales identiques courtes : `0 === 0`)
+//   - exemption marker `dead-code-ok` sur la ligne du construct
+
+DeadCode(file, line, "identical-subexpressions",
+  "expression avec les 2 cotes identiques — bug ou redondance", op, leftText) :-
+    BinaryExpressionAst(file, line, op, leftText, leftText, leftIsShortLiteral),
+    SuspectBinaryOp(op),
+    leftIsShortLiteral = 0,
+    !FileTag(file, "test"),
+    !ExemptionLine(file, line, "dead-code-ok").

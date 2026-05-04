@@ -1,0 +1,72 @@
+// Magic Numbers Detector — Datalog rules
+//
+// Reproduit extractMagicNumbersFileBundle (extractors/magic-numbers.ts) en
+// derivation pure depuis NumericLiteralAst + lookup tables.
+//
+// Branches mutuellement exclusives (réplique le switch dans classifyLiteral) :
+//   1. CallExpression + TimeoutFnName             → "timeout"
+//   2. CallExpression + valueAbs >= 1000          → "large-int"
+//   3. PropertyAssignment + TimeoutPropertyName   → "timeout"
+//   4. PropertyAssignment + ThresholdPropertyName → "threshold"
+//   5. PropertyAssignment + isRatio=1             → "ratio"
+//   6. PropertyAssignment + valueAbs >= 1000      → "large-int"
+//   7. VariableDeclaration + valueAbs >= 1000 + !ScreamingSnake → "large-int"
+//
+// Test files skipped via FileTag(file, "test").
+
+// Rule 1 — timeout fn (setInterval, setTimeout, ...)
+MagicNumber(file, line, valueText, callName, "timeout") :-
+  NumericLiteralAst(file, line, valueText, _, "CallExpression", callName, _, _, _, isTrivial),
+  TimeoutFnName(callName),
+  isTrivial = 0,
+  !FileTag(file, "test").
+
+// Rule 2 — large-int dans call argument (non timeout)
+MagicNumber(file, line, valueText, contextName, "large-int") :-
+  NumericLiteralAst(file, line, valueText, valueAbs, "CallExpression", contextName, _, _, _, isTrivial),
+  !TimeoutFnName(contextName),
+  valueAbs >= 1000,
+  isTrivial = 0,
+  !FileTag(file, "test").
+
+// Rule 3 — timeout property
+MagicNumber(file, line, valueText, propName, "timeout") :-
+  NumericLiteralAst(file, line, valueText, _, "PropertyAssignment", propName, _, _, _, isTrivial),
+  TimeoutPropertyName(propName),
+  isTrivial = 0,
+  !FileTag(file, "test").
+
+// Rule 4 — threshold property
+MagicNumber(file, line, valueText, propName, "threshold") :-
+  NumericLiteralAst(file, line, valueText, _, "PropertyAssignment", propName, _, _, _, isTrivial),
+  ThresholdPropertyName(propName),
+  !TimeoutPropertyName(propName),
+  isTrivial = 0,
+  !FileTag(file, "test").
+
+// Rule 5 — ratio (0 < value < 1) en property assignment
+MagicNumber(file, line, valueText, propName, "ratio") :-
+  NumericLiteralAst(file, line, valueText, _, "PropertyAssignment", propName, _, _, isRatio, isTrivial),
+  isRatio = 1,
+  !TimeoutPropertyName(propName),
+  !ThresholdPropertyName(propName),
+  isTrivial = 0,
+  !FileTag(file, "test").
+
+// Rule 6 — large-int en property assignment (non timeout/threshold/ratio)
+MagicNumber(file, line, valueText, propName, "large-int") :-
+  NumericLiteralAst(file, line, valueText, valueAbs, "PropertyAssignment", propName, _, _, isRatio, isTrivial),
+  isRatio = 0,
+  !TimeoutPropertyName(propName),
+  !ThresholdPropertyName(propName),
+  valueAbs >= 1000,
+  isTrivial = 0,
+  !FileTag(file, "test").
+
+// Rule 7 — large-int en var declaration (sauf SCREAMING_SNAKE_CASE convention)
+MagicNumber(file, line, valueText, varName, "large-int") :-
+  NumericLiteralAst(file, line, valueText, valueAbs, "VariableDeclaration", varName, _, isScreamingSnake, _, isTrivial),
+  isScreamingSnake = 0,
+  valueAbs >= 1000,
+  isTrivial = 0,
+  !FileTag(file, "test").
