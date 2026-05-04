@@ -129,6 +129,10 @@ export const SCHEMA_DL = `// AST primitive facts — extraits par ast-facts-visi
   argVarName:symbol, argIdx:number, source:symbol, sym:symbol)
 .input TaintedVarArgCallCandidate
 
+.decl ResourceImbalanceCandidate(file:symbol, sym:symbol, line:number,
+  pair:symbol, acqCount:number, relCount:number)
+.input ResourceImbalanceCandidate
+
 // ─── Hybrid outputs ─────────────────────────────────────────────────────────
 
 .decl SanitizerOut(file:symbol, line:number, callee:symbol, containingSymbol:symbol)
@@ -189,6 +193,10 @@ export const SCHEMA_DL = `// AST primitive facts — extraits par ast-facts-visi
 .decl TaintedVarArgCallOut(file:symbol, line:number, callee:symbol,
   argVarName:symbol, argIdx:number, source:symbol, sym:symbol)
 .output TaintedVarArgCallOut
+
+.decl ResourceImbalanceOut(file:symbol, sym:symbol, line:number,
+  pair:symbol, acqCount:number, relCount:number)
+.output ResourceImbalanceOut
 `
 
 // Convention engine : variables capitalisées, literals (numbers, strings) inline.
@@ -370,6 +378,13 @@ ConstantExpressionOut(F, L, K, Msg, ER) :-
   !ExemptionLine(F, L, "const-expr-ok").
 `
 
+// resource-balance — visitor pré-compte par scope, rule filtre exempt.
+export const RESOURCE_BALANCE_DL = `
+ResourceImbalanceOut(F, S, L, P, AC, RC) :-
+  ResourceImbalanceCandidate(F, S, L, P, AC, RC),
+  !ExemptionLine(F, L, "resource-balance-ok").
+`
+
 // tainted-vars — pass-through (visitor pré-skip test files).
 export const TAINTED_VARS_DL = `
 TaintedVarDeclOut(F, S, V, L, Src) :- TaintedVarDeclCandidate(F, S, V, L, Src).
@@ -416,4 +431,5 @@ export const ALL_RULES_DL = [
   ARGUMENTS_DL,
   EVENT_EMIT_SITES_DL,
   TAINTED_VARS_DL,
+  RESOURCE_BALANCE_DL,
 ].join('\n')

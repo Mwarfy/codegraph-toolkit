@@ -175,6 +175,14 @@ export interface DatalogDetectorResults {
       containingSymbol: string
     }>
   }
+  resourceImbalances: Array<{
+    file: string
+    containingSymbol: string
+    line: number
+    pair: string
+    acquireCount: number
+    releaseCount: number
+  }>
   stats: {
     extractMs: number
     evalMs: number
@@ -217,6 +225,7 @@ export async function runDatalogDetectors(
     eventEmitSiteCandidates: [],
     taintedVarDeclCandidates: [],
     taintedVarArgCallCandidates: [],
+    resourceImbalanceCandidates: [],
   }
   for (const sf of opts.project.getSourceFiles()) {
     const rel = relativize(sf.getFilePath(), opts.rootDir)
@@ -243,6 +252,7 @@ export async function runDatalogDetectors(
     merged.eventEmitSiteCandidates.push(...b.eventEmitSiteCandidates)
     merged.taintedVarDeclCandidates.push(...b.taintedVarDeclCandidates)
     merged.taintedVarArgCallCandidates.push(...b.taintedVarArgCallCandidates)
+    merged.resourceImbalanceCandidates.push(...b.resourceImbalanceCandidates)
   }
   const extractMs = performance.now() - t0
 
@@ -357,6 +367,11 @@ export async function runDatalogDetectors(
   factsByRelation.set('TaintedVarArgCallCandidate',
     merged.taintedVarArgCallCandidates.map((a) =>
       [a.file, a.line, safe(a.callee), safe(a.argVarName), a.argIndex, a.source, safe(a.containingSymbol)].join('\t'),
+    ).join('\n'),
+  )
+  factsByRelation.set('ResourceImbalanceCandidate',
+    merged.resourceImbalanceCandidates.map((r) =>
+      [r.file, safe(r.containingSymbol), r.line, r.pair, r.acquireCount, r.releaseCount].join('\t'),
     ).join('\n'),
   )
 
@@ -571,6 +586,19 @@ export async function runDatalogDetectors(
     params: argParamsRaw,
   }
 
+  // ─── Resource Balance (Tier 6) ─────────────────────────────────────────────
+  const resourceImbalances = (result.outputs.get('ResourceImbalanceOut') ?? []).map((t: Tuple) => ({
+    file: String(t[0]),
+    containingSymbol: String(t[1]),
+    line: Number(t[2]),
+    pair: String(t[3]),
+    acquireCount: Number(t[4]),
+    releaseCount: Number(t[5]),
+  }))
+  resourceImbalances.sort((a, b) =>
+    a.file !== b.file ? (a.file < b.file ? -1 : 1) : a.line - b.line,
+  )
+
   // ─── Tainted Vars (Tier 11) ────────────────────────────────────────────────
   const taintedVarDecls = (result.outputs.get('TaintedVarDeclOut') ?? []).map((t: Tuple) => ({
     file: String(t[0]),
@@ -676,7 +704,8 @@ export async function runDatalogDetectors(
     merged.taintedArgumentCandidates.length +
     merged.eventEmitSiteCandidates.length +
     merged.taintedVarDeclCandidates.length +
-    merged.taintedVarArgCallCandidates.length
+    merged.taintedVarArgCallCandidates.length +
+    merged.resourceImbalanceCandidates.length
   const tuplesOut =
     magicNumbers.length +
     deadCodeIdenticalSubexpressions.length +
@@ -696,7 +725,8 @@ export async function runDatalogDetectors(
     argumentsResult.params.length +
     eventEmitSites.length +
     taintedVarsResult.decls.length +
-    taintedVarsResult.argCalls.length
+    taintedVarsResult.argCalls.length +
+    resourceImbalances.length
 
   return {
     magicNumbers,
@@ -716,6 +746,7 @@ export async function runDatalogDetectors(
     arguments: argumentsResult,
     eventEmitSites,
     taintedVars: taintedVarsResult,
+    resourceImbalances,
     stats: { extractMs, evalMs, tuplesIn, tuplesOut },
   }
 }
