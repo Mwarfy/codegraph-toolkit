@@ -24,23 +24,20 @@ export interface ExtractCandidatesArgs {
   min_loc?: number
 }
 
+type LongFn = { file: string; name: string; line: number; loc: number; kind: string }
+type SymRef = { from: string; to: string; line: number }
+interface ScoredCandidate extends LongFn { fanIn: number; score: number; symbol: string }
+
 export function codegraphExtractCandidates(args: ExtractCandidatesArgs): { content: string } {
   const repoRoot = args.repo_root ?? process.cwd()
   const limit = args.limit ?? 5
   const minLoc = args.min_loc ?? 50
-
-  const relPath = path.isAbsolute(args.file_path)
-    ? path.relative(repoRoot, args.file_path).replace(/\\/g, '/')
-    : args.file_path.replace(/\\/g, '/')
+  const relPath = normalizeRelPath(repoRoot, args.file_path)
 
   const snapshot = loadSnapshot(repoRoot)
-  type LongFn = { file: string; name: string; line: number; loc: number; kind: string }
-  type SymRef = { from: string; to: string; line: number }
-
-  const longFns: LongFn[] = snapshot.longFunctions ?? []
-  const refs: SymRef[] = snapshot.symbolRefs ?? []
-
-  const fileFns = longFns.filter((f) => f.file === relPath && f.loc >= minLoc)
+  const fileFns = (snapshot.longFunctions ?? []).filter(
+    (f: LongFn) => f.file === relPath && f.loc >= minLoc,
+  )
   if (fileFns.length === 0) {
     return {
       content: `No long functions (>= ${minLoc} LOC) in ${relPath}. ` +
@@ -48,13 +45,28 @@ export function codegraphExtractCandidates(args: ExtractCandidatesArgs): { conte
     }
   }
 
-  // Compte fanIn par symbol (file:name)
-  const fanInBySymbol = new Map<string, number>()
-  for (const r of refs) {
-    fanInBySymbol.set(r.to, (fanInBySymbol.get(r.to) ?? 0) + 1)
-  }
+  const fanInBySymbol = computeFanInIndex(snapshot.symbolRefs ?? [])
+  const scored = scoreCandidates(fileFns, fanInBySymbol).slice(0, limit)
+  return { content: formatCandidates(relPath, limit, scored) }
+}
 
-  const scored = fileFns
+function normalizeRelPath(repoRoot: string, filePath: string): string {
+  return path.isAbsolute(filePath)
+    ? path.relative(repoRoot, filePath).replace(/\\/g, '/')
+    : filePath.replace(/\\/g, '/')
+}
+
+function computeFanInIndex(refs: SymRef[]): Map<string, number> {
+  const out = new Map<string, number>()
+  for (const r of refs) out.set(r.to, (out.get(r.to) ?? 0) + 1)
+  return out
+}
+
+function scoreCandidates(
+  fileFns: LongFn[],
+  fanInBySymbol: Map<string, number>,
+): ScoredCandidate[] {
+  return fileFns
     .map((f) => {
       const symbol = `${f.file}:${f.name}`
       const fanIn = fanInBySymbol.get(symbol) ?? 0
@@ -62,32 +74,39 @@ export function codegraphExtractCandidates(args: ExtractCandidatesArgs): { conte
       return { ...f, fanIn, score, symbol }
     })
     .sort((a, b) => b.score - a.score)
-    .slice(0, limit)
+}
 
+function formatCandidates(
+  relPath: string,
+  limit: number,
+  scored: ScoredCandidate[],
+): string {
   const lines: string[] = []
   lines.push(`🪓 Extract-method candidates in ${relPath} (top ${limit}):`)
   lines.push('')
   lines.push('  score = loc × (1 + fanIn/5) — favors long & called-often functions')
   lines.push('')
   for (const c of scored) {
-    const fanInDesc = c.fanIn === 0
-      ? 'never called (entry point ?)'
-      : `called ${c.fanIn}× by other symbols`
-    lines.push(`  [${c.score.toFixed(0)}]  ${c.name}  (${c.kind}, line ${c.line})`)
-    lines.push(`     ${c.loc} LOC · ${fanInDesc}`)
-
-    // Heuristique : si la fonction est appelée et longue, suggérer extraction
-    if (c.fanIn >= 3 && c.loc >= 80) {
-      lines.push(`     ⚠ HOT extract candidate — long AND high blast radius`)
-    } else if (c.fanIn === 0 && c.loc >= 100) {
-      lines.push(`     ↪ orchestrator-style: extract internal phases as private helpers`)
-    }
+    appendCandidateBlock(c, lines)
   }
   lines.push('')
   lines.push(
     'Hint: use `lsp_find_symbol` then `lsp_hover` for the actual function ' +
     'body before extracting. Consider keeping the public signature stable.',
   )
+  return lines.join('\n')
+}
 
-  return { content: lines.join('\n') }
+function appendCandidateBlock(c: ScoredCandidate, lines: string[]): void {
+  const fanInDesc = c.fanIn === 0
+    ? 'never called (entry point ?)'
+    : `called ${c.fanIn}× by other symbols`
+  lines.push(`  [${c.score.toFixed(0)}]  ${c.name}  (${c.kind}, line ${c.line})`)
+  lines.push(`     ${c.loc} LOC · ${fanInDesc}`)
+  // Heuristique : si la fonction est appelée et longue, suggérer extraction.
+  if (c.fanIn >= 3 && c.loc >= 80) {
+    lines.push(`     ⚠ HOT extract candidate — long AND high blast radius`)
+  } else if (c.fanIn === 0 && c.loc >= 100) {
+    lines.push(`     ↪ orchestrator-style: extract internal phases as private helpers`)
+  }
 }
