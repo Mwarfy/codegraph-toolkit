@@ -37,8 +37,12 @@ export interface BatchDetectorConfig<Item> {
   workerExtractorOptions?: unknown
   /** Sort key canonique pour ce détecteur. */
   sortKey: (item: Item) => string
-  /** Fallback main-thread si workers off. Doit être pure. */
-  mainThreadExtractor: (sf: SourceFile, relPath: string) => Item[]
+  /**
+   * Fallback main-thread (optionnel) — utilisé seulement par
+   * runBatchedSourceFileDetectorsMainThread. Le caller qui ne va que
+   * vers les workers peut omettre.
+   */
+  mainThreadExtractor?: (sf: SourceFile, relPath: string) => Item[]
   /** Skip this detector for files matching predicate. */
   skipFile?: (relPath: string) => boolean
 }
@@ -152,6 +156,7 @@ export async function runBatchedSourceFileDetectorsMainThread(
     if (!rel || !fileSet.has(rel)) continue
     for (const d of opts.detectors) {
       if (d.skipFile && d.skipFile(rel)) continue
+      if (!d.mainThreadExtractor) continue  // skip si pas de fallback fourni
       const items = d.mainThreadExtractor(sf, rel)
       ;(accumulator[d.key] as unknown[]).push(...items)
     }

@@ -194,15 +194,15 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 > pas verdict. Une tension non explorée n'est pas un bug — c'est un saut
 > latéral possible que le sol stable rend testable.
 
-- **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/datalog/src/cli.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/codegraph/src/extractors/_template.monoid.worker.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/codegraph/src/extractors/todos.worker.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/src/parallel/source-file-worker-runner.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/src/parallel/per-source-file-batch-extractor.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
@@ -224,6 +224,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+4b218d2 feat(codegraph): Phase γ.3b — batch dispatch infrastructure (non-wired)
 444bc98 feat(codegraph): Phase γ.3a — affinity routing + LRU cache intra-worker
 c2ab5c7 feat(codegraph): Phase γ.2c — wire les 6 ts-morph détecteurs restants aux workers
 5a40459 feat(codegraph): Phase γ.2b — wire long-functions + dead-code aux workers
@@ -235,7 +236,6 @@ d94cab1 feat(codegraph): Phase γ.2 — workers ts-morph via mini-Project local
 76362ea feat(codegraph): Phase 2.5 — ts-imports porté au pattern BSP monoïdal
 59d89c8 feat(codegraph): Phase β.3 — ADR-025 + template BSP pour futurs détecteurs
 7dc918b feat(codegraph): Phase β.2 — worker mode opt-in pour analyzeTodos
-de8b02a feat(codegraph): Phase β — worker_threads dispatch via WorkerPool
 ```
 
 ## Comment contribuer à ce brief

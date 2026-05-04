@@ -114,16 +114,32 @@ même worker. Cache LRU dans source-file-worker-runner par
 (absPath, sha1-content-prefix), 256 entries / worker. Cross-detector
 cache hit garanti sur même fichier. Bench toolkit : user-time 30s → 19s.
 
-**Phase γ.3b** (infrastructure ready, non-wired) : batch dispatch.
-Le worker entrypoint `extractBatchInWorker({absPath, content, relPath,
-detectors[]})` exécute N détecteurs en 1 message → 1 parse + N extracts
-au lieu de N × dispatches. Helper main-thread
-`runBatchedSourceFileDetectorsViaWorkers(opts)` dans
-`per-source-file-batch-extractor.ts`. Réduit IPC de N×files → files.
-Pour activer : refactorer `analyzer.ts` pour grouper les analyzeXxx()
-dans un seul batch — non fait dans cette session (analyzer.ts a 6
-phases, incremental cache, timing instrumentation, refactor invasif
-qui mérite un PR dédié).
+**Phase γ.3b** (livrée, opt-in) : batch dispatch wired dans `analyzer.ts`.
+Worker entrypoint `extractBatchInWorker({absPath, content, relPath,
+detectors[]})` exécute 10 détecteurs ts-morph en 1 message → 1 parse +
+10 extracts au lieu de 10 × dispatches. `runBatchWarmupPhase` populated
+`ctx.batchResults` AVANT les phases 1-6, chaque `analyzeXxx()` ts-morph
+court-circuite via `batchOr<T>(ctx, key, fallback)`. ts-imports + oauth
+exclus (cross-file resolution / registry path).
+
+**Bench reality (toolkit 175 + Sentinel 700 fichiers)** :
+- Main thread : 7.4s / 22s (sharedProject réutilise le type checker)
+- Workers γ.3b : 8.4s / 23.5s (ts-morph init × N workers + IPC traffic
+  dominent ; gain × N cores annulé par overhead de spawn)
+- batch warmup Sentinel : 2393ms wall vs 1876ms cumul main-thread
+  → workers paient l'init ts-morph (×10) sans amortir sur des
+  détecteurs assez gros
+
+Conclusion empirique : workers ne gagnent PAS pour les ts-morph
+détecteurs sur ces tailles de codebase. La parallélisation main-thread
+via `sharedProject` (1 type checker, parsé 1 fois, partagé entre tous
+les détecteurs) est naturellement plus efficace. L'architecture worker
+reste correcte et prête pour des workloads où le gain matérialise :
+détecteurs CPU-bound > 100ms/file, ou workloads regex-heavy / plain text
+qui n'ont pas besoin du sharedProject.
+
+Default = main-thread (no env var) ; LIBY_BSP_WORKERS=1 = opt-in
+explicite pour les workloads où ça vaut.
 
 **Pourquoi pas full Salsa parallelism (mutable shared state)** :
 - Race conditions possibles → heisenbugs
