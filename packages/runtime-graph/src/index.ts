@@ -63,6 +63,40 @@ export type {
   ParetoResult,
   CoverageDrift,
 } from './optim/divergence.js'
+
+// Hitting time — Markov chain blast radius (Kemeny-Snell)
+export { hittingTimeFrom, renderHittingTimeMarkdown } from './optim/hitting-time.js'
+export type { HittingTimeOptions, HittingTimeRow, ImportEdge } from './optim/hitting-time.js'
+
+// Wasserstein W₁ — distribution shift entre 2 runtime profiles (Monge-Kantorovich)
+export { wassersteinDistance, renderWassersteinMarkdown } from './optim/wasserstein.js'
+export type {
+  WassersteinOptions,
+  WassersteinResult,
+  DistributionRow,
+  MoverRow,
+} from './optim/wasserstein.js'
+
+// Forman-Ricci curvature — bottlenecks topologiques (geometry of graphs)
+export { computeRicciCurvature, renderRicciMarkdown } from './optim/ricci-curvature.js'
+export type { RicciOptions, RicciCurvatureRow, RicciEdge } from './optim/ricci-curvature.js'
+
+// Submodular test selection — Nemhauser-Wolsey-Fisher greedy
+export { selectTestsGreedy, renderSubmodularMarkdown } from './optim/submodular-tests.js'
+export type {
+  SubmodularOptions,
+  TestRecommendation,
+  CoverageEdge,
+  FileWeight,
+} from './optim/submodular-tests.js'
+
+// Causal discovery — DAG drivers via co-change + temporal precedence (PC-inspired)
+export { discoverCausalEdges, renderCausalMarkdown } from './optim/causal-discovery.js'
+export type {
+  CausalDiscoveryOptions,
+  CausalEdge,
+  CommitLog,
+} from './optim/causal-discovery.js'
 export type {
   StaticCallEdge,
   InformationBottleneckRuntimeFact,
