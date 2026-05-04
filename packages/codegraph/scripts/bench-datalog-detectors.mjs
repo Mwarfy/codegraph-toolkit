@@ -23,6 +23,7 @@ import { analyzeBarrels } from '../dist/extractors/barrels.js'
 import { analyzeEnvUsage } from '../dist/extractors/env-usage.js'
 import { extractConstantExpressionsFileBundle } from '../dist/extractors/constant-expressions.js'
 import { analyzeArguments } from '../dist/extractors/arguments.js'
+import { analyzeEventEmitSites } from '../dist/extractors/event-emit-sites.js'
 import { runDatalogDetectors } from '../dist/datalog-detectors/runner.js'
 import { resolve } from 'node:path'
 
@@ -85,8 +86,9 @@ for (const sf of project.getSourceFiles()) {
 const legacyBarrels = await analyzeBarrels(rootDir, files, project)
 const legacyEnvUsage = await analyzeEnvUsage(rootDir, files, project)
 const legacyArguments = await analyzeArguments(rootDir, files, project)
+const legacyEmitSites = await analyzeEventEmitSites(rootDir, files, project)
 const legacyMs = performance.now() - tLegacy0
-console.log(`  legacy 15 detectors (${legacyMs.toFixed(1)}ms)`)
+console.log(`  legacy 16 detectors (${legacyMs.toFixed(1)}ms)`)
 
 // DATALOG
 const tDl0 = performance.now()
@@ -158,7 +160,10 @@ const ok15a = bidirDiff(legacyArguments.taintedArgs, dl.arguments.taintedArgs,
   'TaintedArgumentToCall')
 const ok15b = bidirDiff(legacyArguments.params, dl.arguments.params,
   (p) => `${p.file}\t${p.symbol}\t${p.paramName}\t${p.paramIndex}`, 'ArgumentsFunctionParam')
+const ok16 = bidirDiff(legacyEmitSites, dl.eventEmitSites,
+  (e) => `${e.file}\t${e.line}\t${e.symbol}\t${normWs(e.callee)}\t${e.kind}\t${e.literalValue ?? ''}\t${e.refExpression ?? ''}`,
+  'EventEmitSite')
 
-const allOk = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10 && ok11 && ok12 && ok13 && ok14 && ok15a && ok15b
+const allOk = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10 && ok11 && ok12 && ok13 && ok14 && ok15a && ok15b && ok16
 console.log(`\n  Total: legacy=${legacyMs.toFixed(0)}ms vs datalog=${dlMs.toFixed(0)}ms (ratio: ${(dlMs/legacyMs).toFixed(2)}x)${allOk ? ' ✓' : ' ✗'}`)
 if (!allOk) process.exit(1)

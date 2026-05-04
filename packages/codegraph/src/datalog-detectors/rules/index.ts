@@ -116,6 +116,11 @@ export const SCHEMA_DL = `// AST primitive facts — extraits par ast-facts-visi
   callee:symbol, paramIndex:number, source:symbol)
 .input TaintedArgumentCandidate
 
+.decl EventEmitSiteCandidate(file:symbol, line:number, sym:symbol,
+  callee:symbol, isMethodCall:number, receiver:symbol,
+  kind:symbol, literalValue:symbol, refExpression:symbol)
+.input EventEmitSiteCandidate
+
 // ─── Hybrid outputs ─────────────────────────────────────────────────────────
 
 .decl SanitizerOut(file:symbol, line:number, callee:symbol, containingSymbol:symbol)
@@ -163,6 +168,11 @@ export const SCHEMA_DL = `// AST primitive facts — extraits par ast-facts-visi
 .decl ArgumentsFunctionParamOut(file:symbol, sym:symbol,
   paramName:symbol, paramIndex:number)
 .output ArgumentsFunctionParamOut
+
+.decl EventEmitSiteOut(file:symbol, line:number, sym:symbol,
+  callee:symbol, isMethodCall:number, receiver:symbol,
+  kind:symbol, literalValue:symbol, refExpression:symbol)
+.output EventEmitSiteOut
 `
 
 // Convention engine : variables capitalisées, literals (numbers, strings) inline.
@@ -344,6 +354,12 @@ ConstantExpressionOut(F, L, K, Msg, ER) :-
   !ExemptionLine(F, L, "const-expr-ok").
 `
 
+// event-emit-sites — pass-through (legacy ne filtre PAS test files).
+export const EVENT_EMIT_SITES_DL = `
+EventEmitSiteOut(F, L, Sym, Callee, IsMethod, Receiver, Kind, Lit, Ref) :-
+  EventEmitSiteCandidate(F, L, Sym, Callee, IsMethod, Receiver, Kind, Lit, Ref).
+`
+
 // Arguments — cross-fn taint facts. Pass-through (visitor pré-skip test files).
 // FunctionParam-for-args dérivé via join FunctionScope+FunctionParam, filtre
 // les anonymes (legacy iterateFnScopes skip les fns sans nom).
@@ -375,4 +391,5 @@ export const ALL_RULES_DL = [
   ENV_USAGE_DL,
   CONSTANT_EXPRESSIONS_DL,
   ARGUMENTS_DL,
+  EVENT_EMIT_SITES_DL,
 ].join('\n')

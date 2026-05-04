@@ -146,6 +146,17 @@ export interface DatalogDetectorResults {
       paramIndex: number
     }>
   }
+  eventEmitSites: Array<{
+    file: string
+    line: number
+    symbol: string
+    callee: string
+    isMethodCall: boolean
+    receiver?: string
+    kind: 'literal' | 'eventConstRef' | 'dynamic'
+    literalValue?: string
+    refExpression?: string
+  }>
   stats: {
     extractMs: number
     evalMs: number
@@ -185,6 +196,7 @@ export async function runDatalogDetectors(
     envVarReads: [],
     constantExpressionCandidates: [],
     taintedArgumentCandidates: [],
+    eventEmitSiteCandidates: [],
   }
   for (const sf of opts.project.getSourceFiles()) {
     const rel = relativize(sf.getFilePath(), opts.rootDir)
@@ -208,6 +220,7 @@ export async function runDatalogDetectors(
     merged.envVarReads.push(...b.envVarReads)
     merged.constantExpressionCandidates.push(...b.constantExpressionCandidates)
     merged.taintedArgumentCandidates.push(...b.taintedArgumentCandidates)
+    merged.eventEmitSiteCandidates.push(...b.eventEmitSiteCandidates)
   }
   const extractMs = performance.now() - t0
 
@@ -306,6 +319,12 @@ export async function runDatalogDetectors(
   factsByRelation.set('TaintedArgumentCandidate',
     merged.taintedArgumentCandidates.map((a) =>
       [a.callerFile, safe(a.callerSymbol), safe(a.callee), a.paramIndex, a.source].join('\t'),
+    ).join('\n'),
+  )
+  factsByRelation.set('EventEmitSiteCandidate',
+    merged.eventEmitSiteCandidates.map((e) =>
+      [e.file, e.line, safe(e.symbol), safe(e.callee), e.isMethodCall, safe(e.receiver),
+       e.kind, safe(e.literalValue), safe(e.refExpression)].join('\t'),
     ).join('\n'),
   )
 
@@ -520,6 +539,26 @@ export async function runDatalogDetectors(
     params: argParamsRaw,
   }
 
+  const eventEmitSites = fileLineSort((result.outputs.get('EventEmitSiteOut') ?? []).map((t: Tuple) => {
+    const isMethodCall = Number(t[4]) === 1
+    const receiver = String(t[5])
+    const kind = String(t[6]) as 'literal' | 'eventConstRef' | 'dynamic'
+    const literalValue = String(t[7])
+    const refExpression = String(t[8])
+    const out: DatalogDetectorResults['eventEmitSites'][number] = {
+      file: String(t[0]),
+      line: Number(t[1]),
+      symbol: String(t[2]),
+      callee: String(t[3]),
+      isMethodCall,
+      kind,
+    }
+    if (isMethodCall && receiver) out.receiver = receiver
+    if (kind === 'literal' && literalValue) out.literalValue = literalValue
+    if (kind === 'eventConstRef' && refExpression) out.refExpression = refExpression
+    return out
+  }))
+
   const constantExpressions = (result.outputs.get('ConstantExpressionOut') ?? []).map((t: Tuple) => ({
     file: String(t[0]),
     line: Number(t[1]),
@@ -574,7 +613,8 @@ export async function runDatalogDetectors(
     merged.importEdges.length +
     merged.envVarReads.length +
     merged.constantExpressionCandidates.length +
-    merged.taintedArgumentCandidates.length
+    merged.taintedArgumentCandidates.length +
+    merged.eventEmitSiteCandidates.length
   const tuplesOut =
     magicNumbers.length +
     deadCodeIdenticalSubexpressions.length +
@@ -591,7 +631,8 @@ export async function runDatalogDetectors(
     envUsage.length +
     constantExpressions.length +
     argumentsResult.taintedArgs.length +
-    argumentsResult.params.length
+    argumentsResult.params.length +
+    eventEmitSites.length
 
   return {
     magicNumbers,
@@ -609,6 +650,7 @@ export async function runDatalogDetectors(
     envUsage,
     constantExpressions,
     arguments: argumentsResult,
+    eventEmitSites,
     stats: { extractMs, evalMs, tuplesIn, tuplesOut },
   }
 }

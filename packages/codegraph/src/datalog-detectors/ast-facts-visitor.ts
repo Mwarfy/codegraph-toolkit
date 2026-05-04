@@ -290,6 +290,27 @@ export interface HardcodedSecretCandidateFact {
 }
 
 /**
+ * Event emit site candidate (parallèle à event-listener-sites mais pour
+ * emit({ type: ... })). Visitor pré-classifie literal / eventConstRef /
+ * dynamic. Symbol résolu via buildLineToSymbol (legacy comportement).
+ *
+ * Schéma : .decl EventEmitSiteCandidate(file:symbol, line:number,
+ *   sym:symbol, callee:symbol, isMethodCall:number, receiver:symbol,
+ *   kind:symbol, literalValue:symbol, refExpression:symbol)
+ */
+export interface EventEmitSiteCandidateFact {
+  file: string
+  line: number
+  symbol: string
+  callee: string
+  isMethodCall: number
+  receiver: string
+  kind: string
+  literalValue: string
+  refExpression: string
+}
+
+/**
  * Tainted argument candidate (cross-function taint analysis Tier 14).
  * Visitor pré-classifie via matchSource regex + per-scope tainted-vars Map.
  * Rule pass-through (test files filtré au visit-level).
@@ -344,6 +365,7 @@ export interface AstFactsBundle {
   envVarReads: EnvVarReadFact[]
   constantExpressionCandidates: ConstantExpressionCandidateFact[]
   taintedArgumentCandidates: TaintedArgumentCandidateFact[]
+  eventEmitSiteCandidates: EventEmitSiteCandidateFact[]
 }
 
 // ─── Visitor ────────────────────────────────────────────────────────────────
@@ -398,6 +420,7 @@ export function extractAstFactsBundle(
   const envVarReads: EnvVarReadFact[] = []
   const constantExpressionCandidates: ConstantExpressionCandidateFact[] = []
   const taintedArgumentCandidates: TaintedArgumentCandidateFact[] = []
+  const eventEmitSiteCandidates: EventEmitSiteCandidateFact[] = []
 
   const isTest = TEST_FILE_RE.test(relPath)
   if (isTest) fileTags.push({ file: relPath, tag: 'test' })
@@ -425,6 +448,8 @@ export function extractAstFactsBundle(
   // event-listener-sites legacy n'a PAS de filtre test files — capturé même
   // dans tests/ (les tests subscribers comptent).
   visitEventListenerSiteCandidates(sf, relPath, eventListenerSiteCandidates)
+  // event-emit-sites idem — pas de filtre test files (legacy).
+  visitEventEmitSiteCandidates(sf, relPath, eventEmitSiteCandidates)
   // barrels + import-edges : pas de filtre test files non plus.
   visitBarrelsAndImports(sf, relPath, rootDir, barrelFiles, importEdges)
   // env-usage : capture process.env.X partout (legacy ne filtre pas).
@@ -440,6 +465,7 @@ export function extractAstFactsBundle(
     barrelFiles, importEdges, envVarReads,
     constantExpressionCandidates,
     taintedArgumentCandidates,
+    eventEmitSiteCandidates,
   }
 }
 
@@ -1531,6 +1557,90 @@ function visitTaintedArgumentCandidates(
           }
         }
       }
+    }
+  }
+}
+
+// ─── Event Emit Sites (parallèle à event-listener-sites) ────────────────────
+
+const EMIT_NAMES = new Set(['emit', 'emitEvent'])
+
+function visitEventEmitSiteCandidates(
+  sf: SourceFile,
+  relPath: string,
+  out: EventEmitSiteCandidateFact[],
+): void {
+  // Court-circuit textuel — comme legacy.
+  const text = sf.getFullText()
+  let hasCandidate = false
+  for (const n of EMIT_NAMES) {
+    if (text.includes(n + '(')) { hasCandidate = true; break }
+  }
+  if (!hasCandidate) return
+
+  const lineToSymbol = buildLineToSymbol(sf)
+  for (const call of sf.getDescendantsOfKind(SyntaxKind.CallExpression)) {
+    const callee = call.getExpression()
+    let calleeName = ''
+    let isMethodCall = 0
+    let receiver = ''
+    if (Node.isIdentifier(callee)) {
+      calleeName = callee.getText()
+    } else if (Node.isPropertyAccessExpression(callee)) {
+      calleeName = callee.getName()
+      isMethodCall = 1
+      receiver = callee.getExpression().getText()
+    } else continue
+    if (!EMIT_NAMES.has(calleeName)) continue
+
+    const args = call.getArguments()
+    if (args.length === 0) continue
+    const firstArg = args[0]
+    if (firstArg.getKind() !== SyntaxKind.ObjectLiteralExpression) continue
+
+    // Find type: prop
+    const props = (firstArg as import('ts-morph').ObjectLiteralExpression).getProperties()
+    let typeInit: Node | undefined
+    for (const p of props) {
+      if (p.getKind() !== SyntaxKind.PropertyAssignment) continue
+      const pa = p as import('ts-morph').PropertyAssignment
+      const nameNode = pa.getNameNode()
+      const k = nameNode.getKind()
+      let name: string | undefined
+      if (k === SyntaxKind.Identifier) name = nameNode.getText()
+      else if (k === SyntaxKind.StringLiteral) {
+        name = (nameNode as import('ts-morph').StringLiteral).getLiteralText()
+      }
+      if (name === 'type') {
+        typeInit = pa.getInitializer()
+        break
+      }
+    }
+    if (!typeInit) continue
+
+    const line = call.getStartLineNumber()
+    const symbol = lineToSymbol.get(line) ?? ''
+    const initKind = typeInit.getKind()
+
+    if (initKind === SyntaxKind.StringLiteral || initKind === SyntaxKind.NoSubstitutionTemplateLiteral) {
+      const lit = typeInit as import('ts-morph').StringLiteral | import('ts-morph').NoSubstitutionTemplateLiteral
+      out.push({
+        file: relPath, line, symbol,
+        callee: calleeName, isMethodCall, receiver,
+        kind: 'literal', literalValue: lit.getLiteralText(), refExpression: '',
+      })
+    } else if (initKind === SyntaxKind.PropertyAccessExpression) {
+      out.push({
+        file: relPath, line, symbol,
+        callee: calleeName, isMethodCall, receiver,
+        kind: 'eventConstRef', literalValue: '', refExpression: typeInit.getText(),
+      })
+    } else {
+      out.push({
+        file: relPath, line, symbol,
+        callee: calleeName, isMethodCall, receiver,
+        kind: 'dynamic', literalValue: '', refExpression: '',
+      })
     }
   }
 }
