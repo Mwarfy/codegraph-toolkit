@@ -178,15 +178,15 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 > pas verdict. Une tension non explorée n'est pas un bug — c'est un saut
 > latéral possible que le sol stable rend testable.
 
-- **ORPHELIN** `packages/datalog/src/cli.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/datalog/src/cli.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/env-usage/config.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/event-emit-sites/sample.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/b.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
@@ -208,6 +208,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+69a75bc refactor(codegraph): split extractTaintSinksFileBundle (cyclo 14→4, cog 31→4) — taint-sinks.ts cleared
 3660fdc refactor(codegraph): split collectImportSpecifiers (cyclo 15→4, cog 28→4) — package-deps.ts cleared
 a7bbb0c refactor(codegraph): split computePackageMinCuts (cyclo 15→6, cog 28→8) — package-mincut.ts cleared
 5309e21 refactor(codegraph): split loadPersistedCache (cyclo 16→2, cog 18→1) — incremental/persistence.ts cleared
@@ -219,7 +220,6 @@ c1c37b8 refactor(codegraph): split extractFunctionSnippetsLocal (cyclo 16→3, c
 6ff5dfd refactor(codegraph): split extractLongFunctionsFileBundle (cyclo 16→3, cog 24→3) — long-functions.ts cleared
 43a9785 refactor(codegraph): split collectAdrMarkers (cyclo 16→3, cog 35→0) — adr-markers.ts cleared
 97128ab refactor(runtime-graph): split lyapunovTimeseries (cyclo 17→7, cog 24→7) — lyapunov-timeseries.ts cleared
-5ea3ad1 refactor(codegraph-mcp): split codegraphMemoryRecall (cyclo 17→5, cog 25→3) — memory.ts cleared
 ```
 
 ## Comment contribuer à ce brief

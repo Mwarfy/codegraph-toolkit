@@ -5,12 +5,13 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-04T00:51:53Z
+Last update : 2026-05-04T00:53:23Z
 
 ## By type
 
 ### `refactor` (50)
 
+- **69a75bc** refactor(codegraph): split extractTaintSinksFileBundle (cyclo 14→4, cog 31→4) — taint-sinks.ts cleared — 2026-05-04
 - **3660fdc** refactor(codegraph): split collectImportSpecifiers (cyclo 15→4, cog 28→4) — package-deps.ts cleared — 2026-05-04
 - **a7bbb0c** refactor(codegraph): split computePackageMinCuts (cyclo 15→6, cog 28→8) — package-mincut.ts cleared — 2026-05-04
 - **5309e21** refactor(codegraph): split loadPersistedCache (cyclo 16→2, cog 18→1) — incremental/persistence.ts cleared — 2026-05-04
@@ -30,11 +31,11 @@ Last update : 2026-05-04T00:51:53Z
 - **68a0620** refactor(codegraph): split detectSignatureDuplicates (cyclo 18→7, cog 27→6) — signature-duplication.ts cleared — 2026-05-04
 - **860b688** refactor(adr-toolkit): split findWriteSites (cyclo 15→2, cog 32→1) — bootstrap-fsm.ts FULLY cleared — 2026-05-04
 - **194452b** refactor(adr-toolkit): split detectFsmCandidates (cyclo 18→3, cog 29→1) — bootstrap-fsm.ts detectFsmCandidates cleared — 2026-05-04
-- **0e97abd** refactor(runtime-graph): split newmanGirvanRuntime (cyclo 20→2, cog 17→1) — runtime-disciplines.ts cleared — 2026-05-04
 
 
 ## Full history
 
+- **69a75bc** refactor(codegraph): split extractTaintSinksFileBundle (cyclo 14→4, cog 31→4) — taint-sinks.ts cleared — 2026-05-04
 - **3660fdc** refactor(codegraph): split collectImportSpecifiers (cyclo 15→4, cog 28→4) — package-deps.ts cleared — 2026-05-04
 - **a7bbb0c** refactor(codegraph): split computePackageMinCuts (cyclo 15→6, cog 28→8) — package-mincut.ts cleared — 2026-05-04
 - **5309e21** refactor(codegraph): split loadPersistedCache (cyclo 16→2, cog 18→1) — incremental/persistence.ts cleared — 2026-05-04
@@ -84,4 +85,3 @@ Last update : 2026-05-04T00:51:53Z
 - **357636e** refactor(codegraph): split scanImportsInSourceFile (cyclo 28→1, cog 45→0) — ts-imports.ts bomb-free — 2026-05-04
 - **091d636** refactor(codegraph): split isAwaitedOrConsumed (cyclo 28→4, cog 47→5) — floating-promises.ts bomb-free — 2026-05-04
 - **2afff33** refactor(codegraph): split tarjanScc (cyclo 13→3, cog 37→3) — dsm.ts FULLY bomb-free — 2026-05-04
-- **5e798f4** refactor(codegraph): split computeDsm (cyclo 29→1, cog 45→0) — top-level orchestrator clean — 2026-05-04
