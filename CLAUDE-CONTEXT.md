@@ -130,7 +130,10 @@
 - `packages/codegraph/src/incremental/watcher.ts` → ADR-007
 - `packages/codegraph/src/map/dsm-renderer.ts` → ADR-008
 - `packages/codegraph/src/memory/store.ts` → ADR-002
+- `packages/codegraph/src/parallel/bsp-scheduler.ts` → ADR-024
 - `packages/codegraph/src/parallel/monoid.ts` → ADR-024
+- `packages/codegraph/src/parallel/per-file-extractor.ts` → ADR-024
+- `packages/codegraph/src/parallel/per-source-file-extractor.ts` → ADR-024
 - `packages/codegraph/src/synopsis/builder.ts` → ADR-001
 - `packages/codegraph/src/synopsis/tensions.ts` → ADR-001
 - `packages/datalog/src/canonical.ts` → ADR-010
@@ -187,9 +190,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/audit-listener.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/scheduler.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/b.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
@@ -211,6 +214,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+190b979 feat(codegraph): Phase 2.2 — hardcoded-secrets porté + ADR-024
 abd6ad7 feat(codegraph): Phase 2.1 — 2 détecteurs portés au pattern BSP monoïdal
 415d382 feat(codegraph): Phase 1 BSP — monoid algebra + scheduler déterministe
 576e358 feat(toolkit): press-button complet — RECIPES + --with-runtime + 5 awaits paralléllisés
@@ -222,7 +226,6 @@ c626690 perf(codegraph): parallelize delta reads in applyDeltasInOrder
 b4959d9 feat(runtime-graph): math optim suggester — universel pour toute app
 7d4d382 feat(runtime-graph): fn-wrap iitm — capture exacte des call edges cross-module
 e936121 feat(runtime-graph): CPU profile capture pour apps pure-CPU
-924a064 feat(toolkit): wire Claude Code hooks pour le toolkit lui-même
 ```
 
 ## Comment contribuer à ce brief

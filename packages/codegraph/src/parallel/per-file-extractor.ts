@@ -1,3 +1,4 @@
+// ADR-024
 /**
  * Helper canonique pour porter les détecteurs per-file au pattern BSP.
  *

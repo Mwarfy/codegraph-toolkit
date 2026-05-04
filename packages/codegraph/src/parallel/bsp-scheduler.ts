@@ -1,3 +1,4 @@
+// ADR-024
 /**
  * BSP scheduler — orchestrator 4-phase pour parallélisme déterministe.
  *

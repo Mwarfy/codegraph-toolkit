@@ -1,3 +1,4 @@
+// ADR-024
 /**
  * Helper BSP pour les détecteurs Project ts-morph partagé.
  *
