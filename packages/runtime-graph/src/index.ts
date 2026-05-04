@@ -41,6 +41,18 @@ export {
   lyapunovRuntime,
   computeAllDisciplines,
 } from './metrics/runtime-disciplines.js'
+
+// CPU profile capture (option A — V8 sampling, ~5-10% overhead)
+export { startCpuProfile, aggregateProfile } from './capture/cpu-profile.js'
+export type { CpuProfile, CpuProfileNode, CpuProfileHandle, AggregateOptions, AggregateResult } from './capture/cpu-profile.js'
+
+// Function wrap via iitm (option C — exact, ~30-50% overhead, dev-only)
+export { attachFnWrap } from './capture/fn-wrap.js'
+export type { FnWrapOptions } from './capture/fn-wrap.js'
+
+// Math optim suggester — Lyapunov / IB / variance heuristics
+export { suggestOptimizations, renderSuggestionsMarkdown } from './optim/suggest.js'
+export type { OptimSuggestOptions, OptimCandidate, OptimSuggestion } from './optim/suggest.js'
 export type {
   StaticCallEdge,
   InformationBottleneckRuntimeFact,

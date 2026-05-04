@@ -148,6 +148,13 @@ async function loadBaselineSnapshot(
  * Applique les deltas dans l'ordre. Best-effort : on s'arrête au premier
  * delta corrompu / version mismatch / applyDelta throw. La DB et les mtimes
  * reflètent le dernier delta valide appliqué.
+ *
+ * Optim 2026-05-04 : les LECTURES disque sont parallélisées (Promise.all),
+ * l'APPLICATION reste séquentielle (db.applyDelta accumule, ordre critique).
+ * Mesure runtime probe : tryApplyDeltaFile était top hot symbol score 3844
+ * (count=62 × p95=62ms). Cause = sequential await fs.readFile dans la loop.
+ * Trade-off : si premier delta foire, on aura quand même lu les suivants —
+ * gaspillé négligeable car erreur rare et reads sont I/O-light.
  */
 async function applyDeltasInOrder(
   rootDir: string,
@@ -155,29 +162,46 @@ async function applyDeltasInOrder(
   db: Database,
 ): Promise<void> {
   const deltaFiles = await listDeltas(rootDir)
-  for (const df of deltaFiles) {
-    // await-ok: deltas en ordre strict (db.applyDelta accumule), break-on-error
-    const applied = await tryApplyDeltaFile(df, db, mtimes)
-    if (!applied) break
+  if (deltaFiles.length === 0) return
+
+  // Read all delta files in parallel — order preservé via Promise.all index.
+  const reads = await Promise.all(deltaFiles.map((df) => readDeltaFile(df)))
+
+  // Apply sequentially in original order.
+  for (const parsed of reads) {
+    if (!parsed) break  // first failed read or invalid → stop accumulation
+    if (!applyParsedDelta(parsed, db, mtimes)) break
   }
 }
 
-async function tryApplyDeltaFile(
-  df: string,
+/**
+ * Lit + parse + valide un delta file. Retourne null si fichier manquant,
+ * JSON invalide, ou version mismatch — tous des cas "skip silencieusement".
+ */
+async function readDeltaFile(df: string): Promise<PersistedDelta | null> {
+  let raw: string
+  try { raw = await fs.readFile(df, 'utf-8') } catch { return null }
+  let parsed: PersistedDelta
+  try { parsed = JSON.parse(raw) } catch { return null }
+  if (parsed.version !== PERSIST_VERSION) return null
+  return parsed
+}
+
+/**
+ * Applique un delta pré-lu sur la DB + merge les mtimes. Retourne false
+ * si applyDelta throw (rollback impossible — on stop l'accumulation).
+ */
+function applyParsedDelta(
+  parsed: PersistedDelta,
   db: Database,
   mtimes: Map<string, number>,
-): Promise<boolean> {
-  let dRaw: string
-  try { dRaw = await fs.readFile(df, 'utf-8') } catch { return false }
-  let dParsed: PersistedDelta
-  try { dParsed = JSON.parse(dRaw) } catch { return false }
-  if (dParsed.version !== PERSIST_VERSION) return false
+): boolean {
   try {
-    db.applyDelta(dParsed.delta)
+    db.applyDelta(parsed.delta)
   } catch {
     return false
   }
-  for (const [k, v] of Object.entries(dParsed.mtimes ?? {})) {
+  for (const [k, v] of Object.entries(parsed.mtimes ?? {})) {
     mtimes.set(k, v as number)
   }
   return true
