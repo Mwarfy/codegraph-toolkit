@@ -13,6 +13,11 @@ import { extractDeadCodeFileBundle } from '../dist/extractors/dead-code.js'
 import { extractEvalCallsFileBundle } from '../dist/extractors/eval-calls.js'
 import { extractCryptoCallsFileBundle } from '../dist/extractors/crypto-algo.js'
 import { extractBooleanParamsFileBundle } from '../dist/extractors/boolean-params.js'
+import { extractSanitizersFileBundle } from '../dist/extractors/sanitizers.js'
+import { extractTaintSinksFileBundle } from '../dist/extractors/taint-sinks.js'
+import { extractLongFunctionsFileBundle } from '../dist/extractors/long-functions.js'
+import { extractFunctionComplexityFileBundle } from '../dist/extractors/function-complexity.js'
+import { extractHardcodedSecretsFileBundle } from '../dist/extractors/hardcoded-secrets.js'
 import { runDatalogDetectors } from '../dist/datalog-detectors/runner.js'
 import { resolve } from 'node:path'
 
@@ -42,6 +47,11 @@ const legacyDeadIdentical = []
 const legacyEval = []
 const legacyCrypto = []
 const legacyBool = []
+const legacySanit = []
+const legacyTaint = []
+const legacyLong = []
+const legacyComplx = []
+const legacySecret = []
 for (const sf of project.getSourceFiles()) {
   const abs = sf.getFilePath()
   const rel = abs.replace(rootDir + '/', '')
@@ -54,9 +64,14 @@ for (const sf of project.getSourceFiles()) {
   legacyEval.push(...extractEvalCallsFileBundle(sf, rel).calls)
   legacyCrypto.push(...extractCryptoCallsFileBundle(sf, rel).calls)
   legacyBool.push(...extractBooleanParamsFileBundle(sf, rel).sites)
+  legacySanit.push(...extractSanitizersFileBundle(sf, rel).sanitizers)
+  legacyTaint.push(...extractTaintSinksFileBundle(sf, rel).sinks)
+  legacyLong.push(...extractLongFunctionsFileBundle(sf, rel).functions)
+  legacyComplx.push(...extractFunctionComplexityFileBundle(sf, rel))
+  legacySecret.push(...extractHardcodedSecretsFileBundle(sf, rel).secrets)
 }
 const legacyMs = performance.now() - tLegacy0
-console.log(`  legacy: magic=${legacyMagic.length} dead=${legacyDeadIdentical.length} eval=${legacyEval.length} crypto=${legacyCrypto.length} bool=${legacyBool.length} (${legacyMs.toFixed(1)}ms)`)
+console.log(`  legacy 10 detectors (${legacyMs.toFixed(1)}ms)`)
 
 // DATALOG
 const tDl0 = performance.now()
@@ -92,7 +107,22 @@ const ok4 = bidirDiff(legacyCrypto, dl.cryptoCalls,
   (c) => `${c.file}\t${c.line}\t${c.fn}\t${c.algo}\t${c.containingSymbol}`, 'CryptoCall')
 const ok5 = bidirDiff(legacyBool, dl.booleanParams,
   (b) => `${b.file}\t${b.name}\t${b.line}\t${b.paramIndex}\t${b.paramName}\t${b.totalParams}`, 'BooleanParam')
+// Whitespace normalization : legacy callee text peut contenir \n des
+// méthodes chainées multi-line ; les .facts TSV (côté legacy ET datalog)
+// les normalisent en space. On applique la même normalisation au diff
+// in-memory pour BIT-IDENTICAL parity au niveau facts.
+const normWs = (s) => s.replace(/[\t\n\r]/g, ' ')
+const ok6 = bidirDiff(legacySanit, dl.sanitizers,
+  (s) => `${s.file}\t${s.line}\t${normWs(s.callee)}\t${s.containingSymbol}`, 'Sanitizer')
+const ok7 = bidirDiff(legacyTaint, dl.taintSinks,
+  (s) => `${s.file}\t${s.line}\t${s.kind}\t${normWs(s.callee)}\t${s.containingSymbol}`, 'TaintSink')
+const ok8 = bidirDiff(legacyLong.filter((l) => l.loc >= 100), dl.longFunctions,
+  (l) => `${l.file}\t${l.line}\t${l.name}\t${l.loc}\t${l.kind}`, 'LongFunction')
+const ok9 = bidirDiff(legacyComplx, dl.functionComplexities,
+  (c) => `${c.file}\t${c.line}\t${c.name}\t${c.cyclomatic}\t${c.cognitive}\t${c.containingClass}`, 'FunctionComplexity')
+const ok10 = bidirDiff(legacySecret, dl.hardcodedSecrets,
+  (h) => `${h.file}\t${h.line}\t${h.name}`, 'HardcodedSecret')
 
-const allOk = ok1 && ok2 && ok3 && ok4 && ok5
+const allOk = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10
 console.log(`\n  Total: legacy=${legacyMs.toFixed(0)}ms vs datalog=${dlMs.toFixed(0)}ms (ratio: ${(dlMs/legacyMs).toFixed(2)}x)${allOk ? ' ✓' : ' ✗'}`)
 if (!allOk) process.exit(1)

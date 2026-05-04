@@ -55,6 +55,42 @@ export interface DatalogDetectorResults {
     paramName: string
     totalParams: number
   }>
+  sanitizers: Array<{
+    file: string
+    line: number
+    callee: string
+    containingSymbol: string
+  }>
+  taintSinks: Array<{
+    file: string
+    line: number
+    kind: string
+    callee: string
+    containingSymbol: string
+  }>
+  longFunctions: Array<{
+    file: string
+    line: number
+    name: string
+    loc: number
+    kind: 'function' | 'method' | 'arrow'
+  }>
+  functionComplexities: Array<{
+    file: string
+    line: number
+    name: string
+    cyclomatic: number
+    cognitive: number
+    containingClass: string
+  }>
+  hardcodedSecrets: Array<{
+    file: string
+    line: number
+    name: string
+    sample: string
+    entropyX1000: number
+    length: number
+  }>
   stats: {
     extractMs: number
     evalMs: number
@@ -83,6 +119,11 @@ export async function runDatalogDetectors(
     callExpressions: [],
     functionScopes: [],
     functionParams: [],
+    sanitizerCandidates: [],
+    taintSinkCandidates: [],
+    longFunctionCandidates: [],
+    functionComplexities: [],
+    hardcodedSecretCandidates: [],
   }
   for (const sf of opts.project.getSourceFiles()) {
     const rel = relativize(sf.getFilePath(), opts.rootDir)
@@ -95,6 +136,11 @@ export async function runDatalogDetectors(
     merged.callExpressions.push(...b.callExpressions)
     merged.functionScopes.push(...b.functionScopes)
     merged.functionParams.push(...b.functionParams)
+    merged.sanitizerCandidates.push(...b.sanitizerCandidates)
+    merged.taintSinkCandidates.push(...b.taintSinkCandidates)
+    merged.longFunctionCandidates.push(...b.longFunctionCandidates)
+    merged.functionComplexities.push(...b.functionComplexities)
+    merged.hardcodedSecretCandidates.push(...b.hardcodedSecretCandidates)
   }
   const extractMs = performance.now() - t0
 
@@ -141,6 +187,31 @@ export async function runDatalogDetectors(
   factsByRelation.set('FunctionParam',
     merged.functionParams.map((p) =>
       [p.file, p.scopeLine, p.paramIndex, safe(p.paramName), safe(p.typeText)].join('\t'),
+    ).join('\n'),
+  )
+  factsByRelation.set('SanitizerCandidate',
+    merged.sanitizerCandidates.map((s) =>
+      [s.file, s.line, safe(s.callee), safe(s.containingSymbol)].join('\t'),
+    ).join('\n'),
+  )
+  factsByRelation.set('TaintSinkCandidate',
+    merged.taintSinkCandidates.map((s) =>
+      [s.file, s.line, s.kind, safe(s.callee), safe(s.containingSymbol)].join('\t'),
+    ).join('\n'),
+  )
+  factsByRelation.set('LongFunctionCandidate',
+    merged.longFunctionCandidates.map((l) =>
+      [l.file, l.line, safe(l.name), l.loc, l.kind].join('\t'),
+    ).join('\n'),
+  )
+  factsByRelation.set('FunctionComplexityFactIn',
+    merged.functionComplexities.map((c) =>
+      [c.file, c.line, safe(c.name), c.cyclomatic, c.cognitive, safe(c.containingClass)].join('\t'),
+    ).join('\n'),
+  )
+  factsByRelation.set('HardcodedSecretCandidate',
+    merged.hardcodedSecretCandidates.map((h) =>
+      [h.file, h.line, safe(h.varOrPropName), safe(h.sample), h.entropyX1000, h.length].join('\t'),
     ).join('\n'),
   )
 
@@ -225,6 +296,49 @@ export async function runDatalogDetectors(
     : a.line - b.line || a.paramIndex - b.paramIndex,
   )
 
+  const sanitizers = fileLineSort((result.outputs.get('SanitizerOut') ?? []).map((t: Tuple) => ({
+    file: String(t[0]),
+    line: Number(t[1]),
+    callee: String(t[2]),
+    containingSymbol: String(t[3]),
+  })))
+
+  const taintSinks = fileLineSort((result.outputs.get('TaintSinkOut') ?? []).map((t: Tuple) => ({
+    file: String(t[0]),
+    line: Number(t[1]),
+    kind: String(t[2]),
+    callee: String(t[3]),
+    containingSymbol: String(t[4]),
+  })))
+
+  const longFunctions = fileLineSort((result.outputs.get('LongFunctionOut') ?? []).map((t: Tuple) => ({
+    file: String(t[0]),
+    line: Number(t[1]),
+    name: String(t[2]),
+    loc: Number(t[3]),
+    kind: String(t[4]) as 'function' | 'method' | 'arrow',
+  })))
+  // Re-sort par loc desc pour matcher legacy analyzeLongFunctions
+  longFunctions.sort((a, b) => b.loc - a.loc)
+
+  const functionComplexities = fileLineSort((result.outputs.get('FunctionComplexityOut') ?? []).map((t: Tuple) => ({
+    file: String(t[0]),
+    line: Number(t[1]),
+    name: String(t[2]),
+    cyclomatic: Number(t[3]),
+    cognitive: Number(t[4]),
+    containingClass: String(t[5]),
+  })))
+
+  const hardcodedSecrets = fileLineSort((result.outputs.get('HardcodedSecretOut') ?? []).map((t: Tuple) => ({
+    file: String(t[0]),
+    line: Number(t[1]),
+    name: String(t[2]),
+    sample: String(t[3]),
+    entropyX1000: Number(t[4]),
+    length: Number(t[5]),
+  })))
+
   const tuplesIn =
     merged.numericLiterals.length +
     merged.binaryExpressions.length +
@@ -232,13 +346,23 @@ export async function runDatalogDetectors(
     merged.fileTags.length +
     merged.callExpressions.length +
     merged.functionScopes.length +
-    merged.functionParams.length
+    merged.functionParams.length +
+    merged.sanitizerCandidates.length +
+    merged.taintSinkCandidates.length +
+    merged.longFunctionCandidates.length +
+    merged.functionComplexities.length +
+    merged.hardcodedSecretCandidates.length
   const tuplesOut =
     magicNumbers.length +
     deadCodeIdenticalSubexpressions.length +
     evalCalls.length +
     cryptoCalls.length +
-    booleanParams.length
+    booleanParams.length +
+    sanitizers.length +
+    taintSinks.length +
+    longFunctions.length +
+    functionComplexities.length +
+    hardcodedSecrets.length
 
   return {
     magicNumbers,
@@ -246,6 +370,11 @@ export async function runDatalogDetectors(
     evalCalls,
     cryptoCalls,
     booleanParams,
+    sanitizers,
+    taintSinks,
+    longFunctions,
+    functionComplexities,
+    hardcodedSecrets,
     stats: { extractMs, evalMs, tuplesIn, tuplesOut },
   }
 }

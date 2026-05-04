@@ -1,7 +1,7 @@
 # ADR-026: Détecteurs comme rules Datalog sur facts AST denormalisés
 
 **Date:** 2026-05-04
-**Status:** Accepted (prototype validé sur 2 détecteurs ; port progressif)
+**Status:** Accepted (10/10 ts-morph détecteurs portés, BIT-IDENTICAL)
 
 ## Rule
 
@@ -37,10 +37,17 @@ attaque ce bottleneck à la source :
 - **Self-describing** : les invariants ADR (cf. ADR-022) vivent déjà
   comme rules `.dl`. Cohérence architecturale.
 
-Bench prototype (magic-numbers + dead-code/identical-subexpr) :
-- Toolkit (183 fichiers) : 557ms legacy → 287ms Datalog (1.93×)
-- Sentinel (220 fichiers) : 705ms legacy → 468ms Datalog (1.51×)
-- 11/11 outputs BIT-IDENTICAL
+Bench complet (10/10 ts-morph détecteurs) :
+- Toolkit (183 fichiers) : 1875ms legacy → 1133ms Datalog (1.66×)
+- Sentinel (220 fichiers) : 6552ms legacy → 1509ms Datalog (**4.34×**)
+- 10/10 outputs BIT-IDENTICAL :
+  magic-numbers, dead-code/identical-subexpr, eval-calls, crypto-algo,
+  boolean-params, sanitizers, taint-sinks, long-functions,
+  function-complexity, hardcoded-secrets
+
+Sentinel speedup vient principalement de boolean-params + function-
+complexity legacy qui font des walks AST + type-checker calls
+indépendants pour CHAQUE detector. Le visitor unique amortit ces coûts.
 
 ## How to apply
 

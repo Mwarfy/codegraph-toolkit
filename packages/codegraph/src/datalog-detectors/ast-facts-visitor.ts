@@ -22,6 +22,7 @@
  */
 
 import { type SourceFile, Node, SyntaxKind } from 'ts-morph'
+import { findContainingSymbol as sharedFindContainingSymbol } from '../extractors/_shared/ast-helpers.js'
 
 // ─── Tuple types ────────────────────────────────────────────────────────────
 
@@ -148,6 +149,81 @@ export interface FunctionParamFact {
   typeText: string
 }
 
+/**
+ * Sanitizer candidate (visitor pre-computes match avec lookup + regex
+ * — l'engine Datalog ne supporte pas les regex/string ops).
+ *
+ * Schéma : .decl SanitizerCandidate(file:symbol, line:number,
+ *   callee:symbol, containingSymbol:symbol)
+ */
+export interface SanitizerCandidateFact {
+  file: string
+  line: number
+  callee: string
+  containingSymbol: string
+}
+
+/**
+ * Taint sink candidate (visitor pre-computes la classification
+ * methodName→kind + objectName ∈ HIGH_CONFIDENCE_OBJECTS regex).
+ *
+ * Schéma : .decl TaintSinkCandidate(file:symbol, line:number, kind:symbol,
+ *   callee:symbol, containingSymbol:symbol)
+ */
+export interface TaintSinkCandidateFact {
+  file: string
+  line: number
+  kind: string
+  callee: string
+  containingSymbol: string
+}
+
+/**
+ * Long function candidate (visitor pré-compte les LOC du body).
+ *
+ * Schéma : .decl LongFunctionCandidate(file:symbol, line:number,
+ *   name:symbol, loc:number, kind:symbol)
+ */
+export interface LongFunctionCandidateFact {
+  file: string
+  line: number
+  name: string
+  loc: number
+  kind: 'function' | 'method' | 'arrow'
+}
+
+/**
+ * Function complexity (cyclomatic + cognitive pré-computés en visitor —
+ * trop complexe à exprimer en Datalog pur).
+ *
+ * Schéma : .decl FunctionComplexityFact(file:symbol, line:number,
+ *   name:symbol, cyclomatic:number, cognitive:number, containingClass:symbol)
+ */
+export interface FunctionComplexityFact {
+  file: string
+  line: number
+  name: string
+  cyclomatic: number
+  cognitive: number
+  containingClass: string
+}
+
+/**
+ * Hardcoded secret candidate (visitor calcule entropy de Shannon, filtre
+ * par taille + context). Emit que les candidats qui passent les checks.
+ *
+ * Schéma : .decl HardcodedSecretCandidate(file:symbol, line:number,
+ *   varOrPropName:symbol, sample:symbol, entropyX1000:number, length:number)
+ */
+export interface HardcodedSecretCandidateFact {
+  file: string
+  line: number
+  varOrPropName: string
+  sample: string
+  entropyX1000: number
+  length: number
+}
+
 export interface AstFactsBundle {
   numericLiterals: NumericLiteralFact[]
   binaryExpressions: BinaryExpressionFact[]
@@ -156,6 +232,11 @@ export interface AstFactsBundle {
   callExpressions: CallExpressionFact[]
   functionScopes: FunctionScopeFact[]
   functionParams: FunctionParamFact[]
+  sanitizerCandidates: SanitizerCandidateFact[]
+  taintSinkCandidates: TaintSinkCandidateFact[]
+  longFunctionCandidates: LongFunctionCandidateFact[]
+  functionComplexities: FunctionComplexityFact[]
+  hardcodedSecretCandidates: HardcodedSecretCandidateFact[]
 }
 
 // ─── Visitor ────────────────────────────────────────────────────────────────
@@ -194,10 +275,14 @@ export function extractAstFactsBundle(sf: SourceFile, relPath: string): AstFacts
   const callExpressions: CallExpressionFact[] = []
   const functionScopes: FunctionScopeFact[] = []
   const functionParams: FunctionParamFact[] = []
+  const sanitizerCandidates: SanitizerCandidateFact[] = []
+  const taintSinkCandidates: TaintSinkCandidateFact[] = []
+  const longFunctionCandidates: LongFunctionCandidateFact[] = []
+  const functionComplexities: FunctionComplexityFact[] = []
+  const hardcodedSecretCandidates: HardcodedSecretCandidateFact[] = []
 
-  if (TEST_FILE_RE.test(relPath)) {
-    fileTags.push({ file: relPath, tag: 'test' })
-  }
+  const isTest = TEST_FILE_RE.test(relPath)
+  if (isTest) fileTags.push({ file: relPath, tag: 'test' })
 
   visitNumericLiterals(sf, relPath, numericLiterals)
   visitBinaryExpressions(sf, relPath, binaryExpressions)
@@ -205,9 +290,25 @@ export function extractAstFactsBundle(sf: SourceFile, relPath: string): AstFacts
   visitCallAndNewExpressions(sf, relPath, callExpressions)
   visitFunctionScopesAndParams(sf, relPath, functionScopes, functionParams)
 
+  // Détecteurs hybrides : visitor pré-compute la classification, rules
+  // Datalog filtrent test+exempt seulement. Skip total si test file pour
+  // éviter de générer des candidats qui seraient ensuite filtrés
+  // (perf — les sets candidats peuvent être gros sur les tests/fixtures).
+  if (!isTest) {
+    visitSanitizerCandidates(sf, relPath, sanitizerCandidates)
+    visitTaintSinkCandidates(sf, relPath, taintSinkCandidates)
+    visitLongFunctionAndComplexityCandidates(
+      sf, relPath, longFunctionCandidates, functionComplexities,
+    )
+    visitHardcodedSecretCandidates(sf, relPath, hardcodedSecretCandidates)
+  }
+
   return {
     numericLiterals, binaryExpressions, exemptionLines, fileTags,
     callExpressions, functionScopes, functionParams,
+    sanitizerCandidates, taintSinkCandidates,
+    longFunctionCandidates, functionComplexities,
+    hardcodedSecretCandidates,
   }
 }
 
@@ -393,25 +494,10 @@ function buildCallFact(
   }
 }
 
-/**
- * Best-effort enclosing function/method/arrow-var name. Reproduit
- * `findContainingSymbol` du extractors/_shared (qu'on évite d'importer
- * pour garder le visitor self-contained — duplication assumée).
- */
-function findContainingSymbol(node: Node): string {
-  let cur: Node | undefined = node.getParent()
-  while (cur) {
-    if (Node.isFunctionDeclaration(cur)) return cur.getName() ?? ''
-    if (Node.isMethodDeclaration(cur)) return cur.getName()
-    if (Node.isArrowFunction(cur) || Node.isFunctionExpression(cur)) {
-      const p = cur.getParent()
-      if (p && Node.isVariableDeclaration(p)) return p.getName()
-      if (p && Node.isPropertyAssignment(p)) return p.getName()
-    }
-    cur = cur.getParent()
-  }
-  return ''
-}
+// findContainingSymbol = re-export du helper partagé (alias local). Garantit
+// la même résolution scope-name (Class.method, var name, etc.) que les
+// extractors legacy → BIT-IDENTICAL containingSymbol cross-runs.
+const findContainingSymbol = sharedFindContainingSymbol
 
 // ─── Function scopes + params (boolean-params) ──────────────────────────────
 
@@ -473,6 +559,361 @@ function pushScopeAndParams(
     paramsOut.push({
       file, scopeLine: line, paramIndex: i,
       paramName: p.name, typeText: p.typeText,
+    })
+  }
+}
+
+// ─── Sanitizers (Phase 4 Tier 10) ───────────────────────────────────────────
+
+const SANITIZER_METHODS = new Set<string>([
+  'parse', 'safeParse', 'safeParseAsync', 'parseAsync',
+  'validate', 'validateSync', 'validateAsync',
+  'validateBody', 'validateQuery', 'validateParams', 'validateInput',
+  'validateRequest', 'validateSchema',
+  'escape', 'escapeHtml', 'sanitize', 'sanitizeHtml', 'sanitizeUrl',
+  'normalize', 'resolve',
+  'encodeURIComponent', 'encodeURI',
+])
+const SANITIZER_NAME_PREFIXES = /^(validate|sanitize|clean|escape|normalize|verify|check|parse)/i
+
+function visitSanitizerCandidates(
+  sf: SourceFile,
+  relPath: string,
+  out: SanitizerCandidateFact[],
+): void {
+  for (const call of sf.getDescendantsOfKind(SyntaxKind.CallExpression)) {
+    const callee = call.getExpression()
+    let methodName: string | null = null
+    let calleeText = ''
+    if (Node.isIdentifier(callee)) {
+      methodName = callee.getText()
+      calleeText = methodName
+    } else if (Node.isPropertyAccessExpression(callee)) {
+      methodName = callee.getName()
+      calleeText = callee.getText()
+    } else continue
+    if (!methodName) continue
+    if (!SANITIZER_METHODS.has(methodName) && !SANITIZER_NAME_PREFIXES.test(methodName)) continue
+    out.push({
+      file: relPath,
+      line: call.getStartLineNumber(),
+      callee: calleeText,
+      containingSymbol: findContainingSymbol(call),
+    })
+  }
+}
+
+// ─── Taint sinks (Phase 4 Tier 10) ──────────────────────────────────────────
+
+const SINK_METHOD_TO_KIND = new Map<string, string>()
+;(() => {
+  const patterns: Array<[string, string[]]> = [
+    ['sql',      ['query', 'raw', 'execute']],
+    ['eval',     ['eval']],
+    ['exec',     ['exec', 'execSync', 'execFile', 'execFileSync', 'spawn', 'spawnSync', 'fork']],
+    ['fs-read',  ['readFile', 'readFileSync', 'createReadStream', 'readdir', 'readdirSync']],
+    ['fs-write', ['writeFile', 'writeFileSync', 'createWriteStream', 'appendFile', 'unlink', 'rm', 'rmSync']],
+    ['http-out', ['fetch', 'request', 'get', 'post', 'put', 'delete', 'patch']],
+    ['html-out', ['send', 'render', 'innerHTML', 'outerHTML']],
+    ['log',      ['info', 'warn', 'error', 'debug', 'log', 'trace', 'fatal']],
+    ['redirect', ['redirect', 'setHeader', 'writeHead']],
+  ]
+  for (const [kind, methods] of patterns) {
+    for (const m of methods) SINK_METHOD_TO_KIND.set(m, kind)
+  }
+})()
+
+const SINK_HIGH_CONFIDENCE: Record<string, RegExp> = {
+  'sql':      /^(db|pool|client|knex|prisma|sql|connection|conn|database)$/i,
+  'eval':     /.*/,
+  'exec':     /^(child_process|cp|childProcess)$/i,
+  'fs-read':  /^(fs|fsPromises|fsp)$/i,
+  'fs-write': /^(fs|fsPromises|fsp)$/i,
+  'http-out': /^(axios|http|https|got|fetch|node_fetch|nodeFetch)$/i,
+  'html-out': /^(res|response|element|document)$/i,
+  'log':      /^(logger|log|console|pino|winston|bunyan)$/i,
+  'redirect': /^(res|response|ctx|reply)$/i,
+}
+
+function visitTaintSinkCandidates(
+  sf: SourceFile,
+  relPath: string,
+  out: TaintSinkCandidateFact[],
+): void {
+  for (const call of sf.getDescendantsOfKind(SyntaxKind.CallExpression)) {
+    const callee = call.getExpression()
+    let methodName: string | null = null
+    let objectName: string | null = null
+    let calleeText = ''
+    if (Node.isIdentifier(callee)) {
+      methodName = callee.getText()
+      calleeText = methodName
+    } else if (Node.isPropertyAccessExpression(callee)) {
+      methodName = callee.getName()
+      calleeText = callee.getText()
+      const exprNode = callee.getExpression()
+      if (Node.isIdentifier(exprNode)) objectName = exprNode.getText()
+      else if (Node.isPropertyAccessExpression(exprNode)) objectName = exprNode.getName()
+    } else continue
+    if (!methodName) continue
+    const kind = SINK_METHOD_TO_KIND.get(methodName)
+    if (!kind) continue
+    // High-confidence : objectName matches regex per kind, OR (no object AND
+    // method is uniquely identifiable like eval/fetch).
+    const hc = objectName
+      ? SINK_HIGH_CONFIDENCE[kind].test(objectName)
+      : (methodName === 'eval' || methodName === 'fetch')
+    if (!hc) continue
+    out.push({
+      file: relPath,
+      line: call.getStartLineNumber(),
+      kind,
+      callee: calleeText,
+      containingSymbol: findContainingSymbol(call),
+    })
+  }
+}
+
+// ─── Long functions + Function complexity ───────────────────────────────────
+
+const CYCLO_KINDS = new Set<number>([
+  SyntaxKind.IfStatement,
+  SyntaxKind.ConditionalExpression,
+  SyntaxKind.CaseClause,
+  SyntaxKind.ForStatement,
+  SyntaxKind.ForInStatement,
+  SyntaxKind.ForOfStatement,
+  SyntaxKind.WhileStatement,
+  SyntaxKind.DoStatement,
+  SyntaxKind.CatchClause,
+])
+
+const COG_NEST_KINDS = new Set<number>([
+  SyntaxKind.IfStatement,
+  SyntaxKind.ForStatement,
+  SyntaxKind.ForInStatement,
+  SyntaxKind.ForOfStatement,
+  SyntaxKind.WhileStatement,
+  SyntaxKind.DoStatement,
+  SyntaxKind.CatchClause,
+  SyntaxKind.ConditionalExpression,
+])
+
+interface FnLikeWithBody {
+  /** Just method/function/var name (no class prefix). */
+  shortName: string
+  body: Node
+  line: number
+  containingClass: string
+  kind: 'function' | 'method' | 'arrow'
+}
+
+function* iterateFnLikesWithBody(sf: SourceFile): Generator<FnLikeWithBody> {
+  for (const fn of sf.getFunctions()) {
+    const body = fn.getBody()
+    if (!body) continue
+    yield {
+      shortName: fn.getName() ?? '(anonymous)',
+      body,
+      line: fn.getStartLineNumber(),
+      containingClass: '',
+      kind: 'function',
+    }
+  }
+  for (const cls of sf.getClasses()) {
+    const className = cls.getName() ?? '(anonymous)'
+    for (const m of cls.getMethods()) {
+      const body = m.getBody()
+      if (!body) continue
+      yield {
+        shortName: m.getName(),
+        body,
+        line: m.getStartLineNumber(),
+        containingClass: className,
+        kind: 'method',
+      }
+    }
+  }
+  for (const v of sf.getVariableDeclarations()) {
+    const init = v.getInitializer()
+    if (!init) continue
+    if (!Node.isArrowFunction(init) && !Node.isFunctionExpression(init)) continue
+    const body = init.getBody()
+    if (!body) continue
+    yield {
+      shortName: v.getName(),
+      body,
+      line: v.getStartLineNumber(),
+      containingClass: '',
+      kind: 'arrow',
+    }
+  }
+}
+
+function visitLongFunctionAndComplexityCandidates(
+  sf: SourceFile,
+  relPath: string,
+  longOut: LongFunctionCandidateFact[],
+  cmplxOut: FunctionComplexityFact[],
+): void {
+  for (const fn of iterateFnLikesWithBody(sf)) {
+    // Long-functions legacy : name = "Class.method" pour les methods, sinon shortName
+    const longName = fn.kind === 'method' && fn.containingClass
+      ? `${fn.containingClass}.${fn.shortName}`
+      : fn.shortName
+    longOut.push({
+      file: relPath,
+      line: fn.line,
+      name: longName,
+      loc: countLoc(fn.body.getText()),
+      kind: fn.kind,
+    })
+    // Function-complexity legacy : name = juste shortName, containingClass séparé
+    cmplxOut.push({
+      file: relPath,
+      line: fn.line,
+      name: fn.shortName,
+      cyclomatic: computeCyclomatic(fn.body),
+      cognitive: computeCognitive(fn.body),
+      containingClass: fn.containingClass,
+    })
+  }
+}
+
+function countLoc(bodyText: string): number {
+  const lines = bodyText.split('\n')
+  let count = 0
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (trimmed === '') continue
+    if (trimmed === '{' || trimmed === '}') continue
+    if (trimmed.startsWith('//')) continue
+    if (trimmed.startsWith('*') || trimmed.startsWith('/*') || trimmed.endsWith('*/')) continue
+    count++
+  }
+  return count
+}
+
+function computeCyclomatic(node: Node): number {
+  let count = 1
+  node.forEachDescendant((child) => {
+    const kind = child.getKind()
+    if (CYCLO_KINDS.has(kind)) count++
+    else if (kind === SyntaxKind.BinaryExpression) {
+      const op = (child as unknown as { getOperatorToken: () => { getKind: () => number } })
+        .getOperatorToken().getKind()
+      if (op === SyntaxKind.AmpersandAmpersandToken
+       || op === SyntaxKind.BarBarToken
+       || op === SyntaxKind.QuestionQuestionToken) {
+        count++
+      }
+    }
+  })
+  return count
+}
+
+function computeCognitive(node: Node): number {
+  let total = 0
+  const walk = (n: Node, nesting: number): void => {
+    n.forEachChild((child) => {
+      const kind = child.getKind()
+      if (COG_NEST_KINDS.has(kind)) {
+        total += 1 + nesting
+        walk(child, nesting + 1)
+      } else if (kind === SyntaxKind.SwitchStatement) {
+        total += 1 + nesting
+        walk(child, nesting + 1)
+      } else if (kind === SyntaxKind.BinaryExpression) {
+        const op = (child as unknown as { getOperatorToken: () => { getKind: () => number } })
+          .getOperatorToken().getKind()
+        if (op === SyntaxKind.AmpersandAmpersandToken
+         || op === SyntaxKind.BarBarToken) {
+          total += 1
+        }
+        walk(child, nesting)
+      } else {
+        walk(child, nesting)
+      }
+    })
+  }
+  walk(node, 0)
+  return total
+}
+
+// ─── Hardcoded secrets (entropy + context) ──────────────────────────────────
+// Match exact legacy extractors/hardcoded-secrets.ts : SUSPICIOUS_NAME_RE +
+// KNOWN_PREFIX_RE, length >= 20, entropy >= 4.0 (×1000 = 4000) seulement
+// pour le trigger "name". Iterate seulement StringLiteral (pas template).
+
+const SECRET_SUSPICIOUS_NAME_RE =
+  /\b(?:api[_-]?key|secret|token|password|passwd|pwd|credential|auth|bearer|access[_-]?token|refresh[_-]?token|private[_-]?key|client[_-]?secret)\b/i
+
+const SECRET_KNOWN_PREFIX_RE =
+  /^(?:sk-[A-Za-z0-9]{20,}|sk_(?:test|live)_[A-Za-z0-9]{20,}|pk_(?:test|live)_[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|xox[bps]-[A-Za-z0-9-]{20,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{20,}|ya29\.[0-9A-Za-z_-]{20,})/
+
+const SECRET_MIN_LENGTH = 20
+const SECRET_MIN_ENTROPY_X1000 = 4_000  // bits/char × 1000
+
+function shannonEntropyX1000(s: string): number {
+  if (s.length === 0) return 0
+  const freq = new Map<string, number>()
+  for (const ch of s) freq.set(ch, (freq.get(ch) ?? 0) + 1)
+  let h = 0
+  for (const c of freq.values()) {
+    const p = c / s.length
+    h -= p * Math.log2(p)
+  }
+  return Math.trunc(h * 1000)
+}
+
+/**
+ * Reproduit exactement findContext() du legacy : VariableDeclaration,
+ * PropertyAssignment (avec strip quotes), BinaryExpression LHS PropertyAccess.
+ */
+function findSecretContext(node: Node): string | null {
+  const parent = node.getParent()
+  if (!parent) return null
+  if (Node.isVariableDeclaration(parent)) return parent.getName()
+  if (Node.isPropertyAssignment(parent)) {
+    return parent.getName().replace(/^['"]|['"]$/g, '')
+  }
+  if (Node.isBinaryExpression(parent)) {
+    const lhs = parent.getLeft()
+    if (Node.isPropertyAccessExpression(lhs)) return lhs.getName()
+  }
+  return null
+}
+
+function visitHardcodedSecretCandidates(
+  sf: SourceFile,
+  relPath: string,
+  out: HardcodedSecretCandidateFact[],
+): void {
+  for (const lit of sf.getDescendantsOfKind(SyntaxKind.StringLiteral)) {
+    const value = lit.getLiteralText()
+    if (value.length < SECRET_MIN_LENGTH) continue
+
+    const context = findSecretContext(lit)
+    let trigger: 'name' | 'pattern' | null = null
+    if (SECRET_KNOWN_PREFIX_RE.test(value)) {
+      trigger = 'pattern'
+    } else if (context && SECRET_SUSPICIOUS_NAME_RE.test(context)) {
+      trigger = 'name'
+    }
+    if (!trigger) continue
+
+    const entX1000 = shannonEntropyX1000(value)
+    // Pour 'name' trigger : exiger entropy >= 4. Pour 'pattern' : skip filter
+    // (les prefixes connus sont déjà spécifiques).
+    if (trigger === 'name' && entX1000 < SECRET_MIN_ENTROPY_X1000) continue
+
+    out.push({
+      file: relPath,
+      line: lit.getStartLineNumber(),
+      varOrPropName: context ?? '',
+      sample: value.slice(0, Math.min(8, value.length)) + '…',
+      entropyX1000: entX1000,
+      length: value.length,
     })
   }
 }

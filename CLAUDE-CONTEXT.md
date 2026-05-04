@@ -200,11 +200,11 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/codegraph/src/datalog-detectors/runner.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/codegraph/src/extractors/_template.monoid.worker.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/codegraph/src/extractors/todos.worker.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/src/datalog-detectors/runner.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
@@ -226,6 +226,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+b2a709e feat(codegraph): Phase γ.4b — consolide + 3 nouveaux détecteurs Datalog
 3175c64 feat(codegraph): Phase γ.4 — prototype Datalog detectors (magic-numbers + dead-code)
 06c21b1 feat(codegraph): Phase γ.3b — wire batch warmup dans analyzer.ts
 4b218d2 feat(codegraph): Phase γ.3b — batch dispatch infrastructure (non-wired)
@@ -237,7 +238,6 @@ d94cab1 feat(codegraph): Phase γ.2 — workers ts-morph via mini-Project local
 07b0dcf feat(codegraph): Phase 2.7 — function-complexity + long-functions portés (12/65)
 7366782 feat(codegraph): Phase γ.1 — cost-model auto-tuning LIBY_BSP_WORKERS=auto
 896219e feat(codegraph): Phase 2.6 — oauth-scope-literals porté (10/65)
-76362ea feat(codegraph): Phase 2.5 — ts-imports porté au pattern BSP monoïdal
 ```
 
 ## Comment contribuer à ce brief

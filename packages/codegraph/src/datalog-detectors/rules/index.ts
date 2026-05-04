@@ -73,6 +73,44 @@ export const SCHEMA_DL = `// AST primitive facts — extraits par ast-facts-visi
   file:symbol, scopeName:symbol, scopeLine:number,
   paramIndex:number, paramName:symbol, totalParams:number)
 .output BooleanParamSiteOut
+
+// ─── Hybrid candidate facts (visitor pre-classifies) ────────────────────────
+
+.decl SanitizerCandidate(file:symbol, line:number, callee:symbol, containingSymbol:symbol)
+.input SanitizerCandidate
+
+.decl TaintSinkCandidate(file:symbol, line:number, kind:symbol, callee:symbol, containingSymbol:symbol)
+.input TaintSinkCandidate
+
+.decl LongFunctionCandidate(file:symbol, line:number, name:symbol, loc:number, kind:symbol)
+.input LongFunctionCandidate
+
+.decl FunctionComplexityFactIn(file:symbol, line:number, name:symbol,
+  cyclomatic:number, cognitive:number, containingClass:symbol)
+.input FunctionComplexityFactIn
+
+.decl HardcodedSecretCandidate(file:symbol, line:number,
+  varOrPropName:symbol, sample:symbol, entropyX1000:number, length:number)
+.input HardcodedSecretCandidate
+
+// ─── Hybrid outputs ─────────────────────────────────────────────────────────
+
+.decl SanitizerOut(file:symbol, line:number, callee:symbol, containingSymbol:symbol)
+.output SanitizerOut
+
+.decl TaintSinkOut(file:symbol, line:number, kind:symbol, callee:symbol, containingSymbol:symbol)
+.output TaintSinkOut
+
+.decl LongFunctionOut(file:symbol, line:number, name:symbol, loc:number, kind:symbol)
+.output LongFunctionOut
+
+.decl FunctionComplexityOut(file:symbol, line:number, name:symbol,
+  cyclomatic:number, cognitive:number, containingClass:symbol)
+.output FunctionComplexityOut
+
+.decl HardcodedSecretOut(file:symbol, line:number, name:symbol, sample:symbol,
+  entropyX1000:number, length:number)
+.output HardcodedSecretOut
 `
 
 // Convention engine : variables capitalisées, literals (numbers, strings) inline.
@@ -186,6 +224,47 @@ BooleanParamSiteOut(F, ScopeName, ScopeLine, Idx, ParamName, Total) :-
   !ExemptionLine(F, ScopeLine, "boolean-ok").
 `
 
+// ─── Hybrid rules (visitor pré-classifie, rule filtre cross-cutting) ──────
+// Pour ces détecteurs (sanitizers, taint-sinks, long-functions, function-
+// complexity, hardcoded-secrets), la classification métier (regex sur
+// objectName, entropy de Shannon, comptage AST descendants) ne s'exprime
+// pas en Datalog pur. Le visitor pré-compute et émet des candidats ;
+// les rules filtrent uniquement test-files + exempt markers.
+
+export const SANITIZERS_DL = `
+SanitizerOut(F, L, Callee, Sym) :-
+  SanitizerCandidate(F, L, Callee, Sym),
+  !FileTag(F, "test").
+`
+
+export const TAINT_SINKS_DL = `
+TaintSinkOut(F, L, Kind, Callee, Sym) :-
+  TaintSinkCandidate(F, L, Kind, Callee, Sym),
+  !FileTag(F, "test"),
+  !ExemptionLine(F, L, "taint-ok").
+`
+
+export const LONG_FUNCTIONS_DL = `
+LongFunctionOut(F, L, Name, Loc, Kind) :-
+  LongFunctionCandidate(F, L, Name, Loc, Kind),
+  Loc >= 100,
+  !FileTag(F, "test").
+`
+
+export const FUNCTION_COMPLEXITY_DL = `
+FunctionComplexityOut(F, L, Name, Cyclo, Cog, ContainingClass) :-
+  FunctionComplexityFactIn(F, L, Name, Cyclo, Cog, ContainingClass),
+  !FileTag(F, "test"),
+  !ExemptionLine(F, L, "complexity-ok").
+`
+
+export const HARDCODED_SECRETS_DL = `
+HardcodedSecretOut(F, L, Name, Sample, Ent, Len) :-
+  HardcodedSecretCandidate(F, L, Name, Sample, Ent, Len),
+  !FileTag(F, "test"),
+  !ExemptionLine(F, L, "secret-ok").
+`
+
 export const ALL_RULES_DL = [
   SCHEMA_DL,
   MAGIC_NUMBERS_DL,
@@ -193,4 +272,9 @@ export const ALL_RULES_DL = [
   EVAL_CALLS_DL,
   CRYPTO_ALGO_DL,
   BOOLEAN_PARAMS_DL,
+  SANITIZERS_DL,
+  TAINT_SINKS_DL,
+  LONG_FUNCTIONS_DL,
+  FUNCTION_COMPLEXITY_DL,
+  HARDCODED_SECRETS_DL,
 ].join('\n')
