@@ -157,6 +157,24 @@ export interface DatalogDetectorResults {
     literalValue?: string
     refExpression?: string
   }>
+  taintedVars: {
+    decls: Array<{
+      file: string
+      containingSymbol: string
+      varName: string
+      line: number
+      source: string
+    }>
+    argCalls: Array<{
+      file: string
+      line: number
+      callee: string
+      argVarName: string
+      argIndex: number
+      source: string
+      containingSymbol: string
+    }>
+  }
   stats: {
     extractMs: number
     evalMs: number
@@ -197,6 +215,8 @@ export async function runDatalogDetectors(
     constantExpressionCandidates: [],
     taintedArgumentCandidates: [],
     eventEmitSiteCandidates: [],
+    taintedVarDeclCandidates: [],
+    taintedVarArgCallCandidates: [],
   }
   for (const sf of opts.project.getSourceFiles()) {
     const rel = relativize(sf.getFilePath(), opts.rootDir)
@@ -221,6 +241,8 @@ export async function runDatalogDetectors(
     merged.constantExpressionCandidates.push(...b.constantExpressionCandidates)
     merged.taintedArgumentCandidates.push(...b.taintedArgumentCandidates)
     merged.eventEmitSiteCandidates.push(...b.eventEmitSiteCandidates)
+    merged.taintedVarDeclCandidates.push(...b.taintedVarDeclCandidates)
+    merged.taintedVarArgCallCandidates.push(...b.taintedVarArgCallCandidates)
   }
   const extractMs = performance.now() - t0
 
@@ -325,6 +347,16 @@ export async function runDatalogDetectors(
     merged.eventEmitSiteCandidates.map((e) =>
       [e.file, e.line, safe(e.symbol), safe(e.callee), e.isMethodCall, safe(e.receiver),
        e.kind, safe(e.literalValue), safe(e.refExpression)].join('\t'),
+    ).join('\n'),
+  )
+  factsByRelation.set('TaintedVarDeclCandidate',
+    merged.taintedVarDeclCandidates.map((d) =>
+      [d.file, safe(d.containingSymbol), safe(d.varName), d.line, d.source].join('\t'),
+    ).join('\n'),
+  )
+  factsByRelation.set('TaintedVarArgCallCandidate',
+    merged.taintedVarArgCallCandidates.map((a) =>
+      [a.file, a.line, safe(a.callee), safe(a.argVarName), a.argIndex, a.source, safe(a.containingSymbol)].join('\t'),
     ).join('\n'),
   )
 
@@ -539,6 +571,34 @@ export async function runDatalogDetectors(
     params: argParamsRaw,
   }
 
+  // ─── Tainted Vars (Tier 11) ────────────────────────────────────────────────
+  const taintedVarDecls = (result.outputs.get('TaintedVarDeclOut') ?? []).map((t: Tuple) => ({
+    file: String(t[0]),
+    containingSymbol: String(t[1]),
+    varName: String(t[2]),
+    line: Number(t[3]),
+    source: String(t[4]),
+  }))
+  taintedVarDecls.sort((a, b) =>
+    a.file !== b.file ? (a.file < b.file ? -1 : 1) : a.line - b.line,
+  )
+  const taintedVarArgCalls = (result.outputs.get('TaintedVarArgCallOut') ?? []).map((t: Tuple) => ({
+    file: String(t[0]),
+    line: Number(t[1]),
+    callee: String(t[2]),
+    argVarName: String(t[3]),
+    argIndex: Number(t[4]),
+    source: String(t[5]),
+    containingSymbol: String(t[6]),
+  }))
+  taintedVarArgCalls.sort((a, b) =>
+    a.file !== b.file ? (a.file < b.file ? -1 : 1) : a.line - b.line,
+  )
+  const taintedVarsResult: DatalogDetectorResults['taintedVars'] = {
+    decls: taintedVarDecls,
+    argCalls: taintedVarArgCalls,
+  }
+
   const eventEmitSites = fileLineSort((result.outputs.get('EventEmitSiteOut') ?? []).map((t: Tuple) => {
     const isMethodCall = Number(t[4]) === 1
     const receiver = String(t[5])
@@ -614,7 +674,9 @@ export async function runDatalogDetectors(
     merged.envVarReads.length +
     merged.constantExpressionCandidates.length +
     merged.taintedArgumentCandidates.length +
-    merged.eventEmitSiteCandidates.length
+    merged.eventEmitSiteCandidates.length +
+    merged.taintedVarDeclCandidates.length +
+    merged.taintedVarArgCallCandidates.length
   const tuplesOut =
     magicNumbers.length +
     deadCodeIdenticalSubexpressions.length +
@@ -632,7 +694,9 @@ export async function runDatalogDetectors(
     constantExpressions.length +
     argumentsResult.taintedArgs.length +
     argumentsResult.params.length +
-    eventEmitSites.length
+    eventEmitSites.length +
+    taintedVarsResult.decls.length +
+    taintedVarsResult.argCalls.length
 
   return {
     magicNumbers,
@@ -651,6 +715,7 @@ export async function runDatalogDetectors(
     constantExpressions,
     arguments: argumentsResult,
     eventEmitSites,
+    taintedVars: taintedVarsResult,
     stats: { extractMs, evalMs, tuplesIn, tuplesOut },
   }
 }

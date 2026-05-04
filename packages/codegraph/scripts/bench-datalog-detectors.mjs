@@ -24,6 +24,7 @@ import { analyzeEnvUsage } from '../dist/extractors/env-usage.js'
 import { extractConstantExpressionsFileBundle } from '../dist/extractors/constant-expressions.js'
 import { analyzeArguments } from '../dist/extractors/arguments.js'
 import { analyzeEventEmitSites } from '../dist/extractors/event-emit-sites.js'
+import { analyzeTaintedVars } from '../dist/extractors/tainted-vars.js'
 import { runDatalogDetectors } from '../dist/datalog-detectors/runner.js'
 import { resolve } from 'node:path'
 
@@ -87,8 +88,9 @@ const legacyBarrels = await analyzeBarrels(rootDir, files, project)
 const legacyEnvUsage = await analyzeEnvUsage(rootDir, files, project)
 const legacyArguments = await analyzeArguments(rootDir, files, project)
 const legacyEmitSites = await analyzeEventEmitSites(rootDir, files, project)
+const legacyTaintedVars = await analyzeTaintedVars(rootDir, files, project)
 const legacyMs = performance.now() - tLegacy0
-console.log(`  legacy 16 detectors (${legacyMs.toFixed(1)}ms)`)
+console.log(`  legacy 17 detectors (${legacyMs.toFixed(1)}ms)`)
 
 // DATALOG
 const tDl0 = performance.now()
@@ -163,7 +165,13 @@ const ok15b = bidirDiff(legacyArguments.params, dl.arguments.params,
 const ok16 = bidirDiff(legacyEmitSites, dl.eventEmitSites,
   (e) => `${e.file}\t${e.line}\t${e.symbol}\t${normWs(e.callee)}\t${e.kind}\t${e.literalValue ?? ''}\t${e.refExpression ?? ''}`,
   'EventEmitSite')
+const ok17a = bidirDiff(legacyTaintedVars.decls, dl.taintedVars.decls,
+  (d) => `${d.file}\t${d.containingSymbol}\t${d.varName}\t${d.line}\t${d.source}`,
+  'TaintedVarDecl')
+const ok17b = bidirDiff(legacyTaintedVars.argCalls, dl.taintedVars.argCalls,
+  (a) => `${a.file}\t${a.line}\t${normWs(a.callee)}\t${a.argVarName}\t${a.argIndex}\t${a.source}\t${a.containingSymbol}`,
+  'TaintedVarArgCall')
 
-const allOk = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10 && ok11 && ok12 && ok13 && ok14 && ok15a && ok15b && ok16
+const allOk = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10 && ok11 && ok12 && ok13 && ok14 && ok15a && ok15b && ok16 && ok17a && ok17b
 console.log(`\n  Total: legacy=${legacyMs.toFixed(0)}ms vs datalog=${dlMs.toFixed(0)}ms (ratio: ${(dlMs/legacyMs).toFixed(2)}x)${allOk ? ' ✓' : ' ✗'}`)
 if (!allOk) process.exit(1)

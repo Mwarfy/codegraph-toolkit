@@ -290,6 +290,39 @@ export interface HardcodedSecretCandidateFact {
 }
 
 /**
+ * Tainted var decl candidate (Tier 11). Visitor pré-classifie via
+ * matchSource regex + destructuring patterns. Rule pass-through.
+ *
+ * Schéma : .decl TaintedVarDeclCandidate(file:symbol, sym:symbol,
+ *   varName:symbol, line:number, source:symbol)
+ */
+export interface TaintedVarDeclCandidateFact {
+  file: string
+  containingSymbol: string
+  varName: string
+  line: number
+  source: string
+}
+
+/**
+ * Tainted arg call candidate (Tier 11). Visitor pré-classifie via
+ * per-scope tainted-vars Map. Rule pass-through.
+ *
+ * Schéma : .decl TaintedVarArgCallCandidate(file:symbol, line:number,
+ *   callee:symbol, argVarName:symbol, argIdx:number, source:symbol,
+ *   sym:symbol)
+ */
+export interface TaintedVarArgCallCandidateFact {
+  file: string
+  line: number
+  callee: string
+  argVarName: string
+  argIndex: number
+  source: string
+  containingSymbol: string
+}
+
+/**
  * Event emit site candidate (parallèle à event-listener-sites mais pour
  * emit({ type: ... })). Visitor pré-classifie literal / eventConstRef /
  * dynamic. Symbol résolu via buildLineToSymbol (legacy comportement).
@@ -366,6 +399,8 @@ export interface AstFactsBundle {
   constantExpressionCandidates: ConstantExpressionCandidateFact[]
   taintedArgumentCandidates: TaintedArgumentCandidateFact[]
   eventEmitSiteCandidates: EventEmitSiteCandidateFact[]
+  taintedVarDeclCandidates: TaintedVarDeclCandidateFact[]
+  taintedVarArgCallCandidates: TaintedVarArgCallCandidateFact[]
 }
 
 // ─── Visitor ────────────────────────────────────────────────────────────────
@@ -421,6 +456,8 @@ export function extractAstFactsBundle(
   const constantExpressionCandidates: ConstantExpressionCandidateFact[] = []
   const taintedArgumentCandidates: TaintedArgumentCandidateFact[] = []
   const eventEmitSiteCandidates: EventEmitSiteCandidateFact[] = []
+  const taintedVarDeclCandidates: TaintedVarDeclCandidateFact[] = []
+  const taintedVarArgCallCandidates: TaintedVarArgCallCandidateFact[] = []
 
   const isTest = TEST_FILE_RE.test(relPath)
   if (isTest) fileTags.push({ file: relPath, tag: 'test' })
@@ -444,6 +481,7 @@ export function extractAstFactsBundle(
     visitHardcodedSecretCandidates(sf, relPath, hardcodedSecretCandidates)
     visitConstantExpressionCandidates(sf, relPath, constantExpressionCandidates)
     visitTaintedArgumentCandidates(sf, relPath, taintedArgumentCandidates)
+    visitTaintedVarsCandidates(sf, relPath, taintedVarDeclCandidates, taintedVarArgCallCandidates)
   }
   // event-listener-sites legacy n'a PAS de filtre test files — capturé même
   // dans tests/ (les tests subscribers comptent).
@@ -466,6 +504,8 @@ export function extractAstFactsBundle(
     constantExpressionCandidates,
     taintedArgumentCandidates,
     eventEmitSiteCandidates,
+    taintedVarDeclCandidates,
+    taintedVarArgCallCandidates,
   }
 }
 
@@ -1641,6 +1681,123 @@ function visitEventEmitSiteCandidates(
         callee: calleeName, isMethodCall, receiver,
         kind: 'dynamic', literalValue: '', refExpression: '',
       })
+    }
+  }
+}
+
+// ─── Tainted Vars (Tier 11) ─────────────────────────────────────────────────
+
+const TAINTED_VARS_SOURCE_PATTERNS: Array<{ kind: string; re: RegExp }> = [
+  { kind: 'req.body',     re: /^(req|request|ctx\.req)\.body($|\.|\[)/ },
+  { kind: 'req.query',    re: /^(req|request|ctx\.req)\.query($|\.|\[)/ },
+  { kind: 'req.params',   re: /^(req|request|ctx\.req)\.params($|\.|\[)/ },
+  { kind: 'req.headers',  re: /^(req|request|ctx\.req)\.headers($|\.|\[)/ },
+  { kind: 'process.argv', re: /^process\.argv($|\.|\[)/ },
+  { kind: 'process.env',  re: /^process\.env($|\.|\[)/ },
+]
+
+function matchTaintedVarsSource(text: string): string | null {
+  const t = text.trim()
+  for (const { kind, re } of TAINTED_VARS_SOURCE_PATTERNS) {
+    if (re.test(t)) return kind
+  }
+  return null
+}
+
+interface TaintedVarsFnScope {
+  fnNode: Node
+  fnId: string
+  fnName: string
+}
+
+function* iterateTaintedVarsFnScopes(sf: SourceFile): Generator<TaintedVarsFnScope> {
+  for (const fn of sf.getFunctions()) {
+    const name = fn.getName() ?? '(anonymous)'
+    yield { fnNode: fn, fnId: `fn:${name}:${fn.getStartLineNumber()}`, fnName: name }
+  }
+  for (const cls of sf.getClasses()) {
+    const className = cls.getName() ?? '(anonymous)'
+    for (const method of cls.getMethods()) {
+      const name = `${className}.${method.getName()}`
+      yield { fnNode: method, fnId: `mth:${name}:${method.getStartLineNumber()}`, fnName: name }
+    }
+  }
+  for (const v of sf.getVariableDeclarations()) {
+    const init = v.getInitializer()
+    if (!init) continue
+    if (!Node.isArrowFunction(init) && !Node.isFunctionExpression(init)) continue
+    const name = v.getName()
+    yield { fnNode: init, fnId: `arrow:${name}:${v.getStartLineNumber()}`, fnName: name }
+  }
+}
+
+function readTaintedVarsCalleeText(callee: Node): string | null {
+  if (Node.isIdentifier(callee)) return callee.getText()
+  if (Node.isPropertyAccessExpression(callee)) return callee.getText()
+  return null
+}
+
+function visitTaintedVarsCandidates(
+  sf: SourceFile,
+  relPath: string,
+  declsOut: TaintedVarDeclCandidateFact[],
+  argCallsOut: TaintedVarArgCallCandidateFact[],
+): void {
+  const taintedByFn = new Map<string, Map<string, string>>()
+  for (const { fnNode, fnId, fnName } of iterateTaintedVarsFnScopes(sf)) {
+    const taintedVars = new Map<string, string>()
+    for (const v of fnNode.getDescendantsOfKind(SyntaxKind.VariableDeclaration)) {
+      const init = v.getInitializer()
+      if (!init) continue
+      const source = matchTaintedVarsSource(init.getText())
+      if (!source) continue
+      const nameNode = v.getNameNode()
+      const line = v.getStartLineNumber()
+      if (Node.isIdentifier(nameNode)) {
+        taintedVars.set(nameNode.getText(), source)
+        declsOut.push({
+          file: relPath, containingSymbol: fnName,
+          varName: nameNode.getText(), line, source,
+        })
+      } else if (Node.isObjectBindingPattern(nameNode) || Node.isArrayBindingPattern(nameNode)) {
+        for (const elem of nameNode.getElements()) {
+          if (!Node.isBindingElement(elem)) continue
+          const elemName = elem.getNameNode()
+          if (!Node.isIdentifier(elemName)) continue
+          taintedVars.set(elemName.getText(), source)
+          declsOut.push({
+            file: relPath, containingSymbol: fnName,
+            varName: elemName.getText(), line, source,
+          })
+        }
+      }
+    }
+    if (taintedVars.size > 0) taintedByFn.set(fnId, taintedVars)
+  }
+
+  for (const { fnNode, fnId, fnName } of iterateTaintedVarsFnScopes(sf)) {
+    const taintedVars = taintedByFn.get(fnId)
+    if (!taintedVars) continue
+    for (const call of fnNode.getDescendantsOfKind(SyntaxKind.CallExpression)) {
+      const calleeText = readTaintedVarsCalleeText(call.getExpression())
+      if (!calleeText) continue
+      const args = call.getArguments()
+      for (let i = 0; i < args.length; i++) {
+        const arg = args[i]
+        if (!Node.isIdentifier(arg)) continue
+        const varName = arg.getText()
+        const source = taintedVars.get(varName)
+        if (!source) continue
+        argCallsOut.push({
+          file: relPath,
+          line: call.getStartLineNumber(),
+          callee: calleeText,
+          argVarName: varName,
+          argIndex: i,
+          source,
+          containingSymbol: fnName,
+        })
+      }
     }
   }
 }

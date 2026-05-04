@@ -121,6 +121,14 @@ export const SCHEMA_DL = `// AST primitive facts — extraits par ast-facts-visi
   kind:symbol, literalValue:symbol, refExpression:symbol)
 .input EventEmitSiteCandidate
 
+.decl TaintedVarDeclCandidate(file:symbol, sym:symbol, varName:symbol,
+  line:number, source:symbol)
+.input TaintedVarDeclCandidate
+
+.decl TaintedVarArgCallCandidate(file:symbol, line:number, callee:symbol,
+  argVarName:symbol, argIdx:number, source:symbol, sym:symbol)
+.input TaintedVarArgCallCandidate
+
 // ─── Hybrid outputs ─────────────────────────────────────────────────────────
 
 .decl SanitizerOut(file:symbol, line:number, callee:symbol, containingSymbol:symbol)
@@ -173,6 +181,14 @@ export const SCHEMA_DL = `// AST primitive facts — extraits par ast-facts-visi
   callee:symbol, isMethodCall:number, receiver:symbol,
   kind:symbol, literalValue:symbol, refExpression:symbol)
 .output EventEmitSiteOut
+
+.decl TaintedVarDeclOut(file:symbol, sym:symbol, varName:symbol,
+  line:number, source:symbol)
+.output TaintedVarDeclOut
+
+.decl TaintedVarArgCallOut(file:symbol, line:number, callee:symbol,
+  argVarName:symbol, argIdx:number, source:symbol, sym:symbol)
+.output TaintedVarArgCallOut
 `
 
 // Convention engine : variables capitalisées, literals (numbers, strings) inline.
@@ -354,6 +370,13 @@ ConstantExpressionOut(F, L, K, Msg, ER) :-
   !ExemptionLine(F, L, "const-expr-ok").
 `
 
+// tainted-vars — pass-through (visitor pré-skip test files).
+export const TAINTED_VARS_DL = `
+TaintedVarDeclOut(F, S, V, L, Src) :- TaintedVarDeclCandidate(F, S, V, L, Src).
+TaintedVarArgCallOut(F, L, Callee, V, Idx, Src, S) :-
+  TaintedVarArgCallCandidate(F, L, Callee, V, Idx, Src, S).
+`
+
 // event-emit-sites — pass-through (legacy ne filtre PAS test files).
 export const EVENT_EMIT_SITES_DL = `
 EventEmitSiteOut(F, L, Sym, Callee, IsMethod, Receiver, Kind, Lit, Ref) :-
@@ -392,4 +415,5 @@ export const ALL_RULES_DL = [
   CONSTANT_EXPRESSIONS_DL,
   ARGUMENTS_DL,
   EVENT_EMIT_SITES_DL,
+  TAINTED_VARS_DL,
 ].join('\n')
