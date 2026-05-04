@@ -14,12 +14,30 @@
 import type { GraphSnapshot } from '../core/types.js'
 import type { CyclesDiff } from './types.js'
 
+type CycleEntry = NonNullable<GraphSnapshot['cycles']>[number]
+type GatingChange = CyclesDiff['gatingChanged'][number]
+
 export function diffCycles(before: GraphSnapshot, after: GraphSnapshot): CyclesDiff {
   const beforeMap = new Map((before.cycles ?? []).map((c) => [c.id, c]))
   const afterMap = new Map((after.cycles ?? []).map((c) => [c.id, c]))
 
-  const added = []
-  const gatingChanged = []
+  const { added, gatingChanged } = scanAfterMap(beforeMap, afterMap)
+  const removed = collectRemovedCycles(beforeMap, afterMap)
+
+  added.sort(compareAddedCycle)
+  removed.sort(compareById)
+  gatingChanged.sort((a, b) => (a.cycleId < b.cycleId ? -1 : a.cycleId > b.cycleId ? 1 : 0))
+
+  return { added, removed, gatingChanged }
+}
+
+/** Pour chaque cycle de `after` : added si nouveau, gating-changed si flip. */
+function scanAfterMap(
+  beforeMap: Map<string, CycleEntry>,
+  afterMap: Map<string, CycleEntry>,
+): { added: CycleEntry[]; gatingChanged: GatingChange[] } {
+  const added: CycleEntry[] = []
+  const gatingChanged: GatingChange[] = []
   for (const [id, afterCycle] of afterMap) {
     const prev = beforeMap.get(id)
     if (prev === undefined) {
@@ -33,20 +51,26 @@ export function diffCycles(before: GraphSnapshot, after: GraphSnapshot): CyclesD
       })
     }
   }
+  return { added, gatingChanged }
+}
 
-  const removed = []
+function collectRemovedCycles(
+  beforeMap: Map<string, CycleEntry>,
+  afterMap: Map<string, CycleEntry>,
+): CycleEntry[] {
+  const removed: CycleEntry[] = []
   for (const [id, beforeCycle] of beforeMap) {
     if (!afterMap.has(id)) removed.push(beforeCycle)
   }
+  return removed
+}
 
-  // Tri stable : non-gated d'abord pour `added` (plus urgent à voir),
-  // par id pour `removed` et `gatingChanged` (identité stable).
-  added.sort((a, b) => {
-    if (a.gated !== b.gated) return a.gated ? 1 : -1
-    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
-  })
-  removed.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-  gatingChanged.sort((a, b) => (a.cycleId < b.cycleId ? -1 : a.cycleId > b.cycleId ? 1 : 0))
+/** Tri added : non-gated d'abord (plus urgent à voir), puis par id. */
+function compareAddedCycle(a: CycleEntry, b: CycleEntry): number {
+  if (a.gated !== b.gated) return a.gated ? 1 : -1
+  return compareById(a, b)
+}
 
-  return { added, removed, gatingChanged }
+function compareById(a: { id: string }, b: { id: string }): number {
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
 }
