@@ -30,92 +30,121 @@ export interface ChangesSinceArgs {
   repo_root?: string
 }
 
+interface SnapshotEntry { path: string; name: string; mtime: number; isLive: boolean }
+
 export function codegraphChangesSince(args: ChangesSinceArgs): { content: string } {
   const repoRoot = args.repo_root ?? process.cwd()
   const codegraphDir = path.join(repoRoot, '.codegraph')
 
-  // Trouve les snapshots disponibles + leurs mtime
-  let files: Array<{ path: string; name: string; mtime: number; isLive: boolean }>
-  try {
-    files = fs.readdirSync(codegraphDir)
-      .filter((f) => f.startsWith('snapshot-') && f.endsWith('.json'))
-      .map((f) => {
-        const p = path.join(codegraphDir, f)
-        return {
-          path: p,
-          name: f,
-          mtime: fs.statSync(p).mtimeMs,
-          isLive: f === 'snapshot-live.json',
-        }
-      })
-  } catch {
-    return { content: 'No .codegraph directory. Run `npx codegraph analyze` first.' }
-  }
-
-  if (files.length === 0) {
-    return { content: 'No snapshots found in .codegraph/.' }
-  }
+  const filesOrError = listSnapshotFiles(codegraphDir)
+  if (typeof filesOrError === 'string') return { content: filesOrError }
+  const files = filesOrError
 
   // Current = freshest (snapshot-live.json si watcher actif, sinon le plus
-  // récent post-commit)
+  // récent post-commit).
   files.sort((a, b) => b.mtime - a.mtime)
   const current = files[0]
 
-  // Reference par défaut = dernier post-commit (= le plus récent qui
-  // n'est PAS snapshot-live.json). Si l'utilisateur passe une autre ref,
-  // on cherche par nom ou par path absolu.
-  let referencePath: string | undefined
-  if (!args.reference || args.reference === 'post-commit') {
-    const postCommit = files.find((f) => !f.isLive)
-    if (!postCommit) {
-      return {
-        content:
-          'No post-commit snapshot found (only snapshot-live.json present). ' +
-          'Commit current state first to establish a reference, or pass an explicit reference path.',
-      }
-    }
-    if (postCommit.path === current.path) {
-      return {
-        content:
-          'Current snapshot IS the latest post-commit (no watcher running, ' +
-          'or no edits since last analyze). Nothing to diff.',
-      }
-    }
-    referencePath = postCommit.path
-  } else if (args.reference === 'live') {
-    const live = files.find((f) => f.isLive)
-    if (!live || live.path === current.path) {
-      return {
-        content: 'Reference "live" but no live snapshot exists or it equals current.',
-      }
-    }
-    referencePath = live.path
-  } else if (path.isAbsolute(args.reference) || args.reference.endsWith('.json')) {
-    referencePath = path.isAbsolute(args.reference)
-      ? args.reference
-      : path.join(codegraphDir, args.reference)
-  } else {
-    return { content: `Unknown reference: ${args.reference}` }
-  }
+  const refResult = resolveReferencePath(args.reference, files, current, codegraphDir)
+  if (typeof refResult === 'string') return { content: refResult }
+  const referencePath = refResult
 
-  // Load both snapshots
-  let before: any, after: any
-  try {
-    before = JSON.parse(fs.readFileSync(referencePath!, 'utf-8'))
-    after = JSON.parse(fs.readFileSync(current.path, 'utf-8'))
-  } catch (err) {
-    return { content: `Failed to load snapshots: ${err instanceof Error ? err.message : err}` }
-  }
+  const snapshotsOrError = loadSnapshots(referencePath, current.path)
+  if (typeof snapshotsOrError === 'string') return { content: snapshotsOrError }
+  const { before, after } = snapshotsOrError
 
   const diff = buildStructuralDiff(before, after)
   const md = renderStructuralDiffMarkdown(diff)
+  return { content: buildDiffHeader(current, referencePath) + md }
+}
 
-  // Header explicite : indique ce qu'on diff vs quoi
+/** Read .codegraph dir → snapshot entries OR return user-friendly error string. */
+function listSnapshotFiles(codegraphDir: string): SnapshotEntry[] | string {
+  let names: string[]
+  try {
+    names = fs.readdirSync(codegraphDir).filter(
+      (f) => f.startsWith('snapshot-') && f.endsWith('.json'),
+    )
+  } catch {
+    return 'No .codegraph directory. Run `npx codegraph analyze` first.'
+  }
+  if (names.length === 0) return 'No snapshots found in .codegraph/.'
+  return names.map((f) => {
+    const p = path.join(codegraphDir, f)
+    return {
+      path: p,
+      name: f,
+      mtime: fs.statSync(p).mtimeMs,
+      isLive: f === 'snapshot-live.json',
+    }
+  })
+}
+
+/**
+ * Reference par défaut = dernier post-commit (= le plus récent qui n'est PAS
+ * snapshot-live.json). Si l'utilisateur passe une autre ref, on cherche par
+ * nom ou par path absolu. Returns string error si pas trouvable.
+ */
+function resolveReferencePath(
+  reference: string | undefined,
+  files: SnapshotEntry[],
+  current: SnapshotEntry,
+  codegraphDir: string,
+): string {
+  if (!reference || reference === 'post-commit') {
+    return resolvePostCommitRef(files, current)
+  }
+  if (reference === 'live') {
+    return resolveLiveRef(files, current)
+  }
+  if (path.isAbsolute(reference) || reference.endsWith('.json')) {
+    return path.isAbsolute(reference) ? reference : path.join(codegraphDir, reference)
+  }
+  return `Unknown reference: ${reference}`
+}
+
+function resolvePostCommitRef(files: SnapshotEntry[], current: SnapshotEntry): string {
+  const postCommit = files.find((f) => !f.isLive)
+  if (!postCommit) {
+    return 'No post-commit snapshot found (only snapshot-live.json present). ' +
+      'Commit current state first to establish a reference, or pass an explicit reference path.'
+  }
+  if (postCommit.path === current.path) {
+    return 'Current snapshot IS the latest post-commit (no watcher running, ' +
+      'or no edits since last analyze). Nothing to diff.'
+  }
+  return postCommit.path
+}
+
+function resolveLiveRef(files: SnapshotEntry[], current: SnapshotEntry): string {
+  const live = files.find((f) => f.isLive)
+  if (!live || live.path === current.path) {
+    return 'Reference "live" but no live snapshot exists or it equals current.'
+  }
+  return live.path
+}
+
+function loadSnapshots(
+  referencePath: string,
+  currentPath: string,
+): { before: any; after: any } | string {
+  // Si referencePath n'est pas un path (= un message d'erreur en string), on
+  // l'a déjà court-circuité plus haut. Mais on garde un guard try/catch ici
+  // au cas où le fichier n'existerait plus entre listing + read.
+  try {
+    return {
+      before: JSON.parse(fs.readFileSync(referencePath, 'utf-8')),
+      after: JSON.parse(fs.readFileSync(currentPath, 'utf-8')),
+    }
+  } catch (err) {
+    return `Failed to load snapshots: ${err instanceof Error ? err.message : err}`
+  }
+}
+
+function buildDiffHeader(current: SnapshotEntry, referencePath: string): string {
   const refLabel = current.isLive
-    ? `live (uncommitted edits)`
+    ? 'live (uncommitted edits)'
     : `current snapshot ${current.name}`
-  const beforeLabel = path.basename(referencePath!)
-  const header = `# Changes since ${beforeLabel}\n\n_Diff: \`${beforeLabel}\` → \`${refLabel}\`_\n\n`
-
-  return { content: header + md }
+  const beforeLabel = path.basename(referencePath)
+  return `# Changes since ${beforeLabel}\n\n_Diff: \`${beforeLabel}\` → \`${refLabel}\`_\n\n`
 }

@@ -184,9 +184,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/event-emit-sites/sample.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/b.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/audit-listener.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
@@ -208,6 +208,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+07922ff refactor(codegraph): split classifyLiteral (cyclo 18→5, cog 27→4) — magic-numbers.ts cleared
 68a0620 refactor(codegraph): split detectSignatureDuplicates (cyclo 18→7, cog 27→6) — signature-duplication.ts cleared
 860b688 refactor(adr-toolkit): split findWriteSites (cyclo 15→2, cog 32→1) — bootstrap-fsm.ts FULLY cleared
 194452b refactor(adr-toolkit): split detectFsmCandidates (cyclo 18→3, cog 29→1) — bootstrap-fsm.ts detectFsmCandidates cleared
@@ -219,7 +220,6 @@ ca65576 refactor(runtime-graph): split mergeFactsDirs (cyclo 18→2, cog 45→1)
 78eeb86 refactor(codegraph): split parseSqlFile (cyclo 20→1, cog 32→0) — sql-schema.ts cleared
 b431f2f refactor(codegraph): split getOrBuildSharedProject (cyclo 20→2, cog 33→1) — project-cache.ts cleared
 600fdb0 refactor(codegraph): split BullmqQueueDetector.detect (cyclo 20→2, cog 42→1) — bullmq-queues.ts cleared
-fb50d40 refactor(codegraph): split EventBusDetector.detect (cyclo 20→1, cog 48→0) — event-bus.ts cleared
 ```
 
 ## Comment contribuer à ce brief

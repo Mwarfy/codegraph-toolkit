@@ -5,17 +5,13 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-04T00:01:30Z
+Last update : 2026-05-04T00:02:58Z
 
 ## By type
 
-### `perf` (1)
+### `refactor` (50)
 
-- **101b1b5** perf(toolkit): Salsa-iso boolean-params — 35ms → 0ms warm — 2026-05-04
-
-
-### `refactor` (49)
-
+- **07922ff** refactor(codegraph): split classifyLiteral (cyclo 18→5, cog 27→4) — magic-numbers.ts cleared — 2026-05-04
 - **68a0620** refactor(codegraph): split detectSignatureDuplicates (cyclo 18→7, cog 27→6) — signature-duplication.ts cleared — 2026-05-04
 - **860b688** refactor(adr-toolkit): split findWriteSites (cyclo 15→2, cog 32→1) — bootstrap-fsm.ts FULLY cleared — 2026-05-04
 - **194452b** refactor(adr-toolkit): split detectFsmCandidates (cyclo 18→3, cog 29→1) — bootstrap-fsm.ts detectFsmCandidates cleared — 2026-05-04
@@ -35,11 +31,11 @@ Last update : 2026-05-04T00:01:30Z
 - **65c2c5c** refactor(codegraph): split mergeSqlSchemaResults (cyclo 21→1, cog 42→0) — drizzle-schema-detector.ts cleared — 2026-05-04
 - **725ecdf** refactor(runtime-graph): split grangerRuntime (cyclo 22→5, cog 41→4) — granger-runtime.ts cleared — 2026-05-04
 - **1bc0481** refactor(codegraph): split DbTableDetector.detect (cyclo 22→1, cog 47→0) — db-tables.ts cleared — 2026-05-04
-- **05adaa7** refactor(codegraph): split extractDeprecatedUsageFileBundle (cyclo 23→2, cog 31→1) — deprecated-usage.ts cleared — 2026-05-04
 
 
 ## Full history
 
+- **07922ff** refactor(codegraph): split classifyLiteral (cyclo 18→5, cog 27→4) — magic-numbers.ts cleared — 2026-05-04
 - **68a0620** refactor(codegraph): split detectSignatureDuplicates (cyclo 18→7, cog 27→6) — signature-duplication.ts cleared — 2026-05-04
 - **860b688** refactor(adr-toolkit): split findWriteSites (cyclo 15→2, cog 32→1) — bootstrap-fsm.ts FULLY cleared — 2026-05-04
 - **194452b** refactor(adr-toolkit): split detectFsmCandidates (cyclo 18→3, cog 29→1) — bootstrap-fsm.ts detectFsmCandidates cleared — 2026-05-04
@@ -89,4 +85,3 @@ Last update : 2026-05-04T00:01:30Z
 - **5cd34f2** refactor(codegraph): split computeGrangerCausality (cyclo 42→8, cog 53→2) — granger-causality.ts bomb-free — 2026-05-04
 - **3340d64** refactor(datalog): split stratify (cyclo 42→2, cog 67→0) — stratify.ts bomb-free — 2026-05-04
 - **ead1516** refactor(toolkit): split extractDriftPatternsFileBundle (cyclo 45→3) — drift-patterns.ts ALL bombs cleared — 2026-05-04
-- **101b1b5** perf(toolkit): Salsa-iso boolean-params — 35ms → 0ms warm — 2026-05-04
