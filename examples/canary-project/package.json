@@ -1,0 +1,7 @@
+{
+  "name": "canary-project",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Ground-truth fixture for @liby-tools/codegraph — 5 known violations, validate.sh asserts exact counts."
+}

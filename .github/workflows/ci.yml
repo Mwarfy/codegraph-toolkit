@@ -36,3 +36,9 @@ jobs:
 
       - name: Check ADR anchors + INDEX.md drift
         run: node packages/adr-toolkit/dist/cli/index.js regen --check
+
+      - name: Ground-truth fixture — codegraph (canary-project)
+        run: ./examples/canary-project/validate.sh
+
+      - name: Ground-truth fixture — runtime-graph (demo)
+        run: ./examples/runtime-graph-demo/run.sh
