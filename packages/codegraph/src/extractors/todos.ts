@@ -19,7 +19,16 @@
  */
 
 import * as path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { runPerFileExtractor } from '../parallel/per-file-extractor.js'
+
+// Path absolu vers le worker compilé — résolu à la load. Workers chargent
+// extractTodosForWorker via dynamic import. Mode worker actif si
+// LIBY_BSP_WORKERS=1.
+const TODOS_WORKER_MODULE = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'todos.worker.js',
+)
 
 export type TodoTag = 'TODO' | 'FIXME' | 'HACK' | 'XXX' | 'NOTE'
 
@@ -107,6 +116,11 @@ export async function analyzeTodos(
     extractor: extractTodosFileBundle,
     selectItems: (b) => b.todos,
     sortKey: (m) => `${m.file}:${String(m.line).padStart(8, '0')}`,
+    // Worker mode opt-in via LIBY_BSP_WORKERS=1 — workerModule + workerExport
+    // toujours fournis pour qu'env var soit la seule décision (pas besoin
+    // de patcher le caller).
+    workerModule: TODOS_WORKER_MODULE,
+    workerExport: 'extractTodosForWorker',
   })
   return r.items
 }

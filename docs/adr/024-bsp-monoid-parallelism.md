@@ -50,12 +50,12 @@ output bit-identique entre runs, déterminisme garanti.
 
 <!-- AUTO-GÉNÉRÉ depuis les marqueurs ADR-NNN du code source. Voir @liby-tools/adr-toolkit. NE PAS éditer à la main. -->
 
+- `packages/codegraph/src/extractors/todos.worker.ts`
 - `packages/codegraph/src/parallel/bsp-scheduler.ts`
 - `packages/codegraph/src/parallel/monoid.ts`
 - `packages/codegraph/src/parallel/per-file-extractor.ts`
 - `packages/codegraph/src/parallel/per-source-file-extractor.ts`
 - `packages/codegraph/src/parallel/worker-pool.ts`
-- `packages/codegraph/src/parallel/worker-runner.ts`
 
 
 ## Tested by

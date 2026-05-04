@@ -86,6 +86,7 @@
 - `packages/codegraph/src/extractors/sql-schema.ts` → ADR-005
 - `packages/codegraph/src/extractors/state-machines.ts` → ADR-005
 - `packages/codegraph/src/extractors/tainted-vars.ts` → ADR-007
+- `packages/codegraph/src/extractors/todos.worker.ts` → ADR-024
 - `packages/codegraph/src/extractors/unused-exports.ts` → ADR-005
 - `packages/codegraph/src/facts/index.ts` → ADR-010
 - `packages/codegraph/src/incremental/arguments.ts` → ADR-007
@@ -135,7 +136,6 @@
 - `packages/codegraph/src/parallel/per-file-extractor.ts` → ADR-024
 - `packages/codegraph/src/parallel/per-source-file-extractor.ts` → ADR-024
 - `packages/codegraph/src/parallel/worker-pool.ts` → ADR-024
-- `packages/codegraph/src/parallel/worker-runner.ts` → ADR-024
 - `packages/codegraph/src/synopsis/builder.ts` → ADR-001
 - `packages/codegraph/src/synopsis/tensions.ts` → ADR-001
 - `packages/datalog/src/canonical.ts` → ADR-010
@@ -190,11 +190,11 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/codegraph/src/extractors/todos.worker.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/codegraph/src/parallel/worker-runner.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/audit-listener.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/scheduler.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
@@ -216,6 +216,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+de8b02a feat(codegraph): Phase β — worker_threads dispatch via WorkerPool
 3399c54 feat(codegraph): Phase 2.4 — sanitizers + taint-sinks portés (8/65)
 f066d43 feat(codegraph): Phase 2.3 — 3 détecteurs portés (boolean-params, eval-calls, crypto-algo)
 84b2f76 docs(adr-024): anchor markers sur les 3 helpers BSP
@@ -227,7 +228,6 @@ c17c0c1 feat(runtime-graph): press-button CLI `probe` + refactor 2 bombs
 e1b0a02 feat(runtime-graph): 5 nouvelles disciplines pluridisciplinaires
 410daa0 feat(runtime-graph): static↔runtime divergence — KL + Pareto + coverage drift
 fc9449a perf(co-change): --no-merges --no-renames sur git log
-c626690 perf(codegraph): parallelize delta reads in applyDeltasInOrder
 ```
 
 ## Comment contribuer à ce brief

@@ -1,4 +1,5 @@
-// ADR-024
+// ADR-024 drift-ok : entrypoint worker_thread, importé dynamiquement à
+// l'init du Worker — pas de static import, donc orphan-by-design.
 /**
  * Worker bootstrap — exécuté DANS chaque worker_thread spawné par le pool.
  *
