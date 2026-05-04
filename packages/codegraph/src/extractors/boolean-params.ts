@@ -22,6 +22,8 @@
  * Convention exempt : `// boolean-ok: <reason>` sur la ligne précédente.
  */
 
+import { fileURLToPath } from 'node:url'
+import * as path from 'node:path'
 import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
 import { makeIsExemptForMarker } from './_shared/ast-helpers.js'
 import { runPerSourceFileExtractor } from '../parallel/per-source-file-extractor.js'
@@ -144,6 +146,18 @@ function isExactBooleanParam(p: ParamLike): boolean {
   return typeText === 'boolean' || typeText === 'bool'
 }
 
+/**
+ * Worker entrypoint Phase γ.2.
+ */
+export function extractBooleanParamsForWorker(sf: SourceFile, relPath: string): BooleanParamSite[] {
+  return extractBooleanParamsFileBundle(sf, relPath).sites
+}
+
+const BOOLEAN_PARAMS_WORKER_MODULE = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'boolean-params.js',
+)
+
 export async function analyzeBooleanParams(
   rootDir: string,
   files: string[],
@@ -156,6 +170,8 @@ export async function analyzeBooleanParams(
     extractor: extractBooleanParamsFileBundle,
     selectItems: (b) => b.sites,
     sortKey: (s) => `${s.file}:${String(s.line).padStart(8, '0')}`,
+    workerModule: BOOLEAN_PARAMS_WORKER_MODULE,
+    workerExport: 'extractBooleanParamsForWorker',
   })
   return r.items
 }

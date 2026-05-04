@@ -223,6 +223,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+5a40459 feat(codegraph): Phase γ.2b — wire long-functions + dead-code aux workers
 d94cab1 feat(codegraph): Phase γ.2 — workers ts-morph via mini-Project local
 9a741e3 feat(codegraph): Phase 2.8 — dead-code + event-emit-sites portés (14/65)
 07b0dcf feat(codegraph): Phase 2.7 — function-complexity + long-functions portés (12/65)
@@ -234,7 +235,6 @@ d94cab1 feat(codegraph): Phase γ.2 — workers ts-morph via mini-Project local
 de8b02a feat(codegraph): Phase β — worker_threads dispatch via WorkerPool
 3399c54 feat(codegraph): Phase 2.4 — sanitizers + taint-sinks portés (8/65)
 f066d43 feat(codegraph): Phase 2.3 — 3 détecteurs portés (boolean-params, eval-calls, crypto-algo)
-84b2f76 docs(adr-024): anchor markers sur les 3 helpers BSP
 ```
 
 ## Comment contribuer à ce brief

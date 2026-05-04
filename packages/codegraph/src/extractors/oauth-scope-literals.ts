@@ -21,8 +21,9 @@
  * "normales" indistinguables sans context — out-of-scope pour ce détecteur.
  */
 
+import { fileURLToPath } from 'node:url'
 import * as path from 'node:path'
-import type { Project } from 'ts-morph'
+import type { Project, SourceFile } from 'ts-morph'
 import { runPerSourceFileExtractor } from '../parallel/per-source-file-extractor.js'
 
 export interface OauthScopeLiteral {
@@ -40,6 +41,19 @@ export interface OauthScopeLiteralsOptions {
 
 const DEFAULT_SCOPE_RE = /['"](https:\/\/www\.googleapis\.com\/auth\/[^'"]+)['"]/g
 
+/**
+ * Worker entrypoint Phase γ.2. Le worker recree son propre RegExp module-level
+ * via DEFAULT_SCOPE_RE — pas besoin de cloner cross-thread.
+ */
+export function extractOauthScopesForWorker(sf: SourceFile, relPath: string): OauthScopeLiteral[] {
+  return scanOauthScopesInContent(sf.getFullText(), relPath, DEFAULT_SCOPE_RE)
+}
+
+const OAUTH_SCOPES_WORKER_MODULE = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'oauth-scope-literals.js',
+)
+
 export async function analyzeOauthScopeLiterals(
   rootDir: string,
   files: string[],
@@ -47,6 +61,9 @@ export async function analyzeOauthScopeLiterals(
   options: OauthScopeLiteralsOptions = {},
 ): Promise<OauthScopeLiteral[]> {
   const re = options.scopePattern ?? DEFAULT_SCOPE_RE
+  // Mode worker activé seulement pour le pattern default — un scopePattern
+  // custom RegExp n'est pas trivialement sérialisable cross-thread.
+  const useWorker = options.scopePattern === undefined
   const r = await runPerSourceFileExtractor<{ items: OauthScopeLiteral[] }, OauthScopeLiteral>({
     project,
     files,
@@ -54,6 +71,12 @@ export async function analyzeOauthScopeLiterals(
     extractor: (sf, rel) => ({ items: scanOauthScopesInContent(sf.getFullText(), rel, re) }),
     selectItems: (b) => b.items,
     sortKey: (s) => `${s.file}:${String(s.line).padStart(8, '0')}`,
+    ...(useWorker
+      ? {
+          workerModule: OAUTH_SCOPES_WORKER_MODULE,
+          workerExport: 'extractOauthScopesForWorker',
+        }
+      : {}),
   })
   return r.items
 }

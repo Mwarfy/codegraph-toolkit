@@ -21,6 +21,8 @@
  * Convention exempt : `// taint-ok: <reason>` ligne précédente.
  */
 
+import { fileURLToPath } from 'node:url'
+import * as path from 'node:path'
 import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
 import { findContainingSymbol, makeIsExemptForMarker } from './_shared/ast-helpers.js'
 import { runPerSourceFileExtractor } from '../parallel/per-source-file-extractor.js'
@@ -158,6 +160,18 @@ function isHighConfidenceCall(info: CalleeInfo, kind: TaintSink['kind']): boolea
   return info.methodName === 'eval' || info.methodName === 'fetch'
 }
 
+/**
+ * Worker entrypoint Phase γ.2.
+ */
+export function extractTaintSinksForWorker(sf: SourceFile, relPath: string): TaintSink[] {
+  return extractTaintSinksFileBundle(sf, relPath).sinks
+}
+
+const TAINT_SINKS_WORKER_MODULE = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'taint-sinks.js',
+)
+
 export async function analyzeTaintSinks(
   rootDir: string,
   files: string[],
@@ -170,6 +184,8 @@ export async function analyzeTaintSinks(
     extractor: extractTaintSinksFileBundle,
     selectItems: (b) => b.sinks,
     sortKey: (s) => `${s.file}:${String(s.line).padStart(8, '0')}`,
+    workerModule: TAINT_SINKS_WORKER_MODULE,
+    workerExport: 'extractTaintSinksForWorker',
   })
   return r.items
 }

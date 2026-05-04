@@ -21,6 +21,8 @@
  * agrégat concat trivial.
  */
 
+import { fileURLToPath } from 'node:url'
+import * as path from 'node:path'
 import { type Project, type SourceFile, SyntaxKind, Node } from 'ts-morph'
 import { runPerSourceFileExtractor } from '../parallel/per-source-file-extractor.js'
 
@@ -204,6 +206,24 @@ function getCallName(expr: Node): string | null {
   return null
 }
 
+/**
+ * Worker entrypoint Phase γ.2 — wrap extract + select pour retourner Item[]
+ * directement. Loadé depuis source-file-worker-runner.ts en worker.
+ */
+export function extractMagicNumbersForWorker(
+  sf: SourceFile,
+  relPath: string,
+  options?: { minMagnitude?: number },
+): MagicNumber[] {
+  const minMagnitude = options?.minMagnitude ?? 1000
+  return extractMagicNumbersFileBundle(sf, relPath, minMagnitude).numbers
+}
+
+const MAGIC_NUMBERS_WORKER_MODULE = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'magic-numbers.js',
+)
+
 export async function analyzeMagicNumbers(
   rootDir: string,
   files: string[],
@@ -219,6 +239,9 @@ export async function analyzeMagicNumbers(
     selectItems: (b) => b.numbers,
     sortKey: (m) => `${m.file}:${String(m.line).padStart(8, '0')}`,
     skipFile: (rel) => rel.includes('/tests/') || rel.includes('/__tests__/') || rel.endsWith('.test.ts'),
+    workerModule: MAGIC_NUMBERS_WORKER_MODULE,
+    workerExport: 'extractMagicNumbersForWorker',
+    workerExtractorOptions: { minMagnitude },
   })
   return r.items
 }
