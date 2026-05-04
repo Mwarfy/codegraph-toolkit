@@ -183,6 +183,35 @@ export interface DatalogDetectorResults {
     acquireCount: number
     releaseCount: number
   }>
+  securityPatterns: {
+    secretRefs: Array<{
+      file: string
+      line: number
+      varName: string
+      kind: string
+      callee: string
+      containingSymbol: string
+    }>
+    corsConfigs: Array<{
+      file: string
+      line: number
+      originKind: string
+      containingSymbol: string
+    }>
+    tlsUnsafe: Array<{
+      file: string
+      line: number
+      key: string
+      containingSymbol: string
+    }>
+    weakRandoms: Array<{
+      file: string
+      line: number
+      varName: string
+      secretKind: string
+      containingSymbol: string
+    }>
+  }
   stats: {
     extractMs: number
     evalMs: number
@@ -226,6 +255,10 @@ export async function runDatalogDetectors(
     taintedVarDeclCandidates: [],
     taintedVarArgCallCandidates: [],
     resourceImbalanceCandidates: [],
+    secretVarRefCandidates: [],
+    corsConfigCandidates: [],
+    tlsUnsafeCandidates: [],
+    weakRandomCandidates: [],
   }
   for (const sf of opts.project.getSourceFiles()) {
     const rel = relativize(sf.getFilePath(), opts.rootDir)
@@ -253,6 +286,10 @@ export async function runDatalogDetectors(
     merged.taintedVarDeclCandidates.push(...b.taintedVarDeclCandidates)
     merged.taintedVarArgCallCandidates.push(...b.taintedVarArgCallCandidates)
     merged.resourceImbalanceCandidates.push(...b.resourceImbalanceCandidates)
+    merged.secretVarRefCandidates.push(...b.secretVarRefCandidates)
+    merged.corsConfigCandidates.push(...b.corsConfigCandidates)
+    merged.tlsUnsafeCandidates.push(...b.tlsUnsafeCandidates)
+    merged.weakRandomCandidates.push(...b.weakRandomCandidates)
   }
   const extractMs = performance.now() - t0
 
@@ -372,6 +409,26 @@ export async function runDatalogDetectors(
   factsByRelation.set('ResourceImbalanceCandidate',
     merged.resourceImbalanceCandidates.map((r) =>
       [r.file, safe(r.containingSymbol), r.line, r.pair, r.acquireCount, r.releaseCount].join('\t'),
+    ).join('\n'),
+  )
+  factsByRelation.set('SecretVarRefCandidate',
+    merged.secretVarRefCandidates.map((s) =>
+      [s.file, s.line, safe(s.varName), s.kind, safe(s.callee), safe(s.containingSymbol)].join('\t'),
+    ).join('\n'),
+  )
+  factsByRelation.set('CorsConfigCandidate',
+    merged.corsConfigCandidates.map((c) =>
+      [c.file, c.line, c.originKind, safe(c.containingSymbol)].join('\t'),
+    ).join('\n'),
+  )
+  factsByRelation.set('TlsUnsafeCandidate',
+    merged.tlsUnsafeCandidates.map((t) =>
+      [t.file, t.line, t.key, safe(t.containingSymbol)].join('\t'),
+    ).join('\n'),
+  )
+  factsByRelation.set('WeakRandomCandidate',
+    merged.weakRandomCandidates.map((w) =>
+      [w.file, w.line, safe(w.varName), w.secretKind, safe(w.containingSymbol)].join('\t'),
     ).join('\n'),
   )
 
@@ -586,6 +643,41 @@ export async function runDatalogDetectors(
     params: argParamsRaw,
   }
 
+  // ─── Security Patterns (Tier 16) ───────────────────────────────────────────
+  const fileLineSortPlain = <T extends { file: string; line: number }>(arr: T[]): T[] => {
+    arr.sort((a, b) => a.file < b.file ? -1 : a.file > b.file ? 1 : a.line - b.line)
+    return arr
+  }
+  const securityPatternsResult: DatalogDetectorResults['securityPatterns'] = {
+    secretRefs: fileLineSortPlain((result.outputs.get('SecretVarRefOut') ?? []).map((t: Tuple) => ({
+      file: String(t[0]),
+      line: Number(t[1]),
+      varName: String(t[2]),
+      kind: String(t[3]),
+      callee: String(t[4]),
+      containingSymbol: String(t[5]),
+    }))),
+    corsConfigs: fileLineSortPlain((result.outputs.get('CorsConfigOut') ?? []).map((t: Tuple) => ({
+      file: String(t[0]),
+      line: Number(t[1]),
+      originKind: String(t[2]),
+      containingSymbol: String(t[3]),
+    }))),
+    tlsUnsafe: fileLineSortPlain((result.outputs.get('TlsUnsafeOut') ?? []).map((t: Tuple) => ({
+      file: String(t[0]),
+      line: Number(t[1]),
+      key: String(t[2]),
+      containingSymbol: String(t[3]),
+    }))),
+    weakRandoms: fileLineSortPlain((result.outputs.get('WeakRandomOut') ?? []).map((t: Tuple) => ({
+      file: String(t[0]),
+      line: Number(t[1]),
+      varName: String(t[2]),
+      secretKind: String(t[3]),
+      containingSymbol: String(t[4]),
+    }))),
+  }
+
   // ─── Resource Balance (Tier 6) ─────────────────────────────────────────────
   const resourceImbalances = (result.outputs.get('ResourceImbalanceOut') ?? []).map((t: Tuple) => ({
     file: String(t[0]),
@@ -705,7 +797,11 @@ export async function runDatalogDetectors(
     merged.eventEmitSiteCandidates.length +
     merged.taintedVarDeclCandidates.length +
     merged.taintedVarArgCallCandidates.length +
-    merged.resourceImbalanceCandidates.length
+    merged.resourceImbalanceCandidates.length +
+    merged.secretVarRefCandidates.length +
+    merged.corsConfigCandidates.length +
+    merged.tlsUnsafeCandidates.length +
+    merged.weakRandomCandidates.length
   const tuplesOut =
     magicNumbers.length +
     deadCodeIdenticalSubexpressions.length +
@@ -726,7 +822,11 @@ export async function runDatalogDetectors(
     eventEmitSites.length +
     taintedVarsResult.decls.length +
     taintedVarsResult.argCalls.length +
-    resourceImbalances.length
+    resourceImbalances.length +
+    securityPatternsResult.secretRefs.length +
+    securityPatternsResult.corsConfigs.length +
+    securityPatternsResult.tlsUnsafe.length +
+    securityPatternsResult.weakRandoms.length
 
   return {
     magicNumbers,
@@ -747,6 +847,7 @@ export async function runDatalogDetectors(
     eventEmitSites,
     taintedVars: taintedVarsResult,
     resourceImbalances,
+    securityPatterns: securityPatternsResult,
     stats: { extractMs, evalMs, tuplesIn, tuplesOut },
   }
 }

@@ -197,7 +197,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/audit-listener.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
@@ -219,6 +219,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+4baa9d0 feat(codegraph): Phase γ.12 — port resource-balance au pattern Datalog
 cc6598b feat(codegraph): Phase γ.11 — port tainted-vars au pattern Datalog
 91912a1 feat(codegraph): Phase γ.10 — port event-emit-sites au pattern Datalog
 2cfe578 feat(codegraph): Phase γ.9 — port arguments au pattern Datalog
@@ -230,7 +231,6 @@ a2bc182 feat(codegraph): Phase γ.4c — 5 derniers détecteurs ts-morph portés
 b2a709e feat(codegraph): Phase γ.4b — consolide + 3 nouveaux détecteurs Datalog
 3175c64 feat(codegraph): Phase γ.4 — prototype Datalog detectors (magic-numbers + dead-code)
 06c21b1 feat(codegraph): Phase γ.3b — wire batch warmup dans analyzer.ts
-4b218d2 feat(codegraph): Phase γ.3b — batch dispatch infrastructure (non-wired)
 ```
 
 ## Comment contribuer à ce brief

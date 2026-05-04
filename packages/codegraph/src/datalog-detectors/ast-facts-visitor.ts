@@ -290,6 +290,44 @@ export interface HardcodedSecretCandidateFact {
 }
 
 /**
+ * Security pattern candidates (Tier 16). 4 facts émis :
+ *   - SecretVarRefCandidate : var nommée secret/token/... passée en arg
+ *   - CorsConfigCandidate   : cors({ origin: ... })
+ *   - TlsUnsafeCandidate    : { rejectUnauthorized: false } etc.
+ *   - WeakRandomCandidate   : Math.random() assigné à une var (kind si secret)
+ */
+export interface SecretVarRefCandidateFact {
+  file: string
+  line: number
+  varName: string
+  kind: string
+  callee: string
+  containingSymbol: string
+}
+
+export interface CorsConfigCandidateFact {
+  file: string
+  line: number
+  originKind: string
+  containingSymbol: string
+}
+
+export interface TlsUnsafeCandidateFact {
+  file: string
+  line: number
+  key: string
+  containingSymbol: string
+}
+
+export interface WeakRandomCandidateFact {
+  file: string
+  line: number
+  varName: string
+  secretKind: string
+  containingSymbol: string
+}
+
+/**
  * Resource imbalance candidate (Tier 6). Visitor pré-compte les calls
  * acquire/release par scope et émet un fact si counts différents.
  *
@@ -418,6 +456,10 @@ export interface AstFactsBundle {
   taintedVarDeclCandidates: TaintedVarDeclCandidateFact[]
   taintedVarArgCallCandidates: TaintedVarArgCallCandidateFact[]
   resourceImbalanceCandidates: ResourceImbalanceCandidateFact[]
+  secretVarRefCandidates: SecretVarRefCandidateFact[]
+  corsConfigCandidates: CorsConfigCandidateFact[]
+  tlsUnsafeCandidates: TlsUnsafeCandidateFact[]
+  weakRandomCandidates: WeakRandomCandidateFact[]
 }
 
 // ─── Visitor ────────────────────────────────────────────────────────────────
@@ -444,6 +486,7 @@ const EXEMPTION_MARKERS = new Set([
   'crypto-ok',
   'const-expr-ok',
   'resource-balance-ok',
+  'security-ok',
 ])
 
 /**
@@ -477,6 +520,10 @@ export function extractAstFactsBundle(
   const taintedVarDeclCandidates: TaintedVarDeclCandidateFact[] = []
   const taintedVarArgCallCandidates: TaintedVarArgCallCandidateFact[] = []
   const resourceImbalanceCandidates: ResourceImbalanceCandidateFact[] = []
+  const secretVarRefCandidates: SecretVarRefCandidateFact[] = []
+  const corsConfigCandidates: CorsConfigCandidateFact[] = []
+  const tlsUnsafeCandidates: TlsUnsafeCandidateFact[] = []
+  const weakRandomCandidates: WeakRandomCandidateFact[] = []
 
   const isTest = TEST_FILE_RE.test(relPath)
   if (isTest) fileTags.push({ file: relPath, tag: 'test' })
@@ -502,6 +549,11 @@ export function extractAstFactsBundle(
     visitTaintedArgumentCandidates(sf, relPath, taintedArgumentCandidates)
     visitTaintedVarsCandidates(sf, relPath, taintedVarDeclCandidates, taintedVarArgCallCandidates)
     visitResourceImbalanceCandidates(sf, relPath, resourceImbalanceCandidates)
+    visitSecurityPatternsCandidates(
+      sf, relPath,
+      secretVarRefCandidates, corsConfigCandidates,
+      tlsUnsafeCandidates, weakRandomCandidates,
+    )
   }
   // event-listener-sites legacy n'a PAS de filtre test files — capturé même
   // dans tests/ (les tests subscribers comptent).
@@ -527,6 +579,10 @@ export function extractAstFactsBundle(
     taintedVarDeclCandidates,
     taintedVarArgCallCandidates,
     resourceImbalanceCandidates,
+    secretVarRefCandidates,
+    corsConfigCandidates,
+    tlsUnsafeCandidates,
+    weakRandomCandidates,
   }
 }
 
@@ -1893,6 +1949,130 @@ function visitResourceImbalanceCandidates(
         acquireCount: acq,
         releaseCount: rel,
       })
+    }
+  }
+}
+
+// ─── Security Patterns (Tier 16) ────────────────────────────────────────────
+
+const SECURITY_SECRET_NAME_RE =
+  /^(password|passwd|pwd|secret|token|api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|client[-_]?secret|jwt|nonce|sessionid|csrf|otp|priv(ate)?[-_]?key|encryption[-_]?key)$/i
+
+function detectSecuritySecretKind(name: string): string {
+  const m = name.match(SECURITY_SECRET_NAME_RE)
+  return m ? m[0].toLowerCase() : ''
+}
+
+function isSecurityMathRandomCall(call: Node): boolean {
+  if (!Node.isCallExpression(call)) return false
+  const callee = call.getExpression()
+  return Node.isPropertyAccessExpression(callee)
+    && callee.getExpression().getText() === 'Math'
+    && callee.getName() === 'random'
+}
+
+function classifySecurityCorsOriginKind(init: Node | undefined): string {
+  if (!init) return 'dynamic'
+  if (Node.isStringLiteral(init)) {
+    return init.getLiteralValue() === '*' ? 'wildcard' : 'literal'
+  }
+  if (Node.isPropertyAccessExpression(init)
+    && /req\.headers\.|request\.headers\./.test(init.getText())) {
+    return 'reflective'
+  }
+  return 'dynamic'
+}
+
+function visitSecurityPatternsCandidates(
+  sf: SourceFile,
+  relPath: string,
+  secretRefsOut: SecretVarRefCandidateFact[],
+  corsOut: CorsConfigCandidateFact[],
+  tlsOut: TlsUnsafeCandidateFact[],
+  weakRandomsOut: WeakRandomCandidateFact[],
+): void {
+  // Pass 1: CallExpression — cors({ origin }) + secret refs en args
+  for (const call of sf.getDescendantsOfKind(SyntaxKind.CallExpression)) {
+    const line = call.getStartLineNumber()
+    const callee = call.getExpression()
+    const args = call.getArguments()
+
+    // CORS detection
+    if (Node.isIdentifier(callee) && callee.getText() === 'cors'
+      && args.length > 0 && Node.isObjectLiteralExpression(args[0])) {
+      const originProp = args[0].getProperty('origin')
+      if (originProp && Node.isPropertyAssignment(originProp)) {
+        corsOut.push({
+          file: relPath, line,
+          originKind: classifySecurityCorsOriginKind(originProp.getInitializer()),
+          containingSymbol: sharedFindContainingSymbol(call),
+        })
+      }
+    }
+
+    // Secret refs : identifier args + shorthand prop names
+    let calleeText = ''
+    if (Node.isIdentifier(callee)) calleeText = callee.getText()
+    else if (Node.isPropertyAccessExpression(callee)) calleeText = callee.getText()
+    if (!calleeText) continue
+    for (const arg of args) {
+      if (Node.isIdentifier(arg)) {
+        const k = detectSecuritySecretKind(arg.getText())
+        if (k) {
+          secretRefsOut.push({
+            file: relPath, line,
+            varName: arg.getText(), kind: k, callee: calleeText,
+            containingSymbol: sharedFindContainingSymbol(call),
+          })
+        }
+      } else if (Node.isObjectLiteralExpression(arg)) {
+        for (const prop of arg.getProperties()) {
+          if (!Node.isShorthandPropertyAssignment(prop)) continue
+          const name = prop.getName()
+          const k = detectSecuritySecretKind(name)
+          if (k) {
+            secretRefsOut.push({
+              file: relPath, line,
+              varName: name, kind: k, callee: calleeText,
+              containingSymbol: sharedFindContainingSymbol(call),
+            })
+          }
+        }
+      }
+    }
+  }
+
+  // Pass 2: VariableDeclaration → Math.random()
+  for (const v of sf.getDescendantsOfKind(SyntaxKind.VariableDeclaration)) {
+    const init = v.getInitializer()
+    if (!init || !Node.isCallExpression(init)) continue
+    if (!isSecurityMathRandomCall(init)) continue
+    const nameNode = v.getNameNode()
+    const varName = Node.isIdentifier(nameNode) ? nameNode.getText() : ''
+    weakRandomsOut.push({
+      file: relPath,
+      line: v.getStartLineNumber(),
+      varName,
+      secretKind: detectSecuritySecretKind(varName),
+      containingSymbol: sharedFindContainingSymbol(v),
+    })
+  }
+
+  // Pass 3: ObjectLiteral → TLS unsafe options
+  for (const obj of sf.getDescendantsOfKind(SyntaxKind.ObjectLiteralExpression)) {
+    const line = obj.getStartLineNumber()
+    for (const prop of obj.getProperties()) {
+      if (!Node.isPropertyAssignment(prop)) continue
+      const name = prop.getName()
+      const init = prop.getInitializer()
+      if (!init) continue
+      if ((name === 'rejectUnauthorized' || name === 'strictSSL')
+        && init.getText() === 'false') {
+        tlsOut.push({
+          file: relPath, line, key: name,
+          containingSymbol: sharedFindContainingSymbol(obj),
+        })
+      }
     }
   }
 }

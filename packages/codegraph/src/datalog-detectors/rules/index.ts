@@ -133,6 +133,21 @@ export const SCHEMA_DL = `// AST primitive facts — extraits par ast-facts-visi
   pair:symbol, acqCount:number, relCount:number)
 .input ResourceImbalanceCandidate
 
+.decl SecretVarRefCandidate(file:symbol, line:number, varName:symbol,
+  kind:symbol, callee:symbol, sym:symbol)
+.input SecretVarRefCandidate
+
+.decl CorsConfigCandidate(file:symbol, line:number, originKind:symbol,
+  sym:symbol)
+.input CorsConfigCandidate
+
+.decl TlsUnsafeCandidate(file:symbol, line:number, key:symbol, sym:symbol)
+.input TlsUnsafeCandidate
+
+.decl WeakRandomCandidate(file:symbol, line:number, varName:symbol,
+  secretKind:symbol, sym:symbol)
+.input WeakRandomCandidate
+
 // ─── Hybrid outputs ─────────────────────────────────────────────────────────
 
 .decl SanitizerOut(file:symbol, line:number, callee:symbol, containingSymbol:symbol)
@@ -197,6 +212,20 @@ export const SCHEMA_DL = `// AST primitive facts — extraits par ast-facts-visi
 .decl ResourceImbalanceOut(file:symbol, sym:symbol, line:number,
   pair:symbol, acqCount:number, relCount:number)
 .output ResourceImbalanceOut
+
+.decl SecretVarRefOut(file:symbol, line:number, varName:symbol,
+  kind:symbol, callee:symbol, sym:symbol)
+.output SecretVarRefOut
+
+.decl CorsConfigOut(file:symbol, line:number, originKind:symbol, sym:symbol)
+.output CorsConfigOut
+
+.decl TlsUnsafeOut(file:symbol, line:number, key:symbol, sym:symbol)
+.output TlsUnsafeOut
+
+.decl WeakRandomOut(file:symbol, line:number, varName:symbol,
+  secretKind:symbol, sym:symbol)
+.output WeakRandomOut
 `
 
 // Convention engine : variables capitalisées, literals (numbers, strings) inline.
@@ -378,6 +407,26 @@ ConstantExpressionOut(F, L, K, Msg, ER) :-
   !ExemptionLine(F, L, "const-expr-ok").
 `
 
+// security-patterns (4 sub-detectors) — visitor pré-classifie + skip
+// test files au visit-level. Rule filtre uniquement exempt markers.
+export const SECURITY_PATTERNS_DL = `
+SecretVarRefOut(F, L, V, K, Callee, S) :-
+  SecretVarRefCandidate(F, L, V, K, Callee, S),
+  !ExemptionLine(F, L, "security-ok").
+
+CorsConfigOut(F, L, OK, S) :-
+  CorsConfigCandidate(F, L, OK, S),
+  !ExemptionLine(F, L, "security-ok").
+
+TlsUnsafeOut(F, L, K, S) :-
+  TlsUnsafeCandidate(F, L, K, S),
+  !ExemptionLine(F, L, "security-ok").
+
+WeakRandomOut(F, L, V, SK, S) :-
+  WeakRandomCandidate(F, L, V, SK, S),
+  !ExemptionLine(F, L, "security-ok").
+`
+
 // resource-balance — visitor pré-compte par scope, rule filtre exempt.
 export const RESOURCE_BALANCE_DL = `
 ResourceImbalanceOut(F, S, L, P, AC, RC) :-
@@ -432,4 +481,5 @@ export const ALL_RULES_DL = [
   EVENT_EMIT_SITES_DL,
   TAINTED_VARS_DL,
   RESOURCE_BALANCE_DL,
+  SECURITY_PATTERNS_DL,
 ].join('\n')

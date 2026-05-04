@@ -26,6 +26,7 @@ import { analyzeArguments } from '../dist/extractors/arguments.js'
 import { analyzeEventEmitSites } from '../dist/extractors/event-emit-sites.js'
 import { analyzeTaintedVars } from '../dist/extractors/tainted-vars.js'
 import { analyzeResourceBalance } from '../dist/extractors/resource-balance.js'
+import { analyzeSecurityPatterns } from '../dist/extractors/security-patterns.js'
 import { runDatalogDetectors } from '../dist/datalog-detectors/runner.js'
 import { resolve } from 'node:path'
 
@@ -91,8 +92,9 @@ const legacyArguments = await analyzeArguments(rootDir, files, project)
 const legacyEmitSites = await analyzeEventEmitSites(rootDir, files, project)
 const legacyTaintedVars = await analyzeTaintedVars(rootDir, files, project)
 const legacyResourceImbalances = await analyzeResourceBalance(rootDir, files, project)
+const legacySecurityPatterns = await analyzeSecurityPatterns(rootDir, files, project)
 const legacyMs = performance.now() - tLegacy0
-console.log(`  legacy 18 detectors (${legacyMs.toFixed(1)}ms)`)
+console.log(`  legacy 19 detectors (${legacyMs.toFixed(1)}ms)`)
 
 // DATALOG
 const tDl0 = performance.now()
@@ -176,7 +178,19 @@ const ok17b = bidirDiff(legacyTaintedVars.argCalls, dl.taintedVars.argCalls,
 const ok18 = bidirDiff(legacyResourceImbalances, dl.resourceImbalances,
   (r) => `${r.file}\t${r.containingSymbol}\t${r.line}\t${r.pair}\t${r.acquireCount}\t${r.releaseCount}`,
   'ResourceImbalance')
+const ok19a = bidirDiff(legacySecurityPatterns.secretRefs, dl.securityPatterns.secretRefs,
+  (s) => `${s.file}\t${s.line}\t${s.varName}\t${s.kind}\t${normWs(s.callee)}\t${s.containingSymbol}`,
+  'SecretVarRef')
+const ok19b = bidirDiff(legacySecurityPatterns.corsConfigs, dl.securityPatterns.corsConfigs,
+  (c) => `${c.file}\t${c.line}\t${c.originKind}\t${c.containingSymbol}`,
+  'CorsConfig')
+const ok19c = bidirDiff(legacySecurityPatterns.tlsUnsafe, dl.securityPatterns.tlsUnsafe,
+  (t) => `${t.file}\t${t.line}\t${t.key}\t${t.containingSymbol}`,
+  'TlsUnsafe')
+const ok19d = bidirDiff(legacySecurityPatterns.weakRandoms, dl.securityPatterns.weakRandoms,
+  (w) => `${w.file}\t${w.line}\t${w.varName}\t${w.secretKind}\t${w.containingSymbol}`,
+  'WeakRandom')
 
-const allOk = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10 && ok11 && ok12 && ok13 && ok14 && ok15a && ok15b && ok16 && ok17a && ok17b && ok18
+const allOk = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10 && ok11 && ok12 && ok13 && ok14 && ok15a && ok15b && ok16 && ok17a && ok17b && ok18 && ok19a && ok19b && ok19c && ok19d
 console.log(`\n  Total: legacy=${legacyMs.toFixed(0)}ms vs datalog=${dlMs.toFixed(0)}ms (ratio: ${(dlMs/legacyMs).toFixed(2)}x)${allOk ? ' ✓' : ' ✗'}`)
 if (!allOk) process.exit(1)
