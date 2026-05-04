@@ -1,54 +1,95 @@
 # canary-project — ground-truth fixture for codegraph
 
-Tiny TypeScript project with **deliberately injected violations**. Each
-violation has an exact expected detection, asserted by `validate.sh`.
+Tiny TypeScript project with **deliberately injected violations**, used to
+measure codegraph's detection coverage and catch silent regressions in CI.
 
-If a toolkit change silently breaks one detector, this fixture fails at CI
-and tells you exactly which signal regressed.
+`./validate.sh` runs `codegraph analyze` then asserts:
+1. **20 specific detections** (one assert per discipline class)
+2. **Fact coverage threshold** (currently ≥ 50% of 83 fact relations populated)
 
-## The 5 violations
+If a future toolkit change silently disables a detector, this fixture fails
+immediately and tells you which signal regressed.
 
-| # | Violation | File(s) | Expected detection |
+## Current state — 2026-05-04
+
+```
+Asserts        : 20 / 20 ✓
+Fact coverage  : 51 / 83 (61%)
+```
+
+## Detection categories asserted
+
+| Category | Detected | File / pattern |
+|---|---|---|
+| **Structure** | cycle, hub, orphan, articulation point | `cycle-a/b.ts`, `hub.ts` + 5 consumers, `orphan.ts` |
+| **Code quality** | long function (105 LOC), magic numbers, await-in-loop, alloc-in-loop | `long-function.ts`, `magic-await.ts` |
+| **Security** | eval call (taint sink), hardcoded secret, weak crypto (md5) | `taint.ts`, `extras.ts`, `crypto-weak.ts` |
+| **State machines** | FSM declared (4 states), 1 orphan state (`abandoned`) | `fsm.ts` |
+| **Schemas** | SQL table | `sql-schema.sql` |
+| **Identity** | OAuth scope literal, env read, truth-point writer+reader | `oauth-scope.ts`, `extras.ts`, `truth-point.ts` |
+| **Events** | emit literal type | `events.ts` |
+| **Hygiene** | declared-unused dep (`lodash`), boolean param, no bin shebang | `package.json`, `extras.ts` |
+
+## Mathematical disciplines exercised
+
+These are the formules that fire on canary-project:
+
+| Discipline | Fact | Status | Notes |
 |---|---|---|---|
-| 1 | Direct import cycle | `src/bad/cycle-a.ts` ↔ `src/bad/cycle-b.ts` | `snapshot.cycles[]` has 1 entry of size 2 |
-| 2 | High in-degree hub | `src/bad/hub.ts` (7 importers) | edge in-degree ≥ 5 |
-| 3 | Orphan file | `src/bad/orphan.ts` | node with `status === 'orphan'` |
-| 4 | Long function | `src/bad/long-function.ts:7` (`veryLongFunction`, 105 LOC) | `snapshot.longFunctions[]` has entry |
-| 5 | (Negative) no bin field | `package.json` has no `bin` | `snapshot.binShebangIssues` empty |
+| Newman-Girvan modularity | `ModularityScore`, `ImportCommunity` | ✓ | 1 + 26 rows |
+| Shannon entropy | `SymbolEntropy` | ✓ | 1 row |
+| PageRank / Henry-Kafura | `ModuleCentrality`, `ModuleFanIn` | ✓ | 23 rows each |
+| Information Bottleneck (heuristic) | `InformationBottleneck` | ✓ | 18 rows |
+| Articulation points (graph theory) | `ArticulationPoint` | ✓ | 3 rows |
+| Cyclomatic + cognitive complexity | `FunctionComplexity` | ✓ | 28 rows |
+| Hamming similarity | `SignatureNearDuplicate` | ✗ | empty — extractor logic to debug |
+| Fiedler eigenvalue (spectral) | `SpectralMetric` | ✗ | needs partitioned graph |
+| NCD compression distance | `CompressionDistance` | ✗ | needs structurally-similar files |
+| Lyapunov exponent (time series) | `LyapunovMetric` | ✗ | **needs git history** |
+| Granger causality | `GrangerCausality` | ✗ | **needs git history** |
+| Bayesian co-change | `BayesianCoChange`, `CoChange` | ✗ | **needs git history** |
+| TDA persistence (homology) | `PersistentCycle` | ✗ | **needs git history** |
+| Fact stability over time | `FactKindStability` | ✗ | **needs git history** |
+
+The 5 marked **needs git history** are time-series disciplines — they read
+git log to compute correlations across commits. They can't fire on a
+git-less fixture; covering them needs a separate `with-history/` fixture
+that initializes a synthetic 10-commit history with controlled file
+churn. Tracked as future work.
+
+## Coverage gaps (32 / 83 facts still empty)
+
+```
+Git-history-only (7)    : BayesianCoChange, CoChange, CompressionDistance,
+                          FactKindStability, GrangerCausality, LyapunovMetric,
+                          PersistentCycle
+Fixable (15)            : Barrel, BooleanParam (in deeper context),
+                          ConstantExpression, CorsConfig, DeadCode,
+                          DeprecatedUsage, DriftSignalFact, EmitsConstRef/
+                          Dynamic, ListensConstRef/Dynamic, EnvReadWrapped,
+                          EslintViolation, FloatingPromise, IsPackageEntryPoint,
+                          PackageMinCut, RegexLiteral (deeper), ResourceImbalance,
+                          SanitizerCall (already fires), SecretVarRef,
+                          SignatureNearDuplicate, SpectralMetric, SqlFkWithoutIndex,
+                          SqlForeignKey, SqlMigrationOrderViolation, TlsConfigUnsafe,
+                          TryCatchSwallow (already fires), WeakRandomCall
+Domain-specific (rare)  : the rest
+```
 
 ## Usage
 
 ```bash
-# From toolkit root :
 cd packages/codegraph && npm run build
 ./examples/canary-project/validate.sh
 ```
 
-Expected : `✓ tous les ground-truth signals détectés` + summary table.
-
-## Why this exists
-
-`docs/EXTERNAL-VALIDATION.md` documents qualitative runs on Hono / Sentinel
-("hubs cohérents", "0 hallucination") but doesn't give a quantitative
-precision/recall measure. This fixture fills that gap : known violations,
-known counts, exact assertions. It's the smallest possible step toward a
-universal-readiness benchmark — sister fixture
-[`runtime-graph-demo`](../runtime-graph-demo/) does the same job for the
-runtime layer.
+Expected output ends with `Fact coverage : 51 / 83 (61%)` and `✓ tous les
+ground-truth signals détectés`.
 
 ## Adding a new violation
 
 1. Add a source file in `src/bad/` that triggers the new detector
-2. Add the assertion in `validate.sh`
-3. Document the violation in this table
+2. Wire it from `src/index.ts` so it's not orphan (unless orphan-ness IS the test)
+3. Add an `assert "label" "expression"` in `validate.sh`
 4. Run `./validate.sh` — should pass
-
-## Limits (acknowledged)
-
-- **6 orphans**, not 1 : the 5 hub consumers (`consumer-a..e.ts`) exist to
-  drive up hub's in-degree but they themselves are unimported. Validate
-  asserts ≥ 1 orphan, not exactly 1.
-- **Not exhaustive** : 5 detectors covered out of ~40. New ground-truth
-  files are welcome — see "Adding a new violation" above.
-- **Single config** : doesn't validate detector toggles, multi-package
-  monorepos, or non-default include/exclude patterns. Out of scope for v1.
+5. Update the table in this README
