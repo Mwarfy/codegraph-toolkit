@@ -222,6 +222,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+7366782 feat(codegraph): Phase γ.1 — cost-model auto-tuning LIBY_BSP_WORKERS=auto
 896219e feat(codegraph): Phase 2.6 — oauth-scope-literals porté (10/65)
 76362ea feat(codegraph): Phase 2.5 — ts-imports porté au pattern BSP monoïdal
 59d89c8 feat(codegraph): Phase β.3 — ADR-025 + template BSP pour futurs détecteurs
@@ -233,7 +234,6 @@ f066d43 feat(codegraph): Phase 2.3 — 3 détecteurs portés (boolean-params, ev
 190b979 feat(codegraph): Phase 2.2 — hardcoded-secrets porté + ADR-024
 abd6ad7 feat(codegraph): Phase 2.1 — 2 détecteurs portés au pattern BSP monoïdal
 415d382 feat(codegraph): Phase 1 BSP — monoid algebra + scheduler déterministe
-576e358 feat(toolkit): press-button complet — RECIPES + --with-runtime + 5 awaits paralléllisés
 ```
 
 ## Comment contribuer à ce brief

@@ -17,6 +17,7 @@
 
 import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
 import { makeIsExemptForMarker } from './_shared/ast-helpers.js'
+import { runPerSourceFileExtractor } from '../parallel/per-source-file-extractor.js'
 
 export interface FunctionComplexity {
   file: string
@@ -184,17 +185,15 @@ export async function analyzeFunctionComplexity(
   files: string[],
   project: Project,
 ): Promise<FunctionComplexity[]> {
-  const fileSet = new Set(files)
-  const out: FunctionComplexity[] = []
-  for (const sf of project.getSourceFiles()) {
-    const rel = relativize(sf.getFilePath(), rootDir)
-    if (!rel || !fileSet.has(rel)) continue
-    out.push(...extractFunctionComplexityFileBundle(sf, rel))
-  }
-  out.sort((a, b) =>
-    a.file !== b.file ? (a.file < b.file ? -1 : 1) : a.line - b.line,
-  )
-  return out
+  const r = await runPerSourceFileExtractor<FunctionComplexity[], FunctionComplexity>({
+    project,
+    files,
+    rootDir,
+    extractor: extractFunctionComplexityFileBundle,
+    selectItems: (items) => items,
+    sortKey: (c) => `${c.file}:${String(c.line).padStart(8, '0')}`,
+  })
+  return r.items
 }
 
 function relativize(absPath: string, rootDir: string): string | null {

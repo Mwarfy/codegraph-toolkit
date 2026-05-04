@@ -15,6 +15,7 @@
 
 import { type Project, type SourceFile, Node } from 'ts-morph'
 import * as path from 'node:path'
+import { runPerSourceFileExtractor } from '../parallel/per-source-file-extractor.js'
 
 export interface LongFunction {
   file: string
@@ -133,18 +134,21 @@ export async function analyzeLongFunctions(
   options: LongFunctionsOptions = {},
 ): Promise<LongFunction[]> {
   const threshold = options.threshold ?? DEFAULT_THRESHOLD
-  const fileSet = new Set(files)
-  const all: LongFunction[] = []
-
-  for (const sf of project.getSourceFiles()) {
-    const rel = relativize(sf.getFilePath(), rootDir)
-    if (!rel || !fileSet.has(rel)) continue
-    const bundle = extractLongFunctionsFileBundle(sf, rel, threshold)
-    all.push(...bundle.functions)
-  }
-
-  all.sort((a, b) => b.loc - a.loc)
-  return all
+  // Sort canonique par (file, line) pour le pattern monoïdal — puis re-sort
+  // par loc desc en main thread (sort secondaire). Le sortKey monoïdal
+  // garantit le déterminisme cross-thread ; le re-sort par loc est juste
+  // une présentation pour les humains qui veulent les top long fns en haut.
+  const r = await runPerSourceFileExtractor<{ items: LongFunction[] }, LongFunction>({
+    project,
+    files,
+    rootDir,
+    extractor: (sf, rel) => ({ items: extractLongFunctionsFileBundle(sf, rel, threshold).functions }),
+    selectItems: (b) => b.items,
+    sortKey: (l) => `${l.file}:${String(l.line).padStart(8, '0')}`,
+  })
+  // Re-sort par loc desc — pure JS sort, déterministe (loc ties broken par
+  // l'ordre canonique injecté ci-dessus).
+  return [...r.items].sort((a, b) => b.loc - a.loc)
 }
 
 function relativize(absPath: string, rootDir: string): string | null {
