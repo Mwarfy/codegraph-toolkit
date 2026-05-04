@@ -1,3 +1,4 @@
+// ADR-024
 /**
  * Monoid algebra — fondation du parallélisme déterministe.
  *

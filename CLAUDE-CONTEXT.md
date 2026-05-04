@@ -32,6 +32,8 @@
   → [`runtime-graph capture pipeline — OTel attach + span-to-fact projection`](docs/adr/011-runtime-graph-capture-pipeline.md)
 - **ADR-012** — Les helpers ts-morph utilisés par 2+ extractors vivent dans > `packages/codegraph/src/extractors/_shared/`. Pas de duplication > ad-hoc dans les extractors individuels. Les fonctions `_shared/` > sont **pures** (SourceFile in, donnée out — pas d'I/O, pas d'état).
   → [`Extractors `_shared/` — helpers ts-morph mutualisés`](docs/adr/012-extractor-shared-helpers.md)
+- **ADR-024** — Tout détecteur per-file (cf. ADR-005) DOIT exposer un `extractFileBundle` > pure et son orchestrateur passe par `runPerFileExtractor` (readFile-based) > ou `runPerSourceFileExtractor` (Project ts-morph) — pas de boucle séquentielle.
+  → [`Parallélisme déterministe par algèbre monoïdale (BSP)`](docs/adr/024-bsp-monoid-parallelism.md)
 
 ## Fichiers gouvernés par un ADR (lookup pré-calculé)
 
@@ -128,6 +130,7 @@
 - `packages/codegraph/src/incremental/watcher.ts` → ADR-007
 - `packages/codegraph/src/map/dsm-renderer.ts` → ADR-008
 - `packages/codegraph/src/memory/store.ts` → ADR-002
+- `packages/codegraph/src/parallel/monoid.ts` → ADR-024
 - `packages/codegraph/src/synopsis/builder.ts` → ADR-001
 - `packages/codegraph/src/synopsis/tensions.ts` → ADR-001
 - `packages/datalog/src/canonical.ts` → ADR-010
@@ -184,9 +187,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/audit-listener.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/b.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/scheduler.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
@@ -208,6 +211,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+abd6ad7 feat(codegraph): Phase 2.1 — 2 détecteurs portés au pattern BSP monoïdal
 415d382 feat(codegraph): Phase 1 BSP — monoid algebra + scheduler déterministe
 576e358 feat(toolkit): press-button complet — RECIPES + --with-runtime + 5 awaits paralléllisés
 c17c0c1 feat(runtime-graph): press-button CLI `probe` + refactor 2 bombs
@@ -219,7 +223,6 @@ b4959d9 feat(runtime-graph): math optim suggester — universel pour toute app
 7d4d382 feat(runtime-graph): fn-wrap iitm — capture exacte des call edges cross-module
 e936121 feat(runtime-graph): CPU profile capture pour apps pure-CPU
 924a064 feat(toolkit): wire Claude Code hooks pour le toolkit lui-même
-706725f feat(toolkit): runtime-diff dans la chain post-commit
 ```
 
 ## Comment contribuer à ce brief

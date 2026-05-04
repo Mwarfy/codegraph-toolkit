@@ -26,6 +26,7 @@
 
 import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
 import { makeIsExemptForMarker } from './_shared/ast-helpers.js'
+import { runPerSourceFileExtractor } from '../parallel/per-source-file-extractor.js'
 
 export interface HardcodedSecret {
   file: string
@@ -174,21 +175,15 @@ export async function analyzeHardcodedSecrets(
   project: Project,
   options: HardcodedSecretsOptions = {},
 ): Promise<HardcodedSecret[]> {
-  const fileSet = new Set(files)
-  const all: HardcodedSecret[] = []
-
-  for (const sf of project.getSourceFiles()) {
-    const rel = relativize(sf.getFilePath(), rootDir)
-    if (!rel || !fileSet.has(rel)) continue
-    const bundle = extractHardcodedSecretsFileBundle(sf, rel, options)
-    all.push(...bundle.secrets)
-  }
-
-  all.sort((a, b) => {
-    if (a.file !== b.file) return a.file < b.file ? -1 : 1
-    return a.line - b.line
+  const r = await runPerSourceFileExtractor<HardcodedSecretsFileBundle, HardcodedSecret>({
+    project,
+    files,
+    rootDir,
+    extractor: (sf, rel) => extractHardcodedSecretsFileBundle(sf, rel, options),
+    selectItems: (b) => b.secrets,
+    sortKey: (s) => `${s.file}:${String(s.line).padStart(8, '0')}`,
   })
-  return all
+  return r.items
 }
 
 function relativize(absPath: string, rootDir: string): string | null {
