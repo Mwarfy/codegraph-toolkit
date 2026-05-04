@@ -20,6 +20,7 @@
 
 import { parallelMap, parallelMapWorkers } from './bsp-scheduler.js'
 import { appendSortedMonoid } from './monoid.js'
+import { decideWorkerMode } from './cost-model.js'
 
 export interface PerFileExtractorOptions<Bundle, Item> {
   /** Liste de fichiers à traiter (relatifs au rootDir). */
@@ -69,13 +70,17 @@ export async function runPerFileExtractor<Bundle, Item>(
   const concurrency = opts.concurrency ?? 8
   const monoid = appendSortedMonoid<Item>(opts.sortKey)
 
-  // Mode worker_threads : opt-in via env var LIBY_BSP_WORKERS=1. Le caller
-  // doit aussi fournir workerModule + workerExport (closure pas sérialisable).
-  // Default reste main thread Promise.all (sûr, déterministe, mêmes outputs).
-  const useWorkers =
-    process.env.LIBY_BSP_WORKERS === '1' &&
-    opts.workerModule !== undefined &&
-    opts.workerExport !== undefined
+  // Mode worker_threads décidé par cost-model (LIBY_BSP_WORKERS=1 force on,
+  // =0 force off, =auto ou unset → cost-model heuristique). Le caller doit
+  // fournir workerModule + workerExport (closure pas sérialisable).
+  let useWorkers = false
+  if (opts.workerModule !== undefined && opts.workerExport !== undefined) {
+    const decision = await decideWorkerMode({
+      projectRoot: process.cwd(),
+      fileCount: tsFiles.length,
+    })
+    useWorkers = decision === 'workers'
+  }
 
   if (useWorkers) {
     return await runViaWorkers<Bundle, Item>(opts, tsFiles, monoid)

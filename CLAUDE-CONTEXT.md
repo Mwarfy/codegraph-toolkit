@@ -137,6 +137,7 @@
 - `packages/codegraph/src/map/dsm-renderer.ts` → ADR-008
 - `packages/codegraph/src/memory/store.ts` → ADR-002
 - `packages/codegraph/src/parallel/bsp-scheduler.ts` → ADR-024
+- `packages/codegraph/src/parallel/cost-model.ts` → ADR-024
 - `packages/codegraph/src/parallel/monoid.ts` → ADR-024
 - `packages/codegraph/src/parallel/per-file-extractor.ts` → ADR-024
 - `packages/codegraph/src/parallel/per-source-file-extractor.ts` → ADR-024
@@ -191,9 +192,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 > pas verdict. Une tension non explorée n'est pas un bug — c'est un saut
 > latéral possible que le sol stable rend testable.
 
-- **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/datalog/src/cli.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/codegraph/src/extractors/_template.monoid.worker.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
@@ -221,6 +222,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+896219e feat(codegraph): Phase 2.6 — oauth-scope-literals porté (10/65)
 76362ea feat(codegraph): Phase 2.5 — ts-imports porté au pattern BSP monoïdal
 59d89c8 feat(codegraph): Phase β.3 — ADR-025 + template BSP pour futurs détecteurs
 7dc918b feat(codegraph): Phase β.2 — worker mode opt-in pour analyzeTodos
@@ -232,7 +234,6 @@ f066d43 feat(codegraph): Phase 2.3 — 3 détecteurs portés (boolean-params, ev
 abd6ad7 feat(codegraph): Phase 2.1 — 2 détecteurs portés au pattern BSP monoïdal
 415d382 feat(codegraph): Phase 1 BSP — monoid algebra + scheduler déterministe
 576e358 feat(toolkit): press-button complet — RECIPES + --with-runtime + 5 awaits paralléllisés
-c17c0c1 feat(runtime-graph): press-button CLI `probe` + refactor 2 bombs
 ```
 
 ## Comment contribuer à ce brief

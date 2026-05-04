@@ -56,6 +56,7 @@ output bit-identique entre runs, déterminisme garanti.
 - `packages/codegraph/src/extractors/todos.ts`
 - `packages/codegraph/src/extractors/todos.worker.ts`
 - `packages/codegraph/src/parallel/bsp-scheduler.ts`
+- `packages/codegraph/src/parallel/cost-model.ts`
 - `packages/codegraph/src/parallel/monoid.ts`
 - `packages/codegraph/src/parallel/per-file-extractor.ts`
 - `packages/codegraph/src/parallel/per-source-file-extractor.ts`
