@@ -1,0 +1,7 @@
+{
+  "name": "runtime-graph-demo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Ground-truth fixture for @liby-tools/runtime-graph — proves auto-bootstrap captures HTTP spans on ESM projects."
+}

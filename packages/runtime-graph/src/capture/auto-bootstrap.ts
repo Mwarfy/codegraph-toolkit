@@ -21,8 +21,36 @@
 
 import * as path from 'node:path'
 import { writeFileSync, mkdirSync } from 'node:fs'
+import { register } from 'node:module'
 import { attachRuntimeCapture } from './otel-attach.js'
 import { aggregateSpans } from './span-aggregator.js'
+
+// CRITIQUE — register le ESM loader hook AVANT tout `attachRuntimeCapture`.
+//
+// Les auto-instruments OTel (pg, http, redis, …) utilisent require-in-the-middle
+// pour patcher `require()` côté CJS. Sur un projet `"type": "module"` qui charge
+// pg via `import pg from 'pg'`, le hook CJS NE VOIT PAS l'import → 0 span.
+//
+// Le package `@opentelemetry/instrumentation` ≥ 0.40 ship un ESM loader
+// (`hook.mjs`) qui s'enregistre via `module.register()` (Node ≥ 20.6) et
+// patch les imports ESM. Sans ça, les auto-instruments sont silently dead
+// sur tout projet ESM moderne.
+//
+// Cas vécu Sentinel 2026-05-03 : 3 runs probe → RuntimeRunMeta=1, autres
+// facts à 0 lignes. Cause = ce gap. Cf. EXTERNAL-VALIDATION run #1 Hono
+// FULL CHAIN (même symptôme côté replay-tests).
+//
+// On enregistre `import-in-the-middle/hook.mjs` directement (et pas
+// `@opentelemetry/instrumentation/hook.mjs` qui est un re-export legacy
+// avec l'ancienne API du loader Node — getFormat/getSource — qui crash
+// sur Node 22 avec `register()`). iitm est la lib que OTel utilise sous
+// le capot ; on bypass juste le wrapper cassé.
+try {
+  register('import-in-the-middle/hook.mjs', import.meta.url)
+} catch {
+  // Hook unavailable — auto-instruments resteront sur le path require-in-the-middle
+  // (utile pour projets CJS uniquement).
+}
 
 const projectRoot = process.env.LIBY_RUNTIME_PROJECT_ROOT ?? process.cwd()
 // Sub-dir par PID pour éviter qu'un parent process (ex: npm test) n'écrase

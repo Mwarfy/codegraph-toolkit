@@ -74,7 +74,11 @@ export const replayTestsDriver: Driver = {
         cwd,
         env: {
           ...process.env,
-          NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --require ${bootstrapPath}`.trim(),
+          // ESM-compatible bootstrap : `--import` (not `--require`) — sinon
+          // les imports ESM target ne sont pas patchés (require-in-the-middle
+          // n'attrape que `require()`). Cf. examples/runtime-graph-demo et
+          // commit qui a fixé Sentinel probe (3 runs vides → captures OK).
+          NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import file://${bootstrapPath}`.trim(),
           LIBY_RUNTIME_PROJECT_ROOT: opts.projectRoot,
           LIBY_RUNTIME_FACTS_OUT: factsBootstrapDir,
           LIBY_RUNTIME_AUTO_INSTRUMENTS: enableAutoInstruments ? 'true' : 'false',

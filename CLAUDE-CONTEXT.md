@@ -184,9 +184,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/audit-listener.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/scheduler.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/b.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
@@ -208,6 +208,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+f4d87b3 chore(packages): strip leading './' from bin paths
 acd31ff feat(codegraph): bin-shebangs detector — publish hygiene
 da5f643 chore(invariants-postgres-ts): bump codegraph/datalog peer dep ^0.2.0 → ^0.3.0
 ca5ec9f chore(codegraph-mcp): bump 0.2.0 → 0.3.0 (align workspace)
@@ -219,7 +220,6 @@ edb3764 refactor(toolkit): zero drift signals — 23 → 0 (-100%)
 e0715bf refactor(codegraph): split detectHttpEntries (cyclo 12→1, cog 27→0) — data-flows.ts cleared
 990857f refactor(codegraph): split printExportsSummary (cyclo 12→4, cog 29→3) — cli/commands/analyze.ts cleared
 e20b3fb refactor(adr-toolkit): split collectMarkers (cyclo 13→1, cog 28→0) — regenerate-anchors.ts cleared
-bc2d6c5 refactor(codegraph): split extractTryCatchSwallows (cyclo 13→5, cog 29→7) — try-catch-swallow.ts cleared
 ```
 
 ## Comment contribuer à ce brief
