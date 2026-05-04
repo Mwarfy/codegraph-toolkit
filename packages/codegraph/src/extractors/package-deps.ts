@@ -271,24 +271,23 @@ function collectImportSpecifiers(sf: SourceFile): string[] {
     const ms = decl.getModuleSpecifierValue()
     if (ms) specs.push(ms)
   }
-  // Tier 17 self-audit fix : capture les imports dynamiques.
-  //   - `await import('pkg')` → CallExpression dont expression.kind === ImportKeyword
-  //   - `require.resolve('pkg')` → CallExpression dont expression matches `require.resolve`
-  //   - `require('pkg')` (CommonJS) → CallExpression dont expression === 'require'
-  // Sans ca, l'extractor classait des deps utilisees en "declared-unused" (5 FP
-  // sur le toolkit lui-meme : serve-handler, @liby-tools/datalog, etc.).
+  collectDynamicImportSpecs(sf, specs)
+  return specs
+}
+
+/**
+ * Tier 17 self-audit fix : capture les imports dynamiques. Sans ça,
+ * l'extractor classait des deps utilisées en "declared-unused" (5 FP
+ * sur le toolkit lui-même : serve-handler, @liby-tools/datalog, etc.).
+ *
+ * Patterns reconnus :
+ *   - `await import('pkg')` : CallExpression dont expr.kind === ImportKeyword.
+ *   - `require('pkg')` (CommonJS) : Identifier === 'require'.
+ *   - `require.resolve('pkg')` : PropertyAccess === 'require.resolve'.
+ */
+function collectDynamicImportSpecs(sf: SourceFile, specs: string[]): void {
   for (const call of sf.getDescendantsOfKind(SyntaxKind.CallExpression)) {
-    const callee = call.getExpression()
-    let isDynImport = false
-    // `import('pkg')` — l'expression est un ImportKeyword (kind=100).
-    if (callee.getKind() === SyntaxKind.ImportKeyword) isDynImport = true
-    // `require('pkg')` ou `require.resolve('pkg')`
-    else if (Node.isIdentifier(callee) && callee.getText() === 'require') isDynImport = true
-    else if (Node.isPropertyAccessExpression(callee)) {
-      const text = callee.getText()
-      if (text === 'require.resolve' || text === 'require') isDynImport = true
-    }
-    if (!isDynImport) continue
+    if (!isDynamicImportCall(call.getExpression())) continue
     const args = call.getArguments()
     if (args.length === 0) continue
     const arg0 = args[0]
@@ -296,7 +295,16 @@ function collectImportSpecifiers(sf: SourceFile): string[] {
       specs.push(arg0.getLiteralValue())
     }
   }
-  return specs
+}
+
+function isDynamicImportCall(callee: Node): boolean {
+  if (callee.getKind() === SyntaxKind.ImportKeyword) return true
+  if (Node.isIdentifier(callee) && callee.getText() === 'require') return true
+  if (Node.isPropertyAccessExpression(callee)) {
+    const text = callee.getText()
+    if (text === 'require.resolve' || text === 'require') return true
+  }
+  return false
 }
 
 /**

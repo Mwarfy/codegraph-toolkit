@@ -208,6 +208,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+a7bbb0c refactor(codegraph): split computePackageMinCuts (cyclo 15→6, cog 28→8) — package-mincut.ts cleared
 5309e21 refactor(codegraph): split loadPersistedCache (cyclo 16→2, cog 18→1) — incremental/persistence.ts cleared
 119cfd4 refactor(codegraph): split diffDataFlows (cyclo 16→3, cog 20→0) — diff/data-flows.ts cleared
 da2fe20 refactor(codegraph): split diffCycles (cyclo 16→5, cog 21→3) — diff/cycles.ts cleared
@@ -219,7 +220,6 @@ c1c37b8 refactor(codegraph): split extractFunctionSnippetsLocal (cyclo 16→3, c
 97128ab refactor(runtime-graph): split lyapunovTimeseries (cyclo 17→7, cog 24→7) — lyapunov-timeseries.ts cleared
 5ea3ad1 refactor(codegraph-mcp): split codegraphMemoryRecall (cyclo 17→5, cog 25→3) — memory.ts cleared
 fae254e refactor(codegraph): split extractFunctionComplexityFileBundle (cyclo 17→4, cog 25→4) — function-complexity.ts cleared
-8dcc063 refactor(adr-toolkit): split detectLayout (cyclo 17→4, cog 27→3) — init.ts cleared
 ```
 
 ## Comment contribuer à ce brief
