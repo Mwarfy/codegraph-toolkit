@@ -201,7 +201,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/codegraph/src/extractors/todos.worker.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/src/parallel/worker-runner.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/src/parallel/source-file-worker-runner.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
@@ -223,6 +223,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+d94cab1 feat(codegraph): Phase γ.2 — workers ts-morph via mini-Project local
 9a741e3 feat(codegraph): Phase 2.8 — dead-code + event-emit-sites portés (14/65)
 07b0dcf feat(codegraph): Phase 2.7 — function-complexity + long-functions portés (12/65)
 7366782 feat(codegraph): Phase γ.1 — cost-model auto-tuning LIBY_BSP_WORKERS=auto
@@ -234,7 +235,6 @@ de8b02a feat(codegraph): Phase β — worker_threads dispatch via WorkerPool
 3399c54 feat(codegraph): Phase 2.4 — sanitizers + taint-sinks portés (8/65)
 f066d43 feat(codegraph): Phase 2.3 — 3 détecteurs portés (boolean-params, eval-calls, crypto-algo)
 84b2f76 docs(adr-024): anchor markers sur les 3 helpers BSP
-190b979 feat(codegraph): Phase 2.2 — hardcoded-secrets porté + ADR-024
 ```
 
 ## Comment contribuer à ce brief

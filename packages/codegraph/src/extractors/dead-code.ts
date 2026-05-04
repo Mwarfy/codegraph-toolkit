@@ -20,6 +20,8 @@
  * Skip les fichiers de test (pattern souvent intentionnel en setup/mock).
  */
 
+import { fileURLToPath } from 'node:url'
+import * as path from 'node:path'
 import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
 import { makeIsExemptForMarker } from './_shared/ast-helpers.js'
 import { runPerSourceFileExtractor } from '../parallel/per-source-file-extractor.js'
@@ -277,6 +279,19 @@ function truncate(s: string, max: number): string {
   return s.length <= max ? s : s.slice(0, max - 1) + '…'
 }
 
+/**
+ * Worker entrypoint Phase γ.2 — wrap extract + select pour retourner Item[]
+ * directement. Loadé depuis source-file-worker-runner.ts en worker.
+ */
+export function extractDeadCodeForWorker(sf: SourceFile, relPath: string): DeadCodeFinding[] {
+  return extractDeadCodeFileBundle(sf, relPath).findings
+}
+
+const DEAD_CODE_WORKER_MODULE = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'dead-code.js',
+)
+
 export async function analyzeDeadCode(
   rootDir: string,
   files: string[],
@@ -289,6 +304,8 @@ export async function analyzeDeadCode(
     extractor: extractDeadCodeFileBundle,
     selectItems: (b) => b.findings,
     sortKey: (f) => `${f.file}:${String(f.line).padStart(8, '0')}:${f.kind}`,
+    workerModule: DEAD_CODE_WORKER_MODULE,
+    workerExport: 'extractDeadCodeForWorker',
   })
   return r.items
 }
