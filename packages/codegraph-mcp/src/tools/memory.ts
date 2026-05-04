@@ -42,15 +42,7 @@ export async function codegraphMemoryRecall(
 
   const lines: string[] = []
   lines.push(`🧠 Memory recall — ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}`)
-
-  // Récap du scope appliqué pour que l'agent comprenne pourquoi un set
-  // précis revient.
-  const scopeBits: string[] = []
-  if (args.kind) scopeBits.push(`kind=${args.kind}`)
-  if (args.file) scopeBits.push(`file=${args.file}`)
-  if (args.detector) scopeBits.push(`detector=${args.detector}`)
-  if (args.include_obsolete) scopeBits.push('include_obsolete=true')
-  if (scopeBits.length > 0) lines.push(`  Scope: ${scopeBits.join(', ')}`)
+  appendScopeLine(args, lines)
   lines.push('')
 
   if (entries.length === 0) {
@@ -59,21 +51,51 @@ export async function codegraphMemoryRecall(
   }
 
   for (const e of entries) {
-    const obsoleteTag = e.obsoleteAt ? ' [OBSOLETE]' : ''
-    lines.push(`  • [${e.kind}] ${e.fingerprint}${obsoleteTag}`)
-    lines.push(`    ${e.reason}`)
-    if (e.scope) {
-      const bits: string[] = []
-      if (e.scope.file) bits.push(`file=${e.scope.file}`)
-      if (e.scope.detector) bits.push(`detector=${e.scope.detector}`)
-      if (e.scope.tags && e.scope.tags.length > 0) bits.push(`tags=${e.scope.tags.join(',')}`)
-      if (bits.length > 0) lines.push(`    scope: ${bits.join(', ')}`)
-    }
-    lines.push(`    id: ${e.id}  ·  added: ${e.addedAt.slice(0, 10)}`)
-    lines.push('')
+    appendEntryBlock(e, lines)
   }
 
   return { content: lines.join('\n') }
+}
+
+/** Récap du scope appliqué pour que l'agent comprenne le filtrage. */
+function appendScopeLine(args: MemoryRecallArgs, lines: string[]): void {
+  const scopeBits: string[] = []
+  if (args.kind) scopeBits.push(`kind=${args.kind}`)
+  if (args.file) scopeBits.push(`file=${args.file}`)
+  if (args.detector) scopeBits.push(`detector=${args.detector}`)
+  if (args.include_obsolete) scopeBits.push('include_obsolete=true')
+  if (scopeBits.length > 0) lines.push(`  Scope: ${scopeBits.join(', ')}`)
+}
+
+interface MemEntryLike {
+  kind: string
+  fingerprint: string
+  obsoleteAt?: string | null
+  reason: string
+  scope?: { file?: string; detector?: string; tags?: string[] }
+  id: string
+  addedAt: string
+}
+
+function appendEntryBlock(e: MemEntryLike, lines: string[]): void {
+  const obsoleteTag = e.obsoleteAt ? ' [OBSOLETE]' : ''
+  lines.push(`  • [${e.kind}] ${e.fingerprint}${obsoleteTag}`)
+  lines.push(`    ${e.reason}`)
+  appendEntryScope(e.scope, lines)
+  lines.push(`    id: ${e.id}  ·  added: ${e.addedAt.slice(0, 10)}`)
+  lines.push('')
+}
+
+function appendEntryScope(
+  scope: MemEntryLike['scope'],
+  lines: string[],
+): void {
+  if (!scope) return
+  const bits: string[] = []
+  if (scope.file) bits.push(`file=${scope.file}`)
+  if (scope.detector) bits.push(`detector=${scope.detector}`)
+  if (scope.tags && scope.tags.length > 0) bits.push(`tags=${scope.tags.join(',')}`)
+  if (bits.length > 0) lines.push(`    scope: ${bits.join(', ')}`)
 }
 
 // ─── mark ─────────────────────────────────────────────────────────────────

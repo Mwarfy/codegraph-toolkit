@@ -178,9 +178,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 > pas verdict. Une tension non explorée n'est pas un bug — c'est un saut
 > latéral possible que le sol stable rend testable.
 
-- **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/datalog/src/cli.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
@@ -208,6 +208,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+fae254e refactor(codegraph): split extractFunctionComplexityFileBundle (cyclo 17→4, cog 25→4) — function-complexity.ts cleared
 8dcc063 refactor(adr-toolkit): split detectLayout (cyclo 17→4, cog 27→3) — init.ts cleared
 9d26278 refactor(codegraph-mcp): split codegraphChangesSince (cyclo 18→5, cog 27→3) — changes-since.ts cleared
 07922ff refactor(codegraph): split classifyLiteral (cyclo 18→5, cog 27→4) — magic-numbers.ts cleared
@@ -219,7 +220,6 @@ de0af83 refactor(codegraph): split extractBooleanParamsFileBundle (cyclo 19→4,
 1898604 refactor(codegraph-mcp): split codegraphDrift (cyclo 19→5, cog 28→1) — drift.ts cleared
 ca65576 refactor(runtime-graph): split mergeFactsDirs (cyclo 18→2, cog 45→1) — cli.ts mergeFactsDirs cleared
 47c470a refactor(codegraph): split HttpRouteDetector.detect (cyclo 20→1, cog 29→0) — http-routes.ts cleared
-78eeb86 refactor(codegraph): split parseSqlFile (cyclo 20→1, cog 32→0) — sql-schema.ts cleared
 ```
 
 ## Comment contribuer à ce brief
