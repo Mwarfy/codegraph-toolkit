@@ -5,12 +5,13 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-04T00:45:17Z
+Last update : 2026-05-04T00:46:51Z
 
 ## By type
 
 ### `refactor` (50)
 
+- **119cfd4** refactor(codegraph): split diffDataFlows (cyclo 16→3, cog 20→0) — diff/data-flows.ts cleared — 2026-05-04
 - **da2fe20** refactor(codegraph): split diffCycles (cyclo 16→5, cog 21→3) — diff/cycles.ts cleared — 2026-05-04
 - **c1c37b8** refactor(codegraph): split extractFunctionSnippetsLocal (cyclo 16→3, cog 22→2) — incremental/compression-similarity.ts cleared — 2026-05-04
 - **6c2ca10** refactor(codegraph-mcp): split codegraphExtractCandidates (cyclo 18→8, cog 14→2) — extract-candidates.ts cleared — 2026-05-04
@@ -30,11 +31,11 @@ Last update : 2026-05-04T00:45:17Z
 - **de0af83** refactor(codegraph): split extractBooleanParamsFileBundle (cyclo 19→4, cog 19→4) — boolean-params.ts cleared — 2026-05-04
 - **1898604** refactor(codegraph-mcp): split codegraphDrift (cyclo 19→5, cog 28→1) — drift.ts cleared — 2026-05-04
 - **ca65576** refactor(runtime-graph): split mergeFactsDirs (cyclo 18→2, cog 45→1) — cli.ts mergeFactsDirs cleared — 2026-05-04
-- **47c470a** refactor(codegraph): split HttpRouteDetector.detect (cyclo 20→1, cog 29→0) — http-routes.ts cleared — 2026-05-04
 
 
 ## Full history
 
+- **119cfd4** refactor(codegraph): split diffDataFlows (cyclo 16→3, cog 20→0) — diff/data-flows.ts cleared — 2026-05-04
 - **da2fe20** refactor(codegraph): split diffCycles (cyclo 16→5, cog 21→3) — diff/cycles.ts cleared — 2026-05-04
 - **c1c37b8** refactor(codegraph): split extractFunctionSnippetsLocal (cyclo 16→3, cog 22→2) — incremental/compression-similarity.ts cleared — 2026-05-04
 - **6c2ca10** refactor(codegraph-mcp): split codegraphExtractCandidates (cyclo 18→8, cog 14→2) — extract-candidates.ts cleared — 2026-05-04
@@ -84,4 +85,3 @@ Last update : 2026-05-04T00:45:17Z
 - **aa09cb1** refactor(codegraph): split runCrossDisciplineDetectors (cyclo 30→9, cog 43→6) — cross-discipline-orchestrator.ts bomb-free — 2026-05-04
 - **798d038** refactor(codegraph): split scanEmitSitesInSourceFile (cyclo 31→3, cog 39→2) — event-emit-sites.ts bomb-free — 2026-05-04
 - **bd1923f** refactor(codegraph-mcp): split codegraphDatalogQuery (cyclo 31→7, cog 52→3) — datalog-query.ts bomb-free — 2026-05-04
-- **89be66f** refactor(codegraph): split extractArgumentsFileBundle (cyclo 33→3, cog 53→2) — arguments.ts bomb-free — 2026-05-04

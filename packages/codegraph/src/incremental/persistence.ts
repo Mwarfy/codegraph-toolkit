@@ -103,7 +103,22 @@ export async function loadPersistedCache(
   rootDir: string,
   db: Database = sharedDb,
 ): Promise<{ mtimes: Map<string, number> } | null> {
-  const file = cachePath(rootDir)
+  const baseline = await loadBaselineSnapshot(cachePath(rootDir), db)
+  if (!baseline) return null
+
+  await applyDeltasInOrder(rootDir, baseline.mtimes, db)
+  return { mtimes: baseline.mtimes }
+}
+
+/**
+ * Lit le baseline + applique loadState sur la DB. Retourne null si fichier
+ * absent, JSON invalide, version mismatch, state invalide, ou loadState
+ * throw — tout ça = on retourne cold (le caller saura repartir).
+ */
+async function loadBaselineSnapshot(
+  file: string,
+  db: Database,
+): Promise<{ mtimes: Map<string, number> } | null> {
   let raw: string
   try {
     raw = await fs.readFile(file, 'utf-8')
@@ -126,26 +141,46 @@ export async function loadPersistedCache(
   for (const [k, v] of Object.entries(parsed.mtimes ?? {})) {
     mtimes.set(k, v as number)
   }
+  return { mtimes }
+}
 
-  // Apply deltas in order. Best-effort : on s'arrête au premier delta
-  // corrompu. La DB et les mtimes reflètent le dernier delta appliqué.
+/**
+ * Applique les deltas dans l'ordre. Best-effort : on s'arrête au premier
+ * delta corrompu / version mismatch / applyDelta throw. La DB et les mtimes
+ * reflètent le dernier delta valide appliqué.
+ */
+async function applyDeltasInOrder(
+  rootDir: string,
+  mtimes: Map<string, number>,
+  db: Database,
+): Promise<void> {
   const deltaFiles = await listDeltas(rootDir)
   for (const df of deltaFiles) {
-    let dRaw: string
     // await-ok: deltas en ordre strict (db.applyDelta accumule), break-on-error
-    try { dRaw = await fs.readFile(df, 'utf-8') } catch { break }
-    let dParsed: PersistedDelta
-    try { dParsed = JSON.parse(dRaw) } catch { break }
-    if (dParsed.version !== PERSIST_VERSION) break
-    try {
-      db.applyDelta(dParsed.delta)
-    } catch { break }
-    for (const [k, v] of Object.entries(dParsed.mtimes ?? {})) {
-      mtimes.set(k, v as number)
-    }
+    const applied = await tryApplyDeltaFile(df, db, mtimes)
+    if (!applied) break
   }
+}
 
-  return { mtimes }
+async function tryApplyDeltaFile(
+  df: string,
+  db: Database,
+  mtimes: Map<string, number>,
+): Promise<boolean> {
+  let dRaw: string
+  try { dRaw = await fs.readFile(df, 'utf-8') } catch { return false }
+  let dParsed: PersistedDelta
+  try { dParsed = JSON.parse(dRaw) } catch { return false }
+  if (dParsed.version !== PERSIST_VERSION) return false
+  try {
+    db.applyDelta(dParsed.delta)
+  } catch {
+    return false
+  }
+  for (const [k, v] of Object.entries(dParsed.mtimes ?? {})) {
+    mtimes.set(k, v as number)
+  }
+  return true
 }
 
 /**
