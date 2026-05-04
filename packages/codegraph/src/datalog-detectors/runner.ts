@@ -122,6 +122,15 @@ export interface DatalogDetectorResults {
     }>
     isSecret: boolean
   }>
+  constantExpressions: Array<{
+    file: string
+    line: number
+    kind: 'tautology-condition' | 'contradiction-condition'
+      | 'gratuitous-bool-comparison' | 'double-negation'
+      | 'literal-fold-opportunity'
+    message: string
+    exprRepr: string
+  }>
   stats: {
     extractMs: number
     evalMs: number
@@ -159,6 +168,7 @@ export async function runDatalogDetectors(
     barrelFiles: [],
     importEdges: [],
     envVarReads: [],
+    constantExpressionCandidates: [],
   }
   for (const sf of opts.project.getSourceFiles()) {
     const rel = relativize(sf.getFilePath(), opts.rootDir)
@@ -180,6 +190,7 @@ export async function runDatalogDetectors(
     merged.barrelFiles.push(...b.barrelFiles)
     merged.importEdges.push(...b.importEdges)
     merged.envVarReads.push(...b.envVarReads)
+    merged.constantExpressionCandidates.push(...b.constantExpressionCandidates)
   }
   const extractMs = performance.now() - t0
 
@@ -268,6 +279,11 @@ export async function runDatalogDetectors(
   factsByRelation.set('EnvVarRead',
     merged.envVarReads.map((r) =>
       [r.file, r.line, r.col, safe(r.varName), safe(r.symbol), r.hasDefault, safe(r.wrappedIn)].join('\t'),
+    ).join('\n'),
+  )
+  factsByRelation.set('ConstantExpressionCandidate',
+    merged.constantExpressionCandidates.map((c) =>
+      [c.file, c.line, c.kind, safe(c.message), safe(c.exprRepr)].join('\t'),
     ).join('\n'),
   )
 
@@ -451,6 +467,20 @@ export async function runDatalogDetectors(
   }
   envUsage.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
 
+  const constantExpressions = (result.outputs.get('ConstantExpressionOut') ?? []).map((t: Tuple) => ({
+    file: String(t[0]),
+    line: Number(t[1]),
+    kind: String(t[2]) as DatalogDetectorResults['constantExpressions'][number]['kind'],
+    message: String(t[3]),
+    exprRepr: String(t[4]),
+  }))
+  // sort par (file, line, kind) pour matcher legacy analyzeConstantExpressionsBatch
+  constantExpressions.sort((a, b) =>
+    a.file !== b.file ? (a.file < b.file ? -1 : 1) :
+    a.line !== b.line ? a.line - b.line :
+    a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0,
+  )
+
   const eventListenerSites = fileLineSort((result.outputs.get('EventListenerSiteOut') ?? []).map((t: Tuple) => {
     const isMethodCall = Number(t[4]) === 1
     const receiver = String(t[5])
@@ -489,7 +519,8 @@ export async function runDatalogDetectors(
     merged.eventListenerSiteCandidates.length +
     merged.barrelFiles.length +
     merged.importEdges.length +
-    merged.envVarReads.length
+    merged.envVarReads.length +
+    merged.constantExpressionCandidates.length
   const tuplesOut =
     magicNumbers.length +
     deadCodeIdenticalSubexpressions.length +
@@ -503,7 +534,8 @@ export async function runDatalogDetectors(
     hardcodedSecrets.length +
     eventListenerSites.length +
     barrels.length +
-    envUsage.length
+    envUsage.length +
+    constantExpressions.length
 
   return {
     magicNumbers,
@@ -519,6 +551,7 @@ export async function runDatalogDetectors(
     eventListenerSites,
     barrels,
     envUsage,
+    constantExpressions,
     stats: { extractMs, evalMs, tuplesIn, tuplesOut },
   }
 }

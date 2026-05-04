@@ -219,6 +219,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+393fc2c feat(codegraph): Phase γ.7 — port barrels + env-usage au pattern Datalog
 14fe493 feat(codegraph): Phase γ.6 — port event-listener-sites au pattern Datalog
 be79c7b refactor(codegraph): Phase γ.5 — cleanup workers cold code (Phase β/γ.2/γ.3)
 a2bc182 feat(codegraph): Phase γ.4c — 5 derniers détecteurs ts-morph portés Datalog
@@ -230,7 +231,6 @@ b2a709e feat(codegraph): Phase γ.4b — consolide + 3 nouveaux détecteurs Data
 c2ab5c7 feat(codegraph): Phase γ.2c — wire les 6 ts-morph détecteurs restants aux workers
 5a40459 feat(codegraph): Phase γ.2b — wire long-functions + dead-code aux workers
 d94cab1 feat(codegraph): Phase γ.2 — workers ts-morph via mini-Project local
-9a741e3 feat(codegraph): Phase 2.8 — dead-code + event-emit-sites portés (14/65)
 ```
 
 ## Comment contribuer à ce brief

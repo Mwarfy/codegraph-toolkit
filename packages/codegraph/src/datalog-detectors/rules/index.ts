@@ -108,6 +108,10 @@ export const SCHEMA_DL = `// AST primitive facts — extraits par ast-facts-visi
   hasDefault:number, wrappedIn:symbol)
 .input EnvVarRead
 
+.decl ConstantExpressionCandidate(file:symbol, line:number, kind:symbol,
+  message:symbol, exprRepr:symbol)
+.input ConstantExpressionCandidate
+
 // ─── Hybrid outputs ─────────────────────────────────────────────────────────
 
 .decl SanitizerOut(file:symbol, line:number, callee:symbol, containingSymbol:symbol)
@@ -143,6 +147,10 @@ export const SCHEMA_DL = `// AST primitive facts — extraits par ast-facts-visi
 .decl EnvVarReadOut(file:symbol, line:number, col:number, varName:symbol, sym:symbol,
   hasDefault:number, wrappedIn:symbol)
 .output EnvVarReadOut
+
+.decl ConstantExpressionOut(file:symbol, line:number, kind:symbol,
+  message:symbol, exprRepr:symbol)
+.output ConstantExpressionOut
 `
 
 // Convention engine : variables capitalisées, literals (numbers, strings) inline.
@@ -315,6 +323,15 @@ EnvVarReadOut(F, L, Col, Name, Sym, HasDef, Wrapped) :-
   EnvVarRead(F, L, Col, Name, Sym, HasDef, Wrapped).
 `
 
+// Hybrid : visitor pré-classifie (récursion bool, context check, literal-fold).
+// Rule filtre uniquement test files + exempt markers.
+export const CONSTANT_EXPRESSIONS_DL = `
+ConstantExpressionOut(F, L, K, Msg, ER) :-
+  ConstantExpressionCandidate(F, L, K, Msg, ER),
+  !FileTag(F, "test"),
+  !ExemptionLine(F, L, "const-expr-ok").
+`
+
 export const ALL_RULES_DL = [
   SCHEMA_DL,
   MAGIC_NUMBERS_DL,
@@ -330,4 +347,5 @@ export const ALL_RULES_DL = [
   EVENT_LISTENER_SITES_DL,
   BARRELS_DL,
   ENV_USAGE_DL,
+  CONSTANT_EXPRESSIONS_DL,
 ].join('\n')

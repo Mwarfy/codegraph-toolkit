@@ -21,6 +21,7 @@ import { extractHardcodedSecretsFileBundle } from '../dist/extractors/hardcoded-
 import { scanListenerSitesInSourceFile } from '../dist/extractors/event-listener-sites.js'
 import { analyzeBarrels } from '../dist/extractors/barrels.js'
 import { analyzeEnvUsage } from '../dist/extractors/env-usage.js'
+import { extractConstantExpressionsFileBundle } from '../dist/extractors/constant-expressions.js'
 import { runDatalogDetectors } from '../dist/datalog-detectors/runner.js'
 import { resolve } from 'node:path'
 
@@ -56,6 +57,7 @@ const legacyLong = []
 const legacyComplx = []
 const legacySecret = []
 const legacyEvtListen = []
+const legacyConstExpr = []
 for (const sf of project.getSourceFiles()) {
   const abs = sf.getFilePath()
   const rel = abs.replace(rootDir + '/', '')
@@ -75,13 +77,14 @@ for (const sf of project.getSourceFiles()) {
   legacyLong.push(...extractLongFunctionsFileBundle(sf, rel).functions)
   legacyComplx.push(...extractFunctionComplexityFileBundle(sf, rel))
   legacySecret.push(...extractHardcodedSecretsFileBundle(sf, rel).secrets)
+  legacyConstExpr.push(...extractConstantExpressionsFileBundle(sf, rel).findings)
 }
 // barrels + env-usage : extracteurs cross-file. Appel direct (les analyze*
 // reçoivent rootDir, files, project, et font leur propre cross-file scan).
 const legacyBarrels = await analyzeBarrels(rootDir, files, project)
 const legacyEnvUsage = await analyzeEnvUsage(rootDir, files, project)
 const legacyMs = performance.now() - tLegacy0
-console.log(`  legacy 13 detectors (${legacyMs.toFixed(1)}ms)`)
+console.log(`  legacy 14 detectors (${legacyMs.toFixed(1)}ms)`)
 
 // DATALOG
 const tDl0 = performance.now()
@@ -146,7 +149,9 @@ const envNorm = (u) => {
   return `${u.name}\t${u.isSecret}\t${rs}`
 }
 const ok13 = bidirDiff(legacyEnvUsage, dl.envUsage, envNorm, 'EnvUsage')
+const ok14 = bidirDiff(legacyConstExpr, dl.constantExpressions,
+  (c) => `${c.file}\t${c.line}\t${c.kind}\t${c.message}\t${c.exprRepr}`, 'ConstantExpression')
 
-const allOk = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10 && ok11 && ok12 && ok13
+const allOk = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10 && ok11 && ok12 && ok13 && ok14
 console.log(`\n  Total: legacy=${legacyMs.toFixed(0)}ms vs datalog=${dlMs.toFixed(0)}ms (ratio: ${(dlMs/legacyMs).toFixed(2)}x)${allOk ? ' ✓' : ' ✗'}`)
 if (!allOk) process.exit(1)
