@@ -141,6 +141,7 @@
 - `packages/codegraph/src/parallel/monoid.ts` → ADR-024
 - `packages/codegraph/src/parallel/per-file-extractor.ts` → ADR-024
 - `packages/codegraph/src/parallel/per-source-file-extractor.ts` → ADR-024
+- `packages/codegraph/src/parallel/source-file-worker-runner.ts` → ADR-024
 - `packages/codegraph/src/parallel/worker-pool.ts` → ADR-024
 - `packages/codegraph/src/synopsis/builder.ts` → ADR-001
 - `packages/codegraph/src/synopsis/tensions.ts` → ADR-001
@@ -177,7 +178,7 @@
 - `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 25) · gov by ADR-012
 - `packages/codegraph/src/core/detector-registry.ts` (in: 19) · gov by ADR-008
 - `packages/runtime-graph/src/core/types.ts` (in: 14) · gov by ADR-009
-- `packages/codegraph/src/parallel/per-source-file-extractor.ts` (in: 11) · gov by ADR-024
+- `packages/codegraph/src/parallel/per-source-file-extractor.ts` (in: 13) · gov by ADR-024
 
 ## ⚠ ADR anchor suggestions
 
@@ -222,6 +223,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+9a741e3 feat(codegraph): Phase 2.8 — dead-code + event-emit-sites portés (14/65)
 07b0dcf feat(codegraph): Phase 2.7 — function-complexity + long-functions portés (12/65)
 7366782 feat(codegraph): Phase γ.1 — cost-model auto-tuning LIBY_BSP_WORKERS=auto
 896219e feat(codegraph): Phase 2.6 — oauth-scope-literals porté (10/65)
@@ -233,7 +235,6 @@ de8b02a feat(codegraph): Phase β — worker_threads dispatch via WorkerPool
 f066d43 feat(codegraph): Phase 2.3 — 3 détecteurs portés (boolean-params, eval-calls, crypto-algo)
 84b2f76 docs(adr-024): anchor markers sur les 3 helpers BSP
 190b979 feat(codegraph): Phase 2.2 — hardcoded-secrets porté + ADR-024
-abd6ad7 feat(codegraph): Phase 2.1 — 2 détecteurs portés au pattern BSP monoïdal
 ```
 
 ## Comment contribuer à ce brief

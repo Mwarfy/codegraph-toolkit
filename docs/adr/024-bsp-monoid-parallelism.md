@@ -60,6 +60,7 @@ output bit-identique entre runs, déterminisme garanti.
 - `packages/codegraph/src/parallel/monoid.ts`
 - `packages/codegraph/src/parallel/per-file-extractor.ts`
 - `packages/codegraph/src/parallel/per-source-file-extractor.ts`
+- `packages/codegraph/src/parallel/source-file-worker-runner.ts`
 - `packages/codegraph/src/parallel/worker-pool.ts`
 
 
@@ -86,9 +87,24 @@ restaure l'ordre canonique → bit-identique entre runs.
 thread. Gain limité sur CPU-bound (Node single-thread JS). Vrai gain sur
 I/O-bound (reads + writes parallel).
 
-**Phase β prévue** : worker_threads. L'API `parallelMap` ne change pas — le
-scheduler dispatche sur N workers. Gain attendu × N cores sur projets
-> 100 fichiers.
+**Phase β** (livrée) : worker_threads via `WorkerPool` + `parallelMapWorkers`.
+L'API `parallelMap` ne change pas — le scheduler dispatche sur N workers.
+Gain attendu × N cores sur projets > 100 fichiers. Activé via
+`LIBY_BSP_WORKERS=1` ou cost-model `auto`.
+
+**Phase γ.1** (livrée) : cost-model auto-tuning (`decideWorkerMode`). Lit
+`.codegraph/facts-self-runtime/DetectorTiming.facts` si dispo et décide
+worker vs main-thread selon mean_task_ms, total_ms, file_count. Heuristique
+conservative : main-thread par défaut sauf si `LIBY_BSP_WORKERS=auto` opt-in.
+
+**Phase γ.2** (livrée) : workers pour les détecteurs Project ts-morph via
+mini-Project local au worker. Le worker reçoit `{absPath, content, relPath,
+extractorModule, extractorExport}`, crée un `new Project({useInMemoryFileSystem:
+true})` avec 1 SourceFile, charge dynamiquement l'extractor compilé, l'appelle.
+Coût : ~10-30ms re-parse par fichier × N cores. Crossover ROI ~50 fichiers.
+Le mini-Project ne contient QUE le file traité — donc pas de cross-file
+type resolution. Détecteurs dépendant du symbol table cross-file (ts-imports,
+deprecated-usage) restent main-thread.
 
 **Pourquoi pas full Salsa parallelism (mutable shared state)** :
 - Race conditions possibles → heisenbugs

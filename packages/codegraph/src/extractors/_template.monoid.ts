@@ -9,9 +9,10 @@
  *
  * Les détecteurs Project ts-morph utilisent runPerSourceFileExtractor à la
  * place — même algèbre, signature extractor (sf, relPath) au lieu de
- * (content, relPath). Pour eux, le mode worker n'est PAS supporté (Project
- * ts-morph non-sérialisable cross-thread, re-parser chaque file × workers
- * = coût prohibitif). Restent main thread, gain via Promise.all suffit.
+ * (content, relPath). Phase γ.2 supporte aussi le mode worker via mini-
+ * Project local au worker (re-parse 1 SourceFile depuis content string).
+ * L'extractor doit retourner Item[] directement (pas de Bundle wrapper),
+ * sinon prévoir une fn wrapper exportée pour le worker entrypoint.
  *
  * Pour copier ce template :
  *   1. Renomme le fichier xxx.ts (ex: my-detector.ts)
