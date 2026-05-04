@@ -184,9 +184,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/env-usage/config.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/b.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/audit-listener.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
@@ -208,6 +208,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+e0715bf refactor(codegraph): split detectHttpEntries (cyclo 12→1, cog 27→0) — data-flows.ts cleared
 990857f refactor(codegraph): split printExportsSummary (cyclo 12→4, cog 29→3) — cli/commands/analyze.ts cleared
 e20b3fb refactor(adr-toolkit): split collectMarkers (cyclo 13→1, cog 28→0) — regenerate-anchors.ts cleared
 bc2d6c5 refactor(codegraph): split extractTryCatchSwallows (cyclo 13→5, cog 29→7) — try-catch-swallow.ts cleared
@@ -219,7 +220,6 @@ a7bbb0c refactor(codegraph): split computePackageMinCuts (cyclo 15→6, cog 28�
 da2fe20 refactor(codegraph): split diffCycles (cyclo 16→5, cog 21→3) — diff/cycles.ts cleared
 c1c37b8 refactor(codegraph): split extractFunctionSnippetsLocal (cyclo 16→3, cog 22→2) — incremental/compression-similarity.ts cleared
 6c2ca10 refactor(codegraph-mcp): split codegraphExtractCandidates (cyclo 18→8, cog 14→2) — extract-candidates.ts cleared
-9cc5e08 refactor(codegraph): split analyze (cyclo 18→10, cog 16→4) — analyzer.ts top-level cleared
 ```
 
 ## Comment contribuer à ce brief

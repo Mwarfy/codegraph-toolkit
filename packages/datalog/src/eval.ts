@@ -399,6 +399,8 @@ function joinPositive(
  * needed, we return the original `env`.
  */
 function unify(atom: Atom, tuple: Tuple, env: Env): Env | null {
+  // Sentinel object distinct de null pour différencier "fail" (return null)
+  // vs "OK pas de nouveau binding" (return UNIFY_OK_NO_EXT).
   let ext: Env | null = null
   for (let i = 0; i < atom.args.length; i++) {
     const t = atom.args[i]
@@ -406,24 +408,40 @@ function unify(atom: Atom, tuple: Tuple, env: Env): Env | null {
     if (t.kind === 'const') {
       if (!valueEq(t.value, v)) return null
     } else if (t.kind === 'var') {
-      const existing = env.get(t.name)
-      if (existing !== undefined) {
-        if (!valueEq(existing, v)) return null
-      } else {
-        // Need to extend.
-        if (!ext) ext = new Map(env)
-        // Within the same atom, two same-name vars must agree.
-        const seenInExt = ext.get(t.name)
-        if (seenInExt !== undefined) {
-          if (!valueEq(seenInExt, v)) return null
-        } else {
-          ext.set(t.name, v)
-        }
-      }
+      const next = unifyVar(t.name, v, env, ext)
+      if (next === UNIFY_FAIL) return null
+      if (next !== UNIFY_OK_NO_EXT) ext = next
     }
     // wildcard: no constraint
   }
   return ext ?? env
+}
+
+/** Sentinels pour le retour de unifyVar (distincts de null/Env). */
+const UNIFY_FAIL: unique symbol = Symbol('unify-fail')
+const UNIFY_OK_NO_EXT: unique symbol = Symbol('unify-ok-no-ext')
+type UnifyVarResult = Env | typeof UNIFY_FAIL | typeof UNIFY_OK_NO_EXT
+
+/**
+ * Unify une variable de term avec une valeur de tuple. Returns :
+ *   - UNIFY_FAIL si conflict (existing binding != v),
+ *   - UNIFY_OK_NO_EXT si binding existant compatible (pas de nouveau ext),
+ *   - Env (le ext étendu) si nouveau binding ajouté.
+ */
+function unifyVar(name: string, v: DatalogValue, env: Env, ext: Env | null): UnifyVarResult {
+  const existing = env.get(name)
+  if (existing !== undefined) {
+    return valueEq(existing, v) ? UNIFY_OK_NO_EXT : UNIFY_FAIL
+  }
+  // Need to extend.
+  const target = ext ?? new Map(env)
+  // Within the same atom, two same-name vars must agree.
+  const seenInExt = target.get(name)
+  if (seenInExt !== undefined) {
+    return valueEq(seenInExt, v) ? target : UNIFY_FAIL
+  }
+  target.set(name, v)
+  return target
 }
 
 /**
