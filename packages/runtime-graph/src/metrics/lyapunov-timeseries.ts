@@ -69,6 +69,12 @@ const DEFAULT_OPTIONS: Required<LyapunovTimeseriesOptions> = {
  * Calcule le Lyapunov 1D pour chaque série time-series du snapshot.
  * Pure — déterministe pour un snapshot donné.
  */
+interface DenseSeries {
+  kind: LatencySeriesFact['kind']
+  key: string
+  values: number[]
+}
+
 export function lyapunovTimeseries(
   snap: RuntimeSnapshot,
   options: LyapunovTimeseriesOptions = {},
@@ -81,8 +87,23 @@ export function lyapunovTimeseries(
     return []
   }
 
-  // Reconstruct dense series : (kind, key) → values[bucketCount]
-  const dense = new Map<string, { kind: LatencySeriesFact['kind']; key: string; values: number[] }>()
+  const dense = buildDenseSeries(series, bucketCount, opts.metric)
+  const out: LyapunovTimeseriesFact[] = []
+  for (const ds of dense.values()) {
+    const fact = computeLyapunovFact(ds, opts.minObservations)
+    if (fact) out.push(fact)
+  }
+  out.sort(compareLyapunovFact)
+  return out
+}
+
+/** Reconstruct dense series : (kind, key) → values[bucketCount]. */
+function buildDenseSeries(
+  series: ReadonlyArray<LatencySeriesFact>,
+  bucketCount: number,
+  metric: 'count' | 'meanLatencyMs',
+): Map<string, DenseSeries> {
+  const dense = new Map<string, DenseSeries>()
   for (const f of series) {
     const id = `${f.kind}\x00${f.key}`
     let entry = dense.get(id)
@@ -91,55 +112,56 @@ export function lyapunovTimeseries(
       dense.set(id, entry)
     }
     if (f.bucketIdx >= 0 && f.bucketIdx < bucketCount) {
-      entry.values[f.bucketIdx] = opts.metric === 'count' ? f.count : f.meanLatencyMs
+      entry.values[f.bucketIdx] = metric === 'count' ? f.count : f.meanLatencyMs
     }
   }
+  return dense
+}
 
-  const out: LyapunovTimeseriesFact[] = []
+function computeLyapunovFact(
+  ds: DenseSeries,
+  minObservations: number,
+): LyapunovTimeseriesFact | null {
+  const observations = ds.values.filter((v) => v > 0).length
+  if (observations < minObservations) return null
 
-  for (const { kind, key, values } of dense.values()) {
-    const observations = values.filter(v => v > 0).length
-    if (observations < opts.minObservations) continue
-
-    // σ = standard deviation of the series
-    const mean = values.reduce((s, x) => s + x, 0) / values.length
-    const variance = values.reduce((s, x) => s + (x - mean) ** 2, 0) / values.length
-    const stdDev = Math.sqrt(variance)
-    if (stdDev === 0) {
-      // Constant series — perfectly stable, λ = 0
-      out.push({
-        kind, key,
-        observations,
-        stdDevX1000: 0,
-        lambdaX1000: 0,
-      })
-      continue
-    }
-
-    // λ_ts = mean over t of log(1 + |x[t+1] - x[t]| / σ)
-    let logSum = 0
-    let stepCount = 0
-    for (let t = 0; t < values.length - 1; t++) {
-      const d = Math.abs(values[t + 1] - values[t]) / stdDev
-      logSum += Math.log(1 + d)
-      stepCount++
-    }
-    const lambda = stepCount === 0 ? 0 : logSum / stepCount
-
-    out.push({
-      kind, key,
-      observations,
-      stdDevX1000: Math.floor(stdDev * 1000),
-      lambdaX1000: Math.floor(lambda * 1000),
-    })
+  const stdDev = computeStdDev(ds.values)
+  if (stdDev === 0) {
+    // Constant series — perfectly stable, λ = 0.
+    return { kind: ds.kind, key: ds.key, observations, stdDevX1000: 0, lambdaX1000: 0 }
   }
 
-  // Determinism : sort by lambda desc, then key
-  out.sort((a, b) =>
-    b.lambdaX1000 - a.lambdaX1000
-      || a.kind.localeCompare(b.kind)
-      || a.key.localeCompare(b.key),
-  )
+  const lambda = computeLambda(ds.values, stdDev)
+  return {
+    kind: ds.kind,
+    key: ds.key,
+    observations,
+    stdDevX1000: Math.floor(stdDev * 1000),
+    lambdaX1000: Math.floor(lambda * 1000),
+  }
+}
 
-  return out
+function computeStdDev(values: number[]): number {
+  const mean = values.reduce((s, x) => s + x, 0) / values.length
+  const variance = values.reduce((s, x) => s + (x - mean) ** 2, 0) / values.length
+  return Math.sqrt(variance)
+}
+
+/** λ_ts = mean over t of log(1 + |x[t+1] - x[t]| / σ). */
+function computeLambda(values: number[], stdDev: number): number {
+  let logSum = 0
+  let stepCount = 0
+  for (let t = 0; t < values.length - 1; t++) {
+    const d = Math.abs(values[t + 1] - values[t]) / stdDev
+    logSum += Math.log(1 + d)
+    stepCount++
+  }
+  return stepCount === 0 ? 0 : logSum / stepCount
+}
+
+/** Determinism : lambda desc, then kind, then key. */
+function compareLyapunovFact(a: LyapunovTimeseriesFact, b: LyapunovTimeseriesFact): number {
+  return b.lambdaX1000 - a.lambdaX1000
+    || a.kind.localeCompare(b.kind)
+    || a.key.localeCompare(b.key)
 }

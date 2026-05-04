@@ -5,12 +5,13 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-04T00:07:54Z
+Last update : 2026-05-04T00:09:23Z
 
 ## By type
 
 ### `refactor` (50)
 
+- **5ea3ad1** refactor(codegraph-mcp): split codegraphMemoryRecall (cyclo 17→5, cog 25→3) — memory.ts cleared — 2026-05-04
 - **fae254e** refactor(codegraph): split extractFunctionComplexityFileBundle (cyclo 17→4, cog 25→4) — function-complexity.ts cleared — 2026-05-04
 - **8dcc063** refactor(adr-toolkit): split detectLayout (cyclo 17→4, cog 27→3) — init.ts cleared — 2026-05-04
 - **9d26278** refactor(codegraph-mcp): split codegraphChangesSince (cyclo 18→5, cog 27→3) — changes-since.ts cleared — 2026-05-04
@@ -30,11 +31,11 @@ Last update : 2026-05-04T00:07:54Z
 - **fcb7141** refactor(codegraph): split findReachablePaths (cyclo 21→3, cog 34→1) — reachability.ts cleared — 2026-05-04
 - **0047e61** refactor(codegraph): split validateStore (cyclo 22→4, cog 27→3) — store.ts cleared — 2026-05-04
 - **a73b0b8** refactor(codegraph-mcp): split codegraphTruthPointFor (cyclo 22→4, cog 26→1) — truth-point.ts cleared — 2026-05-04
-- **9e41eaa** refactor(codegraph): split loadConfig (cyclo 21→4, cog 38→3) — _shared.ts cleared — 2026-05-04
 
 
 ## Full history
 
+- **5ea3ad1** refactor(codegraph-mcp): split codegraphMemoryRecall (cyclo 17→5, cog 25→3) — memory.ts cleared — 2026-05-04
 - **fae254e** refactor(codegraph): split extractFunctionComplexityFileBundle (cyclo 17→4, cog 25→4) — function-complexity.ts cleared — 2026-05-04
 - **8dcc063** refactor(adr-toolkit): split detectLayout (cyclo 17→4, cog 27→3) — init.ts cleared — 2026-05-04
 - **9d26278** refactor(codegraph-mcp): split codegraphChangesSince (cyclo 18→5, cog 27→3) — changes-since.ts cleared — 2026-05-04
@@ -84,4 +85,3 @@ Last update : 2026-05-04T00:07:54Z
 - **e02af8d** refactor(codegraph): split computeComponentMetrics (cyclo 36→4, cog 44→0) — component-metrics.ts bomb-free — 2026-05-04
 - **13162d1** refactor(codegraph): split extractTaintedVarsFileBundle (cyclo 37→6, cog 62→7) — tainted-vars.ts bomb-free — 2026-05-04
 - **4e81398** refactor(codegraph): split analyzeCoChangeSync (cyclo 40→7, cog 54→1) — co-change.ts bomb-free — 2026-05-04
-- **384b28a** refactor(codegraph): split extractSecurityPatternsFileBundle (cyclo 41→2, cog 119→1) — security-patterns.ts bomb-free — 2026-05-04
