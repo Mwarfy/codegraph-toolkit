@@ -102,6 +102,26 @@ export interface DatalogDetectorResults {
     literalValue?: string
     refExpression?: string
   }>
+  /** Barrel files avec leurs consumers aggregés cross-file. */
+  barrels: Array<{
+    file: string
+    reExportCount: number
+    consumers: string[]
+    consumerCount: number
+    lowValue: boolean
+  }>
+  /** Env-var usages aggrégés par-name avec readers + isSecret. */
+  envUsage: Array<{
+    name: string
+    readers: Array<{
+      file: string
+      symbol: string
+      line: number
+      hasDefault: boolean
+      wrappedIn?: string
+    }>
+    isSecret: boolean
+  }>
   stats: {
     extractMs: number
     evalMs: number
@@ -136,11 +156,14 @@ export async function runDatalogDetectors(
     functionComplexities: [],
     hardcodedSecretCandidates: [],
     eventListenerSiteCandidates: [],
+    barrelFiles: [],
+    importEdges: [],
+    envVarReads: [],
   }
   for (const sf of opts.project.getSourceFiles()) {
     const rel = relativize(sf.getFilePath(), opts.rootDir)
     if (!rel || !fileSet.has(rel)) continue
-    const b = extractAstFactsBundle(sf as SourceFile, rel)
+    const b = extractAstFactsBundle(sf as SourceFile, rel, opts.rootDir)
     merged.numericLiterals.push(...b.numericLiterals)
     merged.binaryExpressions.push(...b.binaryExpressions)
     merged.exemptionLines.push(...b.exemptionLines)
@@ -154,6 +177,9 @@ export async function runDatalogDetectors(
     merged.functionComplexities.push(...b.functionComplexities)
     merged.hardcodedSecretCandidates.push(...b.hardcodedSecretCandidates)
     merged.eventListenerSiteCandidates.push(...b.eventListenerSiteCandidates)
+    merged.barrelFiles.push(...b.barrelFiles)
+    merged.importEdges.push(...b.importEdges)
+    merged.envVarReads.push(...b.envVarReads)
   }
   const extractMs = performance.now() - t0
 
@@ -231,6 +257,17 @@ export async function runDatalogDetectors(
     merged.eventListenerSiteCandidates.map((e) =>
       [e.file, e.line, safe(e.symbol), safe(e.callee), e.isMethodCall, safe(e.receiver),
        e.kind, safe(e.literalValue), safe(e.refExpression)].join('\t'),
+    ).join('\n'),
+  )
+  factsByRelation.set('BarrelFileFact',
+    merged.barrelFiles.map((b) => [b.file, b.reExportCount].join('\t')).join('\n'),
+  )
+  factsByRelation.set('ImportEdgeFact',
+    merged.importEdges.map((e) => [e.fromFile, e.toFile].join('\t')).join('\n'),
+  )
+  factsByRelation.set('EnvVarRead',
+    merged.envVarReads.map((r) =>
+      [r.file, r.line, r.col, safe(r.varName), safe(r.symbol), r.hasDefault, safe(r.wrappedIn)].join('\t'),
     ).join('\n'),
   )
 
@@ -358,6 +395,62 @@ export async function runDatalogDetectors(
     length: Number(t[5]),
   })))
 
+  // ─── Barrels — aggregation cross-file (consumers per barrel) ─────────
+  const barrelOutTuples = result.outputs.get('BarrelFileOut') ?? []
+  const importEdgeTuples = result.outputs.get('ImportEdgeOut') ?? []
+  const BARREL_THRESHOLD = 2
+  const barrelSet = new Map<string, number>()
+  for (const t of barrelOutTuples) {
+    barrelSet.set(String(t[0]), Number(t[1]))
+  }
+  const consumers = new Map<string, Set<string>>()
+  for (const f of barrelSet.keys()) consumers.set(f, new Set())
+  for (const t of importEdgeTuples) {
+    const from = String(t[0])
+    const to = String(t[1])
+    if (from === to) continue
+    if (barrelSet.has(to)) consumers.get(to)!.add(from)
+  }
+  const barrels: DatalogDetectorResults['barrels'] = []
+  for (const [file, reExportCount] of barrelSet) {
+    const cs = [...(consumers.get(file) ?? [])].sort()
+    barrels.push({
+      file, reExportCount,
+      consumers: cs,
+      consumerCount: cs.length,
+      lowValue: cs.length < BARREL_THRESHOLD,
+    })
+  }
+  barrels.sort((a, b) => a.file < b.file ? -1 : a.file > b.file ? 1 : 0)
+
+  // ─── EnvUsage — aggregation cross-file (readers per env-var-name) ────
+  const envReadTuples = result.outputs.get('EnvVarReadOut') ?? []
+  const SECRET_TOKENS = ['KEY', 'TOKEN', 'SECRET', 'PASSWORD', 'CREDENTIAL', 'PRIVATE', 'DSN']
+  const byName = new Map<string, DatalogDetectorResults['envUsage'][number]['readers']>()
+  for (const t of envReadTuples) {
+    const file = String(t[0])
+    const line = Number(t[1])
+    // t[2] = col (used only for Datalog tuple uniqueness, dropped here)
+    const name = String(t[3])
+    const symbol = String(t[4])
+    const hasDefault = Number(t[5]) === 1
+    const wrappedIn = String(t[6])
+    if (!byName.has(name)) byName.set(name, [])
+    const reader: DatalogDetectorResults['envUsage'][number]['readers'][number] = {
+      file, symbol, line, hasDefault,
+    }
+    if (wrappedIn) reader.wrappedIn = wrappedIn
+    byName.get(name)!.push(reader)
+  }
+  const envUsage: DatalogDetectorResults['envUsage'] = []
+  for (const [name, readers] of byName) {
+    readers.sort((a, b) => a.file !== b.file ? (a.file < b.file ? -1 : 1) : a.line - b.line)
+    const upper = name.toUpperCase()
+    const isSecret = SECRET_TOKENS.some((tok) => upper.includes(tok))
+    envUsage.push({ name, readers, isSecret })
+  }
+  envUsage.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
+
   const eventListenerSites = fileLineSort((result.outputs.get('EventListenerSiteOut') ?? []).map((t: Tuple) => {
     const isMethodCall = Number(t[4]) === 1
     const receiver = String(t[5])
@@ -393,7 +486,10 @@ export async function runDatalogDetectors(
     merged.longFunctionCandidates.length +
     merged.functionComplexities.length +
     merged.hardcodedSecretCandidates.length +
-    merged.eventListenerSiteCandidates.length
+    merged.eventListenerSiteCandidates.length +
+    merged.barrelFiles.length +
+    merged.importEdges.length +
+    merged.envVarReads.length
   const tuplesOut =
     magicNumbers.length +
     deadCodeIdenticalSubexpressions.length +
@@ -405,7 +501,9 @@ export async function runDatalogDetectors(
     longFunctions.length +
     functionComplexities.length +
     hardcodedSecrets.length +
-    eventListenerSites.length
+    eventListenerSites.length +
+    barrels.length +
+    envUsage.length
 
   return {
     magicNumbers,
@@ -419,6 +517,8 @@ export async function runDatalogDetectors(
     functionComplexities,
     hardcodedSecrets,
     eventListenerSites,
+    barrels,
+    envUsage,
     stats: { extractMs, evalMs, tuplesIn, tuplesOut },
   }
 }

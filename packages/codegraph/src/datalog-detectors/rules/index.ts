@@ -98,6 +98,16 @@ export const SCHEMA_DL = `// AST primitive facts — extraits par ast-facts-visi
   kind:symbol, literalValue:symbol, refExpression:symbol)
 .input EventListenerSiteCandidate
 
+.decl BarrelFileFact(file:symbol, reExportCount:number)
+.input BarrelFileFact
+
+.decl ImportEdgeFact(fromFile:symbol, toFile:symbol)
+.input ImportEdgeFact
+
+.decl EnvVarRead(file:symbol, line:number, col:number, varName:symbol, sym:symbol,
+  hasDefault:number, wrappedIn:symbol)
+.input EnvVarRead
+
 // ─── Hybrid outputs ─────────────────────────────────────────────────────────
 
 .decl SanitizerOut(file:symbol, line:number, callee:symbol, containingSymbol:symbol)
@@ -121,6 +131,18 @@ export const SCHEMA_DL = `// AST primitive facts — extraits par ast-facts-visi
   callee:symbol, isMethodCall:number, receiver:symbol,
   kind:symbol, literalValue:symbol, refExpression:symbol)
 .output EventListenerSiteOut
+
+// Barrel + import edges sont passthrough — aggregation cross-file faite
+// main thread (group-by file pour les consumers).
+.decl BarrelFileOut(file:symbol, reExportCount:number)
+.output BarrelFileOut
+
+.decl ImportEdgeOut(fromFile:symbol, toFile:symbol)
+.output ImportEdgeOut
+
+.decl EnvVarReadOut(file:symbol, line:number, col:number, varName:symbol, sym:symbol,
+  hasDefault:number, wrappedIn:symbol)
+.output EnvVarReadOut
 `
 
 // Convention engine : variables capitalisées, literals (numbers, strings) inline.
@@ -281,6 +303,18 @@ EventListenerSiteOut(F, L, Sym, Callee, IsMethod, Receiver, Kind, Lit, Ref) :-
   EventListenerSiteCandidate(F, L, Sym, Callee, IsMethod, Receiver, Kind, Lit, Ref).
 `
 
+// barrels + import-edges + env-usage : pass-through. Aggregation par-key
+// (consumers per barrel, readers per env-var) faite main-thread.
+export const BARRELS_DL = `
+BarrelFileOut(F, ReExp) :- BarrelFileFact(F, ReExp).
+ImportEdgeOut(From, To) :- ImportEdgeFact(From, To).
+`
+
+export const ENV_USAGE_DL = `
+EnvVarReadOut(F, L, Col, Name, Sym, HasDef, Wrapped) :-
+  EnvVarRead(F, L, Col, Name, Sym, HasDef, Wrapped).
+`
+
 export const ALL_RULES_DL = [
   SCHEMA_DL,
   MAGIC_NUMBERS_DL,
@@ -294,4 +328,6 @@ export const ALL_RULES_DL = [
   FUNCTION_COMPLEXITY_DL,
   HARDCODED_SECRETS_DL,
   EVENT_LISTENER_SITES_DL,
+  BARRELS_DL,
+  ENV_USAGE_DL,
 ].join('\n')

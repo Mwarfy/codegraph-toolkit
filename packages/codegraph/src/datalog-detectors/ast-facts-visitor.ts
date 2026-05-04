@@ -22,7 +22,10 @@
  */
 
 import { type SourceFile, Node, SyntaxKind } from 'ts-morph'
-import { findContainingSymbol as sharedFindContainingSymbol } from '../extractors/_shared/ast-helpers.js'
+import {
+  findContainingSymbol as sharedFindContainingSymbol,
+  buildLineToSymbol,
+} from '../extractors/_shared/ast-helpers.js'
 
 // ─── Tuple types ────────────────────────────────────────────────────────────
 
@@ -209,6 +212,45 @@ export interface FunctionComplexityFact {
 }
 
 /**
+ * Barrel file fact — émis seulement si TOUS les top-level statements
+ * sont des re-exports (pas de declarations). Schéma :
+ *   .decl BarrelFileFact(file:symbol, reExportCount:number)
+ */
+export interface BarrelFileFact {
+  file: string
+  reExportCount: number
+}
+
+/**
+ * Resolved import edge — pour count consumers per barrel + autres analyses
+ * cross-file. Schéma :
+ *   .decl ImportEdgeFact(fromFile:symbol, toFile:symbol)
+ */
+export interface ImportEdgeFact {
+  fromFile: string
+  toFile: string
+}
+
+/**
+ * Env var read fact — `process.env.X` ou `process.env['X']`. Aggrégé
+ * par-name côté runner. Schéma :
+ *   .decl EnvVarRead(file:symbol, line:number, varName:symbol, sym:symbol,
+ *     hasDefault:number, wrappedIn:symbol)
+ */
+export interface EnvVarReadFact {
+  file: string
+  line: number
+  /** Column number (start offset) — disambigue plusieurs `process.env.X`
+   *  sur la même ligne. Datalog dedupe les tuples identiques. */
+  col: number
+  varName: string
+  symbol: string
+  hasDefault: number
+  /** Nom du callee si l'env access est arg d'un call (parseInt, Number, ...). */
+  wrappedIn: string
+}
+
+/**
  * Event listener site candidate — `bus.on('e', h)`, `subscribe('e', h)`, etc.
  *
  * Schéma : .decl EventListenerSiteCandidate(file:symbol, line:number,
@@ -261,6 +303,9 @@ export interface AstFactsBundle {
   functionComplexities: FunctionComplexityFact[]
   hardcodedSecretCandidates: HardcodedSecretCandidateFact[]
   eventListenerSiteCandidates: EventListenerSiteCandidateFact[]
+  barrelFiles: BarrelFileFact[]
+  importEdges: ImportEdgeFact[]
+  envVarReads: EnvVarReadFact[]
 }
 
 // ─── Visitor ────────────────────────────────────────────────────────────────
@@ -291,7 +336,11 @@ const EXEMPTION_MARKERS = new Set([
  * Visiteur unique : 1 passe AST → tous les tuples nécessaires aux détecteurs
  * supportés. Pure (read-only sur sf), idempotente, déterministe.
  */
-export function extractAstFactsBundle(sf: SourceFile, relPath: string): AstFactsBundle {
+export function extractAstFactsBundle(
+  sf: SourceFile,
+  relPath: string,
+  rootDir: string = '',
+): AstFactsBundle {
   const numericLiterals: NumericLiteralFact[] = []
   const binaryExpressions: BinaryExpressionFact[] = []
   const exemptionLines: ExemptionLineFact[] = []
@@ -305,6 +354,9 @@ export function extractAstFactsBundle(sf: SourceFile, relPath: string): AstFacts
   const functionComplexities: FunctionComplexityFact[] = []
   const hardcodedSecretCandidates: HardcodedSecretCandidateFact[] = []
   const eventListenerSiteCandidates: EventListenerSiteCandidateFact[] = []
+  const barrelFiles: BarrelFileFact[] = []
+  const importEdges: ImportEdgeFact[] = []
+  const envVarReads: EnvVarReadFact[] = []
 
   const isTest = TEST_FILE_RE.test(relPath)
   if (isTest) fileTags.push({ file: relPath, tag: 'test' })
@@ -330,6 +382,10 @@ export function extractAstFactsBundle(sf: SourceFile, relPath: string): AstFacts
   // event-listener-sites legacy n'a PAS de filtre test files — capturé même
   // dans tests/ (les tests subscribers comptent).
   visitEventListenerSiteCandidates(sf, relPath, eventListenerSiteCandidates)
+  // barrels + import-edges : pas de filtre test files non plus.
+  visitBarrelsAndImports(sf, relPath, rootDir, barrelFiles, importEdges)
+  // env-usage : capture process.env.X partout (legacy ne filtre pas).
+  visitEnvVarReads(sf, relPath, envVarReads)
 
   return {
     numericLiterals, binaryExpressions, exemptionLines, fileTags,
@@ -338,6 +394,7 @@ export function extractAstFactsBundle(sf: SourceFile, relPath: string): AstFacts
     longFunctionCandidates, functionComplexities,
     hardcodedSecretCandidates,
     eventListenerSiteCandidates,
+    barrelFiles, importEdges, envVarReads,
   }
 }
 
@@ -867,6 +924,151 @@ function computeCognitive(node: Node): number {
   }
   walk(node, 0)
   return total
+}
+
+// ─── Barrels + import edges (cross-file resolution) ────────────────────────
+
+function visitBarrelsAndImports(
+  sf: SourceFile,
+  relPath: string,
+  rootDir: string,
+  barrelsOut: BarrelFileFact[],
+  edgesOut: ImportEdgeFact[],
+): void {
+  // Import + Export edges resolved via ts-morph
+  for (const decl of sf.getImportDeclarations()) {
+    const target = decl.getModuleSpecifierSourceFile()
+    if (!target) continue
+    const toFile = relativizePath(target.getFilePath() as string, rootDir)
+    if (toFile) edgesOut.push({ fromFile: relPath, toFile })
+  }
+  for (const decl of sf.getExportDeclarations()) {
+    const target = decl.getModuleSpecifierSourceFile()
+    if (!target) continue
+    const toFile = relativizePath(target.getFilePath() as string, rootDir)
+    if (toFile) edgesOut.push({ fromFile: relPath, toFile })
+  }
+
+  // Barrel = TOUS les top-level statements sont des ExportDeclaration avec
+  // module specifier. Pas de declaration. Réplique exact legacy.
+  const statements = sf.getStatements()
+  if (statements.length === 0) return
+  let reExports = 0
+  for (const stmt of statements) {
+    if (stmt.getKind() !== SyntaxKind.ExportDeclaration) return
+    const mod = (stmt as unknown as { getModuleSpecifierValue?: () => string | undefined })
+      .getModuleSpecifierValue?.()
+    if (!mod) return
+    reExports++
+  }
+  if (reExports === 0) return
+  barrelsOut.push({ file: relPath, reExportCount: reExports })
+}
+
+function relativizePath(absPath: string, rootDir: string): string | null {
+  if (!rootDir) return null
+  const normalized = absPath.replace(/\\/g, '/')
+  const root = rootDir.replace(/\\/g, '/')
+  if (!normalized.startsWith(root)) return null
+  return normalized.slice(root.length + 1)
+}
+
+// ─── Env var reads (process.env.X) ─────────────────────────────────────────
+
+const ENV_NAME_RE = /^[A-Z_][A-Z0-9_]*$/
+
+function isProcessEnvNode(node: Node): boolean {
+  if (!Node.isPropertyAccessExpression(node)) return false
+  const left = node.getExpression()
+  const right = node.getName()
+  if (right !== 'env') return false
+  if (!Node.isIdentifier(left)) return false
+  return left.getText() === 'process'
+}
+
+function envParentHasDefault(node: Node): number {
+  const parent = node.getParent()
+  if (!parent || !Node.isBinaryExpression(parent)) return 0
+  const op = parent.getOperatorToken().getKind()
+  if (op !== SyntaxKind.QuestionQuestionToken && op !== SyntaxKind.BarBarToken) return 0
+  // L'env access doit être à gauche : sinon `default ?? process.env.FOO`
+  // signifie que process.env est le default lui-même.
+  return parent.getLeft() === node ? 1 : 0
+}
+
+function envWrappingCallName(node: Node): string {
+  // Remonte au-dessus d'un éventuel `?? 'default'` parent.
+  let target: Node = node
+  const direct = target.getParent()
+  if (direct && Node.isBinaryExpression(direct)) {
+    const op = direct.getOperatorToken().getKind()
+    if ((op === SyntaxKind.QuestionQuestionToken || op === SyntaxKind.BarBarToken)
+        && direct.getLeft() === target) {
+      target = direct
+    }
+  }
+  const parent = target.getParent()
+  if (!parent || !Node.isCallExpression(parent)) return ''
+  if (!parent.getArguments().includes(target as never)) return ''
+  const callee = parent.getExpression()
+  if (Node.isIdentifier(callee)) return callee.getText()
+  if (Node.isPropertyAccessExpression(callee)) return callee.getName()
+  return ''
+}
+
+function visitEnvVarReads(
+  sf: SourceFile,
+  relPath: string,
+  out: EnvVarReadFact[],
+): void {
+  // Court-circuit textuel — comme legacy.
+  const content = sf.getFullText()
+  if (!content.includes('process.env')) return
+
+  // Legacy utilise buildLineToSymbol (line→symbol via put-if-absent : indexe
+  // FunctionDecl, ClassMethod, et VariableDecl-with-fnLike-init — pas les
+  // arrows inline en arg de call comme `app.get('/x', (req, res) => {...})`).
+  // → utiliser le SAME helper pour BIT-IDENTICAL parity.
+  const lineToSymbol = buildLineToSymbol(sf)
+
+  sf.forEachDescendant((node) => {
+    const k = node.getKind()
+    if (k === SyntaxKind.PropertyAccessExpression) {
+      const obj = (node as import('ts-morph').PropertyAccessExpression).getExpression()
+      if (!isProcessEnvNode(obj)) return
+      const name = (node as import('ts-morph').PropertyAccessExpression).getName()
+      if (!name || !ENV_NAME_RE.test(name) || name.length < 2) return
+      const line = node.getStartLineNumber()
+      out.push({
+        file: relPath,
+        line,
+        col: node.getStart(),
+        varName: name,
+        symbol: lineToSymbol.get(line) ?? '',
+        hasDefault: envParentHasDefault(node),
+        wrappedIn: envWrappingCallName(node),
+      })
+    } else if (k === SyntaxKind.ElementAccessExpression) {
+      const ea = node as import('ts-morph').ElementAccessExpression
+      const obj = ea.getExpression()
+      if (!isProcessEnvNode(obj)) return
+      const arg = ea.getArgumentExpression()
+      if (!arg) return
+      if (!Node.isStringLiteral(arg) && !Node.isNoSubstitutionTemplateLiteral(arg)) return
+      const name = (arg as import('ts-morph').StringLiteral).getLiteralText()
+      if (!name || !ENV_NAME_RE.test(name) || name.length < 2) return
+      const line = node.getStartLineNumber()
+      out.push({
+        file: relPath,
+        line,
+        col: node.getStart(),
+        varName: name,
+        symbol: lineToSymbol.get(line) ?? '',
+        hasDefault: envParentHasDefault(node),
+        wrappedIn: envWrappingCallName(node),
+      })
+    }
+  })
 }
 
 // ─── Event listener sites (Phase 5 Tier 17) ────────────────────────────────

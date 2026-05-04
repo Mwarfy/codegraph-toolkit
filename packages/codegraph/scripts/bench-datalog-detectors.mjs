@@ -19,6 +19,8 @@ import { extractLongFunctionsFileBundle } from '../dist/extractors/long-function
 import { extractFunctionComplexityFileBundle } from '../dist/extractors/function-complexity.js'
 import { extractHardcodedSecretsFileBundle } from '../dist/extractors/hardcoded-secrets.js'
 import { scanListenerSitesInSourceFile } from '../dist/extractors/event-listener-sites.js'
+import { analyzeBarrels } from '../dist/extractors/barrels.js'
+import { analyzeEnvUsage } from '../dist/extractors/env-usage.js'
 import { runDatalogDetectors } from '../dist/datalog-detectors/runner.js'
 import { resolve } from 'node:path'
 
@@ -74,8 +76,12 @@ for (const sf of project.getSourceFiles()) {
   legacyComplx.push(...extractFunctionComplexityFileBundle(sf, rel))
   legacySecret.push(...extractHardcodedSecretsFileBundle(sf, rel).secrets)
 }
+// barrels + env-usage : extracteurs cross-file. Appel direct (les analyze*
+// reçoivent rootDir, files, project, et font leur propre cross-file scan).
+const legacyBarrels = await analyzeBarrels(rootDir, files, project)
+const legacyEnvUsage = await analyzeEnvUsage(rootDir, files, project)
 const legacyMs = performance.now() - tLegacy0
-console.log(`  legacy 10 detectors (${legacyMs.toFixed(1)}ms)`)
+console.log(`  legacy 13 detectors (${legacyMs.toFixed(1)}ms)`)
 
 // DATALOG
 const tDl0 = performance.now()
@@ -129,7 +135,18 @@ const ok10 = bidirDiff(legacySecret, dl.hardcodedSecrets,
 const ok11 = bidirDiff(legacyEvtListen, dl.eventListenerSites,
   (e) => `${e.file}\t${e.line}\t${e.symbol}\t${normWs(e.callee)}\t${e.kind}\t${e.literalValue ?? ''}\t${e.refExpression ?? ''}`,
   'EventListenerSite')
+const ok12 = bidirDiff(legacyBarrels, dl.barrels,
+  (b) => `${b.file}\t${b.reExportCount}\t${b.consumerCount}\t${b.lowValue}\t${[...b.consumers].sort().join(',')}`,
+  'Barrel')
+// env-usage compare l'array sérialisé : par-name, readers (file, sym, line, hasDefault, wrappedIn?)
+const envNorm = (u) => {
+  const rs = [...u.readers].sort((a, b) => a.file !== b.file ? (a.file < b.file ? -1 : 1) : a.line - b.line)
+    .map((r) => `${r.file}|${r.symbol}|${r.line}|${r.hasDefault}|${r.wrappedIn ?? ''}`)
+    .join(';')
+  return `${u.name}\t${u.isSecret}\t${rs}`
+}
+const ok13 = bidirDiff(legacyEnvUsage, dl.envUsage, envNorm, 'EnvUsage')
 
-const allOk = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10 && ok11
+const allOk = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10 && ok11 && ok12 && ok13
 console.log(`\n  Total: legacy=${legacyMs.toFixed(0)}ms vs datalog=${dlMs.toFixed(0)}ms (ratio: ${(dlMs/legacyMs).toFixed(2)}x)${allOk ? ' ✓' : ' ✗'}`)
 if (!allOk) process.exit(1)
