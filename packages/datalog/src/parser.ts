@@ -139,25 +139,34 @@ class Lexer {
     this.advance()                                   // consume opening "
     let out = ''
     while (this.i < this.src.length && this.peek() !== '"') {
-      const c = this.advance()
-      if (c === '\\') {
-        const next = this.advance()
-        if (next === 'n') out += '\n'
-        else if (next === 't') out += '\t'
-        else if (next === '"') out += '"'
-        else if (next === '\\') out += '\\'
-        else this.err('parse.badEscape', `unknown escape \\${next}`, start)
-      } else if (c === '\n') {
-        this.err('parse.newlineInString', 'newline inside string literal', start)
-      } else {
-        out += c
-      }
+      out += this.consumeStringChar(start)
     }
     if (this.peek() !== '"') {
       this.err('parse.unterminatedString', 'string literal is not closed', start)
     }
     this.advance()                                   // consume closing "
     return { kind: 'string', value: out, pos: start }
+  }
+
+  /** Consume 1 char (literal or escape sequence). Throws sur newline raw. */
+  private consumeStringChar(start: SourcePos): string {
+    const c = this.advance()
+    if (c === '\\') return this.decodeEscape(start)
+    if (c === '\n') {
+      this.err('parse.newlineInString', 'newline inside string literal', start)
+    }
+    return c
+  }
+
+  /** Décode `\<x>` après avoir consommé le `\`. */
+  private decodeEscape(start: SourcePos): string {
+    const next = this.advance()
+    if (next === 'n') return '\n'
+    if (next === 't') return '\t'
+    if (next === '"') return '"'
+    if (next === '\\') return '\\'
+    this.err('parse.badEscape', `unknown escape \\${next}`, start)
+    return ''
   }
 
   private readNumber(): Token {

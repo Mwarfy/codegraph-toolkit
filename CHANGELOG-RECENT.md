@@ -5,12 +5,13 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-04T01:03:24Z
+Last update : 2026-05-04T01:04:53Z
 
 ## By type
 
 ### `refactor` (50)
 
+- **0796ef1** refactor(codegraph): split extractAllocationInLoops (cyclo 11→4, cog 27→6) — allocation-in-loop.ts cleared — 2026-05-04
 - **7c57543** refactor(datalog): split unify (cyclo 11→8, cog 34→17) — eval.ts unify cleared — 2026-05-04
 - **e0715bf** refactor(codegraph): split detectHttpEntries (cyclo 12→1, cog 27→0) — data-flows.ts cleared — 2026-05-04
 - **990857f** refactor(codegraph): split printExportsSummary (cyclo 12→4, cog 29→3) — cli/commands/analyze.ts cleared — 2026-05-04
@@ -30,11 +31,11 @@ Last update : 2026-05-04T01:03:24Z
 - **97128ab** refactor(runtime-graph): split lyapunovTimeseries (cyclo 17→7, cog 24→7) — lyapunov-timeseries.ts cleared — 2026-05-04
 - **5ea3ad1** refactor(codegraph-mcp): split codegraphMemoryRecall (cyclo 17→5, cog 25→3) — memory.ts cleared — 2026-05-04
 - **fae254e** refactor(codegraph): split extractFunctionComplexityFileBundle (cyclo 17→4, cog 25→4) — function-complexity.ts cleared — 2026-05-04
-- **8dcc063** refactor(adr-toolkit): split detectLayout (cyclo 17→4, cog 27→3) — init.ts cleared — 2026-05-04
 
 
 ## Full history
 
+- **0796ef1** refactor(codegraph): split extractAllocationInLoops (cyclo 11→4, cog 27→6) — allocation-in-loop.ts cleared — 2026-05-04
 - **7c57543** refactor(datalog): split unify (cyclo 11→8, cog 34→17) — eval.ts unify cleared — 2026-05-04
 - **e0715bf** refactor(codegraph): split detectHttpEntries (cyclo 12→1, cog 27→0) — data-flows.ts cleared — 2026-05-04
 - **990857f** refactor(codegraph): split printExportsSummary (cyclo 12→4, cog 29→3) — cli/commands/analyze.ts cleared — 2026-05-04
@@ -84,4 +85,3 @@ Last update : 2026-05-04T01:03:24Z
 - **df37db7** refactor(codegraph): split diffTypedCalls (cyclo 25→5, cog 30→0) — diff/typed-calls.ts cleared — 2026-05-04
 - **3814233** refactor(codegraph): split findSqlNamingViolations (cyclo 26→3, cog 42→3) — sql-naming.ts bomb-free — 2026-05-04
 - **024b628** refactor(codegraph): split computeModuleMetrics (cyclo 27→4, cog 22→0) — module-metrics.ts bomb-free — 2026-05-04
-- **8a6e1e1** refactor(codegraph): split applyTransitiveReexportCoverage (cyclo 11→4, cog 26→4) — test-coverage.ts FULLY bomb-free — 2026-05-04
