@@ -143,70 +143,14 @@ async function detectLayout(rootDir: string): Promise<DetectedLayout> {
   const has = (p: string) => exists(path.join(rootDir, p))
   const hasGit = await has('.git')
 
-  if ((await has('backend/src')) && (await has('frontend'))) {
-    const srcDirs = ['backend/src']
-    if (await has('shared/src')) srcDirs.push('shared/src')
-    srcDirs.push('frontend')
-    let tsconfigPath = 'tsconfig.json'
-    if (await has('backend/tsconfig.json')) tsconfigPath = 'backend/tsconfig.json'
-    return {
-      kind: 'fullstack-monorepo',
-      srcDirs,
-      tsconfigPath,
-      codegraphInclude: [
-        'backend/src/**/*.ts',
-        ...(await has('shared/src') ? ['shared/src/**/*.ts'] : []),
-        'frontend/**/*.{ts,tsx}',
-      ],
-      codegraphEntryPoints: [
-        'backend/src/index.ts',
-        'frontend/app/**/page.tsx',
-        'frontend/app/**/layout.tsx',
-        'frontend/pages/**/*.tsx',
-      ],
-      hasGit,
-    }
-  }
+  const fullstack = await tryFullstackMonorepo(has, hasGit)
+  if (fullstack) return fullstack
 
-  if ((await has('apps')) || (await has('packages'))) {
-    const srcDirs: string[] = []
-    if (await has('apps')) srcDirs.push('apps')
-    if (await has('packages')) srcDirs.push('packages')
-    let tsconfigPath = 'tsconfig.json'
-    if (!(await has(tsconfigPath))) {
-      if (await has('tsconfig.base.json')) tsconfigPath = 'tsconfig.base.json'
-    }
-    return {
-      kind: 'workspaces-monorepo',
-      srcDirs,
-      tsconfigPath,
-      codegraphInclude: [
-        ...(await has('apps') ? ['apps/**/*.{ts,tsx}'] : []),
-        ...(await has('packages') ? ['packages/**/*.{ts,tsx}'] : []),
-      ],
-      codegraphEntryPoints: [
-        'apps/**/index.ts',
-        'apps/**/main.ts',
-        'packages/**/index.ts',
-      ],
-      hasGit,
-    }
-  }
+  const workspaces = await tryWorkspacesMonorepo(has, hasGit)
+  if (workspaces) return workspaces
 
-  if (await has('src')) {
-    let tsconfigPath = 'tsconfig.json'
-    if (!(await has(tsconfigPath)) && (await has('src/tsconfig.json'))) {
-      tsconfigPath = 'src/tsconfig.json'
-    }
-    return {
-      kind: 'simple',
-      srcDirs: ['src'],
-      tsconfigPath,
-      codegraphInclude: ['src/**/*.{ts,tsx}'],
-      codegraphEntryPoints: ['src/index.ts', 'src/main.ts', 'src/server.ts'],
-      hasGit,
-    }
-  }
+  const simple = await trySimpleSrc(has, hasGit)
+  if (simple) return simple
 
   return {
     kind: 'flat',
@@ -214,6 +158,82 @@ async function detectLayout(rootDir: string): Promise<DetectedLayout> {
     tsconfigPath: 'tsconfig.json',
     codegraphInclude: ['**/*.{ts,tsx}'],
     codegraphEntryPoints: ['index.ts', 'main.ts'],
+    hasGit,
+  }
+}
+
+type HasFn = (p: string) => Promise<boolean>
+
+async function tryFullstackMonorepo(has: HasFn, hasGit: boolean): Promise<DetectedLayout | null> {
+  if (!(await has('backend/src')) || !(await has('frontend'))) return null
+  const srcDirs = ['backend/src']
+  if (await has('shared/src')) srcDirs.push('shared/src')
+  srcDirs.push('frontend')
+  const tsconfigPath = (await has('backend/tsconfig.json'))
+    ? 'backend/tsconfig.json'
+    : 'tsconfig.json'
+  return {
+    kind: 'fullstack-monorepo',
+    srcDirs,
+    tsconfigPath,
+    codegraphInclude: [
+      'backend/src/**/*.ts',
+      ...(await has('shared/src') ? ['shared/src/**/*.ts'] : []),
+      'frontend/**/*.{ts,tsx}',
+    ],
+    codegraphEntryPoints: [
+      'backend/src/index.ts',
+      'frontend/app/**/page.tsx',
+      'frontend/app/**/layout.tsx',
+      'frontend/pages/**/*.tsx',
+    ],
+    hasGit,
+  }
+}
+
+async function tryWorkspacesMonorepo(has: HasFn, hasGit: boolean): Promise<DetectedLayout | null> {
+  const hasApps = await has('apps')
+  const hasPackages = await has('packages')
+  if (!hasApps && !hasPackages) return null
+
+  const srcDirs: string[] = []
+  if (hasApps) srcDirs.push('apps')
+  if (hasPackages) srcDirs.push('packages')
+
+  let tsconfigPath = 'tsconfig.json'
+  if (!(await has(tsconfigPath)) && (await has('tsconfig.base.json'))) {
+    tsconfigPath = 'tsconfig.base.json'
+  }
+
+  return {
+    kind: 'workspaces-monorepo',
+    srcDirs,
+    tsconfigPath,
+    codegraphInclude: [
+      ...(hasApps ? ['apps/**/*.{ts,tsx}'] : []),
+      ...(hasPackages ? ['packages/**/*.{ts,tsx}'] : []),
+    ],
+    codegraphEntryPoints: [
+      'apps/**/index.ts',
+      'apps/**/main.ts',
+      'packages/**/index.ts',
+    ],
+    hasGit,
+  }
+}
+
+async function trySimpleSrc(has: HasFn, hasGit: boolean): Promise<DetectedLayout | null> {
+  if (!(await has('src'))) return null
+  let tsconfigPath = 'tsconfig.json'
+  if (!(await has(tsconfigPath)) && (await has('src/tsconfig.json'))) {
+    tsconfigPath = 'src/tsconfig.json'
+  }
+  return {
+    kind: 'simple',
+    srcDirs: ['src'],
+    tsconfigPath,
+    codegraphInclude: ['src/**/*.{ts,tsx}'],
+    codegraphEntryPoints: ['src/index.ts', 'src/main.ts', 'src/server.ts'],
     hasGit,
   }
 }
