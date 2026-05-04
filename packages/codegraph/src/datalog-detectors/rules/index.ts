@@ -93,6 +93,11 @@ export const SCHEMA_DL = `// AST primitive facts — extraits par ast-facts-visi
   varOrPropName:symbol, sample:symbol, entropyX1000:number, length:number)
 .input HardcodedSecretCandidate
 
+.decl EventListenerSiteCandidate(file:symbol, line:number, sym:symbol,
+  callee:symbol, isMethodCall:number, receiver:symbol,
+  kind:symbol, literalValue:symbol, refExpression:symbol)
+.input EventListenerSiteCandidate
+
 // ─── Hybrid outputs ─────────────────────────────────────────────────────────
 
 .decl SanitizerOut(file:symbol, line:number, callee:symbol, containingSymbol:symbol)
@@ -111,6 +116,11 @@ export const SCHEMA_DL = `// AST primitive facts — extraits par ast-facts-visi
 .decl HardcodedSecretOut(file:symbol, line:number, name:symbol, sample:symbol,
   entropyX1000:number, length:number)
 .output HardcodedSecretOut
+
+.decl EventListenerSiteOut(file:symbol, line:number, sym:symbol,
+  callee:symbol, isMethodCall:number, receiver:symbol,
+  kind:symbol, literalValue:symbol, refExpression:symbol)
+.output EventListenerSiteOut
 `
 
 // Convention engine : variables capitalisées, literals (numbers, strings) inline.
@@ -265,6 +275,12 @@ HardcodedSecretOut(F, L, Name, Sample, Ent, Len) :-
   !ExemptionLine(F, L, "secret-ok").
 `
 
+// event-listener-sites legacy ne filtre PAS test files. Pass-through total.
+export const EVENT_LISTENER_SITES_DL = `
+EventListenerSiteOut(F, L, Sym, Callee, IsMethod, Receiver, Kind, Lit, Ref) :-
+  EventListenerSiteCandidate(F, L, Sym, Callee, IsMethod, Receiver, Kind, Lit, Ref).
+`
+
 export const ALL_RULES_DL = [
   SCHEMA_DL,
   MAGIC_NUMBERS_DL,
@@ -277,4 +293,5 @@ export const ALL_RULES_DL = [
   LONG_FUNCTIONS_DL,
   FUNCTION_COMPLEXITY_DL,
   HARDCODED_SECRETS_DL,
+  EVENT_LISTENER_SITES_DL,
 ].join('\n')

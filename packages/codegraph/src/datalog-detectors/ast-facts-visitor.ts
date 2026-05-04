@@ -209,6 +209,29 @@ export interface FunctionComplexityFact {
 }
 
 /**
+ * Event listener site candidate — `bus.on('e', h)`, `subscribe('e', h)`, etc.
+ *
+ * Schéma : .decl EventListenerSiteCandidate(file:symbol, line:number,
+ *   symbol:symbol, callee:symbol, isMethodCall:number, receiver:symbol,
+ *   kind:symbol, literalValue:symbol, refExpression:symbol)
+ *
+ * - kind ∈ "literal" | "eventConstRef" | "dynamic"
+ * - literalValue : valeur si kind="literal", sinon ""
+ * - refExpression : texte si kind="eventConstRef", sinon ""
+ */
+export interface EventListenerSiteCandidateFact {
+  file: string
+  line: number
+  symbol: string
+  callee: string
+  isMethodCall: number
+  receiver: string
+  kind: string
+  literalValue: string
+  refExpression: string
+}
+
+/**
  * Hardcoded secret candidate (visitor calcule entropy de Shannon, filtre
  * par taille + context). Emit que les candidats qui passent les checks.
  *
@@ -237,6 +260,7 @@ export interface AstFactsBundle {
   longFunctionCandidates: LongFunctionCandidateFact[]
   functionComplexities: FunctionComplexityFact[]
   hardcodedSecretCandidates: HardcodedSecretCandidateFact[]
+  eventListenerSiteCandidates: EventListenerSiteCandidateFact[]
 }
 
 // ─── Visitor ────────────────────────────────────────────────────────────────
@@ -280,6 +304,7 @@ export function extractAstFactsBundle(sf: SourceFile, relPath: string): AstFacts
   const longFunctionCandidates: LongFunctionCandidateFact[] = []
   const functionComplexities: FunctionComplexityFact[] = []
   const hardcodedSecretCandidates: HardcodedSecretCandidateFact[] = []
+  const eventListenerSiteCandidates: EventListenerSiteCandidateFact[] = []
 
   const isTest = TEST_FILE_RE.test(relPath)
   if (isTest) fileTags.push({ file: relPath, tag: 'test' })
@@ -302,6 +327,9 @@ export function extractAstFactsBundle(sf: SourceFile, relPath: string): AstFacts
     )
     visitHardcodedSecretCandidates(sf, relPath, hardcodedSecretCandidates)
   }
+  // event-listener-sites legacy n'a PAS de filtre test files — capturé même
+  // dans tests/ (les tests subscribers comptent).
+  visitEventListenerSiteCandidates(sf, relPath, eventListenerSiteCandidates)
 
   return {
     numericLiterals, binaryExpressions, exemptionLines, fileTags,
@@ -309,6 +337,7 @@ export function extractAstFactsBundle(sf: SourceFile, relPath: string): AstFacts
     sanitizerCandidates, taintSinkCandidates,
     longFunctionCandidates, functionComplexities,
     hardcodedSecretCandidates,
+    eventListenerSiteCandidates,
   }
 }
 
@@ -838,6 +867,72 @@ function computeCognitive(node: Node): number {
   }
   walk(node, 0)
   return total
+}
+
+// ─── Event listener sites (Phase 5 Tier 17) ────────────────────────────────
+
+const EVENT_LISTENER_NAMES = new Set([
+  'on', 'once', 'subscribe', 'addEventListener', 'listen', 'listensTo',
+])
+
+function visitEventListenerSiteCandidates(
+  sf: SourceFile,
+  relPath: string,
+  out: EventListenerSiteCandidateFact[],
+): void {
+  // Court-circuit textuel — comme legacy.
+  const text = sf.getFullText()
+  let hasCandidate = false
+  for (const n of EVENT_LISTENER_NAMES) {
+    if (text.includes(n + '(') || text.includes('.' + n + '(')) {
+      hasCandidate = true
+      break
+    }
+  }
+  if (!hasCandidate) return
+
+  for (const call of sf.getDescendantsOfKind(SyntaxKind.CallExpression)) {
+    const callee = call.getExpression()
+    let calleeName = ''
+    let isMethodCall = 0
+    let receiver = ''
+    if (Node.isIdentifier(callee)) {
+      calleeName = callee.getText()
+    } else if (Node.isPropertyAccessExpression(callee)) {
+      calleeName = callee.getName()
+      isMethodCall = 1
+      receiver = callee.getExpression().getText()
+    } else continue
+    if (!EVENT_LISTENER_NAMES.has(calleeName)) continue
+
+    const args = call.getArguments()
+    if (args.length === 0) continue
+    const arg0 = args[0]
+    const line = call.getStartLineNumber()
+    const symbol = findContainingSymbol(call)
+    const fullCalleeText = isMethodCall === 1 && receiver
+      ? `${receiver}.${calleeName}` : calleeName
+
+    if (Node.isStringLiteral(arg0) || Node.isNoSubstitutionTemplateLiteral(arg0)) {
+      out.push({
+        file: relPath, line, symbol, callee: fullCalleeText,
+        isMethodCall, receiver,
+        kind: 'literal', literalValue: arg0.getLiteralValue(), refExpression: '',
+      })
+    } else if (Node.isPropertyAccessExpression(arg0)) {
+      out.push({
+        file: relPath, line, symbol, callee: fullCalleeText,
+        isMethodCall, receiver,
+        kind: 'eventConstRef', literalValue: '', refExpression: arg0.getText(),
+      })
+    } else {
+      out.push({
+        file: relPath, line, symbol, callee: fullCalleeText,
+        isMethodCall, receiver,
+        kind: 'dynamic', literalValue: '', refExpression: '',
+      })
+    }
+  }
 }
 
 // ─── Hardcoded secrets (entropy + context) ──────────────────────────────────

@@ -219,6 +219,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+be79c7b refactor(codegraph): Phase γ.5 — cleanup workers cold code (Phase β/γ.2/γ.3)
 a2bc182 feat(codegraph): Phase γ.4c — 5 derniers détecteurs ts-morph portés Datalog
 b2a709e feat(codegraph): Phase γ.4b — consolide + 3 nouveaux détecteurs Datalog
 3175c64 feat(codegraph): Phase γ.4 — prototype Datalog detectors (magic-numbers + dead-code)
@@ -230,7 +231,6 @@ c2ab5c7 feat(codegraph): Phase γ.2c — wire les 6 ts-morph détecteurs restant
 d94cab1 feat(codegraph): Phase γ.2 — workers ts-morph via mini-Project local
 9a741e3 feat(codegraph): Phase 2.8 — dead-code + event-emit-sites portés (14/65)
 07b0dcf feat(codegraph): Phase 2.7 — function-complexity + long-functions portés (12/65)
-7366782 feat(codegraph): Phase γ.1 — cost-model auto-tuning LIBY_BSP_WORKERS=auto
 ```
 
 ## Comment contribuer à ce brief

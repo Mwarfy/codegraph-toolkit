@@ -91,6 +91,17 @@ export interface DatalogDetectorResults {
     entropyX1000: number
     length: number
   }>
+  eventListenerSites: Array<{
+    file: string
+    line: number
+    symbol: string
+    callee: string
+    isMethodCall: boolean
+    receiver?: string
+    kind: 'literal' | 'eventConstRef' | 'dynamic'
+    literalValue?: string
+    refExpression?: string
+  }>
   stats: {
     extractMs: number
     evalMs: number
@@ -124,6 +135,7 @@ export async function runDatalogDetectors(
     longFunctionCandidates: [],
     functionComplexities: [],
     hardcodedSecretCandidates: [],
+    eventListenerSiteCandidates: [],
   }
   for (const sf of opts.project.getSourceFiles()) {
     const rel = relativize(sf.getFilePath(), opts.rootDir)
@@ -141,6 +153,7 @@ export async function runDatalogDetectors(
     merged.longFunctionCandidates.push(...b.longFunctionCandidates)
     merged.functionComplexities.push(...b.functionComplexities)
     merged.hardcodedSecretCandidates.push(...b.hardcodedSecretCandidates)
+    merged.eventListenerSiteCandidates.push(...b.eventListenerSiteCandidates)
   }
   const extractMs = performance.now() - t0
 
@@ -212,6 +225,12 @@ export async function runDatalogDetectors(
   factsByRelation.set('HardcodedSecretCandidate',
     merged.hardcodedSecretCandidates.map((h) =>
       [h.file, h.line, safe(h.varOrPropName), safe(h.sample), h.entropyX1000, h.length].join('\t'),
+    ).join('\n'),
+  )
+  factsByRelation.set('EventListenerSiteCandidate',
+    merged.eventListenerSiteCandidates.map((e) =>
+      [e.file, e.line, safe(e.symbol), safe(e.callee), e.isMethodCall, safe(e.receiver),
+       e.kind, safe(e.literalValue), safe(e.refExpression)].join('\t'),
     ).join('\n'),
   )
 
@@ -339,6 +358,28 @@ export async function runDatalogDetectors(
     length: Number(t[5]),
   })))
 
+  const eventListenerSites = fileLineSort((result.outputs.get('EventListenerSiteOut') ?? []).map((t: Tuple) => {
+    const isMethodCall = Number(t[4]) === 1
+    const receiver = String(t[5])
+    const kind = String(t[6]) as 'literal' | 'eventConstRef' | 'dynamic'
+    const literalValue = String(t[7])
+    const refExpression = String(t[8])
+    const out: DatalogDetectorResults['eventListenerSites'][number] = {
+      file: String(t[0]),
+      line: Number(t[1]),
+      symbol: String(t[2]),
+      callee: String(t[3]),
+      isMethodCall,
+      kind,
+    }
+    // Match legacy : receiver/literalValue/refExpression sont OPTIONAL
+    // (omis si vide). Préserve la shape EventListenerSite.
+    if (isMethodCall && receiver) out.receiver = receiver
+    if (kind === 'literal' && literalValue) out.literalValue = literalValue
+    if (kind === 'eventConstRef' && refExpression) out.refExpression = refExpression
+    return out
+  }))
+
   const tuplesIn =
     merged.numericLiterals.length +
     merged.binaryExpressions.length +
@@ -351,7 +392,8 @@ export async function runDatalogDetectors(
     merged.taintSinkCandidates.length +
     merged.longFunctionCandidates.length +
     merged.functionComplexities.length +
-    merged.hardcodedSecretCandidates.length
+    merged.hardcodedSecretCandidates.length +
+    merged.eventListenerSiteCandidates.length
   const tuplesOut =
     magicNumbers.length +
     deadCodeIdenticalSubexpressions.length +
@@ -362,7 +404,8 @@ export async function runDatalogDetectors(
     taintSinks.length +
     longFunctions.length +
     functionComplexities.length +
-    hardcodedSecrets.length
+    hardcodedSecrets.length +
+    eventListenerSites.length
 
   return {
     magicNumbers,
@@ -375,6 +418,7 @@ export async function runDatalogDetectors(
     longFunctions,
     functionComplexities,
     hardcodedSecrets,
+    eventListenerSites,
     stats: { extractMs, evalMs, tuplesIn, tuplesOut },
   }
 }

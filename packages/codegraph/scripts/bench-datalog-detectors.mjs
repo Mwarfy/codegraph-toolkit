@@ -18,6 +18,7 @@ import { extractTaintSinksFileBundle } from '../dist/extractors/taint-sinks.js'
 import { extractLongFunctionsFileBundle } from '../dist/extractors/long-functions.js'
 import { extractFunctionComplexityFileBundle } from '../dist/extractors/function-complexity.js'
 import { extractHardcodedSecretsFileBundle } from '../dist/extractors/hardcoded-secrets.js'
+import { scanListenerSitesInSourceFile } from '../dist/extractors/event-listener-sites.js'
 import { runDatalogDetectors } from '../dist/datalog-detectors/runner.js'
 import { resolve } from 'node:path'
 
@@ -52,10 +53,13 @@ const legacyTaint = []
 const legacyLong = []
 const legacyComplx = []
 const legacySecret = []
+const legacyEvtListen = []
 for (const sf of project.getSourceFiles()) {
   const abs = sf.getFilePath()
   const rel = abs.replace(rootDir + '/', '')
   if (!files.includes(rel)) continue
+  // event-listener-sites legacy ne filtre pas test files — on émet AVANT le skip
+  legacyEvtListen.push(...scanListenerSitesInSourceFile(sf, rel))
   if (isTestFile(rel)) continue
   legacyMagic.push(...extractMagicNumbersFileBundle(sf, rel).numbers)
   for (const f of extractDeadCodeFileBundle(sf, rel).findings) {
@@ -122,7 +126,10 @@ const ok9 = bidirDiff(legacyComplx, dl.functionComplexities,
   (c) => `${c.file}\t${c.line}\t${c.name}\t${c.cyclomatic}\t${c.cognitive}\t${c.containingClass}`, 'FunctionComplexity')
 const ok10 = bidirDiff(legacySecret, dl.hardcodedSecrets,
   (h) => `${h.file}\t${h.line}\t${h.name}`, 'HardcodedSecret')
+const ok11 = bidirDiff(legacyEvtListen, dl.eventListenerSites,
+  (e) => `${e.file}\t${e.line}\t${e.symbol}\t${normWs(e.callee)}\t${e.kind}\t${e.literalValue ?? ''}\t${e.refExpression ?? ''}`,
+  'EventListenerSite')
 
-const allOk = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10
+const allOk = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10 && ok11
 console.log(`\n  Total: legacy=${legacyMs.toFixed(0)}ms vs datalog=${dlMs.toFixed(0)}ms (ratio: ${(dlMs/legacyMs).toFixed(2)}x)${allOk ? ' ✓' : ' ✗'}`)
 if (!allOk) process.exit(1)
