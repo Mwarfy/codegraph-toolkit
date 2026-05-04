@@ -36,6 +36,8 @@
   → [`Parallélisme déterministe par algèbre monoïdale (BSP)`](docs/adr/024-bsp-monoid-parallelism.md)
 - **ADR-025** — Tout NOUVEAU détecteur ajouté à `extractors/` (readFile-based) DOIT > partir du template `_template.monoid.ts` + `_template.monoid.worker.ts` > et utiliser `runPerFileExtractor`. Aucun for-loop séquentiel + > sort manuel — pattern interdit.
   → [`Tout nouveau détecteur per-file doit suivre le pattern BSP monoïdal`](docs/adr/025-detectors-must-use-bsp-pattern.md)
+- **ADR-026** — Tout nouveau détecteur per-file CPU-bound DOIT s'écrire comme : > 1. Émission de tuples primitifs depuis `ast-facts-visitor.ts` (visite AST > UNIQUE, partagée cross-detector) ; > 2. Une ou plusieurs rules `.dl` qui dérivent l'output métier depuis ces > primitives + lookup tables. > > Les détecteurs existants (Phase 2 BSP monoïdal) restent fonctionnels et > servent de référence BIT-IDENTICAL pour les ports.
+  → [`Détecteurs comme rules Datalog sur facts AST denormalisés`](docs/adr/026-detectors-as-datalog-rules.md)
 
 ## Fichiers gouvernés par un ADR (lookup pré-calculé)
 
@@ -194,15 +196,15 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 > pas verdict. Une tension non explorée n'est pas un bug — c'est un saut
 > latéral possible que le sol stable rend testable.
 
-- **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/datalog/src/cli.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/src/datalog-detectors/runner.ts` — aucun importeur  
+- **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/codegraph/src/extractors/_template.monoid.worker.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/codegraph/src/extractors/todos.worker.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/codegraph/src/datalog-detectors/runner.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
@@ -224,6 +226,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+3175c64 feat(codegraph): Phase γ.4 — prototype Datalog detectors (magic-numbers + dead-code)
 06c21b1 feat(codegraph): Phase γ.3b — wire batch warmup dans analyzer.ts
 4b218d2 feat(codegraph): Phase γ.3b — batch dispatch infrastructure (non-wired)
 444bc98 feat(codegraph): Phase γ.3a — affinity routing + LRU cache intra-worker
@@ -235,7 +238,6 @@ d94cab1 feat(codegraph): Phase γ.2 — workers ts-morph via mini-Project local
 7366782 feat(codegraph): Phase γ.1 — cost-model auto-tuning LIBY_BSP_WORKERS=auto
 896219e feat(codegraph): Phase 2.6 — oauth-scope-literals porté (10/65)
 76362ea feat(codegraph): Phase 2.5 — ts-imports porté au pattern BSP monoïdal
-59d89c8 feat(codegraph): Phase β.3 — ADR-025 + template BSP pour futurs détecteurs
 ```
 
 ## Comment contribuer à ce brief
