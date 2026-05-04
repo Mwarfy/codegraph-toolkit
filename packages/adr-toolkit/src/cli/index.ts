@@ -17,7 +17,7 @@ import { chmod, readdir } from 'node:fs/promises'
 import * as path from 'node:path'
 import chalk from 'chalk'
 import { loadConfig } from '../config.js'
-import { regenerateAnchors } from '../regenerate-anchors.js'
+import { regenerateAnchors, regenerateIndex } from '../regenerate-anchors.js'
 import { loadADRs, findAdrsForFile } from '../linker.js'
 import { checkAsserts } from '../check-asserts.js'
 import { generateBrief } from '../brief.js'
@@ -87,7 +87,7 @@ program
 
 program
   .command('regen')
-  .description("Régénère ## Anchored in depuis les marqueurs // ADR-NNN du code")
+  .description("Régénère ## Anchored in (markers ADR-NNN) + INDEX.md (depuis NNN-*.md)")
   .option('--check', 'Fail si drift, ne réécrit pas (utilisé en CI)', false)
   .action(async (opts) => {
     const config = await loadConfig()
@@ -96,12 +96,19 @@ program
       console.error(chalk.red(`✗ Marqueurs vers ADR(s) inexistant(s) : ${result.orphanAdrs.map(n => `ADR-${n}`).join(', ')}`))
       process.exit(1)
     }
+
+    // Régénère INDEX.md depuis les ADRs eux-mêmes (source-of-truth unique).
+    const indexResult = await regenerateIndex(config, !!opts.check)
+
     if (opts.check) {
-      if (result.drift) {
-        console.error(chalk.red(`✗ Drift détecté — run 'npx @liby-tools/adr-toolkit regen' puis re-commit`))
+      if (result.drift || indexResult.drift) {
+        const what = []
+        if (result.drift) what.push('anchors')
+        if (indexResult.drift) what.push('INDEX.md')
+        console.error(chalk.red(`✗ Drift détecté (${what.join(' + ')}) — run 'npx @liby-tools/adr-toolkit regen' puis re-commit`))
         process.exit(1)
       }
-      console.log(chalk.green(`✓ Anchors sync (${result.totalMarkers} marqueurs, ${result.adrsWithMarkers} ADRs)`))
+      console.log(chalk.green(`✓ Anchors + INDEX sync (${result.totalMarkers} marqueurs, ${result.adrsWithMarkers} ADRs)`))
       return
     }
     if (result.modified.length > 0) {
@@ -109,6 +116,9 @@ program
       for (const m of result.modified) console.log(`  · ${path.relative(config.rootDir, m)}`)
     } else {
       console.log(chalk.dim(`✓ Anchors déjà sync (${result.totalMarkers} marqueurs, ${result.adrsWithMarkers} ADRs)`))
+    }
+    if (indexResult.written) {
+      console.log(chalk.green(`✓ INDEX.md régénéré`))
     }
   })
 

@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [master, main]
+  push:
+    branches: [master, main]
+
+jobs:
+  test:
+    name: Test + lint + adr-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build all packages
+        run: |
+          for pkg in packages/datalog packages/salsa packages/codegraph packages/adr-toolkit packages/codegraph-mcp packages/runtime-graph packages/invariants-postgres-ts; do
+            echo "=== Building $pkg ==="
+            (cd "$pkg" && npm run build) || exit 1
+          done
+
+      - name: Typecheck (root tsc -b)
+        run: npx tsc -b --verbose 2>&1 | tail -20
+
+      - name: Run vitest
+        run: npx vitest run
+
+      - name: Check ADR anchors + INDEX.md drift
+        run: node packages/adr-toolkit/dist/cli/index.js regen --check

@@ -5,12 +5,13 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-04T01:06:09Z
+Last update : 2026-05-04T01:27:51Z
 
 ## By type
 
 ### `refactor` (50)
 
+- **edb3764** refactor(toolkit): zero drift signals — 23 → 0 (-100%) — 2026-05-04
 - **8374745** refactor(datalog): split Lexer.readString (cyclo 10→4, cog 26→3) — parser.ts cleared — 2026-05-04
 - **0796ef1** refactor(codegraph): split extractAllocationInLoops (cyclo 11→4, cog 27→6) — allocation-in-loop.ts cleared — 2026-05-04
 - **7c57543** refactor(datalog): split unify (cyclo 11→8, cog 34→17) — eval.ts unify cleared — 2026-05-04
@@ -30,11 +31,11 @@ Last update : 2026-05-04T01:06:09Z
 - **6ff5dfd** refactor(codegraph): split extractLongFunctionsFileBundle (cyclo 16→3, cog 24→3) — long-functions.ts cleared — 2026-05-04
 - **43a9785** refactor(codegraph): split collectAdrMarkers (cyclo 16→3, cog 35→0) — adr-markers.ts cleared — 2026-05-04
 - **97128ab** refactor(runtime-graph): split lyapunovTimeseries (cyclo 17→7, cog 24→7) — lyapunov-timeseries.ts cleared — 2026-05-04
-- **5ea3ad1** refactor(codegraph-mcp): split codegraphMemoryRecall (cyclo 17→5, cog 25→3) — memory.ts cleared — 2026-05-04
 
 
 ## Full history
 
+- **edb3764** refactor(toolkit): zero drift signals — 23 → 0 (-100%) — 2026-05-04
 - **8374745** refactor(datalog): split Lexer.readString (cyclo 10→4, cog 26→3) — parser.ts cleared — 2026-05-04
 - **0796ef1** refactor(codegraph): split extractAllocationInLoops (cyclo 11→4, cog 27→6) — allocation-in-loop.ts cleared — 2026-05-04
 - **7c57543** refactor(datalog): split unify (cyclo 11→8, cog 34→17) — eval.ts unify cleared — 2026-05-04
@@ -84,4 +85,3 @@ Last update : 2026-05-04T01:06:09Z
 - **bd9fcb0** refactor(codegraph): split printDiffSummary (cyclo 24→4, cog 42→3) — diff.ts cleared — 2026-05-04
 - **dc507d3** refactor(codegraph): split findArticulationPoints (cyclo 23→2, cog 46→0) — articulation-points.ts cleared — 2026-05-04
 - **df37db7** refactor(codegraph): split diffTypedCalls (cyclo 25→5, cog 30→0) — diff/typed-calls.ts cleared — 2026-05-04
-- **3814233** refactor(codegraph): split findSqlNamingViolations (cyclo 26→3, cog 42→3) — sql-naming.ts bomb-free — 2026-05-04

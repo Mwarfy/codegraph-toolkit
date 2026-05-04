@@ -4,16 +4,25 @@
 > Si tu touches un fichier listé dans "Anchored in", lis l'ADR correspondant.
 > Format ADR : voir `_TEMPLATE.md`.
 
+<!-- AUTO-GÉNÉRÉ depuis docs/adr/NNN-*.md. NE PAS éditer la table à la main. -->
+
 ## Conventions
 
 | ADR | Règle qui mord | Anchored in |
 |---|---|---|
-| [001](001-synopsis-builder-pure.md) | Synopsis builder = pure, zéro LLM | `packages/codegraph/src/synopsis/` |
-| [002](002-config-driven-no-hardcoded-projects.md) | Config-driven, jamais de path projet hardcodé | `packages/codegraph/src/config/` |
-| [003](003-detectors-generaliste-vs-project-specific.md) | Détecteurs généralistes vs project-specific | `packages/codegraph/src/detectors/` |
-| [004](004-bootstrap-trois-roles-separes.md) | Bootstrap = 3 rôles (codegraph détecte / LLM rédige / humain valide) | `packages/adr-toolkit/src/bootstrap*` |
-| [005](005-detector-pattern-bundle-per-file.md) | Détecteurs codegraph = bundle per-file + agrégat pure | `packages/codegraph/src/detectors/`, `packages/codegraph/src/incremental/` |
-| [006](006-core-types-canonical-contract.md) | `core/types.ts` = canonical contract, modifications conservatrices uniquement | `packages/codegraph/src/core/types.ts` |
+| [001](001-synopsis-builder-pure.md) | Le synopsis builder (`@liby-tools/codegraph buildSynopsis`) ne fait aucun I/O, n'invoque aucun LLM, n'utili... | `packages/codegraph/src/synopsis/builder.ts`, `packages/codegraph/src/synopsis/tensions.ts` |
+| [002](002-config-driven-no-hardcoded-projects.md) | Aucun path / nom de projet consommateur (Sentinel, Morovar, etc.) ne doit apparaître dans le code des packa... | `packages/adr-toolkit/src/check-asserts.ts`, `packages/adr-toolkit/src/config.ts` +1 |
+| [003](003-detectors-generaliste-vs-project-specific.md) | Le default detector set (`createDetectors([])` ou `defaultDetectorNames()`) exclut tous les détecteurs marq... | `packages/codegraph/src/detectors/block-loader.ts`, `packages/codegraph/src/detectors/index.ts` |
+| [004](004-bootstrap-trois-roles-separes.md) | Le bootstrap agentique sépare 3 rôles, et aucun ne franchit son périmètre : > 1. **OÙ regarder** : codegrap... | `packages/adr-toolkit/src/bootstrap-fsm.ts`, `packages/adr-toolkit/src/bootstrap-writer.ts` +1 |
+| [005](005-detector-pattern-bundle-per-file.md) | Tout détecteur codegraph qui scanne des fichiers TS expose 4 éléments : 1. Un helper pure `extractXxxFileBu... | `packages/codegraph/src/cli/_shared.ts`, `packages/codegraph/src/cli/commands/analyze.ts` +11 |
+| [006](006-core-types-canonical-contract.md) | `packages/codegraph/src/core/types.ts` est importé par 57+ fichiers (top hub absolu du toolkit). Tout type ... | `packages/codegraph/src/check/types.ts`, `packages/codegraph/src/core/types.ts` +2 |
+| [007](007-salsa-incremental-contracts.md) | `incremental/queries.ts` et `incremental/database.ts` sont les **points d'entrée canoniques** pour toute co... | `packages/codegraph/src/extractors/tainted-vars.ts`, `packages/codegraph/src/incremental/arguments.ts` +40 |
+| [008](008-detector-registry-canonical.md) | Tout nouveau détecteur (`extends BaseDetector`) DOIT être enregistré dans `core/detector-registry.ts` via `... | `packages/codegraph-mcp/src/snapshot-loader.ts`, `packages/codegraph/src/core/analyzer.ts` +22 |
+| [009](009-runtime-graph-types-contract.md) | `packages/runtime-graph/src/core/types.ts` est le contract entre 4 couches : (1) capture (OTel attach), (2)... | `packages/runtime-graph/src/core/types.ts` |
+| [010](010-datalog-pure-deterministic.md) | Le package `@liby-tools/datalog` est un interpréteur Datalog pure-TS, ZÉRO binary externe (pas de Soufflé, ... | `packages/codegraph/src/facts/index.ts`, `packages/datalog/src/canonical.ts` +4 |
+| [011](011-runtime-graph-capture-pipeline.md) | Le pipeline runtime capture est en 2 couches strictement séparées : (1) `otel-attach.ts` configure OTel SDK... | `packages/runtime-graph/src/capture/auto-bootstrap.ts`, `packages/runtime-graph/src/capture/otel-attach.ts` +7 |
+| [012](012-extractor-shared-helpers.md) | Les helpers ts-morph utilisés par 2+ extractors vivent dans `packages/codegraph/src/extractors/_shared/`. P... | `packages/codegraph/src/extractors/_shared/ast-helpers.ts`, `packages/codegraph/src/extractors/_shared/sql-helpers.ts` +1 |
+
 
 ## Comment ajouter un ADR
 

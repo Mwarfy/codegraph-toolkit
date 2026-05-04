@@ -171,6 +171,145 @@ export interface RegenResult {
   totalMarkers: number
   adrsWithMarkers: number
   orphanAdrs: string[]
+  /** True si INDEX.md était désynchronisé. */
+  indexDrift?: boolean
+}
+
+interface AdrMeta {
+  num: string
+  filePath: string
+  basename: string
+  title: string
+  rule: string
+  anchoredIn: string[]
+}
+
+const INDEX_AUTOGEN_MARKER = '<!-- AUTO-GÉNÉRÉ depuis docs/adr/NNN-*.md. NE PAS éditer la table à la main. -->'
+
+/** Extract `# ADR-NNN: titre`. Returns titre sans le préfixe. */
+function extractTitle(content: string): string {
+  const m = content.match(/^#\s*ADR-\d{3}:?\s*(.+)$/m)
+  return m ? m[1].trim() : ''
+}
+
+/**
+ * Extract `## Rule\n> ...` ou `**Rule:** ...`. La règle est la 1ère ligne
+ * de quote ou la 1ère ligne après `**Rule:**`. Truncate si > 100 chars.
+ */
+function extractRule(content: string): string {
+  // Format A : `## Rule\n> ...`
+  const blockMatch = content.match(/##\s+Rule\s*\n+>\s*(.+?)(?:\n[^>]|\n\n|$)/s)
+  if (blockMatch) return truncRule(blockMatch[1].replace(/\n>\s*/g, ' ').trim())
+  // Format B : `**Rule:** ...`
+  const inlineMatch = content.match(/\*\*Rule:\*\*\s*(.+?)(?:\n|$)/)
+  if (inlineMatch) return truncRule(inlineMatch[1].trim())
+  return ''
+}
+
+function truncRule(s: string): string {
+  return s.length <= 110 ? s : s.slice(0, 107) + '...'
+}
+
+/** Extract paths from `## Anchored in` section (ignore le marker autogen). */
+function extractAnchoredFiles(content: string): string[] {
+  const m = content.match(/## Anchored in\s+([\s\S]*?)(?=\n## |\n\n## |$)/)
+  if (!m) return []
+  const out: string[] = []
+  for (const line of m[1].split('\n')) {
+    const fileMatch = line.match(/^\s*-\s+`([^`]+)`/)
+    if (fileMatch) out.push(fileMatch[1])
+  }
+  return out
+}
+
+/**
+ * Charge tous les ADRs avec metadata (title, rule, anchored). Source-of-truth
+ * pour régénérer INDEX.md depuis les ADRs eux-mêmes (et non un template stale).
+ */
+async function loadAdrMetas(config: AdrToolkitConfig): Promise<AdrMeta[]> {
+  const adrs = await loadADRs(config)
+  return adrs.map((a) => ({
+    num: a.num,
+    filePath: a.filePath,
+    basename: path.basename(a.filePath),
+    title: extractTitle(a.content),
+    rule: extractRule(a.content),
+    anchoredIn: extractAnchoredFiles(a.content),
+  }))
+}
+
+/** Construit la table markdown depuis les ADR metas. */
+function buildIndexBody(metas: AdrMeta[]): string {
+  const rows = metas.map((m) => {
+    const link = `[${m.num}](${m.basename})`
+    // Anchored : afficher path commun raccourci ou le 1er, max 2.
+    const anchored = m.anchoredIn.length === 0
+      ? '_(pas de marker)_'
+      : m.anchoredIn.slice(0, 2).map((f) => `\`${f}\``).join(', ')
+        + (m.anchoredIn.length > 2 ? ` +${m.anchoredIn.length - 2}` : '')
+    const ruleCell = m.rule || m.title.replace(/^[^:]*:\s*/, '')
+    return `| ${link} | ${ruleCell} | ${anchored} |`
+  })
+  return rows.join('\n')
+}
+
+const INDEX_HEADER = `# ADR Index — règles qui mordent
+
+> **À LIRE en début de session.** Chaque ligne = une règle architecturale active.
+> Si tu touches un fichier listé dans "Anchored in", lis l'ADR correspondant.
+> Format ADR : voir \`_TEMPLATE.md\`.
+
+${INDEX_AUTOGEN_MARKER}
+
+## Conventions
+
+| ADR | Règle qui mord | Anchored in |
+|---|---|---|`
+
+const INDEX_FOOTER = `
+
+## Comment ajouter un ADR
+
+1. Copier \`_TEMPLATE.md\` → \`NNN-titre-court.md\`
+2. Remplir \`Rule\`, \`Why\`, \`How to apply\`, \`Tested by\` (≤30 lignes total)
+3. Poser un marqueur \`// ADR-NNN\` au top du fichier ancré
+4. Lancer \`npx @liby-tools/adr-toolkit regen\` (ou laisser le pre-commit le faire)
+5. Si la règle mérite un test invariant : créer dans \`tests/unit/<X>-invariant.test.ts\`
+
+## Détection automatique des violations
+
+Le boot brief (auto-généré par \`@liby-tools/adr-toolkit brief\` post-commit) liste
+les ADRs actifs et les fichiers gouvernés. Lire en début de session.
+`
+
+/**
+ * Régénère INDEX.md depuis les fichiers `NNN-*.md` du répertoire ADR. La
+ * table est complète (tous les ADRs, pas un sous-ensemble), source-of-truth
+ * unique = les fichiers ADR eux-mêmes.
+ */
+export async function regenerateIndex(
+  config: AdrToolkitConfig,
+  checkOnly = false,
+): Promise<{ drift: boolean; written: boolean }> {
+  const metas = await loadAdrMetas(config)
+  if (metas.length === 0) return { drift: false, written: false }
+
+  const body = buildIndexBody(metas)
+  const newContent = `${INDEX_HEADER}\n${body}\n${INDEX_FOOTER}`
+
+  const indexPath = path.join(config.rootDir, config.adrDir, 'INDEX.md')
+  let existing = ''
+  try {
+    existing = await readFile(indexPath, 'utf-8')
+  } catch {
+    // INDEX.md absent → création
+  }
+
+  if (existing === newContent) return { drift: false, written: false }
+  if (checkOnly) return { drift: true, written: false }
+
+  await writeFile(indexPath, newContent, 'utf-8')
+  return { drift: true, written: true }
 }
 
 export async function regenerateAnchors(opts: RegenOptions): Promise<RegenResult> {
