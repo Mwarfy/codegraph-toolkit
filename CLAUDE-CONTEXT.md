@@ -191,15 +191,15 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 > pas verdict. Une tension non explorée n'est pas un bug — c'est un saut
 > latéral possible que le sol stable rend testable.
 
-- **ORPHELIN** `packages/datalog/src/cli.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/src/parallel/worker-runner.ts` — aucun importeur  
+- **ORPHELIN** `packages/datalog/src/cli.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/codegraph/src/extractors/_template.monoid.worker.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/codegraph/src/extractors/todos.worker.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/codegraph/src/parallel/worker-runner.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
@@ -221,6 +221,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+76362ea feat(codegraph): Phase 2.5 — ts-imports porté au pattern BSP monoïdal
 59d89c8 feat(codegraph): Phase β.3 — ADR-025 + template BSP pour futurs détecteurs
 7dc918b feat(codegraph): Phase β.2 — worker mode opt-in pour analyzeTodos
 de8b02a feat(codegraph): Phase β — worker_threads dispatch via WorkerPool
@@ -232,7 +233,6 @@ abd6ad7 feat(codegraph): Phase 2.1 — 2 détecteurs portés au pattern BSP mono
 415d382 feat(codegraph): Phase 1 BSP — monoid algebra + scheduler déterministe
 576e358 feat(toolkit): press-button complet — RECIPES + --with-runtime + 5 awaits paralléllisés
 c17c0c1 feat(runtime-graph): press-button CLI `probe` + refactor 2 bombs
-e1b0a02 feat(runtime-graph): 5 nouvelles disciplines pluridisciplinaires
 ```
 
 ## Comment contribuer à ce brief

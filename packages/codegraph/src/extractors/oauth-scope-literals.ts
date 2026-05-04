@@ -23,6 +23,7 @@
 
 import * as path from 'node:path'
 import type { Project } from 'ts-morph'
+import { runPerSourceFileExtractor } from '../parallel/per-source-file-extractor.js'
 
 export interface OauthScopeLiteral {
   /** Chemin relatif au rootDir. */
@@ -46,21 +47,15 @@ export async function analyzeOauthScopeLiterals(
   options: OauthScopeLiteralsOptions = {},
 ): Promise<OauthScopeLiteral[]> {
   const re = options.scopePattern ?? DEFAULT_SCOPE_RE
-  const fileSet = new Set(files)
-  const out: OauthScopeLiteral[] = []
-
-  for (const sf of project.getSourceFiles()) {
-    const relPath = relativize(sf.getFilePath(), rootDir)
-    if (!relPath || !fileSet.has(relPath)) continue
-    const content = sf.getFullText()
-    out.push(...scanOauthScopesInContent(content, relPath, re))
-  }
-
-  out.sort((a, b) => {
-    if (a.file !== b.file) return a.file < b.file ? -1 : 1
-    return a.line - b.line
+  const r = await runPerSourceFileExtractor<{ items: OauthScopeLiteral[] }, OauthScopeLiteral>({
+    project,
+    files,
+    rootDir,
+    extractor: (sf, rel) => ({ items: scanOauthScopesInContent(sf.getFullText(), rel, re) }),
+    selectItems: (b) => b.items,
+    sortKey: (s) => `${s.file}:${String(s.line).padStart(8, '0')}`,
   })
-  return out
+  return r.items
 }
 
 /**
