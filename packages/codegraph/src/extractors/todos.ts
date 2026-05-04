@@ -19,6 +19,7 @@
  */
 
 import * as path from 'node:path'
+import { runPerFileExtractor } from '../parallel/per-file-extractor.js'
 
 export type TodoTag = 'TODO' | 'FIXME' | 'HACK' | 'XXX' | 'NOTE'
 
@@ -89,27 +90,25 @@ export function extractTodosFileBundle(content: string, relPath: string): TodosF
 
 /**
  * Analyse all files, return aggregated todos sorted by file then line.
+ *
+ * Implémentation BSP : reads + extracts en parallel, fusion monoïdale via
+ * appendSortedMonoid. Output bit-identique à la version séquentielle
+ * (théorème Church-Rosser : extractor pure + sort canonique).
  */
 export async function analyzeTodos(
   rootDir: string,
   files: string[],
   readFile: (relPath: string) => Promise<string>,
 ): Promise<TodoMarker[]> {
-  // Lit en parallèle les .ts/.tsx files (I/O fs indépendantes), parse séquentiel.
-  const tsFiles = files.filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'))
-  const fileContents = await Promise.all(
-    tsFiles.map(async (file) => ({ file, content: await readFile(file) })),
-  )
-  const all: TodoMarker[] = []
-  for (const { file, content } of fileContents) {
-    const bundle = extractTodosFileBundle(content, file)
-    all.push(...bundle.todos)
-  }
-  all.sort((a, b) => {
-    if (a.file !== b.file) return a.file < b.file ? -1 : 1
-    return a.line - b.line
+  void rootDir  // gardé pour compat API
+  const r = await runPerFileExtractor<TodosFileBundle, TodoMarker>({
+    files,
+    readFile,
+    extractor: extractTodosFileBundle,
+    selectItems: (b) => b.todos,
+    sortKey: (m) => `${m.file}:${String(m.line).padStart(8, '0')}`,
   })
-  return all
+  return r.items
 }
 
 void path  // path not used currently — reserved for relative path normalization

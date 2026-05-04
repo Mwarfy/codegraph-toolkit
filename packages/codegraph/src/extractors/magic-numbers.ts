@@ -22,6 +22,7 @@
  */
 
 import { type Project, type SourceFile, SyntaxKind, Node } from 'ts-morph'
+import { runPerSourceFileExtractor } from '../parallel/per-source-file-extractor.js'
 
 export interface MagicNumber {
   file: string
@@ -210,28 +211,14 @@ export async function analyzeMagicNumbers(
   options: MagicNumbersOptions = {},
 ): Promise<MagicNumber[]> {
   const minMagnitude = options.minMagnitude ?? 1000
-  const fileSet = new Set(files)
-  const all: MagicNumber[] = []
-
-  for (const sf of project.getSourceFiles()) {
-    const rel = relativize(sf.getFilePath(), rootDir)
-    if (!rel || !fileSet.has(rel)) continue
-    // Skip tests fixtures et tests eux-mêmes (volontairement magic-heavy)
-    if (rel.includes('/tests/') || rel.includes('/__tests__/') || rel.endsWith('.test.ts')) continue
-    const bundle = extractMagicNumbersFileBundle(sf, rel, minMagnitude)
-    all.push(...bundle.numbers)
-  }
-
-  all.sort((a, b) => {
-    if (a.file !== b.file) return a.file < b.file ? -1 : 1
-    return a.line - b.line
+  const r = await runPerSourceFileExtractor<MagicNumbersFileBundle, MagicNumber>({
+    project,
+    files,
+    rootDir,
+    extractor: (sf, rel) => extractMagicNumbersFileBundle(sf, rel, minMagnitude),
+    selectItems: (b) => b.numbers,
+    sortKey: (m) => `${m.file}:${String(m.line).padStart(8, '0')}`,
+    skipFile: (rel) => rel.includes('/tests/') || rel.includes('/__tests__/') || rel.endsWith('.test.ts'),
   })
-  return all
-}
-
-function relativize(absPath: string, rootDir: string): string | null {
-  const normalized = absPath.replace(/\\/g, '/')
-  const rootNormalized = rootDir.replace(/\\/g, '/')
-  if (!normalized.startsWith(rootNormalized)) return null
-  return normalized.slice(rootNormalized.length + 1)
+  return r.items
 }

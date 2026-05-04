@@ -178,9 +178,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 > pas verdict. Une tension non explorée n'est pas un bug — c'est un saut
 > latéral possible que le sol stable rend testable.
 
-- **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/datalog/src/cli.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
@@ -208,6 +208,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+415d382 feat(codegraph): Phase 1 BSP — monoid algebra + scheduler déterministe
 576e358 feat(toolkit): press-button complet — RECIPES + --with-runtime + 5 awaits paralléllisés
 c17c0c1 feat(runtime-graph): press-button CLI `probe` + refactor 2 bombs
 e1b0a02 feat(runtime-graph): 5 nouvelles disciplines pluridisciplinaires
@@ -219,7 +220,6 @@ b4959d9 feat(runtime-graph): math optim suggester — universel pour toute app
 e936121 feat(runtime-graph): CPU profile capture pour apps pure-CPU
 924a064 feat(toolkit): wire Claude Code hooks pour le toolkit lui-même
 706725f feat(toolkit): runtime-diff dans la chain post-commit
-2a7d3cf fix(codegraph): bayesian-cochange reads param, not snapshot — 0 → 175 rows
 ```
 
 ## Comment contribuer à ce brief
