@@ -57,6 +57,18 @@ if [ -z "$SKIP_SELF_OPTIM" ] && [ -f "$REPO_ROOT/.codegraph/facts-self-runtime/D
     npx tsx scripts/inject-self-optim-brief.ts > /dev/null 2>&1 && \
       echo -e "\033[0;32m  self-optim\033[0m ✓ brief opportunities updated" || true
   fi
+
+  # 5. Runtime diff (~50ms — lit current vs baseline, ne re-run pas le probe)
+  #    Compare DetectorTiming courant à la baseline archivée par le dernier
+  #    run du probe (cf. self-runtime-probe.ts qui copie l'ancien fichier
+  #    dans baseline/ avant d'écrire le nouveau). Régression p95 > 20% →
+  #    rapport markdown dans .codegraph/runtime-diff.md.
+  if [ -f "$REPO_ROOT/scripts/runtime-diff.ts" ]; then
+    npx tsx scripts/runtime-diff.ts > /dev/null 2>&1 || true
+    if [ -f "$REPO_ROOT/.codegraph/runtime-diff.md" ]; then
+      echo -e "\033[0;33m  runtime-diff\033[0m ⚠ écart détecté — voir .codegraph/runtime-diff.md"
+    fi
+  fi
 fi
 
 exit 0

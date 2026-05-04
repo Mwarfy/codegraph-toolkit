@@ -100,9 +100,25 @@ function renderSection(candidates: CandidateRow[]): string {
   return lines.join('\n')
 }
 
+/**
+ * Lit `.codegraph/runtime-diff.md` (produit par scripts/runtime-diff.ts au
+ * post-commit) et retourne son contenu. Le diff est régénéré en ~50ms à
+ * chaque commit (lit current vs baseline, pas de probe). Si pas de diff
+ * (premier run, pas de régression), retourne string vide.
+ */
+async function loadRuntimeDiff(): Promise<string> {
+  const file = path.join(REPO_ROOT, '.codegraph/runtime-diff.md')
+  try {
+    return await fs.readFile(file, 'utf-8')
+  } catch {
+    return ''
+  }
+}
+
 async function main(): Promise<void> {
   const candidates = await loadCandidates()
   const section = renderSection(candidates)
+  const runtimeDiff = await loadRuntimeDiff()
 
   let brief = ''
   try {
@@ -115,7 +131,13 @@ async function main(): Promise<void> {
   const MARKER_START = '<!-- SELF-OPTIM-START -->'
   const MARKER_END = '<!-- SELF-OPTIM-END -->'
 
-  const wrapped = `${MARKER_START}\n${section}${MARKER_END}`
+  // Section combinée : self-optim candidates + runtime diff (si présent).
+  // Le diff vient juste après les candidates dans le même bloc marker pour
+  // que tout l'auto-injecté reste dans la même région.
+  const combined = runtimeDiff
+    ? `${section}\n\n${runtimeDiff.trim()}\n`
+    : section
+  const wrapped = `${MARKER_START}\n${combined}${MARKER_END}`
 
   if (brief.includes(MARKER_START) && brief.includes(MARKER_END)) {
     // Replace existing
@@ -128,7 +150,7 @@ async function main(): Promise<void> {
 
   await fs.writeFile(BRIEF_FILE, brief, 'utf-8')
   console.log(
-    `[inject-self-optim] ${candidates.length} candidate(s) injected into ${path.relative(REPO_ROOT, BRIEF_FILE)}`,
+    `[inject-self-optim] ${candidates.length} candidate(s)${runtimeDiff ? ' + runtime diff' : ''} injected into ${path.relative(REPO_ROOT, BRIEF_FILE)}`,
   )
 }
 

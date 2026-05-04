@@ -208,6 +208,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+2a7d3cf fix(codegraph): bayesian-cochange reads param, not snapshot — 0 → 175 rows
 4db23a0 feat(canary-project): expand to 51/83 (61%) fact coverage
 c41f911 feat(examples): canary-project ground-truth fixture for codegraph
 cbb861f fix(runtime-graph): ESM project capture + ground-truth fixture
@@ -219,7 +220,6 @@ ca5ec9f chore(codegraph-mcp): bump 0.2.0 → 0.3.0 (align workspace)
 edb3764 refactor(toolkit): zero drift signals — 23 → 0 (-100%)
 8374745 refactor(datalog): split Lexer.readString (cyclo 10→4, cog 26→3) — parser.ts cleared
 0796ef1 refactor(codegraph): split extractAllocationInLoops (cyclo 11→4, cog 27→6) — allocation-in-loop.ts cleared
-7c57543 refactor(datalog): split unify (cyclo 11→8, cog 34→17) — eval.ts unify cleared
 ```
 
 ## Comment contribuer à ce brief

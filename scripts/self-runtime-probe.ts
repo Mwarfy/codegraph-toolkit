@@ -142,6 +142,20 @@ async function main(): Promise<void> {
   // Write facts
   await fs.mkdir(FACTS_OUT, { recursive: true })
 
+  // Archive l'ancien DetectorTiming.facts → baseline/ AVANT d'écrire le
+  // nouveau. Permet à scripts/runtime-diff.ts (post-commit hook) de comparer
+  // chaque commit contre la dernière mesure réelle (rafraîchie quand l'humain
+  // re-run le probe). Best-effort — pas de baseline initial = skip diff.
+  const factsFile = path.join(FACTS_OUT, 'DetectorTiming.facts')
+  const baselineDir = path.join(FACTS_OUT, 'baseline')
+  try {
+    await fs.access(factsFile)
+    await fs.mkdir(baselineDir, { recursive: true })
+    await fs.copyFile(factsFile, path.join(baselineDir, 'DetectorTiming.facts'))
+  } catch {
+    // pas de fichier existant — premier run, pas d'archive
+  }
+
   // DetectorTiming(detector, runs, meanMs, p95Ms, stdDevX1000, lambdaX1000)
   const lines: string[] = []
   for (const s of stats) {
@@ -155,7 +169,7 @@ async function main(): Promise<void> {
     ].join('\t'))
   }
   lines.sort()
-  await fs.writeFile(path.join(FACTS_OUT, 'DetectorTiming.facts'), lines.join('\n') + '\n')
+  await fs.writeFile(factsFile, lines.join('\n') + '\n')
 
   // Schema
   const schema = [
