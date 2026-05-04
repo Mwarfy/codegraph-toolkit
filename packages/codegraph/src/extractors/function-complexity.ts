@@ -54,69 +54,70 @@ const COG_NEST_KINDS = new Set<number>([
   SyntaxKind.ConditionalExpression,
 ])
 
-export function extractFunctionComplexityFileBundle(
-  sf: SourceFile,
-  relPath: string,
-): FunctionComplexity[] {
-  if (TEST_FILE_RE.test(relPath)) return []
-  const out: FunctionComplexity[] = []
+interface FnLikeWithBody {
+  name: string
+  body: Node
+  line: number
+  containingClass: string
+}
 
-  const isExempt = makeIsExemptForMarker(sf, 'complexity-ok')
-
-  // Function declarations
+function* iterateFnLikesWithBody(sf: SourceFile): Generator<FnLikeWithBody> {
   for (const fn of sf.getFunctions()) {
     const body = fn.getBody()
     if (!body) continue
-    const line = fn.getStartLineNumber()
-    if (isExempt(line)) continue
-    out.push({
-      file: relPath,
+    yield {
       name: fn.getName() ?? '(anonymous)',
-      line,
-      cyclomatic: computeCyclomatic(body),
-      cognitive: computeCognitive(body),
+      body,
+      line: fn.getStartLineNumber(),
       containingClass: '',
-    })
+    }
   }
-
-  // Methods
   for (const cls of sf.getClasses()) {
     const className = cls.getName() ?? '(anonymous)'
     for (const m of cls.getMethods()) {
       const body = m.getBody()
       if (!body) continue
-      const line = m.getStartLineNumber()
-      if (isExempt(line)) continue
-      out.push({
-        file: relPath,
+      yield {
         name: m.getName(),
-        line,
-        cyclomatic: computeCyclomatic(body),
-        cognitive: computeCognitive(body),
+        body,
+        line: m.getStartLineNumber(),
         containingClass: className,
-      })
+      }
     }
   }
-
-  // Arrow functions / function expressions assignees a const/let
   for (const v of sf.getVariableDeclarations()) {
     const init = v.getInitializer()
     if (!init) continue
     if (!Node.isArrowFunction(init) && !Node.isFunctionExpression(init)) continue
     const body = init.getBody()
     if (!body) continue
-    const line = v.getStartLineNumber()
-    if (isExempt(line)) continue
+    yield {
+      name: v.getName(),
+      body,
+      line: v.getStartLineNumber(),
+      containingClass: '',
+    }
+  }
+}
+
+export function extractFunctionComplexityFileBundle(
+  sf: SourceFile,
+  relPath: string,
+): FunctionComplexity[] {
+  if (TEST_FILE_RE.test(relPath)) return []
+  const isExempt = makeIsExemptForMarker(sf, 'complexity-ok')
+  const out: FunctionComplexity[] = []
+  for (const fn of iterateFnLikesWithBody(sf)) {
+    if (isExempt(fn.line)) continue
     out.push({
       file: relPath,
-      name: v.getName(),
-      line,
-      cyclomatic: computeCyclomatic(body),
-      cognitive: computeCognitive(body),
-      containingClass: '',
+      name: fn.name,
+      line: fn.line,
+      cyclomatic: computeCyclomatic(fn.body),
+      cognitive: computeCognitive(fn.body),
+      containingClass: fn.containingClass,
     })
   }
-
   return out
 }
 
