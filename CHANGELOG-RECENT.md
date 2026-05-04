@@ -5,12 +5,13 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-04T00:56:42Z
+Last update : 2026-05-04T00:58:16Z
 
 ## By type
 
 ### `refactor` (50)
 
+- **990857f** refactor(codegraph): split printExportsSummary (cyclo 12→4, cog 29→3) — cli/commands/analyze.ts cleared — 2026-05-04
 - **e20b3fb** refactor(adr-toolkit): split collectMarkers (cyclo 13→1, cog 28→0) — regenerate-anchors.ts cleared — 2026-05-04
 - **bc2d6c5** refactor(codegraph): split extractTryCatchSwallows (cyclo 13→5, cog 29→7) — try-catch-swallow.ts cleared — 2026-05-04
 - **69a75bc** refactor(codegraph): split extractTaintSinksFileBundle (cyclo 14→4, cog 31→4) — taint-sinks.ts cleared — 2026-05-04
@@ -30,11 +31,11 @@ Last update : 2026-05-04T00:56:42Z
 - **8dcc063** refactor(adr-toolkit): split detectLayout (cyclo 17→4, cog 27→3) — init.ts cleared — 2026-05-04
 - **9d26278** refactor(codegraph-mcp): split codegraphChangesSince (cyclo 18→5, cog 27→3) — changes-since.ts cleared — 2026-05-04
 - **07922ff** refactor(codegraph): split classifyLiteral (cyclo 18→5, cog 27→4) — magic-numbers.ts cleared — 2026-05-04
-- **68a0620** refactor(codegraph): split detectSignatureDuplicates (cyclo 18→7, cog 27→6) — signature-duplication.ts cleared — 2026-05-04
 
 
 ## Full history
 
+- **990857f** refactor(codegraph): split printExportsSummary (cyclo 12→4, cog 29→3) — cli/commands/analyze.ts cleared — 2026-05-04
 - **e20b3fb** refactor(adr-toolkit): split collectMarkers (cyclo 13→1, cog 28→0) — regenerate-anchors.ts cleared — 2026-05-04
 - **bc2d6c5** refactor(codegraph): split extractTryCatchSwallows (cyclo 13→5, cog 29→7) — try-catch-swallow.ts cleared — 2026-05-04
 - **69a75bc** refactor(codegraph): split extractTaintSinksFileBundle (cyclo 14→4, cog 31→4) — taint-sinks.ts cleared — 2026-05-04
@@ -84,4 +85,3 @@ Last update : 2026-05-04T00:56:42Z
 - **8a6e1e1** refactor(codegraph): split applyTransitiveReexportCoverage (cyclo 11→4, cog 26→4) — test-coverage.ts FULLY bomb-free — 2026-05-04
 - **2f99c5d** refactor(codegraph): split analyzeTestCoverage (cyclo 27→1, cog 54→0) — analyzeTestCoverage bomb-free — 2026-05-04
 - **446c4b6** refactor(codegraph-mcp): split codegraphUncovered (cyclo 28→9, cog 29→3) — uncovered.ts bomb-free — 2026-05-04
-- **357636e** refactor(codegraph): split scanImportsInSourceFile (cyclo 28→1, cog 45→0) — ts-imports.ts bomb-free — 2026-05-04

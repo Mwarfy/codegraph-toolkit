@@ -481,62 +481,75 @@ function detectHttpEntries(
   out: DataFlowEntry[],
 ): void {
   const content = sf.getFullText()
+  scanLiteralRoutePatterns(content, file, ranges, out)
+  scanRegexRoutePatterns(content, file, ranges, out)
+}
 
-  // Patterns littéraux : path === '...' && method === '...'
-  const literalPatterns = [
+/** Patterns littéraux : path === '...' && method === '...'. */
+function scanLiteralRoutePatterns(
+  content: string,
+  file: string,
+  ranges: FnRange[],
+  out: DataFlowEntry[],
+): void {
+  const patterns = [
     /path\s*===\s*['"]([^'"]+)['"]\s*&&\s*method\s*===\s*['"]([A-Z]+)['"]/g,
     /method\s*===\s*['"]([A-Z]+)['"]\s*&&\s*path\s*===\s*['"]([^'"]+)['"]/g,
   ]
-
-  for (let i = 0; i < literalPatterns.length; i++) {
-    const regex = literalPatterns[i]
-    const pathFirst = i === 0
-    regex.lastIndex = 0
-    let match: RegExpExecArray | null
-    while ((match = regex.exec(content)) !== null) {
-      const routePath = pathFirst ? match[1] : match[2]
-      const method = pathFirst ? match[2] : match[1]
-      const line = content.substring(0, match.index).split('\n').length
-      const container = findContainerAtLine(ranges, line)
-      if (!container) continue
-      out.push({
-        kind: 'http-route',
-        id: `${method} ${routePath}`,
-        file,
-        line,
-        handler: `${file}:${container}`,
-      })
-    }
+  for (let i = 0; i < patterns.length; i++) {
+    pushMatchesForRoutePattern(patterns[i], i === 0, content, file, ranges, out)
   }
+}
 
-  // Patterns regex Sentinel : path.match(/^\/api\/.../) && method === '...'
-  // On capture le body de la regex et on remplace les groupes par :param.
-  const regexPatterns = [
+/**
+ * Patterns regex Sentinel : path.match(/^\/api\/.../) && method === '...'.
+ * On capture le body de la regex et on remplace les groupes par :param.
+ */
+function scanRegexRoutePatterns(
+  content: string,
+  file: string,
+  ranges: FnRange[],
+  out: DataFlowEntry[],
+): void {
+  const patterns = [
     /path\.match\(\/\^([^)]+?)\$\/\)\s*&&\s*method\s*===\s*['"]([A-Z]+)['"]/g,
     /method\s*===\s*['"]([A-Z]+)['"]\s*&&\s*path\.match\(\/\^([^)]+?)\$\/\)/g,
   ]
+  for (let i = 0; i < patterns.length; i++) {
+    pushMatchesForRoutePattern(patterns[i], i === 0, content, file, ranges, out, true)
+  }
+}
 
-  for (let i = 0; i < regexPatterns.length; i++) {
-    const regex = regexPatterns[i]
-    const pathFirst = i === 0
-    regex.lastIndex = 0
-    let match: RegExpExecArray | null
-    while ((match = regex.exec(content)) !== null) {
-      const rawRe = pathFirst ? match[1] : match[2]
-      const method = pathFirst ? match[2] : match[1]
-      const routePath = regexToPathTemplate(rawRe)
-      if (!routePath) continue
-      const line = content.substring(0, match.index).split('\n').length
-      const container = findContainerAtLine(ranges, line)
-      if (!container) continue
-      out.push({
-        kind: 'http-route',
-        id: `${method} ${routePath}`,
-        file,
-        line,
-        handler: `${file}:${container}`,
-      })
-    }
+/**
+ * Drive un regex contre `content` et push 1 entry par match. Si `isRegexBody`,
+ * la portion path est traitée comme corps de regex Sentinel (regexToPathTemplate).
+ */
+function pushMatchesForRoutePattern(
+  regex: RegExp,
+  pathFirst: boolean,
+  content: string,
+  file: string,
+  ranges: FnRange[],
+  out: DataFlowEntry[],
+  isRegexBody = false,
+): void {
+  regex.lastIndex = 0
+  let match: RegExpExecArray | null
+  while ((match = regex.exec(content)) !== null) {
+    const rawPath = pathFirst ? match[1] : match[2]
+    const method = pathFirst ? match[2] : match[1]
+    const routePath = isRegexBody ? regexToPathTemplate(rawPath) : rawPath
+    if (!routePath) continue
+    const line = content.substring(0, match.index).split('\n').length
+    const container = findContainerAtLine(ranges, line)
+    if (!container) continue
+    out.push({
+      kind: 'http-route',
+      id: `${method} ${routePath}`,
+      file,
+      line,
+      handler: `${file}:${container}`,
+    })
   }
 }
 
