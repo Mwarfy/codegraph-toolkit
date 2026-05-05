@@ -189,13 +189,13 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 > pas verdict. Une tension non explorée n'est pas un bug — c'est un saut
 > latéral possible que le sol stable rend testable.
 
-- **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/datalog/src/cli.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
+- **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/codegraph/src/datalog-detectors/runner.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
@@ -219,6 +219,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+f8b1256 feat(codegraph): Phase γ.15 — port code-quality-patterns au pattern Datalog
 6951dc6 feat(codegraph): Phase γ.14 — port drift-patterns au pattern Datalog
 7cb5ef4 feat(codegraph): Phase γ.13 — port security-patterns au pattern Datalog
 4baa9d0 feat(codegraph): Phase γ.12 — port resource-balance au pattern Datalog
@@ -230,7 +231,6 @@ dad7dc1 feat(codegraph): Phase γ.8 — port constant-expressions au pattern Dat
 14fe493 feat(codegraph): Phase γ.6 — port event-listener-sites au pattern Datalog
 be79c7b refactor(codegraph): Phase γ.5 — cleanup workers cold code (Phase β/γ.2/γ.3)
 a2bc182 feat(codegraph): Phase γ.4c — 5 derniers détecteurs ts-morph portés Datalog
-b2a709e feat(codegraph): Phase γ.4b — consolide + 3 nouveaux détecteurs Datalog
 ```
 
 ## Comment contribuer à ce brief

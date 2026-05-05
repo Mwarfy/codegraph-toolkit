@@ -1,7 +1,7 @@
 # ADR-026: Détecteurs comme rules Datalog sur facts AST denormalisés
 
 **Date:** 2026-05-04
-**Status:** Accepted (10/10 ts-morph détecteurs portés, BIT-IDENTICAL)
+**Status:** Accepted (18/21 ts-morph détecteurs portés Datalog, 30/30 facts BIT-IDENTICAL ; 3 candidats restants non-portables = cross-file/IO-heavy aggregators)
 
 ## Rule
 
@@ -37,13 +37,36 @@ attaque ce bottleneck à la source :
 - **Self-describing** : les invariants ADR (cf. ADR-022) vivent déjà
   comme rules `.dl`. Cohérence architecturale.
 
-Bench complet (10/10 ts-morph détecteurs) :
-- Toolkit (183 fichiers) : 1875ms legacy → 1133ms Datalog (1.66×)
-- Sentinel (220 fichiers) : 6552ms legacy → 1509ms Datalog (**4.34×**)
-- 10/10 outputs BIT-IDENTICAL :
-  magic-numbers, dead-code/identical-subexpr, eval-calls, crypto-algo,
-  boolean-params, sanitizers, taint-sinks, long-functions,
-  function-complexity, hardcoded-secrets
+Bench complet (18 ts-morph détecteurs portés, 30 facts BIT-IDENTICAL) :
+- Toolkit (175 fichiers) : 3685ms legacy → 2927ms Datalog (1.26×)
+- Sentinel (220 fichiers) : 8354ms legacy → 3363ms Datalog (**2.48×**)
+
+Détecteurs portés (Phase γ.4 → γ.15) :
+- γ.4   : magic-numbers, dead-code/identical-subexpr, eval-calls,
+          crypto-algo, boolean-params, sanitizers, taint-sinks,
+          long-functions, function-complexity, hardcoded-secrets
+- γ.6   : event-listener-sites
+- γ.7   : barrels (cross-file aggregation), env-usage
+- γ.8   : constant-expressions (5 patterns)
+- γ.9   : arguments (TaintedArgumentToCall + ArgumentsFunctionParam
+          via Datalog join)
+- γ.10  : event-emit-sites
+- γ.11  : tainted-vars (decls + argCalls)
+- γ.12  : resource-balance (7 pairs lock/unlock)
+- γ.13  : security-patterns (4 sub : SecretVarRef, CorsConfig, TlsUnsafe,
+          WeakRandom)
+- γ.14  : drift-patterns (4 AST sub : ExcessiveOptionalParams,
+          WrapperSuperfluous, DeepNesting, EmptyCatchNoComment ;
+          todo-no-owner reste cross-file)
+- γ.15  : code-quality-patterns (4 sub : RegexLiteral, TryCatchSwallow,
+          AwaitInLoop, AllocationInLoop)
+
+Détecteurs non-portables (Datalog ne s'applique pas) :
+- bin-shebangs : filesystem walk + JSON parse (pas d'AST)
+- drizzle-schema : cross-file resolution (varNameToTable),
+  derived results (computeFkWithoutIndex, derivePrimaryKeys)
+- state-machines : cross-file aggregation (concept ↔ writes via
+  state values), async SQL file scan, multi-pass derivation
 
 Sentinel speedup vient principalement de boolean-params + function-
 complexity legacy qui font des walks AST + type-checker calls
