@@ -218,6 +218,12 @@ export interface DatalogDetectorResults {
     deepNesting: Array<{ file: string; line: number; name: string; maxDepth: number }>
     emptyCatchNoComment: Array<{ file: string; line: number }>
   }
+  codeQualityPatterns: {
+    regexLiterals: Array<{ file: string; line: number; source: string; flags: string; hasNestedQuantifier: boolean }>
+    tryCatchSwallows: Array<{ file: string; line: number; kind: string; containingSymbol: string }>
+    awaitInLoops: Array<{ file: string; line: number; loopKind: string; containingSymbol: string }>
+    allocationInLoops: Array<{ file: string; line: number; allocKind: string; containingSymbol: string }>
+  }
   stats: {
     extractMs: number
     evalMs: number
@@ -269,6 +275,10 @@ export async function runDatalogDetectors(
     wrapperSuperfluousCandidates: [],
     deepNestingCandidates: [],
     emptyCatchNoCommentCandidates: [],
+    regexLiteralCandidates: [],
+    tryCatchSwallowCandidates: [],
+    awaitInLoopCandidates: [],
+    allocationInLoopCandidates: [],
   }
   for (const sf of opts.project.getSourceFiles()) {
     const rel = relativize(sf.getFilePath(), opts.rootDir)
@@ -304,6 +314,10 @@ export async function runDatalogDetectors(
     merged.wrapperSuperfluousCandidates.push(...b.wrapperSuperfluousCandidates)
     merged.deepNestingCandidates.push(...b.deepNestingCandidates)
     merged.emptyCatchNoCommentCandidates.push(...b.emptyCatchNoCommentCandidates)
+    merged.regexLiteralCandidates.push(...b.regexLiteralCandidates)
+    merged.tryCatchSwallowCandidates.push(...b.tryCatchSwallowCandidates)
+    merged.awaitInLoopCandidates.push(...b.awaitInLoopCandidates)
+    merged.allocationInLoopCandidates.push(...b.allocationInLoopCandidates)
   }
   const extractMs = performance.now() - t0
 
@@ -463,6 +477,26 @@ export async function runDatalogDetectors(
   factsByRelation.set('EmptyCatchNoCommentCandidate',
     merged.emptyCatchNoCommentCandidates.map((e) =>
       [e.file, e.line].join('\t'),
+    ).join('\n'),
+  )
+  factsByRelation.set('RegexLiteralCandidate',
+    merged.regexLiteralCandidates.map((r) =>
+      [r.file, r.line, safe(r.source), safe(r.flags), r.hasNestedQuantifier].join('\t'),
+    ).join('\n'),
+  )
+  factsByRelation.set('TryCatchSwallowCandidate',
+    merged.tryCatchSwallowCandidates.map((t) =>
+      [t.file, t.line, t.kind, safe(t.containingSymbol)].join('\t'),
+    ).join('\n'),
+  )
+  factsByRelation.set('AwaitInLoopCandidate',
+    merged.awaitInLoopCandidates.map((a) =>
+      [a.file, a.line, a.loopKind, safe(a.containingSymbol)].join('\t'),
+    ).join('\n'),
+  )
+  factsByRelation.set('AllocationInLoopCandidate',
+    merged.allocationInLoopCandidates.map((a) =>
+      [a.file, a.line, a.allocKind, safe(a.containingSymbol)].join('\t'),
     ).join('\n'),
   )
 
@@ -712,6 +746,39 @@ export async function runDatalogDetectors(
     }))),
   }
 
+  // ─── Code Quality Patterns (Tier 17 — 4 sub-detectors) ─────────────────────
+  const cqSort = <T extends { file: string; line: number }>(arr: T[]): T[] => {
+    arr.sort((a, b) => a.file < b.file ? -1 : a.file > b.file ? 1 : a.line - b.line)
+    return arr
+  }
+  const codeQualityPatternsResult: DatalogDetectorResults['codeQualityPatterns'] = {
+    regexLiterals: cqSort((result.outputs.get('RegexLiteralOut') ?? []).map((t: Tuple) => ({
+      file: String(t[0]),
+      line: Number(t[1]),
+      source: String(t[2]),
+      flags: String(t[3]),
+      hasNestedQuantifier: Number(t[4]) === 1,
+    }))),
+    tryCatchSwallows: cqSort((result.outputs.get('TryCatchSwallowOut') ?? []).map((t: Tuple) => ({
+      file: String(t[0]),
+      line: Number(t[1]),
+      kind: String(t[2]),
+      containingSymbol: String(t[3]),
+    }))),
+    awaitInLoops: cqSort((result.outputs.get('AwaitInLoopOut') ?? []).map((t: Tuple) => ({
+      file: String(t[0]),
+      line: Number(t[1]),
+      loopKind: String(t[2]),
+      containingSymbol: String(t[3]),
+    }))),
+    allocationInLoops: cqSort((result.outputs.get('AllocationInLoopOut') ?? []).map((t: Tuple) => ({
+      file: String(t[0]),
+      line: Number(t[1]),
+      allocKind: String(t[2]),
+      containingSymbol: String(t[3]),
+    }))),
+  }
+
   // ─── Drift Patterns (4 AST sub-detectors) ──────────────────────────────────
   const driftSort = <T extends { file: string; line: number }>(arr: T[]): T[] => {
     arr.sort((a, b) => a.file < b.file ? -1 : a.file > b.file ? 1 : a.line - b.line)
@@ -871,7 +938,11 @@ export async function runDatalogDetectors(
     merged.excessiveOptionalParamsCandidates.length +
     merged.wrapperSuperfluousCandidates.length +
     merged.deepNestingCandidates.length +
-    merged.emptyCatchNoCommentCandidates.length
+    merged.emptyCatchNoCommentCandidates.length +
+    merged.regexLiteralCandidates.length +
+    merged.tryCatchSwallowCandidates.length +
+    merged.awaitInLoopCandidates.length +
+    merged.allocationInLoopCandidates.length
   const tuplesOut =
     magicNumbers.length +
     deadCodeIdenticalSubexpressions.length +
@@ -900,7 +971,11 @@ export async function runDatalogDetectors(
     driftPatternsResult.excessiveOptionalParams.length +
     driftPatternsResult.wrapperSuperfluous.length +
     driftPatternsResult.deepNesting.length +
-    driftPatternsResult.emptyCatchNoComment.length
+    driftPatternsResult.emptyCatchNoComment.length +
+    codeQualityPatternsResult.regexLiterals.length +
+    codeQualityPatternsResult.tryCatchSwallows.length +
+    codeQualityPatternsResult.awaitInLoops.length +
+    codeQualityPatternsResult.allocationInLoops.length
 
   return {
     magicNumbers,
@@ -923,6 +998,7 @@ export async function runDatalogDetectors(
     resourceImbalances,
     securityPatterns: securityPatternsResult,
     driftPatterns: driftPatternsResult,
+    codeQualityPatterns: codeQualityPatternsResult,
     stats: { extractMs, evalMs, tuplesIn, tuplesOut },
   }
 }

@@ -28,6 +28,7 @@ import { analyzeTaintedVars } from '../dist/extractors/tainted-vars.js'
 import { analyzeResourceBalance } from '../dist/extractors/resource-balance.js'
 import { analyzeSecurityPatterns } from '../dist/extractors/security-patterns.js'
 import { analyzeDriftPatterns } from '../dist/extractors/drift-patterns.js'
+import { analyzeCodeQualityPatterns } from '../dist/extractors/code-quality-patterns.js'
 import { runDatalogDetectors } from '../dist/datalog-detectors/runner.js'
 import { resolve } from 'node:path'
 
@@ -101,8 +102,9 @@ const legacyDriftOptParams = legacyDriftAll.filter((s) => s.kind === 'excessive-
 const legacyDriftWrappers = legacyDriftAll.filter((s) => s.kind === 'wrapper-superfluous')
 const legacyDriftDeepNest = legacyDriftAll.filter((s) => s.kind === 'deep-nesting')
 const legacyDriftEmptyCatch = legacyDriftAll.filter((s) => s.kind === 'empty-catch-no-comment')
+const legacyCodeQuality = await analyzeCodeQualityPatterns(rootDir, files, project)
 const legacyMs = performance.now() - tLegacy0
-console.log(`  legacy 20 detectors (${legacyMs.toFixed(1)}ms)`)
+console.log(`  legacy 21 detectors (${legacyMs.toFixed(1)}ms)`)
 
 // DATALOG
 const tDl0 = performance.now()
@@ -210,7 +212,19 @@ const ok20c = bidirDiff(legacyDriftDeepNest, dl.driftPatterns.deepNesting,
 const ok20d = bidirDiff(legacyDriftEmptyCatch, dl.driftPatterns.emptyCatchNoComment,
   (s) => `${s.file}\t${s.line}`,
   'EmptyCatchNoComment')
+const ok21a = bidirDiff(legacyCodeQuality.regexLiterals, dl.codeQualityPatterns.regexLiterals,
+  (r) => `${r.file}\t${r.line}\t${r.source}\t${r.flags}\t${r.hasNestedQuantifier}`,
+  'RegexLiteral')
+const ok21b = bidirDiff(legacyCodeQuality.tryCatchSwallows, dl.codeQualityPatterns.tryCatchSwallows,
+  (t) => `${t.file}\t${t.line}\t${t.kind}\t${t.containingSymbol}`,
+  'TryCatchSwallow')
+const ok21c = bidirDiff(legacyCodeQuality.awaitInLoops, dl.codeQualityPatterns.awaitInLoops,
+  (a) => `${a.file}\t${a.line}\t${a.loopKind}\t${a.containingSymbol}`,
+  'AwaitInLoop')
+const ok21d = bidirDiff(legacyCodeQuality.allocationInLoops, dl.codeQualityPatterns.allocationInLoops,
+  (a) => `${a.file}\t${a.line}\t${a.allocKind}\t${a.containingSymbol}`,
+  'AllocationInLoop')
 
-const allOk = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10 && ok11 && ok12 && ok13 && ok14 && ok15a && ok15b && ok16 && ok17a && ok17b && ok18 && ok19a && ok19b && ok19c && ok19d && ok20a && ok20b && ok20c && ok20d
+const allOk = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10 && ok11 && ok12 && ok13 && ok14 && ok15a && ok15b && ok16 && ok17a && ok17b && ok18 && ok19a && ok19b && ok19c && ok19d && ok20a && ok20b && ok20c && ok20d && ok21a && ok21b && ok21c && ok21d
 console.log(`\n  Total: legacy=${legacyMs.toFixed(0)}ms vs datalog=${dlMs.toFixed(0)}ms (ratio: ${(dlMs/legacyMs).toFixed(2)}x)${allOk ? ' ✓' : ' ✗'}`)
 if (!allOk) process.exit(1)

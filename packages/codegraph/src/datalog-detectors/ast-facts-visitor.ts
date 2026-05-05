@@ -290,6 +290,41 @@ export interface HardcodedSecretCandidateFact {
 }
 
 /**
+ * Code Quality patterns (Tier 17 — 4 sub-detectors). Visitor pré-classifie
+ * (regex catastrophic, catch swallow kind, loop ancestor walk avec FN
+ * boundary, init/condition/incrementor check). Rules filtrent test +
+ * exempt markers (regex-ok, catch-ok, await-ok, alloc-ok).
+ */
+export interface RegexLiteralCandidateFact {
+  file: string
+  line: number
+  source: string
+  flags: string
+  hasNestedQuantifier: number
+}
+
+export interface TryCatchSwallowCandidateFact {
+  file: string
+  line: number
+  kind: string
+  containingSymbol: string
+}
+
+export interface AwaitInLoopCandidateFact {
+  file: string
+  line: number
+  loopKind: string
+  containingSymbol: string
+}
+
+export interface AllocationInLoopCandidateFact {
+  file: string
+  line: number
+  allocKind: string
+  containingSymbol: string
+}
+
+/**
  * Drift pattern candidates (Tier "drift agentique"). 4 AST patterns
  * portés (todo-no-owner reste cross-file, hors visitor). Filtrage test
  * files spécifique drift (no fixtures, anchored $ — différent du visitor
@@ -503,6 +538,10 @@ export interface AstFactsBundle {
   wrapperSuperfluousCandidates: WrapperSuperfluousCandidateFact[]
   deepNestingCandidates: DeepNestingCandidateFact[]
   emptyCatchNoCommentCandidates: EmptyCatchNoCommentCandidateFact[]
+  regexLiteralCandidates: RegexLiteralCandidateFact[]
+  tryCatchSwallowCandidates: TryCatchSwallowCandidateFact[]
+  awaitInLoopCandidates: AwaitInLoopCandidateFact[]
+  allocationInLoopCandidates: AllocationInLoopCandidateFact[]
 }
 
 // ─── Visitor ────────────────────────────────────────────────────────────────
@@ -531,6 +570,10 @@ const EXEMPTION_MARKERS = new Set([
   'resource-balance-ok',
   'security-ok',
   'drift-ok',
+  'regex-ok',
+  'catch-ok',
+  'await-ok',
+  'alloc-ok',
 ])
 
 /**
@@ -572,6 +615,10 @@ export function extractAstFactsBundle(
   const wrapperSuperfluousCandidates: WrapperSuperfluousCandidateFact[] = []
   const deepNestingCandidates: DeepNestingCandidateFact[] = []
   const emptyCatchNoCommentCandidates: EmptyCatchNoCommentCandidateFact[] = []
+  const regexLiteralCandidates: RegexLiteralCandidateFact[] = []
+  const tryCatchSwallowCandidates: TryCatchSwallowCandidateFact[] = []
+  const awaitInLoopCandidates: AwaitInLoopCandidateFact[] = []
+  const allocationInLoopCandidates: AllocationInLoopCandidateFact[] = []
 
   const isTest = TEST_FILE_RE.test(relPath)
   if (isTest) fileTags.push({ file: relPath, tag: 'test' })
@@ -601,6 +648,11 @@ export function extractAstFactsBundle(
       sf, relPath,
       secretVarRefCandidates, corsConfigCandidates,
       tlsUnsafeCandidates, weakRandomCandidates,
+    )
+    visitCodeQualityPatternsCandidates(
+      sf, relPath,
+      regexLiteralCandidates, tryCatchSwallowCandidates,
+      awaitInLoopCandidates, allocationInLoopCandidates,
     )
   }
   // drift-patterns : own narrow regex (no fixtures) — emit unconditionally,
@@ -642,6 +694,10 @@ export function extractAstFactsBundle(
     wrapperSuperfluousCandidates,
     deepNestingCandidates,
     emptyCatchNoCommentCandidates,
+    regexLiteralCandidates,
+    tryCatchSwallowCandidates,
+    awaitInLoopCandidates,
+    allocationInLoopCandidates,
   }
 }
 
@@ -2286,5 +2342,155 @@ function visitDriftPatternsCandidates(
       file: relPath,
       line: cat.getStartLineNumber(),
     })
+  }
+}
+
+// ─── Code Quality Patterns (Tier 17 — 4 sub-detectors) ──────────────────────
+
+const CQ_NESTED_QUANTIFIER_RE = /\([^)]*[+*]\)[+*]/
+const CQ_LOG_CALL_RE = /(?:console|logger|log)\.[a-z]+\s*\(/i
+const CQ_THROW_RE = /throw\s/
+
+const CQ_LOOP_KINDS = new Set<SyntaxKind>([
+  SyntaxKind.ForStatement,
+  SyntaxKind.ForInStatement,
+  SyntaxKind.ForOfStatement,
+  SyntaxKind.WhileStatement,
+  SyntaxKind.DoStatement,
+])
+const CQ_FN_KINDS = new Set<SyntaxKind>([
+  SyntaxKind.FunctionDeclaration,
+  SyntaxKind.FunctionExpression,
+  SyntaxKind.ArrowFunction,
+  SyntaxKind.MethodDeclaration,
+])
+
+function cqFindEnclosingLoop(node: Node): Node | null {
+  let cur: Node | undefined = node.getParent()
+  while (cur) {
+    if (CQ_FN_KINDS.has(cur.getKind())) return null
+    if (CQ_LOOP_KINDS.has(cur.getKind())) return cur
+    cur = cur.getParent()
+  }
+  return null
+}
+
+function cqIsDescendantOfLoopInit(node: Node, loopAncestor: Node): boolean {
+  let cur: Node | undefined = node
+  while (cur && cur !== loopAncestor) {
+    if (cur.getKind() === SyntaxKind.Block) return false
+    cur = cur.getParent()
+  }
+  return cur === loopAncestor
+}
+
+function cqClassifyCatchSwallow(catchClause: import('ts-morph').CatchClause): string | null {
+  const block = catchClause.getBlock()
+  const stmts = block.getStatements()
+
+  if (stmts.length === 0) {
+    const inside = block.getText().slice(1, -1).trim()
+    const intentional = /\/\*[\s\S]{3,}\*\//.test(inside) || /\/\/.{3,}/.test(inside)
+    return intentional ? null : 'empty'
+  }
+  let allLog = true
+  let hasRethrow = false
+  for (const stmt of stmts) {
+    const t = stmt.getText()
+    if (CQ_THROW_RE.test(t)) hasRethrow = true
+    if (!CQ_LOG_CALL_RE.test(t) && !CQ_THROW_RE.test(t)) allLog = false
+  }
+  if (hasRethrow) return null
+  return allLog ? 'log-only' : 'no-rethrow'
+}
+
+function visitCodeQualityPatternsCandidates(
+  sf: SourceFile,
+  relPath: string,
+  regexOut: RegexLiteralCandidateFact[],
+  catchOut: TryCatchSwallowCandidateFact[],
+  awaitOut: AwaitInLoopCandidateFact[],
+  allocOut: AllocationInLoopCandidateFact[],
+): void {
+  // 1. RegexLiteral : RegExpLiteral + new RegExp(literal[, flags])
+  for (const node of sf.getDescendantsOfKind(SyntaxKind.RegularExpressionLiteral)) {
+    const text = node.getText()
+    const m = text.match(/^\/(.*)\/([a-z]*)$/)
+    if (!m) continue
+    regexOut.push({
+      file: relPath,
+      line: node.getStartLineNumber(),
+      source: m[1],
+      flags: m[2],
+      hasNestedQuantifier: CQ_NESTED_QUANTIFIER_RE.test(m[1]) ? 1 : 0,
+    })
+  }
+  for (const newExpr of sf.getDescendantsOfKind(SyntaxKind.NewExpression)) {
+    const callee = newExpr.getExpression()
+    if (!Node.isIdentifier(callee) || callee.getText() !== 'RegExp') continue
+    const args = newExpr.getArguments()
+    if (args.length === 0) continue
+    const arg0 = args[0]
+    if (!Node.isStringLiteral(arg0) && !Node.isNoSubstitutionTemplateLiteral(arg0)) continue
+    const source = arg0.getLiteralValue()
+    const arg1 = args[1]
+    let flags = ''
+    if (arg1 && (Node.isStringLiteral(arg1) || Node.isNoSubstitutionTemplateLiteral(arg1))) {
+      flags = arg1.getLiteralValue()
+    }
+    regexOut.push({
+      file: relPath,
+      line: newExpr.getStartLineNumber(),
+      source,
+      flags,
+      hasNestedQuantifier: CQ_NESTED_QUANTIFIER_RE.test(source) ? 1 : 0,
+    })
+  }
+
+  // 2. TryCatchSwallow
+  for (const tryStmt of sf.getDescendantsOfKind(SyntaxKind.TryStatement)) {
+    const catchClause = tryStmt.getCatchClause()
+    if (!catchClause) continue
+    const kind = cqClassifyCatchSwallow(catchClause)
+    if (!kind) continue
+    catchOut.push({
+      file: relPath,
+      line: tryStmt.getStartLineNumber(),
+      kind,
+      containingSymbol: sharedFindContainingSymbol(tryStmt),
+    })
+  }
+
+  // 3. AwaitInLoop
+  for (const awaitNode of sf.getDescendantsOfKind(SyntaxKind.AwaitExpression)) {
+    const loop = cqFindEnclosingLoop(awaitNode)
+    if (!loop) continue
+    awaitOut.push({
+      file: relPath,
+      line: awaitNode.getStartLineNumber(),
+      loopKind: SyntaxKind[loop.getKind()] ?? 'unknown',
+      containingSymbol: sharedFindContainingSymbol(awaitNode),
+    })
+  }
+
+  // 4. AllocationInLoop
+  const allocCandidates: Array<{ kind: SyntaxKind; alias: string }> = [
+    { kind: SyntaxKind.ArrayLiteralExpression, alias: 'array-literal' },
+    { kind: SyntaxKind.ObjectLiteralExpression, alias: 'object-literal' },
+    { kind: SyntaxKind.NewExpression, alias: 'new-expression' },
+  ]
+  for (const cand of allocCandidates) {
+    for (const node of sf.getDescendantsOfKind(cand.kind)) {
+      const loopAncestor = cqFindEnclosingLoop(node)
+      if (!loopAncestor) continue
+      if (cand.alias === 'object-literal' && node.getFirstAncestorByKind(SyntaxKind.TypeReference)) continue
+      if (cqIsDescendantOfLoopInit(node, loopAncestor)) continue
+      allocOut.push({
+        file: relPath,
+        line: node.getStartLineNumber(),
+        allocKind: cand.alias,
+        containingSymbol: sharedFindContainingSymbol(node),
+      })
+    }
   }
 }

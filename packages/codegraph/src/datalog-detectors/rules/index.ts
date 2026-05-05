@@ -163,6 +163,22 @@ export const SCHEMA_DL = `// AST primitive facts — extraits par ast-facts-visi
 .decl EmptyCatchNoCommentCandidate(file:symbol, line:number)
 .input EmptyCatchNoCommentCandidate
 
+.decl RegexLiteralCandidate(file:symbol, line:number, source:symbol,
+  flags:symbol, hasNestedQuantifier:number)
+.input RegexLiteralCandidate
+
+.decl TryCatchSwallowCandidate(file:symbol, line:number, kind:symbol,
+  sym:symbol)
+.input TryCatchSwallowCandidate
+
+.decl AwaitInLoopCandidate(file:symbol, line:number, loopKind:symbol,
+  sym:symbol)
+.input AwaitInLoopCandidate
+
+.decl AllocationInLoopCandidate(file:symbol, line:number, allocKind:symbol,
+  sym:symbol)
+.input AllocationInLoopCandidate
+
 // ─── Hybrid outputs ─────────────────────────────────────────────────────────
 
 .decl SanitizerOut(file:symbol, line:number, callee:symbol, containingSymbol:symbol)
@@ -256,6 +272,20 @@ export const SCHEMA_DL = `// AST primitive facts — extraits par ast-facts-visi
 
 .decl EmptyCatchNoCommentOut(file:symbol, line:number)
 .output EmptyCatchNoCommentOut
+
+.decl RegexLiteralOut(file:symbol, line:number, source:symbol,
+  flags:symbol, hasNestedQuantifier:number)
+.output RegexLiteralOut
+
+.decl TryCatchSwallowOut(file:symbol, line:number, kind:symbol, sym:symbol)
+.output TryCatchSwallowOut
+
+.decl AwaitInLoopOut(file:symbol, line:number, loopKind:symbol, sym:symbol)
+.output AwaitInLoopOut
+
+.decl AllocationInLoopOut(file:symbol, line:number, allocKind:symbol,
+  sym:symbol)
+.output AllocationInLoopOut
 `
 
 // Convention engine : variables capitalisées, literals (numbers, strings) inline.
@@ -457,6 +487,26 @@ WeakRandomOut(F, L, V, SK, S) :-
   !ExemptionLine(F, L, "security-ok").
 `
 
+// code-quality-patterns — 4 sub-detectors. Visitor skip test files via
+// isTest gate, rules filtrent exempt markers per-pattern.
+export const CODE_QUALITY_PATTERNS_DL = `
+RegexLiteralOut(F, L, S, Fl, NQ) :-
+  RegexLiteralCandidate(F, L, S, Fl, NQ),
+  !ExemptionLine(F, L, "regex-ok").
+
+TryCatchSwallowOut(F, L, K, Sym) :-
+  TryCatchSwallowCandidate(F, L, K, Sym),
+  !ExemptionLine(F, L, "catch-ok").
+
+AwaitInLoopOut(F, L, LK, Sym) :-
+  AwaitInLoopCandidate(F, L, LK, Sym),
+  !ExemptionLine(F, L, "await-ok").
+
+AllocationInLoopOut(F, L, AK, Sym) :-
+  AllocationInLoopCandidate(F, L, AK, Sym),
+  !ExemptionLine(F, L, "alloc-ok").
+`
+
 // drift-patterns — 4 AST sub-detectors. Visitor skip test files (own narrow
 // regex), rule filtre exempt markers (`// drift-ok`).
 export const DRIFT_PATTERNS_DL = `
@@ -533,4 +583,5 @@ export const ALL_RULES_DL = [
   RESOURCE_BALANCE_DL,
   SECURITY_PATTERNS_DL,
   DRIFT_PATTERNS_DL,
+  CODE_QUALITY_PATTERNS_DL,
 ].join('\n')
