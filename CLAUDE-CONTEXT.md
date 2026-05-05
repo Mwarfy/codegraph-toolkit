@@ -174,7 +174,7 @@
 - `packages/codegraph/src/incremental/queries.ts` (in: 42) · gov by ADR-007
 - `packages/codegraph/src/incremental/database.ts` (in: 41) · gov by ADR-007
 - `packages/salsa/dist/index.d.ts` (in: 40)
-- `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 26) · gov by ADR-012
+- `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 27) · gov by ADR-012
 - `packages/codegraph/src/core/detector-registry.ts` (in: 19) · gov by ADR-008
 - `packages/runtime-graph/src/core/types.ts` (in: 15) · gov by ADR-009
 - `packages/codegraph/src/parallel/per-source-file-extractor.ts` (in: 13) · gov by ADR-024
@@ -226,6 +226,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+4aa2e6a refactor: tame COMPOSITE-AWAIT-IN-LOOP × 12 (135 → 123 violations)
 df3e554 chore(invariants): grandfather tier 4-7 violations (15 → 0)
 dedf3f3 chore(invariants): grandfather 15 singleton violations avec rationale
 fe6ae41 docs: SELF-OBSERVABILITY.md — référence Tier 1 pattern repeat detector
@@ -237,7 +238,6 @@ df32201 docs: YAML frontmatter migration + cross-check audit
 f5f530f refactor(runner): extract 3 sub-projectors to reduce cog complexity
 cd09bc2 fix(codegraph): exclude auto-generated files from BayesianCoChange follower
 dbe0aef feat(hooks): F.2 — auto-injected fix hints + memory match dans NEW violations
-d5b3511 feat(hooks): ADR-028 — token-efficient session-aware hook injection
 ```
 
 ## Comment contribuer à ce brief

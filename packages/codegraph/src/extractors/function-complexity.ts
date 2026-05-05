@@ -28,32 +28,9 @@ export interface FunctionComplexity {
   containingClass: string  // '' si pas une method
 }
 
+import { computeCyclomatic, computeCognitive } from './_shared/complexity.js'
+
 const TEST_FILE_RE = /(\.test\.tsx?|\.spec\.tsx?|(^|\/)tests?\/|(^|\/)fixtures?\/)/
-
-// Increments cyclomatic
-const CYCLO_KINDS = new Set<number>([
-  SyntaxKind.IfStatement,
-  SyntaxKind.ConditionalExpression,
-  SyntaxKind.CaseClause,
-  SyntaxKind.ForStatement,
-  SyntaxKind.ForInStatement,
-  SyntaxKind.ForOfStatement,
-  SyntaxKind.WhileStatement,
-  SyntaxKind.DoStatement,
-  SyntaxKind.CatchClause,
-])
-
-// Nesting-incrementing kinds for cognitive
-const COG_NEST_KINDS = new Set<number>([
-  SyntaxKind.IfStatement,
-  SyntaxKind.ForStatement,
-  SyntaxKind.ForInStatement,
-  SyntaxKind.ForOfStatement,
-  SyntaxKind.WhileStatement,
-  SyntaxKind.DoStatement,
-  SyntaxKind.CatchClause,
-  SyntaxKind.ConditionalExpression,
-])
 
 interface FnLikeWithBody {
   name: string
@@ -120,64 +97,6 @@ export function extractFunctionComplexityFileBundle(
     })
   }
   return out
-}
-
-/**
- * McCabe : 1 + nb branches independantes. Compte les branchements
- * structurels + boolean operators (&&, ||) qui creent des chemins.
- */
-function computeCyclomatic(node: Node): number {
-  let count = 1
-  node.forEachDescendant((child) => {
-    const kind = child.getKind()
-    if (CYCLO_KINDS.has(kind)) count++
-    // else if = IfStatement avec parent IfStatement.elseStatement → comptés via IfStatement standard
-    // && / || dans une condition → +1 chacun (Halstead-aware)
-    else if (kind === SyntaxKind.BinaryExpression) {
-      const op = (child as unknown as { getOperatorToken: () => { getKind: () => number } })
-        .getOperatorToken().getKind()
-      if (op === SyntaxKind.AmpersandAmpersandToken
-       || op === SyntaxKind.BarBarToken
-       || op === SyntaxKind.QuestionQuestionToken) {
-        count++
-      }
-    }
-  })
-  return count
-}
-
-/**
- * Cognitive (SonarQube simplified) :
- *   - +1 per nesting kind reached
- *   - +nestingLevel additional per nested branch
- *   - boolean operators in same expression : +1 first, 0 for sequels (skip ici simplifié)
- */
-function computeCognitive(node: Node): number {
-  let total = 0
-  const walk = (n: Node, nesting: number): void => {
-    n.forEachChild((child) => {
-      const kind = child.getKind()
-      if (COG_NEST_KINDS.has(kind)) {
-        total += 1 + nesting
-        walk(child, nesting + 1)
-      } else if (kind === SyntaxKind.SwitchStatement) {
-        total += 1 + nesting
-        walk(child, nesting + 1)
-      } else if (kind === SyntaxKind.BinaryExpression) {
-        const op = (child as unknown as { getOperatorToken: () => { getKind: () => number } })
-          .getOperatorToken().getKind()
-        if (op === SyntaxKind.AmpersandAmpersandToken
-         || op === SyntaxKind.BarBarToken) {
-          total += 1
-        }
-        walk(child, nesting)
-      } else {
-        walk(child, nesting)
-      }
-    })
-  }
-  walk(node, 0)
-  return total
 }
 
 export async function analyzeFunctionComplexity(

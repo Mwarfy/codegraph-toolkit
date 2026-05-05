@@ -9,7 +9,12 @@
  * boundary stop pour les ancestor walks, isExempt comment marker).
  */
 
-import { type SourceFile, type Node, SyntaxKind } from 'ts-morph'
+import { type Node, SyntaxKind } from 'ts-morph'
+
+// makeIsExempt + IsExempt sont la version canonique dans _shared/ast-helpers.
+// Re-export ici pour préserver les imports existants des sub-detectors
+// code-quality (await-in-loop, allocation-in-loop, etc.).
+export { makeIsExempt, type IsExempt } from '../../_shared/ast-helpers.js'
 
 export const TEST_FILE_RE =
   /(\.test\.tsx?|\.spec\.tsx?|(^|\/)tests?\/|(^|\/)fixtures?\/)/
@@ -28,23 +33,6 @@ export const FN_KINDS: ReadonlySet<SyntaxKind> = new Set([
   SyntaxKind.ArrowFunction,
   SyntaxKind.MethodDeclaration,
 ])
-
-export type IsExempt = (line: number, marker: string) => boolean
-
-/**
- * Construit un prédicat `isExempt(line, marker)` qui regarde si la ligne
- * juste au-dessus contient `// <marker>` (commentaire d'exemption inline).
- *
- * Pourquoi : permet aux call-sites d'exempter localement un faux-positif
- * sans avoir à grandfather le fichier entier.
- */
-export function makeIsExempt(sf: SourceFile): IsExempt {
-  const lines = sf.getFullText().split('\n')
-  return (line, marker) => {
-    if (line < 2 || line - 2 >= lines.length) return false
-    return new RegExp(`//\\s*${marker}\\b`).test(lines[line - 2])
-  }
-}
 
 /**
  * Remonte les ancestors d'un node — retourne le premier loop trouvé

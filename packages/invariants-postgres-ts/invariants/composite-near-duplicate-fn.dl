@@ -33,3 +33,81 @@ Violation("COMPOSITE-NEAR-DUPLICATE-FN", A, 0,
     CompressionDistance(A, B, NCD),
     NCD < 300,
     !NearDuplicateFnGrandfathered(A, B).
+
+// ─── Toolkit grandfather list (2026-05-05 — divergence assumée) ────────
+// Pattern : factorisation déjà faite pour les algos cruciaux
+// (computeCyclomatic/Cognitive via _shared/complexity.ts ; makeIsExempt
+// via _shared/ast-helpers.ts). Le reste = helpers spécifiques par
+// extracteur OU helpers cross-package (3 isMainModule), où la
+// factorisation auraient un ROI faible (10-20 lignes × N call sites).
+
+// isMainModule × 3 paires : entry points CLI dans 3 packages distincts
+// (codegraph-mcp, codegraph, runtime-graph). Helper trivial 10 lignes —
+// extraire dans un package shared = yak shaving cross-package.
+NearDuplicateFnGrandfathered("packages/codegraph-mcp/src/index.ts:isMainModule", "packages/codegraph/src/cli/index.ts:isMainModule").
+NearDuplicateFnGrandfathered("packages/codegraph-mcp/src/index.ts:isMainModule", "packages/runtime-graph/src/cli.ts:isMainModule").
+NearDuplicateFnGrandfathered("packages/codegraph/src/cli/index.ts:isMainModule", "packages/runtime-graph/src/cli.ts:isMainModule").
+
+// Helpers AST internes ast-facts-visitor : visitor optimisé un-pass
+// avec ses propres impls inline pour tight loop. Diverger = trade-off
+// performance vs réutilisation (déjà factorisé pour computeC*).
+NearDuplicateFnGrandfathered("packages/codegraph/src/datalog-detectors/ast-facts-visitor.ts:countLoc", "packages/codegraph/src/extractors/long-functions.ts:countLoc").
+NearDuplicateFnGrandfathered("packages/codegraph/src/datalog-detectors/ast-facts-visitor.ts:walk", "packages/codegraph/src/extractors/drift-patterns.ts:walk").
+NearDuplicateFnGrandfathered("packages/codegraph/src/datalog-detectors/ast-facts-visitor.ts:iterateFnLikesWithBody", "packages/codegraph/src/extractors/function-complexity.ts:iterateFnLikesWithBody").
+NearDuplicateFnGrandfathered("packages/codegraph/src/datalog-detectors/ast-facts-visitor.ts:getCalleeName", "packages/codegraph/src/extractors/drizzle-schema.ts:getCalleeName").
+
+// Pattern helpers per-extracteur — chaque extracteur a sa version
+// adaptée à son scope (matchSource/readCalleeText/iterateFnScopes
+// dans arguments / tainted-vars / resource-balance / boolean-params).
+// Sémantiques proches mais paramétrage divergent.
+NearDuplicateFnGrandfathered("packages/codegraph/src/extractors/arguments.ts:matchSource", "packages/codegraph/src/extractors/tainted-vars.ts:matchSource").
+NearDuplicateFnGrandfathered("packages/codegraph/src/extractors/arguments.ts:readCalleeText", "packages/codegraph/src/extractors/tainted-vars.ts:readCalleeText").
+NearDuplicateFnGrandfathered("packages/codegraph/src/extractors/deprecated-usage.ts:readCalleeName", "packages/codegraph/src/extractors/resource-balance.ts:readCalleeName").
+NearDuplicateFnGrandfathered("packages/codegraph/src/extractors/arguments.ts:iterateFnScopes", "packages/codegraph/src/extractors/boolean-params.ts:iterateFnScopes").
+NearDuplicateFnGrandfathered("packages/codegraph/src/extractors/arguments.ts:iterateFnScopes", "packages/codegraph/src/extractors/resource-balance.ts:iterateFnScopes").
+NearDuplicateFnGrandfathered("packages/codegraph/src/extractors/arguments.ts:iterateFnScopes", "packages/codegraph/src/extractors/tainted-vars.ts:iterateFnScopes").
+NearDuplicateFnGrandfathered("packages/codegraph/src/extractors/boolean-params.ts:iterateFnScopes", "packages/codegraph/src/extractors/resource-balance.ts:iterateFnScopes").
+
+// findEnclosingLoop : version locale dans allocation-in-loop.ts
+// (sub-extractor code-quality), version shared dans _helpers.ts.
+// La sub a une variation de fn boundary detection.
+NearDuplicateFnGrandfathered("packages/codegraph/src/extractors/_internal/code-quality/_helpers.ts:findEnclosingLoop", "packages/codegraph/src/extractors/_internal/code-quality/allocation-in-loop.ts:findEnclosingLoop").
+
+// buildLineToSymbol : version dans _shared (générique) + version dans
+// taint.ts (spécifique au taint pipeline avec symbol metadata supplémentaire).
+NearDuplicateFnGrandfathered("packages/codegraph/src/extractors/_shared/ast-helpers.ts:buildLineToSymbol", "packages/codegraph/src/extractors/taint.ts:buildLineToSymbol").
+
+// getImportMap : 2 builds différents (symbol-refs = par-symbol references,
+// typed-calls = par-callsite typing). Sémantiques proches mais data
+// shapes différentes.
+NearDuplicateFnGrandfathered("packages/codegraph/src/extractors/symbol-refs.ts:getImportMap", "packages/codegraph/src/extractors/typed-calls.ts:getImportMap").
+
+// walkForTests : test-coverage scan tests/, unused-exports scan tests +
+// __tests__ + .test.ts. Implémentations très proches mais filters distincts.
+NearDuplicateFnGrandfathered("packages/codegraph/src/extractors/test-coverage.ts:walkForTests", "packages/codegraph/src/extractors/unused-exports.ts:walkForTests").
+
+// fetchGitLog : co-change + granger-causality utilisent git log mais
+// avec des --pretty et --since différents. Refactor possible mais low-priority.
+NearDuplicateFnGrandfathered("packages/codegraph/src/extractors/co-change.ts:fetchGitLog", "packages/codegraph/src/extractors/granger-causality.ts:fetchGitLog").
+
+// truncate : 2 fns d'1 ligne pour string truncation, contextes affichage différents.
+NearDuplicateFnGrandfathered("packages/codegraph/src/extractors/constant-expressions.ts:truncate", "packages/codegraph/src/extractors/eslint-import.ts:truncate").
+
+// dedup : data-flows dedup paths, truth-points dedup truth-points by concept.
+// Algos similaires (Set-based) mais clés divergentes.
+NearDuplicateFnGrandfathered("packages/codegraph/src/extractors/data-flows.ts:dedup", "packages/codegraph/src/extractors/truth-points.ts:dedup").
+
+// deduplicateLinks : event-bus + http-routes ont chacun leur dédup
+// par signature link distincte. Refactor possible si on consolide les 2.
+NearDuplicateFnGrandfathered("packages/codegraph/src/detectors/event-bus.ts:deduplicateLinks", "packages/codegraph/src/detectors/http-routes.ts:deduplicateLinks").
+
+// writeRelation : runtime-graph a 2 exporters (legacy + discipline-grouped).
+// Convergence vers un seul prévue dans le refactor de runtime-graph.
+NearDuplicateFnGrandfathered("packages/runtime-graph/src/facts/discipline-exporter.ts:writeRelation", "packages/runtime-graph/src/facts/exporter.ts:writeRelation").
+
+// combine ↔ combine (intra-file) : monoid.ts définit plusieurs monoids
+// (sumMonoid, maxMonoid, listMonoid, mapMonoid, ...) chacun avec sa
+// méthode `combine` distincte. Le facts emitter ne distingue pas par
+// line donc auto-pair sur le même symbol. Faux positif structurel —
+// design pattern monoid implique cette répétition.
+NearDuplicateFnGrandfathered("packages/codegraph/src/parallel/monoid.ts:combine", "packages/codegraph/src/parallel/monoid.ts:combine").

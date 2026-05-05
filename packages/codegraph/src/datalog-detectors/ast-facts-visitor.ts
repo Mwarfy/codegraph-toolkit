@@ -22,6 +22,7 @@
  */
 
 import { type SourceFile, Node, SyntaxKind } from 'ts-morph'
+import { computeCyclomatic, computeCognitive } from '../extractors/_shared/complexity.js'
 // ADR-026 phase A.4.2 : on délègue dead-code à l'extracteur legacy pour
 // parité 100% sur les 6 sub-kinds. La logique AST de chaque kind
 // (switch-fallthrough / return-then-else / etc.) ne s'exprime pas en
@@ -1110,29 +1111,8 @@ function visitTaintSinkCandidates(
 }
 
 // ─── Long functions + Function complexity ───────────────────────────────────
-
-const CYCLO_KINDS = new Set<number>([
-  SyntaxKind.IfStatement,
-  SyntaxKind.ConditionalExpression,
-  SyntaxKind.CaseClause,
-  SyntaxKind.ForStatement,
-  SyntaxKind.ForInStatement,
-  SyntaxKind.ForOfStatement,
-  SyntaxKind.WhileStatement,
-  SyntaxKind.DoStatement,
-  SyntaxKind.CatchClause,
-])
-
-const COG_NEST_KINDS = new Set<number>([
-  SyntaxKind.IfStatement,
-  SyntaxKind.ForStatement,
-  SyntaxKind.ForInStatement,
-  SyntaxKind.ForOfStatement,
-  SyntaxKind.WhileStatement,
-  SyntaxKind.DoStatement,
-  SyntaxKind.CatchClause,
-  SyntaxKind.ConditionalExpression,
-])
+// Constants + algos shared via _shared/complexity.ts (factorisation pour
+// garantir cohérence entre ce visitor et function-complexity.ts).
 
 interface FnLikeWithBody {
   /** Just method/function/var name (no class prefix). */
@@ -1227,52 +1207,6 @@ function countLoc(bodyText: string): number {
     count++
   }
   return count
-}
-
-function computeCyclomatic(node: Node): number {
-  let count = 1
-  node.forEachDescendant((child) => {
-    const kind = child.getKind()
-    if (CYCLO_KINDS.has(kind)) count++
-    else if (kind === SyntaxKind.BinaryExpression) {
-      const op = (child as unknown as { getOperatorToken: () => { getKind: () => number } })
-        .getOperatorToken().getKind()
-      if (op === SyntaxKind.AmpersandAmpersandToken
-       || op === SyntaxKind.BarBarToken
-       || op === SyntaxKind.QuestionQuestionToken) {
-        count++
-      }
-    }
-  })
-  return count
-}
-
-function computeCognitive(node: Node): number {
-  let total = 0
-  const walk = (n: Node, nesting: number): void => {
-    n.forEachChild((child) => {
-      const kind = child.getKind()
-      if (COG_NEST_KINDS.has(kind)) {
-        total += 1 + nesting
-        walk(child, nesting + 1)
-      } else if (kind === SyntaxKind.SwitchStatement) {
-        total += 1 + nesting
-        walk(child, nesting + 1)
-      } else if (kind === SyntaxKind.BinaryExpression) {
-        const op = (child as unknown as { getOperatorToken: () => { getKind: () => number } })
-          .getOperatorToken().getKind()
-        if (op === SyntaxKind.AmpersandAmpersandToken
-         || op === SyntaxKind.BarBarToken) {
-          total += 1
-        }
-        walk(child, nesting)
-      } else {
-        walk(child, nesting)
-      }
-    })
-  }
-  walk(node, 0)
-  return total
 }
 
 // ─── Barrels + import edges (cross-file resolution) ────────────────────────
