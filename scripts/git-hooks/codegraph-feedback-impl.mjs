@@ -4,6 +4,7 @@
 // Usage: node codegraph-feedback-impl.mjs <repoRoot> <relPath>
 
 import { createRequire } from 'node:module'
+import { getFixHint } from './codegraph-feedback-hints.mjs'
 const require = createRequire(import.meta.url)
 
 const fs = require('node:fs')
@@ -60,6 +61,30 @@ try {
 
 const node = snapshot.nodes?.find(n => n.id === relPath)
 if (!node) process.exit(0)
+
+// ─── Load memory store une fois (utilisé en 2 sections : violations + Mémoire) ─
+// Index par fingerprint pour lookup O(1) lors du rendu des NEW violations.
+let memoryByFingerprint = new Map()
+let memoryEntries = []
+try {
+  const os = require('node:os')
+  const crypto = require('node:crypto')
+  const memDir = path.join(os.homedir(), '.codegraph-toolkit', 'memory')
+  const baseSan = (path.basename(repoRoot).replace(/[^A-Za-z0-9_-]/g, '_')) || 'root'
+  const hash = crypto.createHash('sha256').update(repoRoot).digest('hex').slice(0, 8)
+  const memFile = path.join(memDir, `${baseSan}-${hash}.json`)
+  if (fs.existsSync(memFile)) {
+    const memStore = JSON.parse(fs.readFileSync(memFile, 'utf-8'))
+    if (memStore && Array.isArray(memStore.entries)) {
+      memoryEntries = memStore.entries
+      for (const e of memoryEntries) {
+        if (e && !e.obsoleteAt && e.fingerprint) {
+          memoryByFingerprint.set(e.fingerprint, e)
+        }
+      }
+    }
+  }
+} catch { /* silent */ }
 
 const edges = snapshot.edges ?? []
 const importers = edges.filter(e => e.to === relPath && e.type === 'import')
@@ -194,16 +219,34 @@ try {
     const grandfatheredCount = violations.length - newSinceSession.length
 
     // Bucket 1 — NEW since session : full visibility (le signal qui corrige)
+    // F.2 : auto-inject fix hint + memory match si applicable.
     if (newSinceSession.length > 0) {
       lines.push('  --- Datalog NEW (this session, ' + data.elapsed + 'ms) ---')
       for (const v of newSinceSession.slice(0, 5)) {
         const lineStr = v.line === 0 ? '' : ':' + v.line
         lines.push('    [' + v.adr + '] ' + v.file + lineStr + '  ' + v.msg)
+        // Proof tree compact (1 ligne max)
         if (v.path) {
-          const pathLines = v.path.split('\n').slice(0, 2)
+          const pathLines = v.path.split('\n').slice(0, 1)
           for (const p of pathLines) {
             if (p.trim().length > 0) lines.push('      ' + p.trim())
           }
+        }
+        // Fix hint (mapping rule → action)
+        const hint = getFixHint(v.adr)
+        if (hint) {
+          lines.push('      fix: ' + hint.fix)
+          if (hint.exempt) lines.push('      exempt: ' + hint.exempt + ' (sur ligne précédente)')
+        }
+        // Memory match : fingerprint exact ou rule-prefix
+        const fpExact = v.adr + ':' + v.file + ':' + v.line
+        const memHit = memoryByFingerprint.get(fpExact) ||
+          memoryByFingerprint.get(v.adr + ':' + v.file) ||
+          memoryEntries.find(e => e && !e.obsoleteAt && e.fingerprint &&
+            e.fingerprint.startsWith(v.adr) && e.scope?.file === v.file)
+        if (memHit) {
+          const reason = String(memHit.reason).split('\n')[0].slice(0, 80)
+          lines.push('      memory: [' + memHit.kind + '] ' + reason)
         }
       }
       if (newSinceSession.length > 5) {
@@ -258,50 +301,28 @@ try {
 }
 
 // ─── Section "Mémoire" (entrées inter-sessions pour ce fichier) ───
-// Lit ~/.codegraph-toolkit/memory/<basename>-<hash8>.json — store local
-// peuplé par `codegraph memory mark` ou `codegraph_memory_mark` MCP tool.
-//
-// Affiche les entrées non-obsolètes qui matchent CE fichier dans leur
-// scope. C'est de la connaissance humaine codifiée — décisions, faux
-// positifs marqués, fingerprints d'incidents — qui peuvent NUANCER ou
-// ANNULER les signaux structurels qui suivent (ex: "ce truth-point est
-// un FP marqué 2026-04-15"). À voir AVANT les sections automatiques.
-//
-// Logique de path dupliquée depuis @liby-tools/codegraph (memory/store.ts) —
-// le toolkit est ESM-only, le hook est require()-based. Si memoryPathFor()
-// change côté toolkit, sync ici. Format : <basename>-<sha256(absPath, 8)>
-try {
-  const os = require('node:os')
-  const crypto = require('node:crypto')
-  const memDir = path.join(os.homedir(), '.codegraph-toolkit', 'memory')
-  const baseSan = (path.basename(repoRoot).replace(/[^A-Za-z0-9_-]/g, '_')) || 'root'
-  const hash = crypto.createHash('sha256').update(repoRoot).digest('hex').slice(0, 8)
-  const memFile = path.join(memDir, `${baseSan}-${hash}.json`)
-  if (fs.existsSync(memFile)) {
-    const memStore = JSON.parse(fs.readFileSync(memFile, 'utf-8'))
-    if (memStore && Array.isArray(memStore.entries)) {
-      const matched = memStore.entries.filter((e) => {
-        if (!e || e.obsoleteAt) return false
-        if (e.scope && e.scope.file === relPath) return true
-        if (e.scope && Array.isArray(e.scope.tags) && e.scope.tags.indexOf('always-show') !== -1) return true
-        return false
-      })
-      if (matched.length > 0) {
-        lines.push('  ─── Mémoire (sessions précédentes) ───')
-        for (let i = 0; i < Math.min(5, matched.length); i++) {
-          const e = matched[i]
-          const reason = String(e.reason).split('\n')[0].slice(0, 80)
-          lines.push('    [' + e.kind + '] ' + e.fingerprint)
-          lines.push('      ' + reason)
-        }
-        if (matched.length > 5) {
-          lines.push('    (+' + (matched.length - 5) + ' more — codegraph_memory_recall pour le détail)')
-        }
-      }
+// Réutilise memoryEntries déjà chargé en haut du script. Affiche les
+// entrées scope-matched OU tagged 'always-show'. À voir AVANT les
+// sections automatiques car peut NUANCER/ANNULER les signaux suivants.
+{
+  const matched = memoryEntries.filter((e) => {
+    if (!e || e.obsoleteAt) return false
+    if (e.scope && e.scope.file === relPath) return true
+    if (e.scope && Array.isArray(e.scope.tags) && e.scope.tags.indexOf('always-show') !== -1) return true
+    return false
+  })
+  if (matched.length > 0) {
+    lines.push('  ─── Mémoire (sessions précédentes) ───')
+    for (let i = 0; i < Math.min(5, matched.length); i++) {
+      const e = matched[i]
+      const reason = String(e.reason).split('\n')[0].slice(0, 80)
+      lines.push('    [' + e.kind + '] ' + e.fingerprint)
+      lines.push('      ' + reason)
+    }
+    if (matched.length > 5) {
+      lines.push('    (+' + (matched.length - 5) + ' more — codegraph_memory_recall pour le détail)')
     }
   }
-} catch {
-  // Store inexistant / corrompu / autre erreur — silent.
 }
 
 // ─── Section "Risques structurels" (si signaux load-bearing) ───

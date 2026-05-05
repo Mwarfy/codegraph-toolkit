@@ -221,6 +221,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+d5b3511 feat(hooks): ADR-028 — token-efficient session-aware hook injection
 d469668 docs(readme): update for v0.6.0 — pipeline composite statique × dynamique × salsa
 48c4c78 chore(codegraph): bump @liby-tools/codegraph to v0.6.0
 7102f13 feat(codegraph): CLI cross-check — composite statique × dynamique
@@ -232,7 +233,6 @@ d65f1c4 feat(runtime-graph): wire Salsa push for composite cross-cut warm path
 dd611b7 feat(codegraph): ADR-026 phase C.2 — cache module-level de l'éval Datalog
 18a45a8 feat(codegraph): ADR-026 phase A.4 — close 3 outliers (full snapshot parity)
 e2fde62 chore(codegraph): bump @liby-tools/codegraph to v0.4.0
-558aa7d feat(codegraph): ADR-026 phase C — Salsa caching for Datalog runner
 ```
 
 ## Comment contribuer à ce brief
