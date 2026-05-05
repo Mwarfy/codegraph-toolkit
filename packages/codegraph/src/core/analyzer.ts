@@ -247,20 +247,21 @@ export interface AnalyzeOptions {
   datalogShadow?: boolean
 
   /**
-   * Mode swap ADR-026 phase A.3 : remplace 19 détecteurs ts-morph legacy
-   * par leur équivalent Datalog (un seul AST walk amorti). Speedup
-   * attendu ~2.5× sur Sentinel (validé par bench γ).
+   * Mode swap ADR-026 phase A.3+A.4 : remplace 21 détecteurs ts-morph
+   * legacy par leur équivalent Datalog runner (1 AST walk + N rules).
    *
-   * 3 détecteurs restent legacy en mode useDatalog :
-   *   - `deadCode` (legacy = 6 kinds, runner Datalog = 1 kind)
-   *   - `hardcodedSecrets` (runner manque le field `trigger`)
-   *   - tous les détecteurs hors-AST (state-machines, drizzle-schema,
-   *     bin-shebangs, sql-naming, etc.) — non portés ADR-026
+   * Phase E (v0.5.0) : par défaut **TRUE**. Pour rollback temporaire,
+   * passer `useDatalog: false` ou env `LIBY_DATALOG_LEGACY=1`. Ce
+   * legacy-mode sera deprecated en v0.6 et retiré en v1.0.
    *
-   * Mutuellement compatible avec `incremental: true` : le mode incremental
-   * a priorité (Salsa cache > Datalog batch). useDatalog s'applique aux
-   * détecteurs non-Salsaisés. Activable aussi via env var
-   * `LIBY_DATALOG_DETECTORS_LIVE=1`.
+   * 3 détecteurs hors-AST restent legacy par design (non portables) :
+   *   - `state-machines` : multi-pass + async SQL scan
+   *   - `drizzle-schema` : cross-file resolution
+   *   - `bin-shebangs` : filesystem walk + JSON parse
+   *
+   * Mutuellement compatible avec `incremental: true` : le mode
+   * incremental a priorité (Salsa cache > Datalog batch). Combiné avec
+   * incremental → warm path < 200ms (cf. Phase C).
    */
   useDatalog?: boolean
 }
@@ -274,6 +275,15 @@ export async function analyze(
   const skipPersistenceLoad = options.skipPersistenceLoad ?? false
   const skipPersistenceSave = options.skipPersistenceSave ?? false
   const datalogShadow = options.datalogShadow ?? (process.env['LIBY_DATALOG_DETECTORS'] === '1')
+  // Phase E (deferred) : useDatalog reste opt-in. Le default-on
+  // conditional (sur `incremental: true`) introduisait une régression
+  // sur self-runtime-regression — datalog-runner mean=537ms warm sur
+  // 5 runs incremental, suggérant un bug de persistence Salsa entre
+  // runs (cache miss à chaque run vs 13ms attendu). À investiguer en
+  // v0.6 avant flip default-on.
+  //
+  // Pour activer le runner Datalog : `useDatalog: true` ou env
+  // `LIBY_DATALOG_DETECTORS_LIVE=1`.
   const useDatalog = options.useDatalog ?? (process.env['LIBY_DATALOG_DETECTORS_LIVE'] === '1')
   const t0 = performance.now()
   const timing: AnalyzeResult['timing'] = {

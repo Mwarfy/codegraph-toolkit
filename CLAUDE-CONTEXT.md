@@ -221,6 +221,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+70bc566 chore(codegraph): bump @liby-tools/codegraph to v0.5.0
 d65f1c4 feat(runtime-graph): wire Salsa push for composite cross-cut warm path
 1488e38 feat(codegraph): ADR-026 phase D — pipeline composite statique × dynamique × salsa
 dd611b7 feat(codegraph): ADR-026 phase C.2 — cache module-level de l'éval Datalog
@@ -232,7 +233,6 @@ e2fde62 chore(codegraph): bump @liby-tools/codegraph to v0.4.0
 3bcc427 docs(adr-026): close-out — 18/21 ts-morph ports done, 3 non-portables
 f8b1256 feat(codegraph): Phase γ.15 — port code-quality-patterns au pattern Datalog
 6951dc6 feat(codegraph): Phase γ.14 — port drift-patterns au pattern Datalog
-7cb5ef4 feat(codegraph): Phase γ.13 — port security-patterns au pattern Datalog
 ```
 
 ## Comment contribuer à ce brief
