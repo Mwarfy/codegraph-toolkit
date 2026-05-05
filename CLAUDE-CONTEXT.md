@@ -175,7 +175,7 @@
 - `packages/salsa/dist/index.d.ts` (in: 40)
 - `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 26) · gov by ADR-012
 - `packages/codegraph/src/core/detector-registry.ts` (in: 19) · gov by ADR-008
-- `packages/runtime-graph/src/core/types.ts` (in: 14) · gov by ADR-009
+- `packages/runtime-graph/src/core/types.ts` (in: 15) · gov by ADR-009
 - `packages/codegraph/src/parallel/per-source-file-extractor.ts` (in: 13) · gov by ADR-024
 
 ## ⚠ ADR anchor suggestions
@@ -195,9 +195,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/src/datalog-detectors/composite-runner.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/codegraph/tests/fixtures/env-usage/config.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/audit-listener.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
@@ -209,7 +209,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ npm uninstall unused-pkg + npm test_
 - **BARREL-LOW** `packages/adr-toolkit/src/index.ts` — barrel à 15 re-export(s) pour 0 consumer(s)  
   _→ inline les imports + supprimer le barrel_
-- **BARREL-LOW** `packages/codegraph/src/index.ts` — barrel à 8 re-export(s) pour 0 consumer(s)  
+- **BARREL-LOW** `packages/codegraph/src/index.ts` — barrel à 12 re-export(s) pour 0 consumer(s)  
   _→ inline les imports + supprimer le barrel_
 - **BARREL-LOW** `packages/codegraph/tests/fixtures/package-deps/src/barrel.ts` — barrel à 2 re-export(s) pour 1 consumer(s)  
   _→ inline les imports + supprimer le barrel_
@@ -221,6 +221,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+d65f1c4 feat(runtime-graph): wire Salsa push for composite cross-cut warm path
 1488e38 feat(codegraph): ADR-026 phase D — pipeline composite statique × dynamique × salsa
 dd611b7 feat(codegraph): ADR-026 phase C.2 — cache module-level de l'éval Datalog
 18a45a8 feat(codegraph): ADR-026 phase A.4 — close 3 outliers (full snapshot parity)
@@ -232,7 +233,6 @@ e2fde62 chore(codegraph): bump @liby-tools/codegraph to v0.4.0
 f8b1256 feat(codegraph): Phase γ.15 — port code-quality-patterns au pattern Datalog
 6951dc6 feat(codegraph): Phase γ.14 — port drift-patterns au pattern Datalog
 7cb5ef4 feat(codegraph): Phase γ.13 — port security-patterns au pattern Datalog
-4baa9d0 feat(codegraph): Phase γ.12 — port resource-balance au pattern Datalog
 ```
 
 ## Comment contribuer à ce brief
