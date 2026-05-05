@@ -1986,6 +1986,98 @@ function readTaintedVarsCalleeText(callee: Node): string | null {
   return null
 }
 
+interface TaintedScopeCtx {
+  relPath: string
+  fnName: string
+  taintedVars: Map<string, string>
+  declsOut: TaintedVarDeclCandidateFact[]
+}
+
+function extractTaintedDeclsFromBinding(
+  nameNode: Node,
+  source: string,
+  line: number,
+  ctx: TaintedScopeCtx,
+): void {
+  if (!Node.isObjectBindingPattern(nameNode) && !Node.isArrayBindingPattern(nameNode)) return
+  for (const elem of nameNode.getElements()) {
+    if (!Node.isBindingElement(elem)) continue
+    const elemName = elem.getNameNode()
+    if (!Node.isIdentifier(elemName)) continue
+    ctx.taintedVars.set(elemName.getText(), source)
+    ctx.declsOut.push({
+      file: ctx.relPath, containingSymbol: ctx.fnName,
+      varName: elemName.getText(), line, source,
+    })
+  }
+}
+
+function extractTaintedVarFromVarDecl(
+  v: import('ts-morph').VariableDeclaration,
+  ctx: TaintedScopeCtx,
+): void {
+  const init = v.getInitializer()
+  if (!init) return
+  const source = matchTaintedVarsSource(init.getText())
+  if (!source) return
+  const nameNode = v.getNameNode()
+  const line = v.getStartLineNumber()
+  if (Node.isIdentifier(nameNode)) {
+    ctx.taintedVars.set(nameNode.getText(), source)
+    ctx.declsOut.push({
+      file: ctx.relPath, containingSymbol: ctx.fnName,
+      varName: nameNode.getText(), line, source,
+    })
+    return
+  }
+  extractTaintedDeclsFromBinding(nameNode, source, line, ctx)
+}
+
+function collectTaintedVarsForFnScope(
+  fnNode: Node,
+  fnName: string,
+  relPath: string,
+  declsOut: TaintedVarDeclCandidateFact[],
+): Map<string, string> {
+  const ctx: TaintedScopeCtx = {
+    relPath, fnName, taintedVars: new Map<string, string>(), declsOut,
+  }
+  for (const v of fnNode.getDescendantsOfKind(SyntaxKind.VariableDeclaration)) {
+    extractTaintedVarFromVarDecl(v, ctx)
+  }
+  return ctx.taintedVars
+}
+
+function recordTaintedArgCalls(
+  fnNode: Node,
+  fnName: string,
+  taintedVars: Map<string, string>,
+  relPath: string,
+  argCallsOut: TaintedVarArgCallCandidateFact[],
+): void {
+  for (const call of fnNode.getDescendantsOfKind(SyntaxKind.CallExpression)) {
+    const calleeText = readTaintedVarsCalleeText(call.getExpression())
+    if (!calleeText) continue
+    const args = call.getArguments()
+    for (let i = 0; i < args.length; i++) {
+      const arg = args[i]
+      if (!Node.isIdentifier(arg)) continue
+      const varName = arg.getText()
+      const source = taintedVars.get(varName)
+      if (!source) continue
+      argCallsOut.push({
+        file: relPath,
+        line: call.getStartLineNumber(),
+        callee: calleeText,
+        argVarName: varName,
+        argIndex: i,
+        source,
+        containingSymbol: fnName,
+      })
+    }
+  }
+}
+
 function visitTaintedVarsCandidates(
   sf: SourceFile,
   relPath: string,
@@ -1994,60 +2086,13 @@ function visitTaintedVarsCandidates(
 ): void {
   const taintedByFn = new Map<string, Map<string, string>>()
   for (const { fnNode, fnId, fnName } of iterateTaintedVarsFnScopes(sf)) {
-    const taintedVars = new Map<string, string>()
-    for (const v of fnNode.getDescendantsOfKind(SyntaxKind.VariableDeclaration)) {
-      const init = v.getInitializer()
-      if (!init) continue
-      const source = matchTaintedVarsSource(init.getText())
-      if (!source) continue
-      const nameNode = v.getNameNode()
-      const line = v.getStartLineNumber()
-      if (Node.isIdentifier(nameNode)) {
-        taintedVars.set(nameNode.getText(), source)
-        declsOut.push({
-          file: relPath, containingSymbol: fnName,
-          varName: nameNode.getText(), line, source,
-        })
-      } else if (Node.isObjectBindingPattern(nameNode) || Node.isArrayBindingPattern(nameNode)) {
-        for (const elem of nameNode.getElements()) {
-          if (!Node.isBindingElement(elem)) continue
-          const elemName = elem.getNameNode()
-          if (!Node.isIdentifier(elemName)) continue
-          taintedVars.set(elemName.getText(), source)
-          declsOut.push({
-            file: relPath, containingSymbol: fnName,
-            varName: elemName.getText(), line, source,
-          })
-        }
-      }
-    }
+    const taintedVars = collectTaintedVarsForFnScope(fnNode, fnName, relPath, declsOut)
     if (taintedVars.size > 0) taintedByFn.set(fnId, taintedVars)
   }
-
   for (const { fnNode, fnId, fnName } of iterateTaintedVarsFnScopes(sf)) {
     const taintedVars = taintedByFn.get(fnId)
     if (!taintedVars) continue
-    for (const call of fnNode.getDescendantsOfKind(SyntaxKind.CallExpression)) {
-      const calleeText = readTaintedVarsCalleeText(call.getExpression())
-      if (!calleeText) continue
-      const args = call.getArguments()
-      for (let i = 0; i < args.length; i++) {
-        const arg = args[i]
-        if (!Node.isIdentifier(arg)) continue
-        const varName = arg.getText()
-        const source = taintedVars.get(varName)
-        if (!source) continue
-        argCallsOut.push({
-          file: relPath,
-          line: call.getStartLineNumber(),
-          callee: calleeText,
-          argVarName: varName,
-          argIndex: i,
-          source,
-          containingSymbol: fnName,
-        })
-      }
-    }
+    recordTaintedArgCalls(fnNode, fnName, taintedVars, relPath, argCallsOut)
   }
 }
 
@@ -2155,66 +2200,84 @@ function classifySecurityCorsOriginKind(init: Node | undefined): string {
   return 'dynamic'
 }
 
-function visitSecurityPatternsCandidates(
+function collectSecurityCorsCall(
+  call: Node,
+  callee: Node,
+  args: Node[],
+  relPath: string,
+  line: number,
+  corsOut: CorsConfigCandidateFact[],
+): void {
+  if (!Node.isIdentifier(callee) || callee.getText() !== 'cors') return
+  if (args.length === 0 || !Node.isObjectLiteralExpression(args[0])) return
+  const originProp = args[0].getProperty('origin')
+  if (!originProp || !Node.isPropertyAssignment(originProp)) return
+  corsOut.push({
+    file: relPath, line,
+    originKind: classifySecurityCorsOriginKind(originProp.getInitializer()),
+    containingSymbol: sharedFindContainingSymbol(call),
+  })
+}
+
+function readSecurityCalleeText(callee: Node): string {
+  if (Node.isIdentifier(callee)) return callee.getText()
+  if (Node.isPropertyAccessExpression(callee)) return callee.getText()
+  return ''
+}
+
+interface SecretRefSink {
+  call: Node
+  calleeText: string
+  relPath: string
+  line: number
+  out: SecretVarRefCandidateFact[]
+}
+
+function pushSecretRefIfMatch(varName: string, sink: SecretRefSink): void {
+  const kind = detectSecuritySecretKind(varName)
+  if (!kind) return
+  sink.out.push({
+    file: sink.relPath, line: sink.line,
+    varName, kind, callee: sink.calleeText,
+    containingSymbol: sharedFindContainingSymbol(sink.call),
+  })
+}
+
+function collectSecretRefsFromArg(arg: Node, sink: SecretRefSink): void {
+  if (Node.isIdentifier(arg)) {
+    pushSecretRefIfMatch(arg.getText(), sink)
+    return
+  }
+  if (!Node.isObjectLiteralExpression(arg)) return
+  for (const prop of arg.getProperties()) {
+    if (!Node.isShorthandPropertyAssignment(prop)) continue
+    pushSecretRefIfMatch(prop.getName(), sink)
+  }
+}
+
+function collectSecurityCallExpressionFacts(
   sf: SourceFile,
   relPath: string,
   secretRefsOut: SecretVarRefCandidateFact[],
   corsOut: CorsConfigCandidateFact[],
-  tlsOut: TlsUnsafeCandidateFact[],
-  weakRandomsOut: WeakRandomCandidateFact[],
 ): void {
-  // Pass 1: CallExpression — cors({ origin }) + secret refs en args
   for (const call of sf.getDescendantsOfKind(SyntaxKind.CallExpression)) {
     const line = call.getStartLineNumber()
     const callee = call.getExpression()
     const args = call.getArguments()
-
-    // CORS detection
-    if (Node.isIdentifier(callee) && callee.getText() === 'cors'
-      && args.length > 0 && Node.isObjectLiteralExpression(args[0])) {
-      const originProp = args[0].getProperty('origin')
-      if (originProp && Node.isPropertyAssignment(originProp)) {
-        corsOut.push({
-          file: relPath, line,
-          originKind: classifySecurityCorsOriginKind(originProp.getInitializer()),
-          containingSymbol: sharedFindContainingSymbol(call),
-        })
-      }
-    }
-
-    // Secret refs : identifier args + shorthand prop names
-    let calleeText = ''
-    if (Node.isIdentifier(callee)) calleeText = callee.getText()
-    else if (Node.isPropertyAccessExpression(callee)) calleeText = callee.getText()
+    collectSecurityCorsCall(call, callee, args, relPath, line, corsOut)
+    const calleeText = readSecurityCalleeText(callee)
     if (!calleeText) continue
-    for (const arg of args) {
-      if (Node.isIdentifier(arg)) {
-        const k = detectSecuritySecretKind(arg.getText())
-        if (k) {
-          secretRefsOut.push({
-            file: relPath, line,
-            varName: arg.getText(), kind: k, callee: calleeText,
-            containingSymbol: sharedFindContainingSymbol(call),
-          })
-        }
-      } else if (Node.isObjectLiteralExpression(arg)) {
-        for (const prop of arg.getProperties()) {
-          if (!Node.isShorthandPropertyAssignment(prop)) continue
-          const name = prop.getName()
-          const k = detectSecuritySecretKind(name)
-          if (k) {
-            secretRefsOut.push({
-              file: relPath, line,
-              varName: name, kind: k, callee: calleeText,
-              containingSymbol: sharedFindContainingSymbol(call),
-            })
-          }
-        }
-      }
-    }
+    const sink: SecretRefSink = { call, calleeText, relPath, line, out: secretRefsOut }
+    for (const arg of args) collectSecretRefsFromArg(arg, sink)
   }
+}
 
-  // Pass 2: VariableDeclaration → Math.random()
+function collectSecurityWeakRandoms(
+  sf: SourceFile,
+  relPath: string,
+  weakRandomsOut: WeakRandomCandidateFact[],
+): void {
   for (const v of sf.getDescendantsOfKind(SyntaxKind.VariableDeclaration)) {
     const init = v.getInitializer()
     if (!init || !Node.isCallExpression(init)) continue
@@ -2229,8 +2292,13 @@ function visitSecurityPatternsCandidates(
       containingSymbol: sharedFindContainingSymbol(v),
     })
   }
+}
 
-  // Pass 3: ObjectLiteral → TLS unsafe options
+function collectSecurityTlsUnsafe(
+  sf: SourceFile,
+  relPath: string,
+  tlsOut: TlsUnsafeCandidateFact[],
+): void {
   for (const obj of sf.getDescendantsOfKind(SyntaxKind.ObjectLiteralExpression)) {
     const line = obj.getStartLineNumber()
     for (const prop of obj.getProperties()) {
@@ -2238,15 +2306,27 @@ function visitSecurityPatternsCandidates(
       const name = prop.getName()
       const init = prop.getInitializer()
       if (!init) continue
-      if ((name === 'rejectUnauthorized' || name === 'strictSSL')
-        && init.getText() === 'false') {
-        tlsOut.push({
-          file: relPath, line, key: name,
-          containingSymbol: sharedFindContainingSymbol(obj),
-        })
-      }
+      if ((name !== 'rejectUnauthorized' && name !== 'strictSSL')
+        || init.getText() !== 'false') continue
+      tlsOut.push({
+        file: relPath, line, key: name,
+        containingSymbol: sharedFindContainingSymbol(obj),
+      })
     }
   }
+}
+
+function visitSecurityPatternsCandidates(
+  sf: SourceFile,
+  relPath: string,
+  secretRefsOut: SecretVarRefCandidateFact[],
+  corsOut: CorsConfigCandidateFact[],
+  tlsOut: TlsUnsafeCandidateFact[],
+  weakRandomsOut: WeakRandomCandidateFact[],
+): void {
+  collectSecurityCallExpressionFacts(sf, relPath, secretRefsOut, corsOut)
+  collectSecurityWeakRandoms(sf, relPath, weakRandomsOut)
+  collectSecurityTlsUnsafe(sf, relPath, tlsOut)
 }
 
 // ─── Drift Patterns (4 AST patterns ; todo-no-owner non-portable, cross-file) ─
@@ -2461,15 +2541,11 @@ function cqClassifyCatchSwallow(catchClause: import('ts-morph').CatchClause): st
   return allLog ? 'log-only' : 'no-rethrow'
 }
 
-function visitCodeQualityPatternsCandidates(
+function collectCqRegexLiterals(
   sf: SourceFile,
   relPath: string,
   regexOut: RegexLiteralCandidateFact[],
-  catchOut: TryCatchSwallowCandidateFact[],
-  awaitOut: AwaitInLoopCandidateFact[],
-  allocOut: AllocationInLoopCandidateFact[],
 ): void {
-  // 1. RegexLiteral : RegExpLiteral + new RegExp(literal[, flags])
   for (const node of sf.getDescendantsOfKind(SyntaxKind.RegularExpressionLiteral)) {
     const text = node.getText()
     const m = text.match(/^\/(.*)\/([a-z]*)$/)
@@ -2482,6 +2558,13 @@ function visitCodeQualityPatternsCandidates(
       hasNestedQuantifier: CQ_NESTED_QUANTIFIER_RE.test(m[1]) ? 1 : 0,
     })
   }
+}
+
+function collectCqRegexConstructors(
+  sf: SourceFile,
+  relPath: string,
+  regexOut: RegexLiteralCandidateFact[],
+): void {
   for (const newExpr of sf.getDescendantsOfKind(SyntaxKind.NewExpression)) {
     const callee = newExpr.getExpression()
     if (!Node.isIdentifier(callee) || callee.getText() !== 'RegExp') continue
@@ -2503,8 +2586,13 @@ function visitCodeQualityPatternsCandidates(
       hasNestedQuantifier: CQ_NESTED_QUANTIFIER_RE.test(source) ? 1 : 0,
     })
   }
+}
 
-  // 2. TryCatchSwallow
+function collectCqTryCatchSwallows(
+  sf: SourceFile,
+  relPath: string,
+  catchOut: TryCatchSwallowCandidateFact[],
+): void {
   for (const tryStmt of sf.getDescendantsOfKind(SyntaxKind.TryStatement)) {
     const catchClause = tryStmt.getCatchClause()
     if (!catchClause) continue
@@ -2517,8 +2605,13 @@ function visitCodeQualityPatternsCandidates(
       containingSymbol: sharedFindContainingSymbol(tryStmt),
     })
   }
+}
 
-  // 3. AwaitInLoop
+function collectCqAwaitInLoops(
+  sf: SourceFile,
+  relPath: string,
+  awaitOut: AwaitInLoopCandidateFact[],
+): void {
   for (const awaitNode of sf.getDescendantsOfKind(SyntaxKind.AwaitExpression)) {
     const loop = cqFindEnclosingLoop(awaitNode)
     if (!loop) continue
@@ -2529,19 +2622,33 @@ function visitCodeQualityPatternsCandidates(
       containingSymbol: sharedFindContainingSymbol(awaitNode),
     })
   }
+}
 
-  // 4. AllocationInLoop
-  const allocCandidates: Array<{ kind: SyntaxKind; alias: string }> = [
-    { kind: SyntaxKind.ArrayLiteralExpression, alias: 'array-literal' },
-    { kind: SyntaxKind.ObjectLiteralExpression, alias: 'object-literal' },
-    { kind: SyntaxKind.NewExpression, alias: 'new-expression' },
-  ]
-  for (const cand of allocCandidates) {
+const CQ_ALLOC_CANDIDATES: Array<{ kind: SyntaxKind; alias: string }> = [
+  { kind: SyntaxKind.ArrayLiteralExpression, alias: 'array-literal' },
+  { kind: SyntaxKind.ObjectLiteralExpression, alias: 'object-literal' },
+  { kind: SyntaxKind.NewExpression, alias: 'new-expression' },
+]
+
+function isCqAllocationInLoopFact(
+  node: Node,
+  alias: string,
+): { loopAncestor: Node } | null {
+  const loopAncestor = cqFindEnclosingLoop(node)
+  if (!loopAncestor) return null
+  if (alias === 'object-literal' && node.getFirstAncestorByKind(SyntaxKind.TypeReference)) return null
+  if (cqIsDescendantOfLoopInit(node, loopAncestor)) return null
+  return { loopAncestor }
+}
+
+function collectCqAllocationsInLoops(
+  sf: SourceFile,
+  relPath: string,
+  allocOut: AllocationInLoopCandidateFact[],
+): void {
+  for (const cand of CQ_ALLOC_CANDIDATES) {
     for (const node of sf.getDescendantsOfKind(cand.kind)) {
-      const loopAncestor = cqFindEnclosingLoop(node)
-      if (!loopAncestor) continue
-      if (cand.alias === 'object-literal' && node.getFirstAncestorByKind(SyntaxKind.TypeReference)) continue
-      if (cqIsDescendantOfLoopInit(node, loopAncestor)) continue
+      if (!isCqAllocationInLoopFact(node, cand.alias)) continue
       allocOut.push({
         file: relPath,
         line: node.getStartLineNumber(),
@@ -2550,4 +2657,19 @@ function visitCodeQualityPatternsCandidates(
       })
     }
   }
+}
+
+function visitCodeQualityPatternsCandidates(
+  sf: SourceFile,
+  relPath: string,
+  regexOut: RegexLiteralCandidateFact[],
+  catchOut: TryCatchSwallowCandidateFact[],
+  awaitOut: AwaitInLoopCandidateFact[],
+  allocOut: AllocationInLoopCandidateFact[],
+): void {
+  collectCqRegexLiterals(sf, relPath, regexOut)
+  collectCqRegexConstructors(sf, relPath, regexOut)
+  collectCqTryCatchSwallows(sf, relPath, catchOut)
+  collectCqAwaitInLoops(sf, relPath, awaitOut)
+  collectCqAllocationsInLoops(sf, relPath, allocOut)
 }

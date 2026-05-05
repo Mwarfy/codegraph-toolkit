@@ -226,6 +226,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+32c50d1 refactor(ast-facts-visitor): extract helpers — 4 visitors bombs résolus (80 → 75)
 face7c3 chore(invariants): grandfather NO-BOOLEAN-POSITIONAL-PARAM × 20 (100 → 80)
 843062f refactor: tame COMPOSITE-NEAR-DUPLICATE-FN × 24 (123 → 100 violations)
 4aa2e6a refactor: tame COMPOSITE-AWAIT-IN-LOOP × 12 (135 → 123 violations)
@@ -237,7 +238,6 @@ fe6ae41 docs: SELF-OBSERVABILITY.md — référence Tier 1 pattern repeat detect
 df32201 docs: YAML frontmatter migration + cross-check audit
 807c2b1 feat(codegraph): doc-claims extractor + composite-doc-stale rule
 38a1ffc chore(codegraph): strip 'export' on 33 local-only interfaces
-f5f530f refactor(runner): extract 3 sub-projectors to reduce cog complexity
 ```
 
 ## Comment contribuer à ce brief
