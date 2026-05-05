@@ -22,3 +22,8 @@ Violation("COMPOSITE-HUB-UNTESTED", F, 0,
 
 // dist/*.d.ts = artefact généré, pas un fichier source à tester.
 HubUntestedGrandfathered("packages/salsa/dist/index.d.ts").
+
+// types.ts ast-facts (post-split 2026-05-05) : fichier d'interfaces
+// TypeScript pures, zero code exécutable. Importé par les 18 visitors
+// du même domaine — fan-in haute mais aucune logique à tester.
+HubUntestedGrandfathered("packages/codegraph/src/datalog-detectors/ast-facts/types.ts").

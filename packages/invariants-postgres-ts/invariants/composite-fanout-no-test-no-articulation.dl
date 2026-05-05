@@ -29,3 +29,7 @@ Violation("COMPOSITE-FANOUT-NO-TEST-NO-ARTIC", F, 0,
 // du code source, ne doivent pas être testés directement (ce sont les
 // fichiers .ts source en amont qui doivent l'être).
 FanoutNoTestNoArticGrandfathered("packages/salsa/dist/index.d.ts").
+
+// types.ts ast-facts (post-split 2026-05-05) : fichier d'interfaces pures,
+// fan-in = 18 visitors qui importent les types. Aucun code à tester.
+FanoutNoTestNoArticGrandfathered("packages/codegraph/src/datalog-detectors/ast-facts/types.ts").

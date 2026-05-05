@@ -34,3 +34,9 @@ GodDispatcherGrandfathered("sentinel-core/src/index.ts:startSystem").
 // God-dispatcher légitime — c'est précisément le rôle d'un registry
 // pattern (ADR-008). Refactor en sous-registries possible mais non urgent.
 GodDispatcherGrandfathered("packages/codegraph/src/core/analyzer.ts:buildDetectorRegistry").
+
+// extractAstFactsBundle : orchestrator AST visitor (post-split du god file
+// 2026-05-05). Dispatch à 18 visitors par domaine — entropy + cyclomatic
+// élevés sont la signature *correcte* d'un orchestrator. Les 18 visitors
+// individuels sont chacun simples ; le pattern aurait été pire en god file.
+GodDispatcherGrandfathered("packages/codegraph/src/datalog-detectors/ast-facts-visitor.ts:extractAstFactsBundle").

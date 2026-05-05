@@ -48,13 +48,13 @@ NearDuplicateFnGrandfathered("packages/codegraph-mcp/src/index.ts:isMainModule",
 NearDuplicateFnGrandfathered("packages/codegraph-mcp/src/index.ts:isMainModule", "packages/runtime-graph/src/cli.ts:isMainModule").
 NearDuplicateFnGrandfathered("packages/codegraph/src/cli/index.ts:isMainModule", "packages/runtime-graph/src/cli.ts:isMainModule").
 
-// Helpers AST internes ast-facts-visitor : visitor optimisé un-pass
-// avec ses propres impls inline pour tight loop. Diverger = trade-off
-// performance vs réutilisation (déjà factorisé pour computeC*).
-NearDuplicateFnGrandfathered("packages/codegraph/src/datalog-detectors/ast-facts-visitor.ts:countLoc", "packages/codegraph/src/extractors/long-functions.ts:countLoc").
-NearDuplicateFnGrandfathered("packages/codegraph/src/datalog-detectors/ast-facts-visitor.ts:walk", "packages/codegraph/src/extractors/drift-patterns.ts:walk").
-NearDuplicateFnGrandfathered("packages/codegraph/src/datalog-detectors/ast-facts-visitor.ts:iterateFnLikesWithBody", "packages/codegraph/src/extractors/function-complexity.ts:iterateFnLikesWithBody").
-NearDuplicateFnGrandfathered("packages/codegraph/src/datalog-detectors/ast-facts-visitor.ts:getCalleeName", "packages/codegraph/src/extractors/drizzle-schema.ts:getCalleeName").
+// Helpers AST internes ast-facts/* (après split du god file 2026-05-05) :
+// visitor optimisé un-pass avec ses propres impls inline pour tight loop.
+// Diverger = trade-off performance vs réutilisation (déjà factorisé pour computeC*).
+NearDuplicateFnGrandfathered("packages/codegraph/src/datalog-detectors/ast-facts/complexity.ts:countLoc", "packages/codegraph/src/extractors/long-functions.ts:countLoc").
+NearDuplicateFnGrandfathered("packages/codegraph/src/datalog-detectors/ast-facts/drift-patterns.ts:walk", "packages/codegraph/src/extractors/drift-patterns.ts:walk").
+NearDuplicateFnGrandfathered("packages/codegraph/src/datalog-detectors/ast-facts/complexity.ts:iterateFnLikesWithBody", "packages/codegraph/src/extractors/function-complexity.ts:iterateFnLikesWithBody").
+NearDuplicateFnGrandfathered("packages/codegraph/src/datalog-detectors/ast-facts/numeric-literals.ts:getCalleeName", "packages/codegraph/src/extractors/drizzle-schema.ts:getCalleeName").
 
 // Pattern helpers per-extracteur — chaque extracteur a sa version
 // adaptée à son scope (matchSource/readCalleeText/iterateFnScopes

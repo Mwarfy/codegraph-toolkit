@@ -174,16 +174,17 @@
 - `packages/codegraph/src/incremental/queries.ts` (in: 42) · gov by ADR-007
 - `packages/codegraph/src/incremental/database.ts` (in: 41) · gov by ADR-007
 - `packages/salsa/dist/index.d.ts` (in: 40)
-- `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 27) · gov by ADR-012
+- `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 34) · gov by ADR-012
+- `packages/codegraph/src/datalog-detectors/ast-facts/types.ts` (in: 21)
 - `packages/codegraph/src/core/detector-registry.ts` (in: 19) · gov by ADR-008
 - `packages/runtime-graph/src/core/types.ts` (in: 15) · gov by ADR-009
-- `packages/codegraph/src/parallel/per-source-file-extractor.ts` (in: 13) · gov by ADR-024
 
 ## ⚠ ADR anchor suggestions
 
 Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `// ADR-NNN`** dans le code. Intentionnel ? Sinon poser un marqueur ou créer un ADR :
 
 - **40** `packages/salsa/dist/index.d.ts` _(top-hub)_
+- **21** `packages/codegraph/src/datalog-detectors/ast-facts/types.ts` _(top-hub)_
 
 ## Tensions actives — invitations à explorer
 
@@ -226,6 +227,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+804e963 refactor(ast-facts-visitor): phase 2 — 3 visitors bombs résolus (75 → 69)
 32c50d1 refactor(ast-facts-visitor): extract helpers — 4 visitors bombs résolus (80 → 75)
 face7c3 chore(invariants): grandfather NO-BOOLEAN-POSITIONAL-PARAM × 20 (100 → 80)
 843062f refactor: tame COMPOSITE-NEAR-DUPLICATE-FN × 24 (123 → 100 violations)
@@ -237,7 +239,6 @@ fe6ae41 docs: SELF-OBSERVABILITY.md — référence Tier 1 pattern repeat detect
 40c8ee0 chore: regenerate CLAUDE-CONTEXT + CHANGELOG post doc-claims feature
 df32201 docs: YAML frontmatter migration + cross-check audit
 807c2b1 feat(codegraph): doc-claims extractor + composite-doc-stale rule
-38a1ffc chore(codegraph): strip 'export' on 33 local-only interfaces
 ```
 
 ## Comment contribuer à ce brief
