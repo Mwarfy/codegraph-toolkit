@@ -5,12 +5,13 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-05T13:03:38Z
+Last update : 2026-05-05T13:28:01Z
 
 ## By type
 
-### `feat` (43)
+### `feat` (41)
 
+- **7102f13** feat(codegraph): CLI cross-check — composite statique × dynamique — 2026-05-05
 - **608d725** feat(codegraph): ADR-026 phase E — default-on useDatalog (root cause fix) — 2026-05-05
 - **d65f1c4** feat(runtime-graph): wire Salsa push for composite cross-cut warm path — 2026-05-05
 - **1488e38** feat(codegraph): ADR-026 phase D — pipeline composite statique × dynamique × salsa — 2026-05-05
@@ -30,7 +31,6 @@ Last update : 2026-05-05T13:03:38Z
 - **14fe493** feat(codegraph): Phase γ.6 — port event-listener-sites au pattern Datalog — 2026-05-05
 - **a2bc182** feat(codegraph): Phase γ.4c — 5 derniers détecteurs ts-morph portés Datalog — 2026-05-04
 - **b2a709e** feat(codegraph): Phase γ.4b — consolide + 3 nouveaux détecteurs Datalog — 2026-05-04
-- **3175c64** feat(codegraph): Phase γ.4 — prototype Datalog detectors (magic-numbers + dead-code) — 2026-05-04
 
 
 ### `refactor` (1)
@@ -38,22 +38,27 @@ Last update : 2026-05-05T13:03:38Z
 - **be79c7b** refactor(codegraph): Phase γ.5 — cleanup workers cold code (Phase β/γ.2/γ.3) — 2026-05-05
 
 
-### `chore` (4)
+### `chore` (5)
 
+- **48c4c78** chore(codegraph): bump @liby-tools/codegraph to v0.6.0 — 2026-05-05
 - **f7944a1** chore(codegraph): defer Phase E (default-on useDatalog) — bug Salsa persistence — 2026-05-05
 - **70bc566** chore(codegraph): bump @liby-tools/codegraph to v0.5.0 — 2026-05-05
 - **e2fde62** chore(codegraph): bump @liby-tools/codegraph to v0.4.0 — 2026-05-05
 - **5cc82a0** chore(hooks): dedup PreToolUse + PostToolUse via SHA40 cache TTL 5min — 2026-05-05
 
 
-### `docs` (2)
+### `docs` (3)
 
+- **d469668** docs(readme): update for v0.6.0 — pipeline composite statique × dynamique × salsa — 2026-05-05
 - **3bcc427** docs(adr-026): close-out — 18/21 ts-morph ports done, 3 non-portables — 2026-05-05
 - **84b2f76** docs(adr-024): anchor markers sur les 3 helpers BSP — 2026-05-04
 
 
 ## Full history
 
+- **d469668** docs(readme): update for v0.6.0 — pipeline composite statique × dynamique × salsa — 2026-05-05
+- **48c4c78** chore(codegraph): bump @liby-tools/codegraph to v0.6.0 — 2026-05-05
+- **7102f13** feat(codegraph): CLI cross-check — composite statique × dynamique — 2026-05-05
 - **608d725** feat(codegraph): ADR-026 phase E — default-on useDatalog (root cause fix) — 2026-05-05
 - **f7944a1** chore(codegraph): defer Phase E (default-on useDatalog) — bug Salsa persistence — 2026-05-05
 - **70bc566** chore(codegraph): bump @liby-tools/codegraph to v0.5.0 — 2026-05-05
@@ -101,6 +106,3 @@ Last update : 2026-05-05T13:03:38Z
 - **abd6ad7** feat(codegraph): Phase 2.1 — 2 détecteurs portés au pattern BSP monoïdal — 2026-05-04
 - **415d382** feat(codegraph): Phase 1 BSP — monoid algebra + scheduler déterministe — 2026-05-04
 - **576e358** feat(toolkit): press-button complet — RECIPES + --with-runtime + 5 awaits paralléllisés — 2026-05-04
-- **c17c0c1** feat(runtime-graph): press-button CLI `probe` + refactor 2 bombs — 2026-05-04
-- **e1b0a02** feat(runtime-graph): 5 nouvelles disciplines pluridisciplinaires — 2026-05-04
-- **410daa0** feat(runtime-graph): static↔runtime divergence — KL + Pareto + coverage drift — 2026-05-04

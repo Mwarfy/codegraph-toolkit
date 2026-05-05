@@ -221,6 +221,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+d469668 docs(readme): update for v0.6.0 — pipeline composite statique × dynamique × salsa
 48c4c78 chore(codegraph): bump @liby-tools/codegraph to v0.6.0
 7102f13 feat(codegraph): CLI cross-check — composite statique × dynamique
 608d725 feat(codegraph): ADR-026 phase E — default-on useDatalog (root cause fix)
@@ -232,7 +233,6 @@ dd611b7 feat(codegraph): ADR-026 phase C.2 — cache module-level de l'éval Dat
 18a45a8 feat(codegraph): ADR-026 phase A.4 — close 3 outliers (full snapshot parity)
 e2fde62 chore(codegraph): bump @liby-tools/codegraph to v0.4.0
 558aa7d feat(codegraph): ADR-026 phase C — Salsa caching for Datalog runner
-5cc82a0 chore(hooks): dedup PreToolUse + PostToolUse via SHA40 cache TTL 5min
 ```
 
 ## Comment contribuer à ce brief
