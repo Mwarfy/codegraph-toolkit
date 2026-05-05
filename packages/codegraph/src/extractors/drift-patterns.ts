@@ -357,7 +357,7 @@ export function todoToDriftSignal(todo: TodoMarker): DriftSignal | null {
  */
 const fileLinesCache = new Map<string, string[]>()
 
-function isTodoExempt(rootDir: string, todo: TodoMarker): boolean {
+export function isTodoExempt(rootDir: string, todo: TodoMarker): boolean {
   let lines = fileLinesCache.get(todo.file)
   if (!lines) {
     try {

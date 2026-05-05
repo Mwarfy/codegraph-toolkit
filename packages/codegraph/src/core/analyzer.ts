@@ -149,6 +149,12 @@ import { computeModuleMetrics } from '../metrics/module-metrics.js'
 import { computeComponentMetrics } from '../metrics/component-metrics.js'
 import { computeDsm } from '../graph/dsm.js'
 import { aggregateByContainer } from '../map/dsm-renderer.js'
+import { runDatalogShadow, logShadowReport } from '../datalog-detectors/shadow.js'
+import { runDatalogDetectors, type DatalogDetectorResults } from '../datalog-detectors/runner.js'
+import {
+  buildSnapshotPatchFromDatalog,
+  adaptDriftSignalsFromDatalog,
+} from '../datalog-detectors/runner-adapter.js'
 import { execSync } from 'node:child_process'
 
 /**
@@ -225,6 +231,38 @@ export interface AnalyzeOptions {
    * en RAM et la met à jour sur fs events.
    */
   preDiscoveredFiles?: string[]
+
+  /**
+   * Mode shadow ADR-026 phase A.1 : run le runner Datalog en parallèle
+   * du legacy après que le snapshot soit finalisé. Compare les outputs
+   * des 18 détecteurs portés (bench BIT-IDENTICAL) et logue les
+   * divergences sans modifier le snapshot. Permet de valider la parité
+   * sur des codebases réelles avant le swap A.2.
+   *
+   * Activable aussi via env var `LIBY_DATALOG_DETECTORS=1`.
+   *
+   * Coût : ~extractMs+evalMs du runner (ex: ~3s sur Sentinel 220 fichiers).
+   * À utiliser en CI/dev, pas en pre-commit hot path.
+   */
+  datalogShadow?: boolean
+
+  /**
+   * Mode swap ADR-026 phase A.3 : remplace 19 détecteurs ts-morph legacy
+   * par leur équivalent Datalog (un seul AST walk amorti). Speedup
+   * attendu ~2.5× sur Sentinel (validé par bench γ).
+   *
+   * 3 détecteurs restent legacy en mode useDatalog :
+   *   - `deadCode` (legacy = 6 kinds, runner Datalog = 1 kind)
+   *   - `hardcodedSecrets` (runner manque le field `trigger`)
+   *   - tous les détecteurs hors-AST (state-machines, drizzle-schema,
+   *     bin-shebangs, sql-naming, etc.) — non portés ADR-026
+   *
+   * Mutuellement compatible avec `incremental: true` : le mode incremental
+   * a priorité (Salsa cache > Datalog batch). useDatalog s'applique aux
+   * détecteurs non-Salsaisés. Activable aussi via env var
+   * `LIBY_DATALOG_DETECTORS_LIVE=1`.
+   */
+  useDatalog?: boolean
 }
 
 export async function analyze(
@@ -235,6 +273,8 @@ export async function analyze(
   const incremental = options.incremental ?? false
   const skipPersistenceLoad = options.skipPersistenceLoad ?? false
   const skipPersistenceSave = options.skipPersistenceSave ?? false
+  const datalogShadow = options.datalogShadow ?? (process.env['LIBY_DATALOG_DETECTORS'] === '1')
+  const useDatalog = options.useDatalog ?? (process.env['LIBY_DATALOG_DETECTORS_LIVE'] === '1')
   const t0 = performance.now()
   const timing: AnalyzeResult['timing'] = {
     total: 0,
@@ -329,6 +369,7 @@ export async function analyze(
   if (!factsOnly) {
     await runDeterministicDetectors({
       config, files, readFile, sharedProject, snapshot, timing, incremental,
+      useDatalog,
     })
   } else {
     await runFactsOnlyTestCoverage(config, files, snapshot, timing)
@@ -338,6 +379,23 @@ export async function analyze(
   // module-metrics, component-metrics, dsm. Tournent post-snapshot car
   // dépendent de snapshot.nodes + snapshot.edges (cf. helper).
   await runPostSnapshotMetrics(config, snapshot, timing, { factsOnly, incremental })
+
+  // ─── 8. Datalog shadow run (ADR-026 phase A.1) ─────────────────────
+  // Compare runner Datalog vs legacy snapshot. Skip si factsOnly (snapshot
+  // incomplet, comparaison aurait des faux ✗ partout).
+  if (datalogShadow && !factsOnly) {
+    const tShadow = performance.now()
+    try {
+      const report = await runDatalogShadow({
+        project: sharedProject, files, rootDir: config.rootDir, snapshot,
+      })
+      logShadowReport(report)
+    } catch (err) {
+      console.error(`  ✗ datalog-shadow failed: ${err}`)
+    } finally {
+      timing.detectors['datalog-shadow'] = performance.now() - tShadow
+    }
+  }
 
   // ─── Persist disk cache (Sprint 7) ───────────────────────────────────
   await persistDiskCacheIfIncremental(config, incremental, skipPersistenceSave)
@@ -720,6 +778,20 @@ interface DetectorPhaseContext {
   snapshot: GraphSnapshot
   timing: AnalyzeResult['timing']
   incremental: boolean
+  /**
+   * ADR-026 phase A.3 : si non-null, contient les outputs des 18 fields
+   * trivial-compat du runner Datalog. Les phases 1-6 branchent dessus
+   * pour skipper le legacy/extracteur ts-morph quand `useDatalog` est
+   * actif. Salsa cache (incremental mode) reste prioritaire — cascade :
+   *   incremental ? salsa : datalogPatch ? datalogPatch.X : legacy
+   */
+  datalogPatch: ReturnType<typeof buildSnapshotPatchFromDatalog> | null
+  /**
+   * ADR-026 phase A.3 : raw output du runner. Phase 2 le consomme pour
+   * reconstruire `driftSignals` (qui dépend de `phase1.todos` non
+   * disponibles au moment du pre-compute).
+   */
+  datalogResults: DatalogDetectorResults | null
 }
 
 interface RunDetectorsArgs {
@@ -730,13 +802,44 @@ interface RunDetectorsArgs {
   snapshot: GraphSnapshot
   timing: AnalyzeResult['timing']
   incremental?: boolean
+  useDatalog?: boolean
 }
 
 async function runDeterministicDetectors(args: RunDetectorsArgs): Promise<void> {
   const { config, files, readFile, sharedProject, snapshot, timing } = args
   const incremental = args.incremental ?? false
+  const useDatalog = args.useDatalog ?? false
+
+  // ADR-026 phase A.3 : pre-compute Datalog runner UNE FOIS pour les
+  // phases 1-6. Coût ~3s sur Sentinel (vs ~5s gain sur les détecteurs
+  // swappés). Skip si `incremental` car Salsa fait mieux per-file.
+  let datalogPatch: ReturnType<typeof buildSnapshotPatchFromDatalog> | null = null
+  let datalogResults: DatalogDetectorResults | null = null
+  if (useDatalog && !incremental) {
+    const tDl = performance.now()
+    try {
+      datalogResults = await runDatalogDetectors({
+        project: sharedProject, files, rootDir: config.rootDir,
+      })
+      datalogPatch = buildSnapshotPatchFromDatalog(datalogResults)
+
+      // Override des 3 fields déjà patchés par DetectorRegistry. Les
+      // détecteurs ts-morph (env-usage, barrels, event-emit-sites)
+      // tournent toujours via le registry mais leurs outputs sont
+      // remplacés par ceux du runner. À optimiser en A.4 (skip register).
+      snapshot.envUsage = datalogPatch.envUsage
+      snapshot.barrels = datalogPatch.barrels
+      snapshot.eventEmitSites = datalogPatch.eventEmitSites
+    } catch (err) {
+      console.error(`  ✗ datalog-runner (useDatalog) failed: ${err}`)
+    } finally {
+      timing.detectors['datalog-runner'] = performance.now() - tDl
+    }
+  }
+
   const ctx: DetectorPhaseContext = {
     config, files, readFile, sharedProject, snapshot, timing, incremental,
+    datalogPatch, datalogResults,
   }
 
   const phase1 = await runPhase1IndependentDetectors(ctx)
@@ -781,16 +884,22 @@ async function runDeterministicDetectors(args: RunDetectorsArgs): Promise<void> 
  * Phase 2 + cross-discipline.
  */
 async function runPhase1IndependentDetectors(ctx: DetectorPhaseContext) {
-  const { config, files, readFile, sharedProject, snapshot, timing, incremental } = ctx
+  const { config, files, readFile, sharedProject, snapshot, timing, incremental, datalogPatch } = ctx
 
   const todos = await runDetectorTimed(timing, 'todos',
     () => analyzeTodos(config.rootDir, files, readFile))
+  // ADR-026 A.3 : long-functions Datalog filtre déjà loc≥100 (cf. rules/
+  // index.ts) — comportement identique au consumer-side qui lit ce field.
   const longFunctions = await runDetectorTimed(timing, 'long-functions',
-    () => analyzeLongFunctions(config.rootDir, files, sharedProject))
+    () => datalogPatch
+      ? Promise.resolve(datalogPatch.longFunctions)
+      : analyzeLongFunctions(config.rootDir, files, sharedProject))
   const magicNumbers = await runDetectorTimed(timing, 'magic-numbers',
     () => incremental
       ? Promise.resolve(incAllMagicNumbers.get('all'))
-      : analyzeMagicNumbers(config.rootDir, files, sharedProject))
+      : datalogPatch
+        ? Promise.resolve(datalogPatch.magicNumbers)
+        : analyzeMagicNumbers(config.rootDir, files, sharedProject))
   const testCoverage = await runDetectorTimed(timing, 'test-coverage',
     () => analyzeTestCoverage(config.rootDir, files, snapshot.edges))
   const coChangePairs = await runDetectorTimed(timing, 'co-change',
@@ -818,7 +927,7 @@ async function runPhase2Phase1Dependent(
   ctx: DetectorPhaseContext,
   todos: TodoMarker[] | undefined,
 ) {
-  const { config, files, sharedProject, timing, incremental } = ctx
+  const { config, files, sharedProject, timing, incremental, datalogPatch, datalogResults } = ctx
 
   const driftSignals = await runDetectorTimed(timing, 'drift-patterns',
     () => {
@@ -838,32 +947,51 @@ async function runPhase2Phase1Dependent(
         })
         return Promise.resolve(merged)
       }
+      // ADR-026 A.3 : Datalog runner = 4 AST sub-arrays plats. Adapter
+      // reconstruit DriftSignal[] et merge le 5e kind todo-no-owner.
+      if (datalogResults) {
+        return Promise.resolve(adaptDriftSignalsFromDatalog(
+          datalogResults.driftPatterns, todos, config.rootDir,
+        ))
+      }
       return analyzeDriftPatterns(config.rootDir, files, sharedProject, todos)
     })
   const evalCalls = await runDetectorTimed(timing, 'eval-calls',
     () => incremental
       ? Promise.resolve(incAllEvalCalls.get('all'))
-      : analyzeEvalCalls(config.rootDir, files, sharedProject))
+      : datalogPatch
+        ? Promise.resolve(datalogPatch.evalCalls)
+        : analyzeEvalCalls(config.rootDir, files, sharedProject))
   const cryptoCalls = await runDetectorTimed(timing, 'crypto-algo',
     () => incremental
       ? Promise.resolve(incAllCryptoCalls.get('all'))
-      : analyzeCryptoCalls(config.rootDir, files, sharedProject))
+      : datalogPatch
+        ? Promise.resolve(datalogPatch.cryptoCalls)
+        : analyzeCryptoCalls(config.rootDir, files, sharedProject))
   // Self-optim discovery : Salsa-isolation post-λ_lyap analysis.
   // Cold path identique au legacy ; warm path = cache hit ~99%.
   const securityPatterns = await runDetectorTimed(timing, 'security-patterns',
     () => incremental
       ? Promise.resolve(incAllSecurityPatterns.get('all'))
-      : analyzeSecurityPatterns(config.rootDir, files, sharedProject))
+      : datalogPatch
+        ? Promise.resolve(datalogPatch.securityPatterns)
+        : analyzeSecurityPatterns(config.rootDir, files, sharedProject))
   const eventListenerSites = await runDetectorTimed(timing, 'event-listener-sites',
-    () => analyzeEventListenerSites(config.rootDir, files, sharedProject))
+    () => datalogPatch
+      ? Promise.resolve(datalogPatch.eventListenerSites)
+      : analyzeEventListenerSites(config.rootDir, files, sharedProject))
   const codeQualityPatterns = await runDetectorTimed(timing, 'code-quality-patterns',
     () => incremental
       ? Promise.resolve(incAllCodeQualityPatterns.get('all'))
-      : analyzeCodeQualityPatterns(config.rootDir, files, sharedProject))
+      : datalogPatch
+        ? Promise.resolve(datalogPatch.codeQualityPatterns)
+        : analyzeCodeQualityPatterns(config.rootDir, files, sharedProject))
   const functionComplexity = await runDetectorTimed(timing, 'function-complexity',
     () => incremental
       ? Promise.resolve(incAllFunctionComplexity.get('all'))
-      : analyzeFunctionComplexity(config.rootDir, files, sharedProject))
+      : datalogPatch
+        ? Promise.resolve(datalogPatch.functionComplexity)
+        : analyzeFunctionComplexity(config.rootDir, files, sharedProject))
 
   return {
     driftSignals, evalCalls, cryptoCalls, securityPatterns, eventListenerSites,
@@ -877,8 +1005,10 @@ async function runPhase2Phase1Dependent(
  * constant-expressions (simplification symbolique).
  */
 async function runPhase4SecurityAndQuality(ctx: DetectorPhaseContext) {
-  const { config, files, sharedProject, snapshot, timing, incremental } = ctx
+  const { config, files, sharedProject, snapshot, timing, incremental, datalogPatch } = ctx
 
+  // hardcoded-secrets : runner Datalog n'expose pas le field `trigger`
+  // (name vs pattern) — reste en legacy pour A.3. À porter en A.4.
   const hardcodedSecrets = await runDetectorTimed(timing, 'hardcoded-secrets',
     () => incremental
       ? Promise.resolve(incAllHardcodedSecrets.get('all'))
@@ -886,7 +1016,12 @@ async function runPhase4SecurityAndQuality(ctx: DetectorPhaseContext) {
   const booleanParams = await runDetectorTimed(timing, 'boolean-params',
     () => incremental
       ? Promise.resolve(incAllBooleanParams.get('all'))
-      : analyzeBooleanParams(config.rootDir, files, sharedProject))
+      : datalogPatch
+        ? Promise.resolve(datalogPatch.booleanParams)
+        : analyzeBooleanParams(config.rootDir, files, sharedProject))
+  // dead-code : runner Datalog couvre 1/6 kinds (identical-subexpressions).
+  // Les 5 autres kinds (return-then-else, switch-fallthrough, etc.) ne sont
+  // pas portés — reste en legacy pour A.3. À étendre runner en A.4.
   const deadCode = await runDetectorTimed(timing, 'dead-code',
     () => incremental
       ? Promise.resolve(incAllDeadCode.get('all'))
@@ -904,7 +1039,9 @@ async function runPhase4SecurityAndQuality(ctx: DetectorPhaseContext) {
   const constantExpressions = await runDetectorTimed(timing, 'constant-expressions',
     () => incremental
       ? Promise.resolve(incAllConstantExpressions.get('all'))
-      : analyzeConstantExpressionsBatch(config.rootDir, files, sharedProject))
+      : datalogPatch
+        ? Promise.resolve(datalogPatch.constantExpressions)
+        : analyzeConstantExpressionsBatch(config.rootDir, files, sharedProject))
   // ESLint ingester — read .codegraph/eslint.json if user provided it.
   const eslintViolations = await runDetectorTimed(timing, 'eslint-import',
     () => importEslintViolations(config.rootDir))
@@ -921,7 +1058,7 @@ async function runPhase4SecurityAndQuality(ctx: DetectorPhaseContext) {
  * undefined → snapshot fields restent non-set.
  */
 async function runPhase5SqlAndResource(ctx: DetectorPhaseContext) {
-  const { config, files, sharedProject, snapshot, timing, incremental } = ctx
+  const { config, files, sharedProject, snapshot, timing, incremental, datalogPatch } = ctx
 
   const sqlNamingViolations = await runDetectorTimed(timing, 'sql-naming',
     async () => snapshot.sqlSchema ? findSqlNamingViolations(snapshot.sqlSchema) : undefined)
@@ -930,7 +1067,9 @@ async function runPhase5SqlAndResource(ctx: DetectorPhaseContext) {
   const resourceImbalances = await runDetectorTimed(timing, 'resource-balance',
     () => incremental
       ? Promise.resolve(incAllResourceBalances.get('all'))
-      : analyzeResourceBalance(config.rootDir, files, sharedProject))
+      : datalogPatch
+        ? Promise.resolve(datalogPatch.resourceImbalances)
+        : analyzeResourceBalance(config.rootDir, files, sharedProject))
 
   return { sqlNamingViolations, sqlMigrationOrderViolations, resourceImbalances }
 }
@@ -941,24 +1080,32 @@ async function runPhase5SqlAndResource(ctx: DetectorPhaseContext) {
  * runtime), mais les rules Datalog en aval consomment les 4 facts.
  */
 async function runPhase6TaintChain(ctx: DetectorPhaseContext) {
-  const { config, files, sharedProject, timing, incremental } = ctx
+  const { config, files, sharedProject, timing, incremental, datalogPatch } = ctx
 
   const taintSinks = await runDetectorTimed(timing, 'taint-sinks',
     () => incremental
       ? Promise.resolve(incAllTaintSinks.get('all'))
-      : analyzeTaintSinks(config.rootDir, files, sharedProject))
+      : datalogPatch
+        ? Promise.resolve(datalogPatch.taintSinks)
+        : analyzeTaintSinks(config.rootDir, files, sharedProject))
   const sanitizerCalls = await runDetectorTimed(timing, 'sanitizers',
     () => incremental
       ? Promise.resolve(incAllSanitizers.get('all'))
-      : analyzeSanitizers(config.rootDir, files, sharedProject))
+      : datalogPatch
+        ? Promise.resolve(datalogPatch.sanitizerCalls)
+        : analyzeSanitizers(config.rootDir, files, sharedProject))
   const taintedVars = await runDetectorTimed(timing, 'tainted-vars',
     () => incremental
       ? Promise.resolve(incAllTaintedVars.get('all'))
-      : analyzeTaintedVars(config.rootDir, files, sharedProject))
+      : datalogPatch
+        ? Promise.resolve(datalogPatch.taintedVars)
+        : analyzeTaintedVars(config.rootDir, files, sharedProject))
   const argumentsFacts = await runDetectorTimed(timing, 'arguments',
     () => incremental
       ? Promise.resolve(incAllArguments.get('all'))
-      : analyzeArguments(config.rootDir, files, sharedProject))
+      : datalogPatch
+        ? Promise.resolve(datalogPatch.argumentsFacts)
+        : analyzeArguments(config.rootDir, files, sharedProject))
 
   return { taintSinks, sanitizerCalls, taintedVars, argumentsFacts }
 }

@@ -219,6 +219,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+3bcc427 docs(adr-026): close-out — 18/21 ts-morph ports done, 3 non-portables
 f8b1256 feat(codegraph): Phase γ.15 — port code-quality-patterns au pattern Datalog
 6951dc6 feat(codegraph): Phase γ.14 — port drift-patterns au pattern Datalog
 7cb5ef4 feat(codegraph): Phase γ.13 — port security-patterns au pattern Datalog
@@ -230,7 +231,6 @@ dad7dc1 feat(codegraph): Phase γ.8 — port constant-expressions au pattern Dat
 393fc2c feat(codegraph): Phase γ.7 — port barrels + env-usage au pattern Datalog
 14fe493 feat(codegraph): Phase γ.6 — port event-listener-sites au pattern Datalog
 be79c7b refactor(codegraph): Phase γ.5 — cleanup workers cold code (Phase β/γ.2/γ.3)
-a2bc182 feat(codegraph): Phase γ.4c — 5 derniers détecteurs ts-morph portés Datalog
 ```
 
 ## Comment contribuer à ce brief

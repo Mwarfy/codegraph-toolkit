@@ -5,83 +5,106 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-04T01:27:51Z
+Last update : 2026-05-05T01:34:14Z
 
 ## By type
 
-### `refactor` (50)
+### `feat` (43)
 
-- **edb3764** refactor(toolkit): zero drift signals — 23 → 0 (-100%) — 2026-05-04
-- **8374745** refactor(datalog): split Lexer.readString (cyclo 10→4, cog 26→3) — parser.ts cleared — 2026-05-04
-- **0796ef1** refactor(codegraph): split extractAllocationInLoops (cyclo 11→4, cog 27→6) — allocation-in-loop.ts cleared — 2026-05-04
-- **7c57543** refactor(datalog): split unify (cyclo 11→8, cog 34→17) — eval.ts unify cleared — 2026-05-04
-- **e0715bf** refactor(codegraph): split detectHttpEntries (cyclo 12→1, cog 27→0) — data-flows.ts cleared — 2026-05-04
-- **990857f** refactor(codegraph): split printExportsSummary (cyclo 12→4, cog 29→3) — cli/commands/analyze.ts cleared — 2026-05-04
-- **e20b3fb** refactor(adr-toolkit): split collectMarkers (cyclo 13→1, cog 28→0) — regenerate-anchors.ts cleared — 2026-05-04
-- **bc2d6c5** refactor(codegraph): split extractTryCatchSwallows (cyclo 13→5, cog 29→7) — try-catch-swallow.ts cleared — 2026-05-04
-- **69a75bc** refactor(codegraph): split extractTaintSinksFileBundle (cyclo 14→4, cog 31→4) — taint-sinks.ts cleared — 2026-05-04
-- **3660fdc** refactor(codegraph): split collectImportSpecifiers (cyclo 15→4, cog 28→4) — package-deps.ts cleared — 2026-05-04
-- **a7bbb0c** refactor(codegraph): split computePackageMinCuts (cyclo 15→6, cog 28→8) — package-mincut.ts cleared — 2026-05-04
-- **5309e21** refactor(codegraph): split loadPersistedCache (cyclo 16→2, cog 18→1) — incremental/persistence.ts cleared — 2026-05-04
-- **119cfd4** refactor(codegraph): split diffDataFlows (cyclo 16→3, cog 20→0) — diff/data-flows.ts cleared — 2026-05-04
-- **da2fe20** refactor(codegraph): split diffCycles (cyclo 16→5, cog 21→3) — diff/cycles.ts cleared — 2026-05-04
-- **c1c37b8** refactor(codegraph): split extractFunctionSnippetsLocal (cyclo 16→3, cog 22→2) — incremental/compression-similarity.ts cleared — 2026-05-04
-- **6c2ca10** refactor(codegraph-mcp): split codegraphExtractCandidates (cyclo 18→8, cog 14→2) — extract-candidates.ts cleared — 2026-05-04
-- **9cc5e08** refactor(codegraph): split analyze (cyclo 18→10, cog 16→4) — analyzer.ts top-level cleared — 2026-05-04
-- **6ff5dfd** refactor(codegraph): split extractLongFunctionsFileBundle (cyclo 16→3, cog 24→3) — long-functions.ts cleared — 2026-05-04
-- **43a9785** refactor(codegraph): split collectAdrMarkers (cyclo 16→3, cog 35→0) — adr-markers.ts cleared — 2026-05-04
-- **97128ab** refactor(runtime-graph): split lyapunovTimeseries (cyclo 17→7, cog 24→7) — lyapunov-timeseries.ts cleared — 2026-05-04
+- **f8b1256** feat(codegraph): Phase γ.15 — port code-quality-patterns au pattern Datalog — 2026-05-05
+- **6951dc6** feat(codegraph): Phase γ.14 — port drift-patterns au pattern Datalog — 2026-05-05
+- **7cb5ef4** feat(codegraph): Phase γ.13 — port security-patterns au pattern Datalog — 2026-05-05
+- **4baa9d0** feat(codegraph): Phase γ.12 — port resource-balance au pattern Datalog — 2026-05-05
+- **cc6598b** feat(codegraph): Phase γ.11 — port tainted-vars au pattern Datalog — 2026-05-05
+- **91912a1** feat(codegraph): Phase γ.10 — port event-emit-sites au pattern Datalog — 2026-05-05
+- **2cfe578** feat(codegraph): Phase γ.9 — port arguments au pattern Datalog — 2026-05-05
+- **dad7dc1** feat(codegraph): Phase γ.8 — port constant-expressions au pattern Datalog — 2026-05-05
+- **393fc2c** feat(codegraph): Phase γ.7 — port barrels + env-usage au pattern Datalog — 2026-05-05
+- **14fe493** feat(codegraph): Phase γ.6 — port event-listener-sites au pattern Datalog — 2026-05-05
+- **a2bc182** feat(codegraph): Phase γ.4c — 5 derniers détecteurs ts-morph portés Datalog — 2026-05-04
+- **b2a709e** feat(codegraph): Phase γ.4b — consolide + 3 nouveaux détecteurs Datalog — 2026-05-04
+- **3175c64** feat(codegraph): Phase γ.4 — prototype Datalog detectors (magic-numbers + dead-code) — 2026-05-04
+- **06c21b1** feat(codegraph): Phase γ.3b — wire batch warmup dans analyzer.ts — 2026-05-04
+- **4b218d2** feat(codegraph): Phase γ.3b — batch dispatch infrastructure (non-wired) — 2026-05-04
+- **444bc98** feat(codegraph): Phase γ.3a — affinity routing + LRU cache intra-worker — 2026-05-04
+- **c2ab5c7** feat(codegraph): Phase γ.2c — wire les 6 ts-morph détecteurs restants aux workers — 2026-05-04
+- **5a40459** feat(codegraph): Phase γ.2b — wire long-functions + dead-code aux workers — 2026-05-04
+- **d94cab1** feat(codegraph): Phase γ.2 — workers ts-morph via mini-Project local — 2026-05-04
+- **9a741e3** feat(codegraph): Phase 2.8 — dead-code + event-emit-sites portés (14/65) — 2026-05-04
+
+
+### `fix` (2)
+
+- **2a7d3cf** fix(codegraph): bayesian-cochange reads param, not snapshot — 0 → 175 rows — 2026-05-04
+- **cbb861f** fix(runtime-graph): ESM project capture + ground-truth fixture — 2026-05-04
+
+
+### `perf` (2)
+
+- **fc9449a** perf(co-change): --no-merges --no-renames sur git log — 2026-05-04
+- **c626690** perf(codegraph): parallelize delta reads in applyDeltasInOrder — 2026-05-04
+
+
+### `refactor` (1)
+
+- **be79c7b** refactor(codegraph): Phase γ.5 — cleanup workers cold code (Phase β/γ.2/γ.3) — 2026-05-05
+
+
+### `docs` (2)
+
+- **3bcc427** docs(adr-026): close-out — 18/21 ts-morph ports done, 3 non-portables — 2026-05-05
+- **84b2f76** docs(adr-024): anchor markers sur les 3 helpers BSP — 2026-05-04
 
 
 ## Full history
 
-- **edb3764** refactor(toolkit): zero drift signals — 23 → 0 (-100%) — 2026-05-04
-- **8374745** refactor(datalog): split Lexer.readString (cyclo 10→4, cog 26→3) — parser.ts cleared — 2026-05-04
-- **0796ef1** refactor(codegraph): split extractAllocationInLoops (cyclo 11→4, cog 27→6) — allocation-in-loop.ts cleared — 2026-05-04
-- **7c57543** refactor(datalog): split unify (cyclo 11→8, cog 34→17) — eval.ts unify cleared — 2026-05-04
-- **e0715bf** refactor(codegraph): split detectHttpEntries (cyclo 12→1, cog 27→0) — data-flows.ts cleared — 2026-05-04
-- **990857f** refactor(codegraph): split printExportsSummary (cyclo 12→4, cog 29→3) — cli/commands/analyze.ts cleared — 2026-05-04
-- **e20b3fb** refactor(adr-toolkit): split collectMarkers (cyclo 13→1, cog 28→0) — regenerate-anchors.ts cleared — 2026-05-04
-- **bc2d6c5** refactor(codegraph): split extractTryCatchSwallows (cyclo 13→5, cog 29→7) — try-catch-swallow.ts cleared — 2026-05-04
-- **69a75bc** refactor(codegraph): split extractTaintSinksFileBundle (cyclo 14→4, cog 31→4) — taint-sinks.ts cleared — 2026-05-04
-- **3660fdc** refactor(codegraph): split collectImportSpecifiers (cyclo 15→4, cog 28→4) — package-deps.ts cleared — 2026-05-04
-- **a7bbb0c** refactor(codegraph): split computePackageMinCuts (cyclo 15→6, cog 28→8) — package-mincut.ts cleared — 2026-05-04
-- **5309e21** refactor(codegraph): split loadPersistedCache (cyclo 16→2, cog 18→1) — incremental/persistence.ts cleared — 2026-05-04
-- **119cfd4** refactor(codegraph): split diffDataFlows (cyclo 16→3, cog 20→0) — diff/data-flows.ts cleared — 2026-05-04
-- **da2fe20** refactor(codegraph): split diffCycles (cyclo 16→5, cog 21→3) — diff/cycles.ts cleared — 2026-05-04
-- **c1c37b8** refactor(codegraph): split extractFunctionSnippetsLocal (cyclo 16→3, cog 22→2) — incremental/compression-similarity.ts cleared — 2026-05-04
-- **6c2ca10** refactor(codegraph-mcp): split codegraphExtractCandidates (cyclo 18→8, cog 14→2) — extract-candidates.ts cleared — 2026-05-04
-- **9cc5e08** refactor(codegraph): split analyze (cyclo 18→10, cog 16→4) — analyzer.ts top-level cleared — 2026-05-04
-- **6ff5dfd** refactor(codegraph): split extractLongFunctionsFileBundle (cyclo 16→3, cog 24→3) — long-functions.ts cleared — 2026-05-04
-- **43a9785** refactor(codegraph): split collectAdrMarkers (cyclo 16→3, cog 35→0) — adr-markers.ts cleared — 2026-05-04
-- **97128ab** refactor(runtime-graph): split lyapunovTimeseries (cyclo 17→7, cog 24→7) — lyapunov-timeseries.ts cleared — 2026-05-04
-- **5ea3ad1** refactor(codegraph-mcp): split codegraphMemoryRecall (cyclo 17→5, cog 25→3) — memory.ts cleared — 2026-05-04
-- **fae254e** refactor(codegraph): split extractFunctionComplexityFileBundle (cyclo 17→4, cog 25→4) — function-complexity.ts cleared — 2026-05-04
-- **8dcc063** refactor(adr-toolkit): split detectLayout (cyclo 17→4, cog 27→3) — init.ts cleared — 2026-05-04
-- **9d26278** refactor(codegraph-mcp): split codegraphChangesSince (cyclo 18→5, cog 27→3) — changes-since.ts cleared — 2026-05-04
-- **07922ff** refactor(codegraph): split classifyLiteral (cyclo 18→5, cog 27→4) — magic-numbers.ts cleared — 2026-05-04
-- **68a0620** refactor(codegraph): split detectSignatureDuplicates (cyclo 18→7, cog 27→6) — signature-duplication.ts cleared — 2026-05-04
-- **860b688** refactor(adr-toolkit): split findWriteSites (cyclo 15→2, cog 32→1) — bootstrap-fsm.ts FULLY cleared — 2026-05-04
-- **194452b** refactor(adr-toolkit): split detectFsmCandidates (cyclo 18→3, cog 29→1) — bootstrap-fsm.ts detectFsmCandidates cleared — 2026-05-04
-- **0e97abd** refactor(runtime-graph): split newmanGirvanRuntime (cyclo 20→2, cog 17→1) — runtime-disciplines.ts cleared — 2026-05-04
-- **de0af83** refactor(codegraph): split extractBooleanParamsFileBundle (cyclo 19→4, cog 19→4) — boolean-params.ts cleared — 2026-05-04
-- **1898604** refactor(codegraph-mcp): split codegraphDrift (cyclo 19→5, cog 28→1) — drift.ts cleared — 2026-05-04
-- **ca65576** refactor(runtime-graph): split mergeFactsDirs (cyclo 18→2, cog 45→1) — cli.ts mergeFactsDirs cleared — 2026-05-04
-- **47c470a** refactor(codegraph): split HttpRouteDetector.detect (cyclo 20→1, cog 29→0) — http-routes.ts cleared — 2026-05-04
-- **78eeb86** refactor(codegraph): split parseSqlFile (cyclo 20→1, cog 32→0) — sql-schema.ts cleared — 2026-05-04
-- **b431f2f** refactor(codegraph): split getOrBuildSharedProject (cyclo 20→2, cog 33→1) — project-cache.ts cleared — 2026-05-04
-- **600fdb0** refactor(codegraph): split BullmqQueueDetector.detect (cyclo 20→2, cog 42→1) — bullmq-queues.ts cleared — 2026-05-04
-- **fb50d40** refactor(codegraph): split EventBusDetector.detect (cyclo 20→1, cog 48→0) — event-bus.ts cleared — 2026-05-04
-- **fcb7141** refactor(codegraph): split findReachablePaths (cyclo 21→3, cog 34→1) — reachability.ts cleared — 2026-05-04
-- **0047e61** refactor(codegraph): split validateStore (cyclo 22→4, cog 27→3) — store.ts cleared — 2026-05-04
-- **a73b0b8** refactor(codegraph-mcp): split codegraphTruthPointFor (cyclo 22→4, cog 26→1) — truth-point.ts cleared — 2026-05-04
-- **9e41eaa** refactor(codegraph): split loadConfig (cyclo 21→4, cog 38→3) — _shared.ts cleared — 2026-05-04
-- **65c2c5c** refactor(codegraph): split mergeSqlSchemaResults (cyclo 21→1, cog 42→0) — drizzle-schema-detector.ts cleared — 2026-05-04
-- **725ecdf** refactor(runtime-graph): split grangerRuntime (cyclo 22→5, cog 41→4) — granger-runtime.ts cleared — 2026-05-04
-- **1bc0481** refactor(codegraph): split DbTableDetector.detect (cyclo 22→1, cog 47→0) — db-tables.ts cleared — 2026-05-04
-- **05adaa7** refactor(codegraph): split extractDeprecatedUsageFileBundle (cyclo 23→2, cog 31→1) — deprecated-usage.ts cleared — 2026-05-04
-- **1e46881** refactor(codegraph): split extractResourceBalanceFileBundle (cyclo 24→5, cog 27→5) — resource-balance.ts cleared — 2026-05-04
-- **3b34ca1** refactor(codegraph): split importEslintViolations (cyclo 24→4, cog 29→2) — eslint-import.ts cleared — 2026-05-04
-- **bd9fcb0** refactor(codegraph): split printDiffSummary (cyclo 24→4, cog 42→3) — diff.ts cleared — 2026-05-04
-- **dc507d3** refactor(codegraph): split findArticulationPoints (cyclo 23→2, cog 46→0) — articulation-points.ts cleared — 2026-05-04
-- **df37db7** refactor(codegraph): split diffTypedCalls (cyclo 25→5, cog 30→0) — diff/typed-calls.ts cleared — 2026-05-04
+- **3bcc427** docs(adr-026): close-out — 18/21 ts-morph ports done, 3 non-portables — 2026-05-05
+- **f8b1256** feat(codegraph): Phase γ.15 — port code-quality-patterns au pattern Datalog — 2026-05-05
+- **6951dc6** feat(codegraph): Phase γ.14 — port drift-patterns au pattern Datalog — 2026-05-05
+- **7cb5ef4** feat(codegraph): Phase γ.13 — port security-patterns au pattern Datalog — 2026-05-05
+- **4baa9d0** feat(codegraph): Phase γ.12 — port resource-balance au pattern Datalog — 2026-05-05
+- **cc6598b** feat(codegraph): Phase γ.11 — port tainted-vars au pattern Datalog — 2026-05-05
+- **91912a1** feat(codegraph): Phase γ.10 — port event-emit-sites au pattern Datalog — 2026-05-05
+- **2cfe578** feat(codegraph): Phase γ.9 — port arguments au pattern Datalog — 2026-05-05
+- **dad7dc1** feat(codegraph): Phase γ.8 — port constant-expressions au pattern Datalog — 2026-05-05
+- **393fc2c** feat(codegraph): Phase γ.7 — port barrels + env-usage au pattern Datalog — 2026-05-05
+- **14fe493** feat(codegraph): Phase γ.6 — port event-listener-sites au pattern Datalog — 2026-05-05
+- **be79c7b** refactor(codegraph): Phase γ.5 — cleanup workers cold code (Phase β/γ.2/γ.3) — 2026-05-05
+- **a2bc182** feat(codegraph): Phase γ.4c — 5 derniers détecteurs ts-morph portés Datalog — 2026-05-04
+- **b2a709e** feat(codegraph): Phase γ.4b — consolide + 3 nouveaux détecteurs Datalog — 2026-05-04
+- **3175c64** feat(codegraph): Phase γ.4 — prototype Datalog detectors (magic-numbers + dead-code) — 2026-05-04
+- **06c21b1** feat(codegraph): Phase γ.3b — wire batch warmup dans analyzer.ts — 2026-05-04
+- **4b218d2** feat(codegraph): Phase γ.3b — batch dispatch infrastructure (non-wired) — 2026-05-04
+- **444bc98** feat(codegraph): Phase γ.3a — affinity routing + LRU cache intra-worker — 2026-05-04
+- **c2ab5c7** feat(codegraph): Phase γ.2c — wire les 6 ts-morph détecteurs restants aux workers — 2026-05-04
+- **5a40459** feat(codegraph): Phase γ.2b — wire long-functions + dead-code aux workers — 2026-05-04
+- **d94cab1** feat(codegraph): Phase γ.2 — workers ts-morph via mini-Project local — 2026-05-04
+- **9a741e3** feat(codegraph): Phase 2.8 — dead-code + event-emit-sites portés (14/65) — 2026-05-04
+- **07b0dcf** feat(codegraph): Phase 2.7 — function-complexity + long-functions portés (12/65) — 2026-05-04
+- **7366782** feat(codegraph): Phase γ.1 — cost-model auto-tuning LIBY_BSP_WORKERS=auto — 2026-05-04
+- **896219e** feat(codegraph): Phase 2.6 — oauth-scope-literals porté (10/65) — 2026-05-04
+- **76362ea** feat(codegraph): Phase 2.5 — ts-imports porté au pattern BSP monoïdal — 2026-05-04
+- **59d89c8** feat(codegraph): Phase β.3 — ADR-025 + template BSP pour futurs détecteurs — 2026-05-04
+- **7dc918b** feat(codegraph): Phase β.2 — worker mode opt-in pour analyzeTodos — 2026-05-04
+- **de8b02a** feat(codegraph): Phase β — worker_threads dispatch via WorkerPool — 2026-05-04
+- **3399c54** feat(codegraph): Phase 2.4 — sanitizers + taint-sinks portés (8/65) — 2026-05-04
+- **f066d43** feat(codegraph): Phase 2.3 — 3 détecteurs portés (boolean-params, eval-calls, crypto-algo) — 2026-05-04
+- **84b2f76** docs(adr-024): anchor markers sur les 3 helpers BSP — 2026-05-04
+- **190b979** feat(codegraph): Phase 2.2 — hardcoded-secrets porté + ADR-024 — 2026-05-04
+- **abd6ad7** feat(codegraph): Phase 2.1 — 2 détecteurs portés au pattern BSP monoïdal — 2026-05-04
+- **415d382** feat(codegraph): Phase 1 BSP — monoid algebra + scheduler déterministe — 2026-05-04
+- **576e358** feat(toolkit): press-button complet — RECIPES + --with-runtime + 5 awaits paralléllisés — 2026-05-04
+- **c17c0c1** feat(runtime-graph): press-button CLI `probe` + refactor 2 bombs — 2026-05-04
+- **e1b0a02** feat(runtime-graph): 5 nouvelles disciplines pluridisciplinaires — 2026-05-04
+- **410daa0** feat(runtime-graph): static↔runtime divergence — KL + Pareto + coverage drift — 2026-05-04
+- **fc9449a** perf(co-change): --no-merges --no-renames sur git log — 2026-05-04
+- **c626690** perf(codegraph): parallelize delta reads in applyDeltasInOrder — 2026-05-04
+- **b4959d9** feat(runtime-graph): math optim suggester — universel pour toute app — 2026-05-04
+- **7d4d382** feat(runtime-graph): fn-wrap iitm — capture exacte des call edges cross-module — 2026-05-04
+- **e936121** feat(runtime-graph): CPU profile capture pour apps pure-CPU — 2026-05-04
+- **924a064** feat(toolkit): wire Claude Code hooks pour le toolkit lui-même — 2026-05-04
+- **706725f** feat(toolkit): runtime-diff dans la chain post-commit — 2026-05-04
+- **2a7d3cf** fix(codegraph): bayesian-cochange reads param, not snapshot — 0 → 175 rows — 2026-05-04
+- **4db23a0** feat(canary-project): expand to 51/83 (61%) fact coverage — 2026-05-04
+- **c41f911** feat(examples): canary-project ground-truth fixture for codegraph — 2026-05-04
+- **cbb861f** fix(runtime-graph): ESM project capture + ground-truth fixture — 2026-05-04
