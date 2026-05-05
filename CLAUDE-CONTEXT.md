@@ -85,6 +85,7 @@
 - `packages/codegraph/src/extractors/co-change.ts` → ADR-005
 - `packages/codegraph/src/extractors/compression-similarity.ts` → ADR-005
 - `packages/codegraph/src/extractors/constant-expressions.ts` → ADR-005
+- `packages/codegraph/src/extractors/dead-code.ts` → ADR-026
 - `packages/codegraph/src/extractors/drift-patterns.ts` → ADR-026
 - `packages/codegraph/src/extractors/eslint-import.ts` → ADR-005
 - `packages/codegraph/src/extractors/package-deps.ts` → ADR-005
@@ -190,15 +191,15 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 > pas verdict. Une tension non explorée n'est pas un bug — c'est un saut
 > latéral possible que le sol stable rend testable.
 
-- **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/datalog/src/cli.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/env-usage/config.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/audit-listener.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/b.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
@@ -220,6 +221,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+18a45a8 feat(codegraph): ADR-026 phase A.4 — close 3 outliers (full snapshot parity)
 e2fde62 chore(codegraph): bump @liby-tools/codegraph to v0.4.0
 558aa7d feat(codegraph): ADR-026 phase C — Salsa caching for Datalog runner
 5cc82a0 chore(hooks): dedup PreToolUse + PostToolUse via SHA40 cache TTL 5min
@@ -231,7 +233,6 @@ f8b1256 feat(codegraph): Phase γ.15 — port code-quality-patterns au pattern D
 4baa9d0 feat(codegraph): Phase γ.12 — port resource-balance au pattern Datalog
 cc6598b feat(codegraph): Phase γ.11 — port tainted-vars au pattern Datalog
 91912a1 feat(codegraph): Phase γ.10 — port event-emit-sites au pattern Datalog
-2cfe578 feat(codegraph): Phase γ.9 — port arguments au pattern Datalog
 ```
 
 ## Comment contribuer à ce brief

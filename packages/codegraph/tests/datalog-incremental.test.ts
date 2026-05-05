@@ -14,7 +14,7 @@ import { Project } from 'ts-morph'
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { runDatalogDetectors } from '../src/datalog-detectors/runner.js'
+import { runDatalogDetectors, _resetDatalogEvalCache } from '../src/datalog-detectors/runner.js'
 import {
   fileContent, projectFiles, setIncrementalContext,
 } from '../src/incremental/queries.js'
@@ -45,8 +45,9 @@ function setupFixture(): { rootDir: string; files: string[]; project: Project } 
 
 describe('runDatalogDetectors — Salsa caching (Phase C)', () => {
   beforeEach(() => {
-    // Reset Salsa cells entre tests pour isolation
+    // Reset Salsa cells + cache d'eval Datalog entre tests pour isolation
     sharedDb.reset()
+    _resetDatalogEvalCache()
   })
 
   it('produces identical outputs cold vs incremental warm', async () => {
@@ -66,22 +67,23 @@ describe('runDatalogDetectors — Salsa caching (Phase C)', () => {
     expect(warm.stats.tuplesOut).toBe(cold.stats.tuplesOut)
   })
 
-  it('warm path skips extractMs (Salsa cache hit)', async () => {
+  it('warm path skips extractMs (Salsa cache hit) and evalMs (eval cache hit)', async () => {
     const { rootDir, files, project } = setupFixture()
     setIncrementalContext({ project, rootDir })
     for (const f of files) fileContent.set(f, readFileSync(join(rootDir, f), 'utf-8'))
     projectFiles.set('all', files)
 
-    // Run 1 (cold incremental — populate cells)
+    // Run 1 (cold incremental — populate cells + eval cache)
     const run1 = await runDatalogDetectors({ project, files, rootDir, incremental: true })
 
-    // Run 2 (warm — toutes les cells hit)
+    // Run 2 (warm — Phase C.1 cache cells, Phase C.2 cache eval)
     const run2 = await runDatalogDetectors({ project, files, rootDir, incremental: true })
 
-    // extractMs warm doit être très court (juste l'iter sur cells, pas de walk AST)
+    // extractMs warm doit être très court (juste l'iter sur cells)
     expect(run2.stats.extractMs).toBeLessThan(run1.stats.extractMs)
-    // Sur fixture mini, warm extract devrait être < 10ms
     expect(run2.stats.extractMs).toBeLessThan(50)
+    // C.2 — evalMs warm doit aussi être réduit (cache hit, pas de re-eval)
+    expect(run2.stats.evalMs).toBeLessThan(run1.stats.evalMs)
   })
 
   it('picks up newly added files when projectFiles changes', async () => {

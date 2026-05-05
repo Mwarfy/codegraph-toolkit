@@ -24,7 +24,7 @@
 | [012](012-extractor-shared-helpers.md) | Les helpers ts-morph utilisés par 2+ extractors vivent dans `packages/codegraph/src/extractors/_shared/`. P... | `packages/codegraph/src/extractors/_shared/ast-helpers.ts`, `packages/codegraph/src/extractors/_shared/sql-helpers.ts` +1 |
 | [024](024-bsp-monoid-parallelism.md) | Tout détecteur per-file (cf. ADR-005) DOIT exposer un `extractFileBundle` pure et son orchestrateur passe p... | `packages/codegraph/src/detectors/ts-imports.ts`, `packages/codegraph/src/extractors/todos.ts` +4 |
 | [025](025-detectors-must-use-bsp-pattern.md) | Tout NOUVEAU détecteur ajouté à `extractors/` (readFile-based) DOIT partir du template `_template.monoid.ts... | _(pas de marker)_ |
-| [026](026-detectors-as-datalog-rules.md) | Tout nouveau détecteur per-file CPU-bound DOIT s'écrire comme : 1. Émission de tuples primitifs depuis `ast... | `packages/codegraph/src/extractors/drift-patterns.ts` |
+| [026](026-detectors-as-datalog-rules.md) | Tout nouveau détecteur per-file CPU-bound DOIT s'écrire comme : 1. Émission de tuples primitifs depuis `ast... | `packages/codegraph/src/extractors/dead-code.ts`, `packages/codegraph/src/extractors/drift-patterns.ts` |
 
 
 ## Comment ajouter un ADR

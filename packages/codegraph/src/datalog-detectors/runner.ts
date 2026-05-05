@@ -11,6 +11,7 @@
  */
 
 import type { Project, SourceFile } from 'ts-morph'
+import { createHash } from 'node:crypto'
 import { parse, loadFacts, evaluate, type Tuple } from '@liby-tools/datalog'
 import {
   extractAstFactsBundle,
@@ -18,6 +19,96 @@ import {
 } from './ast-facts-visitor.js'
 import { buildLookupTuples } from './lookups.js'
 import { ALL_RULES_DL } from './rules/index.js'
+
+// ─── Phase C.2 — module-level cache de l'évaluation Datalog ──────────
+//
+// Le runner re-parse les rules + reload facts + re-evaluate à chaque appel,
+// même quand les facts n'ont pas bougé (Phase C.1 ne cache que la collecte
+// AST côté visitor). Sur Sentinel : ~150ms eval/parse/load combiné.
+//
+// Ce cache court-circuite parse+loadFacts+evaluate quand le hash des
+// `factsByRelation` (TSV concat) match le précédent. Le cache vit en
+// mémoire de process — un nouveau process le rebuild en cold.
+//
+// `parse(ALL_RULES_DL)` est lui-même cachable car les rules sont
+// immutable au runtime (embedded en TS). Cf. `getCachedProgram()`.
+
+let cachedProgram: ReturnType<typeof parse> | null = null
+function getCachedProgram(): ReturnType<typeof parse> {
+  if (cachedProgram === null) cachedProgram = parse(ALL_RULES_DL)
+  return cachedProgram
+}
+
+interface CachedEval {
+  factsHash: string
+  outputs: Map<string, Tuple[]>
+  tuplesIn: number
+  tuplesOut: number
+}
+let cachedEval: CachedEval | null = null
+
+/**
+ * Hash SHA-256 court (16 hex chars = 64 bits) du payload `factsByRelation`
+ * sérialisé en TSV. Discriminant suffisant pour ce volume (~25k tuples
+ * Sentinel) ; collision probable < 2^-32 même avec des millions de runs.
+ */
+function hashFactsByRelation(factsByRelation: Map<string, string>): string {
+  const h = createHash('sha256')
+  // Iteration deterministique : sort relation names pour stabilité
+  // cross-run même si l'ordre d'insertion varie.
+  const names = [...factsByRelation.keys()].sort()
+  for (const name of names) {
+    h.update(name)
+    h.update('\x00')
+    h.update(factsByRelation.get(name) ?? '')
+    h.update('\x00')
+  }
+  return h.digest('hex').slice(0, 16)
+}
+
+interface EvalOutput {
+  outputs: Map<string, Tuple[]>
+  tuplesIn: number
+  tuplesOut: number
+}
+
+/**
+ * Évalue les rules avec cache. Si `factsByRelation` produit le même hash
+ * que le précédent run, retourne directement les outputs cachés sans
+ * re-loadFacts ni re-evaluate.
+ */
+function evaluateCached(factsByRelation: Map<string, string>): EvalOutput {
+  const factsHash = hashFactsByRelation(factsByRelation)
+  if (cachedEval !== null && cachedEval.factsHash === factsHash) {
+    return {
+      outputs: cachedEval.outputs,
+      tuplesIn: cachedEval.tuplesIn,
+      tuplesOut: cachedEval.tuplesOut,
+    }
+  }
+  const program = getCachedProgram()
+  const db = loadFacts(program.decls, { factsByRelation })
+  const result = evaluate(program, db, {})
+  let tuplesIn = 0
+  for (const v of factsByRelation.values()) {
+    if (v.length === 0) continue
+    tuplesIn += v.split('\n').length
+  }
+  let tuplesOut = 0
+  for (const tuples of result.outputs.values()) tuplesOut += tuples.length
+  cachedEval = { factsHash, outputs: result.outputs, tuplesIn, tuplesOut }
+  return { outputs: result.outputs, tuplesIn, tuplesOut }
+}
+
+/**
+ * Reset le cache d'évaluation. Utilisé par les tests pour isolation entre
+ * fixtures. Pas exposé en API publique côté caller — la cache hit
+ * automatique (sans flush) est le comportement souhaité en prod.
+ */
+export function _resetDatalogEvalCache(): void {
+  cachedEval = null
+  cachedProgram = null
+}
 
 export interface DatalogDetectorResults {
   magicNumbers: Array<{
@@ -375,9 +466,10 @@ function collectAstFactsCold(project: Project, fileSet: Set<string>, rootDir: st
  * pourra cacher aussi).
  */
 function finalizeDatalogResults(merged: AstFactsBundle, extractMs: number): DatalogDetectorResults {
-  // 2. Parse les rules (embedded en TS — pas de runtime fs read).
+  // 2. Phase C.2 : parse + loadFacts + evaluate sont cachés en module-level
+  // (cf. `getCachedProgram` + `evaluateCached`). Le hash des facts détecte
+  // les changements ; warm path skip toute la phase 2-4.
   const t1 = performance.now()
-  const program = parse(ALL_RULES_DL)
 
   // 3. Construit les TSV inline. Datalog factsByRelation = Map<rel, tsvLines>.
   // Sanitize : TSV interdit tab/newline/CR + tous les control chars (0x00–0x1F,
@@ -570,10 +662,11 @@ function finalizeDatalogResults(merged: AstFactsBundle, extractMs: number): Data
   factsByRelation.set('BooleanParamTypeText',
     lookups.BooleanParamTypeText.map((r) => r.join('\t')).join('\n'))
 
-  const db = loadFacts(program.decls, { factsByRelation })
-
-  // 4. Évalue les rules.
-  const result = evaluate(program, db, {})
+  // 3. Évalue les rules avec cache (Phase C.2).
+  // Cache hit warm path : ~1ms (juste hashFactsByRelation).
+  // Cache miss cold : ~150ms (parse cached + loadFacts + evaluate).
+  const evaluation = evaluateCached(factsByRelation)
+  const result = { outputs: evaluation.outputs }
   const evalMs = performance.now() - t1
 
   // 5. Project les outputs en types métier.

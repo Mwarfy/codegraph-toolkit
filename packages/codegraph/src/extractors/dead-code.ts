@@ -1,3 +1,4 @@
+// ADR-026
 /**
  * Dead code patterns — détecteur déterministe AST (Phase 4 Tier 3).
  *
