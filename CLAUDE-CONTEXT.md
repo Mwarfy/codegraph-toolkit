@@ -221,6 +221,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+7102f13 feat(codegraph): CLI cross-check — composite statique × dynamique
 608d725 feat(codegraph): ADR-026 phase E — default-on useDatalog (root cause fix)
 f7944a1 chore(codegraph): defer Phase E (default-on useDatalog) — bug Salsa persistence
 70bc566 chore(codegraph): bump @liby-tools/codegraph to v0.5.0
@@ -232,7 +233,6 @@ e2fde62 chore(codegraph): bump @liby-tools/codegraph to v0.4.0
 558aa7d feat(codegraph): ADR-026 phase C — Salsa caching for Datalog runner
 5cc82a0 chore(hooks): dedup PreToolUse + PostToolUse via SHA40 cache TTL 5min
 11deb4b feat(codegraph): ADR-026 phases A.1+A.3 — shadow mode + useDatalog swap
-3bcc427 docs(adr-026): close-out — 18/21 ts-morph ports done, 3 non-portables
 ```
 
 ## Comment contribuer à ce brief
