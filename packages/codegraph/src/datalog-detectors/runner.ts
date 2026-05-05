@@ -879,105 +879,11 @@ function finalizeDatalogResults(merged: AstFactsBundle, extractMs: number): Data
     params: argParamsRaw,
   }
 
-  // ─── Security Patterns (Tier 16) ───────────────────────────────────────────
-  const fileLineSortPlain = <T extends { file: string; line: number }>(arr: T[]): T[] => {
-    arr.sort((a, b) => a.file < b.file ? -1 : a.file > b.file ? 1 : a.line - b.line)
-    return arr
-  }
-  const securityPatternsResult: DatalogDetectorResults['securityPatterns'] = {
-    secretRefs: fileLineSortPlain((result.outputs.get('SecretVarRefOut') ?? []).map((t: Tuple) => ({
-      file: String(t[0]),
-      line: Number(t[1]),
-      varName: String(t[2]),
-      kind: String(t[3]),
-      callee: String(t[4]),
-      containingSymbol: String(t[5]),
-    }))),
-    corsConfigs: fileLineSortPlain((result.outputs.get('CorsConfigOut') ?? []).map((t: Tuple) => ({
-      file: String(t[0]),
-      line: Number(t[1]),
-      originKind: String(t[2]),
-      containingSymbol: String(t[3]),
-    }))),
-    tlsUnsafe: fileLineSortPlain((result.outputs.get('TlsUnsafeOut') ?? []).map((t: Tuple) => ({
-      file: String(t[0]),
-      line: Number(t[1]),
-      key: String(t[2]),
-      containingSymbol: String(t[3]),
-    }))),
-    weakRandoms: fileLineSortPlain((result.outputs.get('WeakRandomOut') ?? []).map((t: Tuple) => ({
-      file: String(t[0]),
-      line: Number(t[1]),
-      varName: String(t[2]),
-      secretKind: String(t[3]),
-      containingSymbol: String(t[4]),
-    }))),
-  }
-
-  // ─── Code Quality Patterns (Tier 17 — 4 sub-detectors) ─────────────────────
-  const cqSort = <T extends { file: string; line: number }>(arr: T[]): T[] => {
-    arr.sort((a, b) => a.file < b.file ? -1 : a.file > b.file ? 1 : a.line - b.line)
-    return arr
-  }
-  const codeQualityPatternsResult: DatalogDetectorResults['codeQualityPatterns'] = {
-    regexLiterals: cqSort((result.outputs.get('RegexLiteralOut') ?? []).map((t: Tuple) => ({
-      file: String(t[0]),
-      line: Number(t[1]),
-      source: String(t[2]),
-      flags: String(t[3]),
-      hasNestedQuantifier: Number(t[4]) === 1,
-    }))),
-    tryCatchSwallows: cqSort((result.outputs.get('TryCatchSwallowOut') ?? []).map((t: Tuple) => ({
-      file: String(t[0]),
-      line: Number(t[1]),
-      kind: String(t[2]),
-      containingSymbol: String(t[3]),
-    }))),
-    awaitInLoops: cqSort((result.outputs.get('AwaitInLoopOut') ?? []).map((t: Tuple) => ({
-      file: String(t[0]),
-      line: Number(t[1]),
-      loopKind: String(t[2]),
-      containingSymbol: String(t[3]),
-    }))),
-    allocationInLoops: cqSort((result.outputs.get('AllocationInLoopOut') ?? []).map((t: Tuple) => ({
-      file: String(t[0]),
-      line: Number(t[1]),
-      allocKind: String(t[2]),
-      containingSymbol: String(t[3]),
-    }))),
-  }
-
-  // ─── Drift Patterns (4 AST sub-detectors) ──────────────────────────────────
-  const driftSort = <T extends { file: string; line: number }>(arr: T[]): T[] => {
-    arr.sort((a, b) => a.file < b.file ? -1 : a.file > b.file ? 1 : a.line - b.line)
-    return arr
-  }
-  const driftPatternsResult: DatalogDetectorResults['driftPatterns'] = {
-    excessiveOptionalParams: driftSort((result.outputs.get('ExcessiveOptionalParamsOut') ?? []).map((t: Tuple) => ({
-      file: String(t[0]),
-      line: Number(t[1]),
-      name: String(t[2]),
-      fnKind: String(t[3]),
-      optionalCount: Number(t[4]),
-    }))),
-    wrapperSuperfluous: driftSort((result.outputs.get('WrapperSuperfluousOut') ?? []).map((t: Tuple) => ({
-      file: String(t[0]),
-      line: Number(t[1]),
-      name: String(t[2]),
-      fnKind: String(t[3]),
-      callee: String(t[4]),
-    }))),
-    deepNesting: driftSort((result.outputs.get('DeepNestingOut') ?? []).map((t: Tuple) => ({
-      file: String(t[0]),
-      line: Number(t[1]),
-      name: String(t[2]),
-      maxDepth: Number(t[3]),
-    }))),
-    emptyCatchNoComment: driftSort((result.outputs.get('EmptyCatchNoCommentOut') ?? []).map((t: Tuple) => ({
-      file: String(t[0]),
-      line: Number(t[1]),
-    }))),
-  }
+  // ADR-028 — sub-projectors extraits pour réduire cognitive complexity
+  // de finalizeDatalogResults (97 → ~25 attendu post-refactor).
+  const securityPatternsResult = projectSecurityPatterns(result.outputs)
+  const codeQualityPatternsResult = projectCodeQualityPatterns(result.outputs)
+  const driftPatternsResult = projectDriftPatterns(result.outputs)
 
   // ─── Resource Balance (Tier 6) ─────────────────────────────────────────────
   const resourceImbalances = (result.outputs.get('ResourceImbalanceOut') ?? []).map((t: Tuple) => ({
@@ -1169,6 +1075,84 @@ function finalizeDatalogResults(merged: AstFactsBundle, extractMs: number): Data
     driftPatterns: driftPatternsResult,
     codeQualityPatterns: codeQualityPatternsResult,
     stats: { extractMs, evalMs, tuplesIn, tuplesOut },
+  }
+}
+
+// ─── Sub-projectors (extraits de finalizeDatalogResults pour réduire ─────
+// cognitive complexity 97 → ~25). Chaque fonction project les outputs Datalog
+// d'un sous-bundle (security, code-quality, drift) en types métier triés.
+
+function fileLineSortAsc<T extends { file: string; line: number }>(arr: T[]): T[] {
+  arr.sort((a, b) => a.file < b.file ? -1 : a.file > b.file ? 1 : a.line - b.line)
+  return arr
+}
+
+function projectSecurityPatterns(
+  outputs: Map<string, Tuple[]>,
+): DatalogDetectorResults['securityPatterns'] {
+  return {
+    secretRefs: fileLineSortAsc((outputs.get('SecretVarRefOut') ?? []).map((t: Tuple) => ({
+      file: String(t[0]), line: Number(t[1]), varName: String(t[2]),
+      kind: String(t[3]), callee: String(t[4]), containingSymbol: String(t[5]),
+    }))),
+    corsConfigs: fileLineSortAsc((outputs.get('CorsConfigOut') ?? []).map((t: Tuple) => ({
+      file: String(t[0]), line: Number(t[1]),
+      originKind: String(t[2]), containingSymbol: String(t[3]),
+    }))),
+    tlsUnsafe: fileLineSortAsc((outputs.get('TlsUnsafeOut') ?? []).map((t: Tuple) => ({
+      file: String(t[0]), line: Number(t[1]),
+      key: String(t[2]), containingSymbol: String(t[3]),
+    }))),
+    weakRandoms: fileLineSortAsc((outputs.get('WeakRandomOut') ?? []).map((t: Tuple) => ({
+      file: String(t[0]), line: Number(t[1]), varName: String(t[2]),
+      secretKind: String(t[3]), containingSymbol: String(t[4]),
+    }))),
+  }
+}
+
+function projectCodeQualityPatterns(
+  outputs: Map<string, Tuple[]>,
+): DatalogDetectorResults['codeQualityPatterns'] {
+  return {
+    regexLiterals: fileLineSortAsc((outputs.get('RegexLiteralOut') ?? []).map((t: Tuple) => ({
+      file: String(t[0]), line: Number(t[1]),
+      source: String(t[2]), flags: String(t[3]),
+      hasNestedQuantifier: Number(t[4]) === 1,
+    }))),
+    tryCatchSwallows: fileLineSortAsc((outputs.get('TryCatchSwallowOut') ?? []).map((t: Tuple) => ({
+      file: String(t[0]), line: Number(t[1]),
+      kind: String(t[2]), containingSymbol: String(t[3]),
+    }))),
+    awaitInLoops: fileLineSortAsc((outputs.get('AwaitInLoopOut') ?? []).map((t: Tuple) => ({
+      file: String(t[0]), line: Number(t[1]),
+      loopKind: String(t[2]), containingSymbol: String(t[3]),
+    }))),
+    allocationInLoops: fileLineSortAsc((outputs.get('AllocationInLoopOut') ?? []).map((t: Tuple) => ({
+      file: String(t[0]), line: Number(t[1]),
+      allocKind: String(t[2]), containingSymbol: String(t[3]),
+    }))),
+  }
+}
+
+function projectDriftPatterns(
+  outputs: Map<string, Tuple[]>,
+): DatalogDetectorResults['driftPatterns'] {
+  return {
+    excessiveOptionalParams: fileLineSortAsc((outputs.get('ExcessiveOptionalParamsOut') ?? []).map((t: Tuple) => ({
+      file: String(t[0]), line: Number(t[1]), name: String(t[2]),
+      fnKind: String(t[3]), optionalCount: Number(t[4]),
+    }))),
+    wrapperSuperfluous: fileLineSortAsc((outputs.get('WrapperSuperfluousOut') ?? []).map((t: Tuple) => ({
+      file: String(t[0]), line: Number(t[1]), name: String(t[2]),
+      fnKind: String(t[3]), callee: String(t[4]),
+    }))),
+    deepNesting: fileLineSortAsc((outputs.get('DeepNestingOut') ?? []).map((t: Tuple) => ({
+      file: String(t[0]), line: Number(t[1]),
+      name: String(t[2]), maxDepth: Number(t[3]),
+    }))),
+    emptyCatchNoComment: fileLineSortAsc((outputs.get('EmptyCatchNoCommentOut') ?? []).map((t: Tuple) => ({
+      file: String(t[0]), line: Number(t[1]),
+    }))),
   }
 }
 

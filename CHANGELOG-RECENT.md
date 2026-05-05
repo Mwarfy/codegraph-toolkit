@@ -5,11 +5,11 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-05T14:36:02Z
+Last update : 2026-05-05T15:09:02Z
 
 ## By type
 
-### `feat` (41)
+### `feat` (40)
 
 - **dbe0aef** feat(hooks): F.2 — auto-injected fix hints + memory match dans NEW violations — 2026-05-05
 - **d5b3511** feat(hooks): ADR-028 — token-efficient session-aware hook injection — 2026-05-05
@@ -31,6 +31,11 @@ Last update : 2026-05-05T14:36:02Z
 - **dad7dc1** feat(codegraph): Phase γ.8 — port constant-expressions au pattern Datalog — 2026-05-05
 - **393fc2c** feat(codegraph): Phase γ.7 — port barrels + env-usage au pattern Datalog — 2026-05-05
 - **14fe493** feat(codegraph): Phase γ.6 — port event-listener-sites au pattern Datalog — 2026-05-05
+
+
+### `fix` (1)
+
+- **cd09bc2** fix(codegraph): exclude auto-generated files from BayesianCoChange follower — 2026-05-05
 
 
 ### `refactor` (1)
@@ -56,6 +61,7 @@ Last update : 2026-05-05T14:36:02Z
 
 ## Full history
 
+- **cd09bc2** fix(codegraph): exclude auto-generated files from BayesianCoChange follower — 2026-05-05
 - **dbe0aef** feat(hooks): F.2 — auto-injected fix hints + memory match dans NEW violations — 2026-05-05
 - **d5b3511** feat(hooks): ADR-028 — token-efficient session-aware hook injection — 2026-05-05
 - **d469668** docs(readme): update for v0.6.0 — pipeline composite statique × dynamique × salsa — 2026-05-05
@@ -105,4 +111,3 @@ Last update : 2026-05-05T14:36:02Z
 - **f066d43** feat(codegraph): Phase 2.3 — 3 détecteurs portés (boolean-params, eval-calls, crypto-algo) — 2026-05-04
 - **84b2f76** docs(adr-024): anchor markers sur les 3 helpers BSP — 2026-05-04
 - **190b979** feat(codegraph): Phase 2.2 — hardcoded-secrets porté + ADR-024 — 2026-05-04
-- **abd6ad7** feat(codegraph): Phase 2.1 — 2 détecteurs portés au pattern BSP monoïdal — 2026-05-04
