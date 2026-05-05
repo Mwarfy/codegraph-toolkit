@@ -221,6 +221,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+f5f530f refactor(runner): extract 3 sub-projectors to reduce cog complexity
 cd09bc2 fix(codegraph): exclude auto-generated files from BayesianCoChange follower
 dbe0aef feat(hooks): F.2 — auto-injected fix hints + memory match dans NEW violations
 d5b3511 feat(hooks): ADR-028 — token-efficient session-aware hook injection
@@ -232,7 +233,6 @@ f7944a1 chore(codegraph): defer Phase E (default-on useDatalog) — bug Salsa pe
 70bc566 chore(codegraph): bump @liby-tools/codegraph to v0.5.0
 d65f1c4 feat(runtime-graph): wire Salsa push for composite cross-cut warm path
 1488e38 feat(codegraph): ADR-026 phase D — pipeline composite statique × dynamique × salsa
-dd611b7 feat(codegraph): ADR-026 phase C.2 — cache module-level de l'éval Datalog
 ```
 
 ## Comment contribuer à ce brief

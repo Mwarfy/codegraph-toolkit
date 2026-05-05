@@ -52,7 +52,7 @@ import {
  * - isScreamingSnake : 1 si var SCREAMING_SNAKE_CASE
  * - isRatio : 1 si 0 < value < 1
  */
-export interface NumericLiteralFact {
+interface NumericLiteralFact {
   file: string
   line: number
   valueText: string
@@ -75,7 +75,7 @@ export interface NumericLiteralFact {
  *     file:symbol, line:number, op:symbol, leftText:symbol, rightText:symbol,
  *     leftIsShortLiteral:number)
  */
-export interface BinaryExpressionFact {
+interface BinaryExpressionFact {
   file: string
   line: number
   op: string
@@ -90,7 +90,7 @@ export interface BinaryExpressionFact {
  *
  * Schéma : .decl ExemptionLine(file:symbol, line:number, marker:symbol)
  */
-export interface ExemptionLineFact {
+interface ExemptionLineFact {
   file: string
   line: number
   marker: string
@@ -100,7 +100,7 @@ export interface ExemptionLineFact {
  * Tag fichier — `IsTestFile`, `IsFixtureFile`, etc.
  * Schéma : .decl FileTag(file:symbol, tag:symbol)
  */
-export interface FileTagFact {
+interface FileTagFact {
   file: string
   tag: string
 }
@@ -120,7 +120,7 @@ export interface FileTagFact {
  *     isNew:number,              // 1 si NewExpression, 0 sinon
  *     containingSymbol:symbol)
  */
-export interface CallExpressionFact {
+interface CallExpressionFact {
   file: string
   line: number
   calleeKind: 'Identifier' | 'PropertyAccess' | 'Other'
@@ -137,7 +137,7 @@ export interface CallExpressionFact {
  * Schéma : .decl FunctionScope(file:symbol, line:number, name:symbol,
  *   totalParams:number, nameMatchesSetterPredicate:number)
  */
-export interface FunctionScopeFact {
+interface FunctionScopeFact {
   file: string
   line: number
   name: string
@@ -150,7 +150,7 @@ export interface FunctionScopeFact {
  * Schéma : .decl FunctionParam(file:symbol, scopeLine:number, paramIndex:number,
  *   paramName:symbol, typeText:symbol)
  */
-export interface FunctionParamFact {
+interface FunctionParamFact {
   file: string
   scopeLine: number
   paramIndex: number
@@ -165,7 +165,7 @@ export interface FunctionParamFact {
  * Schéma : .decl SanitizerCandidate(file:symbol, line:number,
  *   callee:symbol, containingSymbol:symbol)
  */
-export interface SanitizerCandidateFact {
+interface SanitizerCandidateFact {
   file: string
   line: number
   callee: string
@@ -179,7 +179,7 @@ export interface SanitizerCandidateFact {
  * Schéma : .decl TaintSinkCandidate(file:symbol, line:number, kind:symbol,
  *   callee:symbol, containingSymbol:symbol)
  */
-export interface TaintSinkCandidateFact {
+interface TaintSinkCandidateFact {
   file: string
   line: number
   kind: string
@@ -193,7 +193,7 @@ export interface TaintSinkCandidateFact {
  * Schéma : .decl LongFunctionCandidate(file:symbol, line:number,
  *   name:symbol, loc:number, kind:symbol)
  */
-export interface LongFunctionCandidateFact {
+interface LongFunctionCandidateFact {
   file: string
   line: number
   name: string
@@ -208,7 +208,7 @@ export interface LongFunctionCandidateFact {
  * Schéma : .decl FunctionComplexityFact(file:symbol, line:number,
  *   name:symbol, cyclomatic:number, cognitive:number, containingClass:symbol)
  */
-export interface FunctionComplexityFact {
+interface FunctionComplexityFact {
   file: string
   line: number
   name: string
@@ -243,7 +243,7 @@ export interface ImportEdgeFact {
  *   .decl EnvVarRead(file:symbol, line:number, varName:symbol, sym:symbol,
  *     hasDefault:number, wrappedIn:symbol)
  */
-export interface EnvVarReadFact {
+interface EnvVarReadFact {
   file: string
   line: number
   /** Column number (start offset) — disambigue plusieurs `process.env.X`
@@ -267,7 +267,7 @@ export interface EnvVarReadFact {
  * - literalValue : valeur si kind="literal", sinon ""
  * - refExpression : texte si kind="eventConstRef", sinon ""
  */
-export interface EventListenerSiteCandidateFact {
+interface EventListenerSiteCandidateFact {
   file: string
   line: number
   symbol: string
@@ -296,7 +296,7 @@ export interface EventListenerSiteCandidateFact {
  * Calculé par le visitor (regex sur la value + sur le context name) car
  * le moteur Datalog n'a pas de string ops pour ces matches.
  */
-export interface HardcodedSecretCandidateFact {
+interface HardcodedSecretCandidateFact {
   file: string
   line: number
   varOrPropName: string
@@ -312,7 +312,7 @@ export interface HardcodedSecretCandidateFact {
  * boundary, init/condition/incrementor check). Rules filtrent test +
  * exempt markers (regex-ok, catch-ok, await-ok, alloc-ok).
  */
-export interface RegexLiteralCandidateFact {
+interface RegexLiteralCandidateFact {
   file: string
   line: number
   source: string
@@ -320,21 +320,21 @@ export interface RegexLiteralCandidateFact {
   hasNestedQuantifier: number
 }
 
-export interface TryCatchSwallowCandidateFact {
+interface TryCatchSwallowCandidateFact {
   file: string
   line: number
   kind: string
   containingSymbol: string
 }
 
-export interface AwaitInLoopCandidateFact {
+interface AwaitInLoopCandidateFact {
   file: string
   line: number
   loopKind: string
   containingSymbol: string
 }
 
-export interface AllocationInLoopCandidateFact {
+interface AllocationInLoopCandidateFact {
   file: string
   line: number
   allocKind: string
@@ -352,7 +352,7 @@ export interface AllocationInLoopCandidateFact {
  * - DeepNestingCandidate(file, line, name, depth)
  * - EmptyCatchNoCommentCandidate(file, line)
  */
-export interface ExcessiveOptionalParamsCandidateFact {
+interface ExcessiveOptionalParamsCandidateFact {
   file: string
   line: number
   name: string
@@ -360,7 +360,7 @@ export interface ExcessiveOptionalParamsCandidateFact {
   optionalCount: number
 }
 
-export interface WrapperSuperfluousCandidateFact {
+interface WrapperSuperfluousCandidateFact {
   file: string
   line: number
   name: string
@@ -368,14 +368,14 @@ export interface WrapperSuperfluousCandidateFact {
   callee: string
 }
 
-export interface DeepNestingCandidateFact {
+interface DeepNestingCandidateFact {
   file: string
   line: number
   name: string
   maxDepth: number
 }
 
-export interface EmptyCatchNoCommentCandidateFact {
+interface EmptyCatchNoCommentCandidateFact {
   file: string
   line: number
 }
@@ -387,7 +387,7 @@ export interface EmptyCatchNoCommentCandidateFact {
  *   - TlsUnsafeCandidate    : { rejectUnauthorized: false } etc.
  *   - WeakRandomCandidate   : Math.random() assigné à une var (kind si secret)
  */
-export interface SecretVarRefCandidateFact {
+interface SecretVarRefCandidateFact {
   file: string
   line: number
   varName: string
@@ -396,21 +396,21 @@ export interface SecretVarRefCandidateFact {
   containingSymbol: string
 }
 
-export interface CorsConfigCandidateFact {
+interface CorsConfigCandidateFact {
   file: string
   line: number
   originKind: string
   containingSymbol: string
 }
 
-export interface TlsUnsafeCandidateFact {
+interface TlsUnsafeCandidateFact {
   file: string
   line: number
   key: string
   containingSymbol: string
 }
 
-export interface WeakRandomCandidateFact {
+interface WeakRandomCandidateFact {
   file: string
   line: number
   varName: string
@@ -425,7 +425,7 @@ export interface WeakRandomCandidateFact {
  * Schéma : .decl ResourceImbalanceCandidate(file:symbol, sym:symbol,
  *   line:number, pair:symbol, acqCount:number, relCount:number)
  */
-export interface ResourceImbalanceCandidateFact {
+interface ResourceImbalanceCandidateFact {
   file: string
   containingSymbol: string
   line: number
@@ -441,7 +441,7 @@ export interface ResourceImbalanceCandidateFact {
  * Schéma : .decl TaintedVarDeclCandidate(file:symbol, sym:symbol,
  *   varName:symbol, line:number, source:symbol)
  */
-export interface TaintedVarDeclCandidateFact {
+interface TaintedVarDeclCandidateFact {
   file: string
   containingSymbol: string
   varName: string
@@ -457,7 +457,7 @@ export interface TaintedVarDeclCandidateFact {
  *   callee:symbol, argVarName:symbol, argIdx:number, source:symbol,
  *   sym:symbol)
  */
-export interface TaintedVarArgCallCandidateFact {
+interface TaintedVarArgCallCandidateFact {
   file: string
   line: number
   callee: string
@@ -476,7 +476,7 @@ export interface TaintedVarArgCallCandidateFact {
  *   sym:symbol, callee:symbol, isMethodCall:number, receiver:symbol,
  *   kind:symbol, literalValue:symbol, refExpression:symbol)
  */
-export interface EventEmitSiteCandidateFact {
+interface EventEmitSiteCandidateFact {
   file: string
   line: number
   symbol: string
@@ -496,7 +496,7 @@ export interface EventEmitSiteCandidateFact {
  * Schéma : .decl TaintedArgumentCandidate(callerFile:symbol, callerSymbol:symbol,
  *   callee:symbol, paramIndex:number, source:symbol)
  */
-export interface TaintedArgumentCandidateFact {
+interface TaintedArgumentCandidateFact {
   callerFile: string
   callerSymbol: string
   callee: string
@@ -516,7 +516,7 @@ export interface TaintedArgumentCandidateFact {
  *        | "gratuitous-bool-comparison" | "double-negation"
  *        | "literal-fold-opportunity"
  */
-export interface ConstantExpressionCandidateFact {
+interface ConstantExpressionCandidateFact {
   file: string
   line: number
   kind: string
@@ -577,7 +577,7 @@ export interface AstFactsBundle {
  * sont conservés tels quels (Record<string, ...>) — pas serialized en
  * Datalog tuple car on by-pass la rule pour ce détecteur.
  */
-export interface DeadCodeFindingFact {
+interface DeadCodeFindingFact {
   kind: 'identical-subexpressions' | 'return-then-else' | 'switch-fallthrough'
     | 'switch-no-default' | 'switch-empty' | 'controlling-expression-constant'
   file: string

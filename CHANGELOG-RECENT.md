@@ -5,11 +5,11 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-05T15:09:02Z
+Last update : 2026-05-05T15:22:37Z
 
 ## By type
 
-### `feat` (40)
+### `feat` (39)
 
 - **dbe0aef** feat(hooks): F.2 — auto-injected fix hints + memory match dans NEW violations — 2026-05-05
 - **d5b3511** feat(hooks): ADR-028 — token-efficient session-aware hook injection — 2026-05-05
@@ -38,8 +38,9 @@ Last update : 2026-05-05T15:09:02Z
 - **cd09bc2** fix(codegraph): exclude auto-generated files from BayesianCoChange follower — 2026-05-05
 
 
-### `refactor` (1)
+### `refactor` (2)
 
+- **f5f530f** refactor(runner): extract 3 sub-projectors to reduce cog complexity — 2026-05-05
 - **be79c7b** refactor(codegraph): Phase γ.5 — cleanup workers cold code (Phase β/γ.2/γ.3) — 2026-05-05
 
 
@@ -61,6 +62,7 @@ Last update : 2026-05-05T15:09:02Z
 
 ## Full history
 
+- **f5f530f** refactor(runner): extract 3 sub-projectors to reduce cog complexity — 2026-05-05
 - **cd09bc2** fix(codegraph): exclude auto-generated files from BayesianCoChange follower — 2026-05-05
 - **dbe0aef** feat(hooks): F.2 — auto-injected fix hints + memory match dans NEW violations — 2026-05-05
 - **d5b3511** feat(hooks): ADR-028 — token-efficient session-aware hook injection — 2026-05-05
@@ -110,4 +112,3 @@ Last update : 2026-05-05T15:09:02Z
 - **3399c54** feat(codegraph): Phase 2.4 — sanitizers + taint-sinks portés (8/65) — 2026-05-04
 - **f066d43** feat(codegraph): Phase 2.3 — 3 détecteurs portés (boolean-params, eval-calls, crypto-algo) — 2026-05-04
 - **84b2f76** docs(adr-024): anchor markers sur les 3 helpers BSP — 2026-05-04
-- **190b979** feat(codegraph): Phase 2.2 — hardcoded-secrets porté + ADR-024 — 2026-05-04
