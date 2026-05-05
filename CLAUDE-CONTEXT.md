@@ -226,6 +226,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+df32201 docs: YAML frontmatter migration + cross-check audit
 807c2b1 feat(codegraph): doc-claims extractor + composite-doc-stale rule
 38a1ffc chore(codegraph): strip 'export' on 33 local-only interfaces
 f5f530f refactor(runner): extract 3 sub-projectors to reduce cog complexity
@@ -237,7 +238,6 @@ d469668 docs(readme): update for v0.6.0 — pipeline composite statique × dynam
 7102f13 feat(codegraph): CLI cross-check — composite statique × dynamique
 608d725 feat(codegraph): ADR-026 phase E — default-on useDatalog (root cause fix)
 f7944a1 chore(codegraph): defer Phase E (default-on useDatalog) — bug Salsa persistence
-70bc566 chore(codegraph): bump @liby-tools/codegraph to v0.5.0
 ```
 
 ## Comment contribuer à ce brief

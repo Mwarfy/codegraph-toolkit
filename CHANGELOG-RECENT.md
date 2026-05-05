@@ -5,12 +5,13 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-05T15:22:37Z
+Last update : 2026-05-05T18:34:37Z
 
 ## By type
 
-### `feat` (39)
+### `feat` (38)
 
+- **807c2b1** feat(codegraph): doc-claims extractor + composite-doc-stale rule — 2026-05-05
 - **dbe0aef** feat(hooks): F.2 — auto-injected fix hints + memory match dans NEW violations — 2026-05-05
 - **d5b3511** feat(hooks): ADR-028 — token-efficient session-aware hook injection — 2026-05-05
 - **7102f13** feat(codegraph): CLI cross-check — composite statique × dynamique — 2026-05-05
@@ -30,7 +31,6 @@ Last update : 2026-05-05T15:22:37Z
 - **2cfe578** feat(codegraph): Phase γ.9 — port arguments au pattern Datalog — 2026-05-05
 - **dad7dc1** feat(codegraph): Phase γ.8 — port constant-expressions au pattern Datalog — 2026-05-05
 - **393fc2c** feat(codegraph): Phase γ.7 — port barrels + env-usage au pattern Datalog — 2026-05-05
-- **14fe493** feat(codegraph): Phase γ.6 — port event-listener-sites au pattern Datalog — 2026-05-05
 
 
 ### `fix` (1)
@@ -44,8 +44,9 @@ Last update : 2026-05-05T15:22:37Z
 - **be79c7b** refactor(codegraph): Phase γ.5 — cleanup workers cold code (Phase β/γ.2/γ.3) — 2026-05-05
 
 
-### `chore` (5)
+### `chore` (6)
 
+- **38a1ffc** chore(codegraph): strip 'export' on 33 local-only interfaces — 2026-05-05
 - **48c4c78** chore(codegraph): bump @liby-tools/codegraph to v0.6.0 — 2026-05-05
 - **f7944a1** chore(codegraph): defer Phase E (default-on useDatalog) — bug Salsa persistence — 2026-05-05
 - **70bc566** chore(codegraph): bump @liby-tools/codegraph to v0.5.0 — 2026-05-05
@@ -55,13 +56,16 @@ Last update : 2026-05-05T15:22:37Z
 
 ### `docs` (3)
 
+- **df32201** docs: YAML frontmatter migration + cross-check audit — 2026-05-05
 - **d469668** docs(readme): update for v0.6.0 — pipeline composite statique × dynamique × salsa — 2026-05-05
 - **3bcc427** docs(adr-026): close-out — 18/21 ts-morph ports done, 3 non-portables — 2026-05-05
-- **84b2f76** docs(adr-024): anchor markers sur les 3 helpers BSP — 2026-05-04
 
 
 ## Full history
 
+- **df32201** docs: YAML frontmatter migration + cross-check audit — 2026-05-05
+- **807c2b1** feat(codegraph): doc-claims extractor + composite-doc-stale rule — 2026-05-05
+- **38a1ffc** chore(codegraph): strip 'export' on 33 local-only interfaces — 2026-05-05
 - **f5f530f** refactor(runner): extract 3 sub-projectors to reduce cog complexity — 2026-05-05
 - **cd09bc2** fix(codegraph): exclude auto-generated files from BayesianCoChange follower — 2026-05-05
 - **dbe0aef** feat(hooks): F.2 — auto-injected fix hints + memory match dans NEW violations — 2026-05-05
@@ -109,6 +113,3 @@ Last update : 2026-05-05T15:22:37Z
 - **59d89c8** feat(codegraph): Phase β.3 — ADR-025 + template BSP pour futurs détecteurs — 2026-05-04
 - **7dc918b** feat(codegraph): Phase β.2 — worker mode opt-in pour analyzeTodos — 2026-05-04
 - **de8b02a** feat(codegraph): Phase β — worker_threads dispatch via WorkerPool — 2026-05-04
-- **3399c54** feat(codegraph): Phase 2.4 — sanitizers + taint-sinks portés (8/65) — 2026-05-04
-- **f066d43** feat(codegraph): Phase 2.3 — 3 détecteurs portés (boolean-params, eval-calls, crypto-algo) — 2026-05-04
-- **84b2f76** docs(adr-024): anchor markers sur les 3 helpers BSP — 2026-05-04
