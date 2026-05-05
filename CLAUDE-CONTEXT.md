@@ -226,6 +226,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+face7c3 chore(invariants): grandfather NO-BOOLEAN-POSITIONAL-PARAM × 20 (100 → 80)
 843062f refactor: tame COMPOSITE-NEAR-DUPLICATE-FN × 24 (123 → 100 violations)
 4aa2e6a refactor: tame COMPOSITE-AWAIT-IN-LOOP × 12 (135 → 123 violations)
 df3e554 chore(invariants): grandfather tier 4-7 violations (15 → 0)
@@ -237,7 +238,6 @@ df32201 docs: YAML frontmatter migration + cross-check audit
 807c2b1 feat(codegraph): doc-claims extractor + composite-doc-stale rule
 38a1ffc chore(codegraph): strip 'export' on 33 local-only interfaces
 f5f530f refactor(runner): extract 3 sub-projectors to reduce cog complexity
-cd09bc2 fix(codegraph): exclude auto-generated files from BayesianCoChange follower
 ```
 
 ## Comment contribuer à ce brief

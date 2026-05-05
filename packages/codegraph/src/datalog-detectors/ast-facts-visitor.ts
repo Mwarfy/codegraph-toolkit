@@ -748,6 +748,58 @@ export function extractAstFactsBundle(
   }
 }
 
+interface ParentClassification {
+  parentKind: NumericLiteralFact['parentKind']
+  parentName: string
+  parentArgIdx: number
+  isScreamingSnake: number
+}
+
+/**
+ * Classifie le parent d'un NumericLiteral pour extraction de magic
+ * numbers. Reproduit l'intention legacy classifyBinaryComparison
+ * (seuls les comparison_ops capturent côté BinaryExpression).
+ */
+function classifyNumericLiteralParent(parent: Node, lit: Node): ParentClassification {
+  if (Node.isCallExpression(parent)) {
+    return {
+      parentKind: 'CallExpression',
+      parentName: getCalleeName(parent.getExpression()) ?? '',
+      parentArgIdx: parent.getArguments().findIndex((a) => a === lit),
+      isScreamingSnake: 0,
+    }
+  }
+  if (Node.isPropertyAssignment(parent)) {
+    return {
+      parentKind: 'PropertyAssignment',
+      parentName: parent.getName(),
+      parentArgIdx: -1,
+      isScreamingSnake: 0,
+    }
+  }
+  if (Node.isVariableDeclaration(parent)) {
+    const name = parent.getName()
+    return {
+      parentKind: 'VariableDeclaration',
+      parentName: name,
+      parentArgIdx: -1,
+      isScreamingSnake: SCREAMING_SNAKE_RE.test(name) ? 1 : 0,
+    }
+  }
+  if (Node.isBinaryExpression(parent)) {
+    const op = parent.getOperatorToken().getText()
+    if (COMPARISON_OPS_FOR_MAGIC.has(op)) {
+      return {
+        parentKind: 'BinaryExpression',
+        parentName: `compare ${op}`,
+        parentArgIdx: -1,
+        isScreamingSnake: 0,
+      }
+    }
+  }
+  return { parentKind: 'Other', parentName: '', parentArgIdx: -1, isScreamingSnake: 0 }
+}
+
 function visitNumericLiterals(
   sf: SourceFile,
   relPath: string,
@@ -757,35 +809,10 @@ function visitNumericLiterals(
     const text = lit.getText()
     const value = parseFloat(text.replace(/_/g, ''))
     if (!Number.isFinite(value)) continue
-
     const parent = lit.getParent()
     if (!parent) continue
 
-    let parentKind: NumericLiteralFact['parentKind'] = 'Other'
-    let parentName = ''
-    let parentArgIdx = -1
-    let isScreamingSnake = 0
-
-    if (Node.isCallExpression(parent)) {
-      parentKind = 'CallExpression'
-      parentName = getCalleeName(parent.getExpression()) ?? ''
-      parentArgIdx = parent.getArguments().findIndex((a) => a === lit)
-    } else if (Node.isPropertyAssignment(parent)) {
-      parentKind = 'PropertyAssignment'
-      parentName = parent.getName()
-    } else if (Node.isVariableDeclaration(parent)) {
-      parentKind = 'VariableDeclaration'
-      parentName = parent.getName()
-      isScreamingSnake = SCREAMING_SNAKE_RE.test(parentName) ? 1 : 0
-    } else if (Node.isBinaryExpression(parent)) {
-      const op = parent.getOperatorToken().getText()
-      // Match legacy classifyBinaryComparison : seul comparison_ops capture,
-      // contexte = "compare <op>" (intention humaine du detector).
-      if (COMPARISON_OPS_FOR_MAGIC.has(op)) {
-        parentKind = 'BinaryExpression'
-        parentName = `compare ${op}`
-      }
-    }
+    const cls = classifyNumericLiteralParent(parent, lit)
 
     // valueAbs : Datalog number column = integer. On floor — les rules
     // comparent uniquement >= 1000 donc les floats < 1 (ratios) deviennent
@@ -795,10 +822,10 @@ function visitNumericLiterals(
       line: lit.getStartLineNumber(),
       valueText: text,
       valueAbs: Math.trunc(Math.abs(value)),
-      parentKind,
-      parentName,
-      parentArgIdx,
-      isScreamingSnake,
+      parentKind: cls.parentKind,
+      parentName: cls.parentName,
+      parentArgIdx: cls.parentArgIdx,
+      isScreamingSnake: cls.isScreamingSnake,
       isRatio: value > 0 && value < 1 ? 1 : 0,
       isTrivial: TRIVIAL_VALUES.has(value) ? 1 : 0,
     })
@@ -1317,40 +1344,59 @@ function visitEnvVarReads(
   sf.forEachDescendant((node) => {
     const k = node.getKind()
     if (k === SyntaxKind.PropertyAccessExpression) {
-      const obj = (node as import('ts-morph').PropertyAccessExpression).getExpression()
-      if (!isProcessEnvNode(obj)) return
-      const name = (node as import('ts-morph').PropertyAccessExpression).getName()
-      if (!name || !ENV_NAME_RE.test(name) || name.length < 2) return
-      const line = node.getStartLineNumber()
-      out.push({
-        file: relPath,
-        line,
-        col: node.getStart(),
-        varName: name,
-        symbol: lineToSymbol.get(line) ?? '',
-        hasDefault: envParentHasDefault(node),
-        wrappedIn: envWrappingCallName(node),
-      })
+      tryEmitEnvFromPropertyAccess(node, relPath, lineToSymbol, out)
     } else if (k === SyntaxKind.ElementAccessExpression) {
-      const ea = node as import('ts-morph').ElementAccessExpression
-      const obj = ea.getExpression()
-      if (!isProcessEnvNode(obj)) return
-      const arg = ea.getArgumentExpression()
-      if (!arg) return
-      if (!Node.isStringLiteral(arg) && !Node.isNoSubstitutionTemplateLiteral(arg)) return
-      const name = (arg as import('ts-morph').StringLiteral).getLiteralText()
-      if (!name || !ENV_NAME_RE.test(name) || name.length < 2) return
-      const line = node.getStartLineNumber()
-      out.push({
-        file: relPath,
-        line,
-        col: node.getStart(),
-        varName: name,
-        symbol: lineToSymbol.get(line) ?? '',
-        hasDefault: envParentHasDefault(node),
-        wrappedIn: envWrappingCallName(node),
-      })
+      tryEmitEnvFromElementAccess(node, relPath, lineToSymbol, out)
     }
+  })
+}
+
+/** `process.env.NAME` — émet 1 EnvVarReadFact si match. */
+function tryEmitEnvFromPropertyAccess(
+  node: Node,
+  relPath: string,
+  lineToSymbol: Map<number, string>,
+  out: EnvVarReadFact[],
+): void {
+  const pa = node as import('ts-morph').PropertyAccessExpression
+  if (!isProcessEnvNode(pa.getExpression())) return
+  const name = pa.getName()
+  if (!name || !ENV_NAME_RE.test(name) || name.length < 2) return
+  const line = node.getStartLineNumber()
+  out.push({
+    file: relPath,
+    line,
+    col: node.getStart(),
+    varName: name,
+    symbol: lineToSymbol.get(line) ?? '',
+    hasDefault: envParentHasDefault(node),
+    wrappedIn: envWrappingCallName(node),
+  })
+}
+
+/** `process.env['NAME']` — émet 1 EnvVarReadFact si match (string literal arg). */
+function tryEmitEnvFromElementAccess(
+  node: Node,
+  relPath: string,
+  lineToSymbol: Map<number, string>,
+  out: EnvVarReadFact[],
+): void {
+  const ea = node as import('ts-morph').ElementAccessExpression
+  if (!isProcessEnvNode(ea.getExpression())) return
+  const arg = ea.getArgumentExpression()
+  if (!arg) return
+  if (!Node.isStringLiteral(arg) && !Node.isNoSubstitutionTemplateLiteral(arg)) return
+  const name = (arg as import('ts-morph').StringLiteral).getLiteralText()
+  if (!name || !ENV_NAME_RE.test(name) || name.length < 2) return
+  const line = node.getStartLineNumber()
+  out.push({
+    file: relPath,
+    line,
+    col: node.getStart(),
+    varName: name,
+    symbol: lineToSymbol.get(line) ?? '',
+    hasDefault: envParentHasDefault(node),
+    wrappedIn: envWrappingCallName(node),
   })
 }
 
@@ -1616,7 +1662,16 @@ function visitConstantExpressionCandidates(
   relPath: string,
   out: ConstantExpressionCandidateFact[],
 ): void {
-  // 1. Tautology / contradiction (if + ternary)
+  findTautologyContradiction(sf, relPath, out)
+  findGratuitousBoolComparison(sf, relPath, out)
+  findDoubleNegation(sf, relPath, out)
+  findLiteralFoldOpportunity(sf, relPath, out)
+}
+
+/** 1. Tautology / contradiction dans if + ternary. */
+function findTautologyContradiction(
+  sf: SourceFile, relPath: string, out: ConstantExpressionCandidateFact[],
+): void {
   for (const ifNode of sf.getDescendantsOfKind(SyntaxKind.IfStatement)) {
     pushConstExprConditionFinding(
       ifNode.getExpression(), ifNode.getStartLineNumber(), relPath, 'if', out,
@@ -1627,8 +1682,12 @@ function visitConstantExpressionCandidates(
       tern.getCondition(), tern.getStartLineNumber(), relPath, 'ternary', out,
     )
   }
+}
 
-  // 2. Gratuitous bool comparisons (===/!==/==/!= avec true/false literal)
+/** 2. Gratuitous bool comparisons (===/!==/==/!= avec true/false literal). */
+function findGratuitousBoolComparison(
+  sf: SourceFile, relPath: string, out: ConstantExpressionCandidateFact[],
+): void {
   for (const bin of sf.getDescendantsOfKind(SyntaxKind.BinaryExpression)) {
     if (!CONST_EXPR_EQ_NEQ_OPS.has(bin.getOperatorToken().getKind())) continue
     if (!isConstExprBoolLiteral(bin.getLeft()) && !isConstExprBoolLiteral(bin.getRight())) continue
@@ -1640,8 +1699,12 @@ function visitConstantExpressionCandidates(
       exprRepr: truncateConstExpr(bin.getText()),
     })
   }
+}
 
-  // 3. Double negation (!!X hors return / as expression / variable decl)
+/** 3. Double negation (!!X hors contexte boolean attendu). */
+function findDoubleNegation(
+  sf: SourceFile, relPath: string, out: ConstantExpressionCandidateFact[],
+): void {
   for (const prefix of sf.getDescendantsOfKind(SyntaxKind.PrefixUnaryExpression)) {
     if (prefix.getOperatorToken() !== SyntaxKind.ExclamationToken) continue
     const inner = prefix.getOperand()
@@ -1656,8 +1719,12 @@ function visitConstantExpressionCandidates(
       exprRepr: truncateConstExpr(prefix.getText()),
     })
   }
+}
 
-  // 4. Literal fold opportunity (X + 0 / 0 + X)
+/** 4. Literal fold opportunity (X + 0 / 0 + X). */
+function findLiteralFoldOpportunity(
+  sf: SourceFile, relPath: string, out: ConstantExpressionCandidateFact[],
+): void {
   for (const bin of sf.getDescendantsOfKind(SyntaxKind.BinaryExpression)) {
     if (bin.getOperatorToken().getKind() !== SyntaxKind.PlusToken) continue
     if (!isConstExprZeroLiteral(bin.getLeft()) && !isConstExprZeroLiteral(bin.getRight())) continue
@@ -1793,69 +1860,78 @@ function visitEventEmitSiteCandidates(
 
   const lineToSymbol = buildLineToSymbol(sf)
   for (const call of sf.getDescendantsOfKind(SyntaxKind.CallExpression)) {
-    const callee = call.getExpression()
-    let calleeName = ''
-    let isMethodCall = 0
-    let receiver = ''
-    if (Node.isIdentifier(callee)) {
-      calleeName = callee.getText()
-    } else if (Node.isPropertyAccessExpression(callee)) {
-      calleeName = callee.getName()
-      isMethodCall = 1
-      receiver = callee.getExpression().getText()
-    } else continue
-    if (!EMIT_NAMES.has(calleeName)) continue
+    const callInfo = parseEmitCalleeInfo(call.getExpression())
+    if (!callInfo || !EMIT_NAMES.has(callInfo.calleeName)) continue
 
     const args = call.getArguments()
     if (args.length === 0) continue
     const firstArg = args[0]
     if (firstArg.getKind() !== SyntaxKind.ObjectLiteralExpression) continue
 
-    // Find type: prop
-    const props = (firstArg as import('ts-morph').ObjectLiteralExpression).getProperties()
-    let typeInit: Node | undefined
-    for (const p of props) {
-      if (p.getKind() !== SyntaxKind.PropertyAssignment) continue
-      const pa = p as import('ts-morph').PropertyAssignment
-      const nameNode = pa.getNameNode()
-      const k = nameNode.getKind()
-      let name: string | undefined
-      if (k === SyntaxKind.Identifier) name = nameNode.getText()
-      else if (k === SyntaxKind.StringLiteral) {
-        name = (nameNode as import('ts-morph').StringLiteral).getLiteralText()
-      }
-      if (name === 'type') {
-        typeInit = pa.getInitializer()
-        break
-      }
-    }
+    const typeInit = findTypePropInitializer(firstArg as import('ts-morph').ObjectLiteralExpression)
     if (!typeInit) continue
 
     const line = call.getStartLineNumber()
     const symbol = lineToSymbol.get(line) ?? ''
-    const initKind = typeInit.getKind()
+    out.push(buildEmitFactFromTypeInit(typeInit, relPath, line, symbol, callInfo))
+  }
+}
 
-    if (initKind === SyntaxKind.StringLiteral || initKind === SyntaxKind.NoSubstitutionTemplateLiteral) {
-      const lit = typeInit as import('ts-morph').StringLiteral | import('ts-morph').NoSubstitutionTemplateLiteral
-      out.push({
-        file: relPath, line, symbol,
-        callee: calleeName, isMethodCall, receiver,
-        kind: 'literal', literalValue: lit.getLiteralText(), refExpression: '',
-      })
-    } else if (initKind === SyntaxKind.PropertyAccessExpression) {
-      out.push({
-        file: relPath, line, symbol,
-        callee: calleeName, isMethodCall, receiver,
-        kind: 'eventConstRef', literalValue: '', refExpression: typeInit.getText(),
-      })
-    } else {
-      out.push({
-        file: relPath, line, symbol,
-        callee: calleeName, isMethodCall, receiver,
-        kind: 'dynamic', literalValue: '', refExpression: '',
-      })
+interface EmitCalleeInfo { calleeName: string; isMethodCall: number; receiver: string }
+
+/** Parse l'expression callee en {nom, isMethodCall, receiver}. Null si pas un appel reconnu. */
+function parseEmitCalleeInfo(callee: Node): EmitCalleeInfo | null {
+  if (Node.isIdentifier(callee)) {
+    return { calleeName: callee.getText(), isMethodCall: 0, receiver: '' }
+  }
+  if (Node.isPropertyAccessExpression(callee)) {
+    return {
+      calleeName: callee.getName(),
+      isMethodCall: 1,
+      receiver: callee.getExpression().getText(),
     }
   }
+  return null
+}
+
+/** Trouve l'initializer de la propriété `type:` dans un object literal. */
+function findTypePropInitializer(obj: import('ts-morph').ObjectLiteralExpression): Node | undefined {
+  for (const p of obj.getProperties()) {
+    if (p.getKind() !== SyntaxKind.PropertyAssignment) continue
+    const pa = p as import('ts-morph').PropertyAssignment
+    const nameNode = pa.getNameNode()
+    const k = nameNode.getKind()
+    let name: string | undefined
+    if (k === SyntaxKind.Identifier) name = nameNode.getText()
+    else if (k === SyntaxKind.StringLiteral) {
+      name = (nameNode as import('ts-morph').StringLiteral).getLiteralText()
+    }
+    if (name === 'type') return pa.getInitializer()
+  }
+  return undefined
+}
+
+/** Construit le fact selon le kind de l'initializer (literal / constRef / dynamic). */
+function buildEmitFactFromTypeInit(
+  typeInit: Node,
+  relPath: string,
+  line: number,
+  symbol: string,
+  info: EmitCalleeInfo,
+): EventEmitSiteCandidateFact {
+  const initKind = typeInit.getKind()
+  const base = {
+    file: relPath, line, symbol,
+    callee: info.calleeName, isMethodCall: info.isMethodCall, receiver: info.receiver,
+  }
+  if (initKind === SyntaxKind.StringLiteral || initKind === SyntaxKind.NoSubstitutionTemplateLiteral) {
+    const lit = typeInit as import('ts-morph').StringLiteral | import('ts-morph').NoSubstitutionTemplateLiteral
+    return { ...base, kind: 'literal', literalValue: lit.getLiteralText(), refExpression: '' }
+  }
+  if (initKind === SyntaxKind.PropertyAccessExpression) {
+    return { ...base, kind: 'eventConstRef', literalValue: '', refExpression: typeInit.getText() }
+  }
+  return { ...base, kind: 'dynamic', literalValue: '', refExpression: '' }
 }
 
 // ─── Tainted Vars (Tier 11) ─────────────────────────────────────────────────
