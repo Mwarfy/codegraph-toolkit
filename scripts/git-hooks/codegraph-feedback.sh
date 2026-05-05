@@ -498,6 +498,51 @@ if [ -z "$FEEDBACK" ]; then
   exit 0
 fi
 
+# ─── Déduplication par hash sur fenêtre 5 min ──────────────────────────
+# Le feedback complet (importers, NEW violations, exports, co-change…)
+# fait ~2k tokens et ne change PAS entre éditions consécutives du même
+# fichier dans le même run agent. Sur une session avec 5+ edits sur
+# analyzer.ts, c'est ~10k tokens de bruit identique.
+#
+# Stratégie : SHA du payload + timestamp. Si même hash dans les 5 min,
+# on remplace par un stub "(unchanged)". Le 1er run du fichier voit le
+# blob complet ; les suivants ne reçoivent qu'une ligne de marqueur.
+#
+# Cache : .codegraph/.hook-cache/<sha8>.hash → "<full_sha> <epoch_s>".
+CACHE_DIR="$REPO_ROOT/.codegraph/.hook-cache"
+mkdir -p "$CACHE_DIR" 2>/dev/null || true
+
+REL_HASH=$(printf '%s' "$RELATIVE" | shasum | cut -c1-12)
+CACHE_FILE="$CACHE_DIR/$REL_HASH.hash"
+
+# Hash sur version normalisée : strip les valeurs variables qui changent
+# run-to-run sans refléter de changement structurel.
+#   - Timings ms : `220ms` → `Nms`
+#   - WIP counts : `+128/-10` → `+N/-N` (le marker "WIP" reste visible
+#     pour signal qualitatif, mais le compteur exact ne déclenche pas
+#     un re-render à chaque edit)
+NORMALIZED=$(printf '%s' "$FEEDBACK" | sed -E '
+  s/[0-9]+ms/Nms/g
+  s/[0-9]+\.[0-9]+ms/Nms/g
+  s/\+[0-9]+\/-[0-9]+/+N\/-N/g
+')
+NEW_HASH=$(printf '%s' "$NORMALIZED" | shasum | cut -c1-40)
+NOW=$(date +%s)
+DEDUP_TTL=${CODEGRAPH_FEEDBACK_TTL:-300}
+
+if [ -f "$CACHE_FILE" ]; then
+  OLD_LINE=$(cat "$CACHE_FILE" 2>/dev/null || true)
+  OLD_HASH=$(printf '%s' "$OLD_LINE" | awk '{print $1}')
+  OLD_TS=$(printf '%s' "$OLD_LINE" | awk '{print $2}')
+  if [ -n "$OLD_TS" ] && [ "$NEW_HASH" = "$OLD_HASH" ]; then
+    AGE=$((NOW - OLD_TS))
+    if [ "$AGE" -lt "$DEDUP_TTL" ]; then
+      FEEDBACK="📍 codegraph context : $RELATIVE (unchanged since ${AGE}s ago — codegraph_feedback dedup)"
+    fi
+  fi
+fi
+printf '%s %s\n' "$NEW_HASH" "$NOW" > "$CACHE_FILE"
+
 python3 -c '
 import json, sys
 ctx = sys.stdin.read()
