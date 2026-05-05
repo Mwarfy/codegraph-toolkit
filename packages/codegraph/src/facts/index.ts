@@ -94,6 +94,7 @@ export async function exportFacts(
   emitTruthAndCoverageFacts(snapshot, relations)
   emitDriftAndCoChangeFacts(snapshot, relations)
   emitTaintFacts(snapshot, relations)
+  emitDocClaimFacts(snapshot, relations)
 
   // ─── Write to disk ────────────────────────────────────────────────────
   await fs.mkdir(options.outDir, { recursive: true })
@@ -1418,6 +1419,45 @@ function emitCommunityAndCausalityFacts(snapshot: GraphSnapshot, relations: Rela
     ])
   }
   relations.push(grangerRel)
+}
+
+/**
+ * DocStaleClaim (composite-doc-stale.dl).
+ *
+ * Émet la relation consommée par les rules `composite-doc-stale.dl`
+ * pour flag les docs/*.md qui référencent des artefacts disparus
+ * (rules .dl renommées, fichiers source supprimés, ADRs jamais créés).
+ *
+ * Note YAGNI : on n'émet PAS `DocClaim` (la base complète des claims)
+ * car aucune rule ne le consomme. Si une future rule a besoin de
+ * cross-checker des claims sains (pas seulement les divergences), ajouter
+ * l'émission ici. La structure est préservée dans `snapshot.docClaims`
+ * pour l'inspection programmatique.
+ *
+ * ADR-010 (Datalog deterministic) : tri lex sur (file, line, kind, target)
+ * pour garantir un output byte-identique entre runs.
+ */
+function emitDocClaimFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
+  const docStaleRel: RelationDef = {
+    name: 'DocStaleClaim',
+    decl: '(file:symbol, line:number, kind:symbol, target:symbol, issue:symbol)',
+    rows: [],
+  }
+
+  // Tri lex avant émission — ADR-010 byte-identical determinism.
+  const stale = [...(snapshot.docStaleClaims ?? [])].sort((a, b) =>
+    a.file !== b.file ? a.file.localeCompare(b.file)
+      : a.line !== b.line ? a.line - b.line
+      : a.kind !== b.kind ? a.kind.localeCompare(b.kind)
+      : a.target.localeCompare(b.target),
+  )
+  for (const s of stale) {
+    docStaleRel.rows.push([
+      sym(s.file), num(s.line), sym(s.kind), sym(s.target), sym(s.issue),
+    ])
+  }
+
+  relations.push(docStaleRel)
 }
 
 function sym(value: string): string {

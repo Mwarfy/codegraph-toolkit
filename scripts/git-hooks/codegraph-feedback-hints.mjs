@@ -236,6 +236,17 @@ export const FIX_HINTS = {
   'COMPOSITE-ASYNC-SINK-WITH-SWALLOW': {
     fix: 'async sink + try/catch silent — log au moins, ou re-throw',
   },
+
+  // ─── Doc staleness (Tier 17 meta) ──────────────────────────────────────
+  'COMPOSITE-DOC-STALE-RULE': {
+    fix: 'rule renommée/skipped : MAJ le doc OU grandfather dans composite-doc-stale.dl',
+  },
+  'COMPOSITE-DOC-STALE-FILE': {
+    fix: 'fichier renommé/supprimé : MAJ le path OU retirer les backticks (plain text)',
+  },
+  'COMPOSITE-DOC-STALE-ADR': {
+    fix: 'ADR inexistant : créer docs/adr/NNN-X.md OU grandfather (ex: ADR Sentinel)',
+  },
 }
 
 /**

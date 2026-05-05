@@ -177,6 +177,13 @@
 .input ConstantExpression
 .input EslintViolation
 
+// Doc claims (composite-doc-stale.dl) — émis par extractor doc-claims.
+// `DocClaim` (la base complète des claims) n'est volontairement PAS
+// déclarée ici : aucune rule ne la consomme aujourd'hui (YAGNI). La
+// rule composite-doc-stale.dl ne join que sur les divergences.
+.decl DocStaleClaim(file: symbol, line: number, kind: symbol, target: symbol, issue: symbol)
+.input DocStaleClaim
+
 // La relation cible commune : tous les fichiers ADR écrivent ici.
 // 4 colonnes :
 //   adr  : "ADR-NNN" — l'ADR violé

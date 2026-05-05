@@ -86,6 +86,7 @@
 - `packages/codegraph/src/extractors/compression-similarity.ts` → ADR-005
 - `packages/codegraph/src/extractors/constant-expressions.ts` → ADR-005
 - `packages/codegraph/src/extractors/dead-code.ts` → ADR-026
+- `packages/codegraph/src/extractors/doc-claims.ts` → ADR-005
 - `packages/codegraph/src/extractors/drift-patterns.ts` → ADR-026
 - `packages/codegraph/src/extractors/eslint-import.ts` → ADR-005
 - `packages/codegraph/src/extractors/package-deps.ts` → ADR-005
@@ -201,6 +202,14 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/c.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **FSM-ORPHAN** `DocStatus#active` — état déclaré mais jamais écrit dans le code  
+  _→ supprimer l'état OU ajouter la transition manquante_
+- **FSM-ORPHAN** `DocStatus#shipped` — état déclaré mais jamais écrit dans le code  
+  _→ supprimer l'état OU ajouter la transition manquante_
+- **FSM-ORPHAN** `DocStatus#deferred` — état déclaré mais jamais écrit dans le code  
+  _→ supprimer l'état OU ajouter la transition manquante_
+- **FSM-ORPHAN** `DocStatus#superseded` — état déclaré mais jamais écrit dans le code  
+  _→ supprimer l'état OU ajouter la transition manquante_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
 - **DEP-UNUSED** `test-only-in-deps` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
@@ -213,14 +222,11 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ inline les imports + supprimer le barrel_
 - **BARREL-LOW** `packages/codegraph/tests/fixtures/package-deps/src/barrel.ts` — barrel à 2 re-export(s) pour 1 consumer(s)  
   _→ inline les imports + supprimer le barrel_
-- **BARREL-LOW** `packages/datalog/src/index.ts` — barrel à 13 re-export(s) pour 0 consumer(s)  
-  _→ inline les imports + supprimer le barrel_
-- **BARREL-LOW** `packages/runtime-graph/src/capture/index.ts` — barrel à 3 re-export(s) pour 0 consumer(s)  
-  _→ inline les imports + supprimer le barrel_
 
 ## Activité récente (14 derniers jours)
 
 ```
+38a1ffc chore(codegraph): strip 'export' on 33 local-only interfaces
 f5f530f refactor(runner): extract 3 sub-projectors to reduce cog complexity
 cd09bc2 fix(codegraph): exclude auto-generated files from BayesianCoChange follower
 dbe0aef feat(hooks): F.2 — auto-injected fix hints + memory match dans NEW violations
@@ -232,7 +238,6 @@ d469668 docs(readme): update for v0.6.0 — pipeline composite statique × dynam
 f7944a1 chore(codegraph): defer Phase E (default-on useDatalog) — bug Salsa persistence
 70bc566 chore(codegraph): bump @liby-tools/codegraph to v0.5.0
 d65f1c4 feat(runtime-graph): wire Salsa push for composite cross-cut warm path
-1488e38 feat(codegraph): ADR-026 phase D — pipeline composite statique × dynamique × salsa
 ```
 
 ## Comment contribuer à ce brief

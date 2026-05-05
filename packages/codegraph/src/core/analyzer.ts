@@ -85,6 +85,12 @@ import { analyzeMagicNumbers, type MagicNumber } from '../extractors/magic-numbe
 import { analyzeTestCoverage, type TestCoverageReport } from '../extractors/test-coverage.js'
 import { analyzeCoChange, type CoChangePair } from '../extractors/co-change.js'
 import {
+  extractAllDocClaims,
+  evaluateDocClaims,
+  flattenDocClaims,
+  type DocCrossCheckIndex,
+} from '../extractors/doc-claims.js'
+import {
   fileContent as incFileContent,
   projectFiles as incProjectFiles,
   setIncrementalContext,
@@ -395,6 +401,22 @@ export async function analyze(
   // module-metrics, component-metrics, dsm. Tournent post-snapshot car
   // dépendent de snapshot.nodes + snapshot.edges (cf. helper).
   await runPostSnapshotMetrics(config, snapshot, timing, { factsOnly, incremental })
+
+  // ─── 7b. Doc claims extraction (composite-doc-stale ADR-026) ──────
+  // Lit les .md de docs/ + frontmatter YAML, cross-check contre les
+  // .dl rules existantes, les fichiers source, et les ADRs. Émet des
+  // facts DocClaim + DocStaleClaim consommés par composite-doc-stale.dl.
+  // Pas dans factsOnly mode (output dégénéré).
+  if (!factsOnly) {
+    const tDoc = performance.now()
+    try {
+      await runDocClaimsExtraction(config.rootDir, snapshot)
+    } catch (err) {
+      console.error(`  ✗ doc-claims failed: ${err}`)
+    } finally {
+      timing.detectors['doc-claims'] = performance.now() - tDoc
+    }
+  }
 
   // ─── 8. Datalog shadow run (ADR-026 phase A.1) ─────────────────────
   // Compare runner Datalog vs legacy snapshot. Skip si factsOnly (snapshot
@@ -1363,6 +1385,107 @@ async function runPostSnapshotMetrics(
     timing,
     fn: () => runDsmStep(config, snapshot),
   })
+}
+
+/**
+ * Doc claims extraction — scan docs/*.md, parse frontmatter YAML +
+ * inline mentions, cross-check contre les artefacts du repo (rules .dl,
+ * fichiers source, ADRs). Patche le snapshot avec `docClaims` et
+ * `docStaleClaims` qui seront émis comme facts par `facts/index.ts`.
+ *
+ * Build l'index local (dlRules, files, adrs) à partir du filesystem +
+ * du snapshot — pas de cache Salsa pour ce détecteur (les .md changent
+ * rarement et le scan est rapide, < 50ms typiquement).
+ *
+ * Failure mode : si l'extraction échoue (perms, fs error), on log et on
+ * laisse les champs undefined. Le snapshot reste valide. Les rules
+ * `composite-doc-stale.dl` deviennent silencieusement no-op.
+ */
+async function runDocClaimsExtraction(
+  rootDir: string,
+  snapshot: GraphSnapshot,
+): Promise<void> {
+  const bundles = await extractAllDocClaims(rootDir)
+
+  // Build cross-check index depuis le filesystem (pas snapshot.nodes —
+  // celui-ci exclut .test.ts et scripts/ par design, ce qui produit des
+  // faux positifs si un doc référence un test ou un script).
+  // - dlRules : scan des .dl files dans le repo
+  // - files   : scan filesystem complet (TS/JS/MJS, hors node_modules/dist)
+  // - adrs    : scan de docs/adr/NNN-*.md
+  const index: DocCrossCheckIndex = {
+    dlRules: new Set(),
+    files: new Set(),
+    adrs: new Set(),
+  }
+  await scanDlAndAdrIds(rootDir, index)
+
+  const stale = evaluateDocClaims(bundles, index)
+  const all = flattenDocClaims(bundles)
+
+  snapshot.docClaims = all.map((c) => ({
+    file: c.file, line: c.line, kind: c.kind, target: c.target,
+  }))
+  snapshot.docStaleClaims = stale.map((s) => ({
+    file: s.file, line: s.line, kind: s.kind, target: s.target, issue: s.issue,
+  }))
+}
+
+/**
+ * Walk filesystem pour peupler les 3 sets du `DocCrossCheckIndex` :
+ *   - `dlRules` : basenames des `.dl` (ex: `composite-X`)
+ *   - `files`   : paths relatifs des fichiers source/tests/scripts
+ *                 (.ts, .tsx, .mjs, .js) — couvre plus large que
+ *                 `snapshot.nodes` (qui exclut tests + scripts)
+ *   - `adrs`    : IDs ADR-NNN depuis docs/adr/NNN-*.md
+ *
+ * Skip node_modules / dist. Walk unique pour les 3 indexes (1 traversée
+ * filesystem au lieu de 3).
+ */
+async function scanDlAndAdrIds(rootDir: string, index: DocCrossCheckIndex): Promise<void> {
+  const fs = await import('node:fs/promises')
+  const path = await import('node:path')
+
+  async function walk(dir: string): Promise<void> {
+    let entries
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    // Sépare files (sync) et subdirs (async parallèle) pour éviter
+    // l'await-in-loop. Les sous-dossiers sont indépendants : Promise.all
+    // donne un walk concurrent au lieu de séquentiel.
+    const subdirs: string[] = []
+    for (const entry of entries) {
+      if (entry.name.startsWith('.git') || entry.name === 'node_modules' || entry.name === 'dist') {
+        continue
+      }
+      const full = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        subdirs.push(full)
+        continue
+      }
+      if (!entry.isFile()) continue
+
+      const rel = path.relative(rootDir, full)
+      if (entry.name.endsWith('.dl')) {
+        index.dlRules.add(entry.name.replace(/\.dl$/, ''))
+      }
+      // Source / test / script files — pour cross-check des file-ref
+      // mentions dans les docs. Inclut tests + scripts (vs snapshot.nodes
+      // qui les exclut par design).
+      if (/\.(ts|tsx|mjs|js)$/.test(entry.name)) {
+        index.files.add(rel)
+      }
+      if (rel.startsWith('docs/adr/')) {
+        const m = entry.name.match(/^(\d{3})-/)
+        if (m) index.adrs.add(`ADR-${m[1]}`)
+      }
+    }
+    await Promise.all(subdirs.map(walk))
+  }
+  await walk(rootDir)
 }
 
 // ─── File Discovery ─────────────────────────────────────────────────────

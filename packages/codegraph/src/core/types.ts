@@ -954,6 +954,48 @@ export interface GraphSnapshot {
       containingSymbol: string
     }>
   }
+
+  /**
+   * Doc claims — références extraites des fichiers `.md` de `docs/` :
+   * mentions de rules `composite-X.dl`, paths source `packages/.../*.ts`,
+   * IDs `ADR-NNN`, plus le frontmatter YAML structuré.
+   *
+   * Émis par l'extractor `doc-claims.ts`. Le snapshot ne stocke QUE le
+   * delta utile pour Datalog — la liste plate des claims, sans le
+   * frontmatter brut (qui peut être re-parsé si besoin via l'extractor).
+   * Cf. ADR-026 + composite-doc-stale.dl.
+   */
+  docClaims?: Array<{
+    file: string
+    line: number
+    kind:
+      | 'rule-mention'
+      | 'file-ref'
+      | 'adr-ref'
+      | 'frontmatter-rule'
+      | 'frontmatter-file'
+      | 'frontmatter-adr'
+    target: string
+  }>
+
+  /**
+   * Doc stale claims — sous-ensemble de `docClaims` avec issue détectée
+   * lors du cross-check (rule absente, fichier renommé, ADR disparu).
+   * Émis comme `DocStaleClaim` fact, consommé par `composite-doc-stale.dl`.
+   */
+  docStaleClaims?: Array<{
+    file: string
+    line: number
+    kind:
+      | 'rule-mention'
+      | 'file-ref'
+      | 'adr-ref'
+      | 'frontmatter-rule'
+      | 'frontmatter-file'
+      | 'frontmatter-adr'
+    target: string
+    issue: string
+  }>
 }
 
 /** Re-export du type produit par `extractors/oauth-scope-literals`. */

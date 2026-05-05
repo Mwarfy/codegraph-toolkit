@@ -74,6 +74,7 @@ post-coup). Forcer le pattern dès la naissance évite la dette.
 - `packages/codegraph/src/extractors/co-change.ts`
 - `packages/codegraph/src/extractors/compression-similarity.ts`
 - `packages/codegraph/src/extractors/constant-expressions.ts`
+- `packages/codegraph/src/extractors/doc-claims.ts`
 - `packages/codegraph/src/extractors/eslint-import.ts`
 - `packages/codegraph/src/extractors/package-deps.ts`
 - `packages/codegraph/src/extractors/sql-schema.ts`

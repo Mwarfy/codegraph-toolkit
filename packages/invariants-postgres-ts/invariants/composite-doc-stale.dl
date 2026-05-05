@@ -1,0 +1,98 @@
+// COMPOSITE-DOC-STALE (Tier 17 — meta).
+//
+// Pourquoi : les docs (backlog, plan, roadmap) accumulent des claims
+// périmées (rule "à coder" déjà shippée, fichier renommé, ADR référencé
+// puis supprimé). Sans audit déterministe, ces claims survivent
+// indéfiniment et trompent les contributeurs (humains et LLM) qui lisent
+// le doc comme source de vérité.
+//
+// Source : extractor doc-claims (`packages/codegraph/src/extractors/doc-claims.ts`)
+// qui parse les .md de docs/ + frontmatter YAML structuré + claims inline.
+//
+// Trois sub-rules :
+//   - DOC-STALE-RULE   : .md référence `composite-X` mais aucun .dl existant
+//   - DOC-STALE-FILE   : .md référence `path/file.ts` mais fichier absent
+//   - DOC-STALE-ADR    : .md référence `ADR-NNN` mais aucun ADR correspondant
+//
+// Pattern : multi-clause Horn (le parser Datalog ne supporte pas `K = "x"`,
+// donc on duplique la rule par valeur de `kind`). Chaque sub-rule a 2
+// variantes : claim inline (`*-mention` / `*-ref`) et claim frontmatter.
+//
+// Cas légitimes (à grandfather) :
+//   - Doc historique qui décrit l'ancienne archi (status: superseded)
+//   - Rules renommées qui apparaissent encore dans des changelogs
+//   - ADRs disparus dont la trace est intentionnellement préservée
+//
+// Pattern ratchet : grandfather par (file, target).
+//
+// Facts émis par l'extractor doc-claims :
+//   DocClaim(file: symbol, line: number, kind: symbol, target: symbol)
+//   DocStaleClaim(file: symbol, line: number, kind: symbol, target: symbol, issue: symbol)
+//
+// `kind` ∈ { "rule-mention", "file-ref", "adr-ref",
+//            "frontmatter-rule", "frontmatter-file", "frontmatter-adr" }
+
+.decl DocStaleGrandfathered(file: symbol, target: symbol)
+
+// Source facts (`DocClaim`, `DocStaleClaim`) déclarés dans `schema-subset.dl`.
+
+// ─── Rule 1 : doc référence une rule .dl absente ────────────────────────
+Violation("COMPOSITE-DOC-STALE-RULE", F, L,
+  "doc reference une rule Datalog sans .dl correspondant — rule renommee ou claim perime") :-
+    DocStaleClaim(F, L, "rule-mention", T, _),
+    !DocStaleGrandfathered(F, T).
+
+Violation("COMPOSITE-DOC-STALE-RULE", F, L,
+  "doc reference une rule Datalog sans .dl correspondant — rule renommee ou claim perime") :-
+    DocStaleClaim(F, L, "frontmatter-rule", T, _),
+    !DocStaleGrandfathered(F, T).
+
+// ─── Rule 2 : doc référence un fichier source absent ───────────────────
+Violation("COMPOSITE-DOC-STALE-FILE", F, L,
+  "doc reference un fichier source qui n'existe plus — rename ou suppression non repercutee") :-
+    DocStaleClaim(F, L, "file-ref", T, _),
+    !DocStaleGrandfathered(F, T).
+
+Violation("COMPOSITE-DOC-STALE-FILE", F, L,
+  "doc reference un fichier source qui n'existe plus — rename ou suppression non repercutee") :-
+    DocStaleClaim(F, L, "frontmatter-file", T, _),
+    !DocStaleGrandfathered(F, T).
+
+// ─── Rule 3 : doc référence un ADR absent ──────────────────────────────
+Violation("COMPOSITE-DOC-STALE-ADR", F, L,
+  "doc reference un ADR qui n'existe pas — ADR supprime ou jamais cree") :-
+    DocStaleClaim(F, L, "adr-ref", T, _),
+    !DocStaleGrandfathered(F, T).
+
+Violation("COMPOSITE-DOC-STALE-ADR", F, L,
+  "doc reference un ADR qui n'existe pas — ADR supprime ou jamais cree") :-
+    DocStaleClaim(F, L, "frontmatter-adr", T, _),
+    !DocStaleGrandfathered(F, T).
+
+// ─── Grandfather list ──────────────────────────────────────────────────
+// Format : DocStaleGrandfathered("docs/X.md", "ADR-NNN" | "composite-X" | "path/file.ts").
+// Ajouter une entry quand on accepte explicitement de garder une référence
+// historique (ex: changelog qui mentionne ancien nom de rule).
+
+// ─── ADRs Sentinel (projet d'origine du toolkit) ───────────────────────
+// Le toolkit a été extrait de Sentinel ; certains docs (PHASE-*, ENRICHMENT-*)
+// continuent de citer les ADRs Sentinel pour préserver le contexte
+// historique. Ces ADRs vivent dans `~/Documents/sentinel-core/docs/adr/`,
+// pas ici. Plutôt que dupliquer les fichiers, on grandfather chaque
+// référence — la trace reste lisible, le détecteur ne crie pas.
+//
+// Périmètre : ADR-013 à ADR-023 (gap entre toolkit ADR-012 et ADR-024).
+DocStaleGrandfathered("docs/ENRICHMENT-5-AXES-PLAN.md", "ADR-022").
+DocStaleGrandfathered("docs/ENRICHMENT-5-AXES-PLAN.md", "ADR-023").
+DocStaleGrandfathered("docs/PHASE-1-SALSA-MIGRATION.md", "ADR-014").
+DocStaleGrandfathered("docs/PHASE-1-SALSA-MIGRATION.md", "ADR-017").
+DocStaleGrandfathered("docs/PHASE-1-SALSA-MIGRATION.md", "ADR-019").
+DocStaleGrandfathered("docs/PHASE-1-SALSA-MIGRATION.md", "ADR-022").
+DocStaleGrandfathered("docs/PHASE-4-AGENT-FIRST-PLAN.md", "ADR-017").
+DocStaleGrandfathered("docs/PHASE-4-AGENT-FIRST-PLAN.md", "ADR-018").
+DocStaleGrandfathered("docs/PHASE-4-AGENT-FIRST-PLAN.md", "ADR-019").
+DocStaleGrandfathered("docs/PHASE-5-COMPOSITE-BACKLOG.md", "ADR-013").
+DocStaleGrandfathered("docs/PHASE-5-COMPOSITE-BACKLOG.md", "ADR-017").
+DocStaleGrandfathered("docs/PHASE-5-COMPOSITE-BACKLOG.md", "ADR-019").
+DocStaleGrandfathered("docs/PHASE-5-COMPOSITE-BACKLOG.md", "ADR-021").
+DocStaleGrandfathered("docs/PHASE-5-COMPOSITE-BACKLOG.md", "ADR-022").
