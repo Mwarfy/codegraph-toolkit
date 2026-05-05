@@ -24,3 +24,8 @@ Violation("COMPOSITE-FANOUT-NO-TEST-NO-ARTIC", F, 0,
     !TestedFile(F),
     !ArticulationPoint(F, _),
     !FanoutNoTestNoArticGrandfathered(F).
+
+// dist/*.d.ts sont des artefacts générés (déclaration TypeScript) — pas
+// du code source, ne doivent pas être testés directement (ce sont les
+// fichiers .ts source en amont qui doivent l'être).
+FanoutNoTestNoArticGrandfathered("packages/salsa/dist/index.d.ts").

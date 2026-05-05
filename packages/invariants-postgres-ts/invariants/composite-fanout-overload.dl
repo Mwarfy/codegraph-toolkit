@@ -16,3 +16,9 @@ Violation("COMPOSITE-FANOUT-OVERLOAD", F, 0,
     ImportFanOut(F, N),
     N > 25,
     !FanoutOverloadGrandfathered(F).
+
+// analyzer.ts : god file de pipeline (98 imports, 1488 LOC). Split
+// planifié dans le backlog (cli/index.ts d'abord, puis analyzer.ts).
+// Toute la pipeline analyze converge ici par design — split nécessite
+// refactor profond du registry pattern.
+FanoutOverloadGrandfathered("packages/codegraph/src/core/analyzer.ts").

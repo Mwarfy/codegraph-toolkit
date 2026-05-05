@@ -28,3 +28,9 @@ DepUnusedGrandfathered("react-dom").
 DepUnusedGrandfathered("tailwindcss").
 DepUnusedGrandfathered("typescript").
 DepUnusedGrandfathered("vitest").
+
+// Fixture INPUTS pour test detector package-deps — packages volontairement
+// déclarés-non-utilisés dans tests/fixtures/package-deps/package.json.
+DepUnusedGrandfathered("jest").
+DepUnusedGrandfathered("test-only-in-deps").
+DepUnusedGrandfathered("unused-pkg").

@@ -24,3 +24,6 @@ Violation("COMPOSITE-BARREL-LOW-VALUE", F, 0,
 BarrelLowGrandfathered("sentinel-core/src/api/webhook-api.ts").
 BarrelLowGrandfathered("sentinel-core/src/kernel/healer.ts").
 BarrelLowGrandfathered("sentinel-core/src/mcp/index.ts").
+
+// Fixture INPUT pour test detector package-deps — barrel volontairement low-value.
+BarrelLowGrandfathered("packages/codegraph/tests/fixtures/package-deps/src/barrel.ts").

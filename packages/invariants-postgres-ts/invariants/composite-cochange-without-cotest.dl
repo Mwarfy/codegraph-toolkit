@@ -15,6 +15,12 @@
 
 .decl CochangeWithoutCotestGrandfathered(fileA: symbol, fileB: symbol)
 
+// rules/index.ts est un registry de glue — re-exports des 22 sous-rules
+// Datalog. Co-change naturel avec ast-facts-visitor + runner mais pas
+// directement testable (les sub-rules elles-mêmes sont testées).
+CochangeWithoutCotestGrandfathered("packages/codegraph/src/datalog-detectors/ast-facts-visitor.ts", "packages/codegraph/src/datalog-detectors/rules/index.ts").
+CochangeWithoutCotestGrandfathered("packages/codegraph/src/datalog-detectors/runner.ts", "packages/codegraph/src/datalog-detectors/rules/index.ts").
+
 // Filter to TS source files only — File(FB) n'est emit que pour les
 // .ts/.tsx du snapshot. Sans ce filter, la rule fire sur les .md /
 // .dl / .test.ts qui co-évoluent normalement avec leur source mais

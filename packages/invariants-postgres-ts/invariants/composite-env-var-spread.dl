@@ -16,6 +16,11 @@
 .decl EnvVarSpreadGrandfathered(varName: symbol)
 .decl EnvVarWhitelist(varName: symbol)
 EnvVarWhitelist("NODE_ENV").
+// Env vars Node natives (config runtime), pas applicatives — pas de
+// resolver typé applicable.
+EnvVarWhitelist("NODE_OPTIONS").
+EnvVarWhitelist("NODE_PATH").
+EnvVarWhitelist("NODE_DEBUG").
 
 .count EnvVarReadCount(varName: symbol, n: number) by EnvRead(_, _, V, _)
 

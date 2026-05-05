@@ -20,3 +20,6 @@ Violation("COMPOSITE-TRUTH-POINT-ASYMMETRIC", F, 0,
     TruthPointWriter(C, F),
     !TpHasReader(C),
     !TpAsymmetricGrandfathered(C).
+
+// Fixture INPUT pour test data-flows — concept écrit volontairement sans reader.
+TpAsymmetricGrandfathered("decision_journal").

@@ -19,3 +19,8 @@ Violation("COMPOSITE-DRIFT-SIGNAL-DENSITY", F, 0,
     DriftDensityCount(F, N),
     N > 2,
     !DriftDensityGrandfathered(F).
+
+// ast-facts-visitor.ts : god file connu (2200+ LOC, 1 visitor par
+// AST kind). Refactor en sub-visitors planifié dans le backlog. La
+// dette est délibérée + tracée — pas une accumulation cachée.
+DriftDensityGrandfathered("packages/codegraph/src/datalog-detectors/ast-facts-visitor.ts").

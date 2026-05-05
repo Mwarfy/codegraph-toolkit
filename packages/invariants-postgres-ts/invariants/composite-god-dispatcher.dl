@@ -29,3 +29,8 @@ Violation("COMPOSITE-GOD-DISPATCHER", S, 0,
 // Grandfather list — 2026-05-01 (cross-discipline auto-disco).
 GodDispatcherGrandfathered("sentinel-core/src/api/server.ts:startAPI").
 GodDispatcherGrandfathered("sentinel-core/src/index.ts:startSystem").
+
+// buildDetectorRegistry : assemble les 30+ detectors dans createDetectors().
+// God-dispatcher légitime — c'est précisément le rôle d'un registry
+// pattern (ADR-008). Refactor en sous-registries possible mais non urgent.
+GodDispatcherGrandfathered("packages/codegraph/src/core/analyzer.ts:buildDetectorRegistry").

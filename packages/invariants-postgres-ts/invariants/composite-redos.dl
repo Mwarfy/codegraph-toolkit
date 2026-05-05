@@ -21,3 +21,11 @@ Violation("COMPOSITE-REDOS", F, L,
 
 // Grandfather list — 2026-05-01 (auto-generated, 1 entries).
 ReDoSGrandfathered("sentinel-core/src/mcp/tools/codegraph.ts", 1238).
+
+// regenerate-anchors.ts L155 : parser de section "## Rule" dans ADRs.
+// Input = fichiers .md du repo (controlled), pas user-supplied. Le
+// pattern `[^\n]+(?:\n>[^\n]*)*` flag heuristique mais pas de
+// catastrophic backtracking en pratique (char classes disjointes : `\n`
+// vs `[^\n]`). Si on commence à parser des ADRs externes via webhook,
+// re-évaluer.
+ReDoSGrandfathered("packages/adr-toolkit/src/regenerate-anchors.ts", 155).

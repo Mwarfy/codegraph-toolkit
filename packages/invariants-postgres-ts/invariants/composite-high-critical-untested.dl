@@ -31,3 +31,7 @@ Violation("COMPOSITE-HIGH-CRITICAL-UNTESTED", File, 0,
     TruthPointWriter(_, File),
     !TestedFile(File),
     !HighCriticalUntestedGrandfathered(File).
+
+// Fixture INPUT pour test data-flows — service intentionnellement écrit
+// comme articulation+truth-point pour tester la rule elle-même.
+HighCriticalUntestedGrandfathered("packages/codegraph/tests/fixtures/data-flows/approval-service.ts").

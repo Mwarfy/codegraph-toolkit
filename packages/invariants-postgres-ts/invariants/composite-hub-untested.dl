@@ -19,3 +19,6 @@ Violation("COMPOSITE-HUB-UNTESTED", F, 0,
     N >= 20,
     !TestedFile(F),
     !HubUntestedGrandfathered(F).
+
+// dist/*.d.ts = artefact généré, pas un fichier source à tester.
+HubUntestedGrandfathered("packages/salsa/dist/index.d.ts").

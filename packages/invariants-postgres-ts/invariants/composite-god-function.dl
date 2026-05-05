@@ -18,3 +18,8 @@ Violation("COMPOSITE-GOD-FUNCTION", F, 0,
     CalleeUsageCount(F, S, N),
     N > 30,
     !GodFunctionGrandfathered(F, S).
+
+// DatalogError est le SSOT des erreurs du runtime Datalog — pattern
+// `throw new DatalogError(code, msg)` utilisé 33× dans parser/eval/runner.
+// Pas refactorable en service injecté (constructeur natif Error).
+GodFunctionGrandfathered("packages/datalog/src/types.ts", "DatalogError").

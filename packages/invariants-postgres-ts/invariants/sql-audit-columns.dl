@@ -37,3 +37,9 @@ Violation("SQL-AUDIT-COLUMNS", File, Line,
   "table business-critique sans audit column — voir kind (created_at / updated_at)") :-
     AuditMissing(File, Line, Table, Kind),
     !AuditColumnGrandfathered(Table, Kind).
+
+// Fixture INPUT pour test detector sql-schema —
+// `examples/canary-project/src/bad/sql-schema.sql` est volontairement
+// mauvais (chemin `bad/`) pour tester que les rules détectent.
+AuditColumnGrandfathered("orders", "audit-column-missing-created-at").
+AuditColumnGrandfathered("orders", "audit-column-missing-updated-at").

@@ -27,3 +27,8 @@ Violation("COMPOSITE-PACKAGE-COUPLING", FromP, 0,
     PackageMinCut(FromP, _, _, MC),
     MC > 5,
     !PackageCouplingGrandfathered(FromP, _).
+
+// codegraph → salsa : couplage volontaire (codegraph utilise massivement
+// salsa pour l'incremental computing — Sprint 5 migration).
+// L'API salsa est l'interface stable, pas un détail à découpler.
+PackageCouplingGrandfathered("packages/codegraph", "packages/salsa").
