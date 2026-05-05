@@ -148,6 +148,21 @@ export const SCHEMA_DL = `// AST primitive facts — extraits par ast-facts-visi
   secretKind:symbol, sym:symbol)
 .input WeakRandomCandidate
 
+.decl ExcessiveOptionalParamsCandidate(file:symbol, line:number,
+  name:symbol, fnKind:symbol, optCount:number)
+.input ExcessiveOptionalParamsCandidate
+
+.decl WrapperSuperfluousCandidate(file:symbol, line:number,
+  name:symbol, fnKind:symbol, callee:symbol)
+.input WrapperSuperfluousCandidate
+
+.decl DeepNestingCandidate(file:symbol, line:number, name:symbol,
+  maxDepth:number)
+.input DeepNestingCandidate
+
+.decl EmptyCatchNoCommentCandidate(file:symbol, line:number)
+.input EmptyCatchNoCommentCandidate
+
 // ─── Hybrid outputs ─────────────────────────────────────────────────────────
 
 .decl SanitizerOut(file:symbol, line:number, callee:symbol, containingSymbol:symbol)
@@ -226,6 +241,21 @@ export const SCHEMA_DL = `// AST primitive facts — extraits par ast-facts-visi
 .decl WeakRandomOut(file:symbol, line:number, varName:symbol,
   secretKind:symbol, sym:symbol)
 .output WeakRandomOut
+
+.decl ExcessiveOptionalParamsOut(file:symbol, line:number,
+  name:symbol, fnKind:symbol, optCount:number)
+.output ExcessiveOptionalParamsOut
+
+.decl WrapperSuperfluousOut(file:symbol, line:number,
+  name:symbol, fnKind:symbol, callee:symbol)
+.output WrapperSuperfluousOut
+
+.decl DeepNestingOut(file:symbol, line:number, name:symbol,
+  maxDepth:number)
+.output DeepNestingOut
+
+.decl EmptyCatchNoCommentOut(file:symbol, line:number)
+.output EmptyCatchNoCommentOut
 `
 
 // Convention engine : variables capitalisées, literals (numbers, strings) inline.
@@ -427,6 +457,26 @@ WeakRandomOut(F, L, V, SK, S) :-
   !ExemptionLine(F, L, "security-ok").
 `
 
+// drift-patterns — 4 AST sub-detectors. Visitor skip test files (own narrow
+// regex), rule filtre exempt markers (`// drift-ok`).
+export const DRIFT_PATTERNS_DL = `
+ExcessiveOptionalParamsOut(F, L, N, K, C) :-
+  ExcessiveOptionalParamsCandidate(F, L, N, K, C),
+  !ExemptionLine(F, L, "drift-ok").
+
+WrapperSuperfluousOut(F, L, N, K, Callee) :-
+  WrapperSuperfluousCandidate(F, L, N, K, Callee),
+  !ExemptionLine(F, L, "drift-ok").
+
+DeepNestingOut(F, L, N, D) :-
+  DeepNestingCandidate(F, L, N, D),
+  !ExemptionLine(F, L, "drift-ok").
+
+EmptyCatchNoCommentOut(F, L) :-
+  EmptyCatchNoCommentCandidate(F, L),
+  !ExemptionLine(F, L, "drift-ok").
+`
+
 // resource-balance — visitor pré-compte par scope, rule filtre exempt.
 export const RESOURCE_BALANCE_DL = `
 ResourceImbalanceOut(F, S, L, P, AC, RC) :-
@@ -482,4 +532,5 @@ export const ALL_RULES_DL = [
   TAINTED_VARS_DL,
   RESOURCE_BALANCE_DL,
   SECURITY_PATTERNS_DL,
+  DRIFT_PATTERNS_DL,
 ].join('\n')

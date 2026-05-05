@@ -27,6 +27,7 @@ import { analyzeEventEmitSites } from '../dist/extractors/event-emit-sites.js'
 import { analyzeTaintedVars } from '../dist/extractors/tainted-vars.js'
 import { analyzeResourceBalance } from '../dist/extractors/resource-balance.js'
 import { analyzeSecurityPatterns } from '../dist/extractors/security-patterns.js'
+import { analyzeDriftPatterns } from '../dist/extractors/drift-patterns.js'
 import { runDatalogDetectors } from '../dist/datalog-detectors/runner.js'
 import { resolve } from 'node:path'
 
@@ -93,8 +94,15 @@ const legacyEmitSites = await analyzeEventEmitSites(rootDir, files, project)
 const legacyTaintedVars = await analyzeTaintedVars(rootDir, files, project)
 const legacyResourceImbalances = await analyzeResourceBalance(rootDir, files, project)
 const legacySecurityPatterns = await analyzeSecurityPatterns(rootDir, files, project)
+// drift-patterns : todo-no-owner is cross-file (relies on todos snapshot, not portable).
+// Pass undefined todos to legacy so it only emits the 4 AST sub-kinds.
+const legacyDriftAll = await analyzeDriftPatterns(rootDir, files, project, undefined, {})
+const legacyDriftOptParams = legacyDriftAll.filter((s) => s.kind === 'excessive-optional-params')
+const legacyDriftWrappers = legacyDriftAll.filter((s) => s.kind === 'wrapper-superfluous')
+const legacyDriftDeepNest = legacyDriftAll.filter((s) => s.kind === 'deep-nesting')
+const legacyDriftEmptyCatch = legacyDriftAll.filter((s) => s.kind === 'empty-catch-no-comment')
 const legacyMs = performance.now() - tLegacy0
-console.log(`  legacy 19 detectors (${legacyMs.toFixed(1)}ms)`)
+console.log(`  legacy 20 detectors (${legacyMs.toFixed(1)}ms)`)
 
 // DATALOG
 const tDl0 = performance.now()
@@ -190,7 +198,19 @@ const ok19c = bidirDiff(legacySecurityPatterns.tlsUnsafe, dl.securityPatterns.tl
 const ok19d = bidirDiff(legacySecurityPatterns.weakRandoms, dl.securityPatterns.weakRandoms,
   (w) => `${w.file}\t${w.line}\t${w.varName}\t${w.secretKind}\t${w.containingSymbol}`,
   'WeakRandom')
+const ok20a = bidirDiff(legacyDriftOptParams, dl.driftPatterns.excessiveOptionalParams,
+  (s) => `${s.file}\t${s.line}\t${s.details?.name ?? s.name}\t${s.details?.kind ?? s.fnKind}\t${s.details?.optionalCount ?? s.optionalCount}`,
+  'ExcessiveOptionalParams')
+const ok20b = bidirDiff(legacyDriftWrappers, dl.driftPatterns.wrapperSuperfluous,
+  (s) => `${s.file}\t${s.line}\t${s.details?.name ?? s.name}\t${s.details?.kind ?? s.fnKind}\t${s.details?.callee ?? s.callee}`,
+  'WrapperSuperfluous')
+const ok20c = bidirDiff(legacyDriftDeepNest, dl.driftPatterns.deepNesting,
+  (s) => `${s.file}\t${s.line}\t${s.details?.name ?? s.name}\t${s.details?.maxDepth ?? s.maxDepth}`,
+  'DeepNesting')
+const ok20d = bidirDiff(legacyDriftEmptyCatch, dl.driftPatterns.emptyCatchNoComment,
+  (s) => `${s.file}\t${s.line}`,
+  'EmptyCatchNoComment')
 
-const allOk = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10 && ok11 && ok12 && ok13 && ok14 && ok15a && ok15b && ok16 && ok17a && ok17b && ok18 && ok19a && ok19b && ok19c && ok19d
+const allOk = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10 && ok11 && ok12 && ok13 && ok14 && ok15a && ok15b && ok16 && ok17a && ok17b && ok18 && ok19a && ok19b && ok19c && ok19d && ok20a && ok20b && ok20c && ok20d
 console.log(`\n  Total: legacy=${legacyMs.toFixed(0)}ms vs datalog=${dlMs.toFixed(0)}ms (ratio: ${(dlMs/legacyMs).toFixed(2)}x)${allOk ? ' ✓' : ' ✗'}`)
 if (!allOk) process.exit(1)

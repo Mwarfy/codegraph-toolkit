@@ -212,6 +212,12 @@ export interface DatalogDetectorResults {
       containingSymbol: string
     }>
   }
+  driftPatterns: {
+    excessiveOptionalParams: Array<{ file: string; line: number; name: string; fnKind: string; optionalCount: number }>
+    wrapperSuperfluous: Array<{ file: string; line: number; name: string; fnKind: string; callee: string }>
+    deepNesting: Array<{ file: string; line: number; name: string; maxDepth: number }>
+    emptyCatchNoComment: Array<{ file: string; line: number }>
+  }
   stats: {
     extractMs: number
     evalMs: number
@@ -259,6 +265,10 @@ export async function runDatalogDetectors(
     corsConfigCandidates: [],
     tlsUnsafeCandidates: [],
     weakRandomCandidates: [],
+    excessiveOptionalParamsCandidates: [],
+    wrapperSuperfluousCandidates: [],
+    deepNestingCandidates: [],
+    emptyCatchNoCommentCandidates: [],
   }
   for (const sf of opts.project.getSourceFiles()) {
     const rel = relativize(sf.getFilePath(), opts.rootDir)
@@ -290,6 +300,10 @@ export async function runDatalogDetectors(
     merged.corsConfigCandidates.push(...b.corsConfigCandidates)
     merged.tlsUnsafeCandidates.push(...b.tlsUnsafeCandidates)
     merged.weakRandomCandidates.push(...b.weakRandomCandidates)
+    merged.excessiveOptionalParamsCandidates.push(...b.excessiveOptionalParamsCandidates)
+    merged.wrapperSuperfluousCandidates.push(...b.wrapperSuperfluousCandidates)
+    merged.deepNestingCandidates.push(...b.deepNestingCandidates)
+    merged.emptyCatchNoCommentCandidates.push(...b.emptyCatchNoCommentCandidates)
   }
   const extractMs = performance.now() - t0
 
@@ -429,6 +443,26 @@ export async function runDatalogDetectors(
   factsByRelation.set('WeakRandomCandidate',
     merged.weakRandomCandidates.map((w) =>
       [w.file, w.line, safe(w.varName), w.secretKind, safe(w.containingSymbol)].join('\t'),
+    ).join('\n'),
+  )
+  factsByRelation.set('ExcessiveOptionalParamsCandidate',
+    merged.excessiveOptionalParamsCandidates.map((p) =>
+      [p.file, p.line, safe(p.name), p.fnKind, p.optionalCount].join('\t'),
+    ).join('\n'),
+  )
+  factsByRelation.set('WrapperSuperfluousCandidate',
+    merged.wrapperSuperfluousCandidates.map((w) =>
+      [w.file, w.line, safe(w.name), w.fnKind, safe(w.callee)].join('\t'),
+    ).join('\n'),
+  )
+  factsByRelation.set('DeepNestingCandidate',
+    merged.deepNestingCandidates.map((d) =>
+      [d.file, d.line, safe(d.name), d.maxDepth].join('\t'),
+    ).join('\n'),
+  )
+  factsByRelation.set('EmptyCatchNoCommentCandidate',
+    merged.emptyCatchNoCommentCandidates.map((e) =>
+      [e.file, e.line].join('\t'),
     ).join('\n'),
   )
 
@@ -678,6 +712,38 @@ export async function runDatalogDetectors(
     }))),
   }
 
+  // ─── Drift Patterns (4 AST sub-detectors) ──────────────────────────────────
+  const driftSort = <T extends { file: string; line: number }>(arr: T[]): T[] => {
+    arr.sort((a, b) => a.file < b.file ? -1 : a.file > b.file ? 1 : a.line - b.line)
+    return arr
+  }
+  const driftPatternsResult: DatalogDetectorResults['driftPatterns'] = {
+    excessiveOptionalParams: driftSort((result.outputs.get('ExcessiveOptionalParamsOut') ?? []).map((t: Tuple) => ({
+      file: String(t[0]),
+      line: Number(t[1]),
+      name: String(t[2]),
+      fnKind: String(t[3]),
+      optionalCount: Number(t[4]),
+    }))),
+    wrapperSuperfluous: driftSort((result.outputs.get('WrapperSuperfluousOut') ?? []).map((t: Tuple) => ({
+      file: String(t[0]),
+      line: Number(t[1]),
+      name: String(t[2]),
+      fnKind: String(t[3]),
+      callee: String(t[4]),
+    }))),
+    deepNesting: driftSort((result.outputs.get('DeepNestingOut') ?? []).map((t: Tuple) => ({
+      file: String(t[0]),
+      line: Number(t[1]),
+      name: String(t[2]),
+      maxDepth: Number(t[3]),
+    }))),
+    emptyCatchNoComment: driftSort((result.outputs.get('EmptyCatchNoCommentOut') ?? []).map((t: Tuple) => ({
+      file: String(t[0]),
+      line: Number(t[1]),
+    }))),
+  }
+
   // ─── Resource Balance (Tier 6) ─────────────────────────────────────────────
   const resourceImbalances = (result.outputs.get('ResourceImbalanceOut') ?? []).map((t: Tuple) => ({
     file: String(t[0]),
@@ -801,7 +867,11 @@ export async function runDatalogDetectors(
     merged.secretVarRefCandidates.length +
     merged.corsConfigCandidates.length +
     merged.tlsUnsafeCandidates.length +
-    merged.weakRandomCandidates.length
+    merged.weakRandomCandidates.length +
+    merged.excessiveOptionalParamsCandidates.length +
+    merged.wrapperSuperfluousCandidates.length +
+    merged.deepNestingCandidates.length +
+    merged.emptyCatchNoCommentCandidates.length
   const tuplesOut =
     magicNumbers.length +
     deadCodeIdenticalSubexpressions.length +
@@ -826,7 +896,11 @@ export async function runDatalogDetectors(
     securityPatternsResult.secretRefs.length +
     securityPatternsResult.corsConfigs.length +
     securityPatternsResult.tlsUnsafe.length +
-    securityPatternsResult.weakRandoms.length
+    securityPatternsResult.weakRandoms.length +
+    driftPatternsResult.excessiveOptionalParams.length +
+    driftPatternsResult.wrapperSuperfluous.length +
+    driftPatternsResult.deepNesting.length +
+    driftPatternsResult.emptyCatchNoComment.length
 
   return {
     magicNumbers,
@@ -848,6 +922,7 @@ export async function runDatalogDetectors(
     taintedVars: taintedVarsResult,
     resourceImbalances,
     securityPatterns: securityPatternsResult,
+    driftPatterns: driftPatternsResult,
     stats: { extractMs, evalMs, tuplesIn, tuplesOut },
   }
 }
