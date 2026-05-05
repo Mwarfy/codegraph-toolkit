@@ -1,26 +1,27 @@
 # codegraph-toolkit
 
-> **Rends ton projet TS lisible à un agent IA. Détecte les invariants architecturaux. Bloque les régressions structurelles avant qu'elles arrivent en prod.**
+> **Rends ton projet TS lisible à un agent IA. Détecte les invariants architecturaux. Joint statique × dynamique × Salsa incremental en sub-seconde.**
 
-> ⚠ **Status : POC personnel, alpha — pas encore publié sur npm.**
-> Le toolkit est dogfooded sur 1 projet réel ([Sentinel](https://github.com/Mwarfy/sentinel)).
+> **Status : v0.6 publié sur npm.** Dogfooded sur 1 projet réel ([Sentinel](https://github.com/Mwarfy/sentinel)) + le toolkit lui-même.
 > Les heuristiques mathématiques (Lyapunov, Information Bottleneck, TDA persistent
 > homology, Granger) sont **inspirées** de leurs références scientifiques mais
 > implémentées comme heuristiques scalaires, **pas comme les vrais objets
 > mathématiques** (cf. disclaimer dans chaque fichier `extractors/*.ts`).
 
 ```bash
-# Install (mode dev — packages pas encore sur npm registry public)
-git clone https://github.com/Mwarfy/codegraph-toolkit.git
-cd codegraph-toolkit
-npm install
-npm run build
-# npm link les packages depuis le toolkit vers ton projet
-cd ton-projet
-npm link ../codegraph-toolkit/packages/codegraph
-npm link ../codegraph-toolkit/packages/adr-toolkit
-# (autres packages au besoin)
+# 1. Install dans ton projet
+npm install --save-dev @liby-tools/codegraph @liby-tools/adr-toolkit \
+                       @liby-tools/datalog @liby-tools/salsa \
+                       @liby-tools/invariants-postgres-ts \
+                       @liby-tools/runtime-graph
+
+# 2. Init complet (91 rules Datalog + hooks Claude + git hooks)
 npx adr-toolkit init --with-invariants postgres --with-claude-hooks
+
+# 3. Press-button : statique + dynamique + cross-cut composite
+npx codegraph analyze              # statique → .codegraph/facts/
+npx liby-runtime-graph run         # dynamique → .codegraph/facts-runtime/
+npx codegraph cross-check          # composite : DEAD_HANDLER, DEAD_ROUTE, etc.
 ```
 
 C'est tout. Le toolkit détecte ta stack (Express/Hono/Next, raw SQL/Drizzle, mono ou monorepo), génère la config, installe **91 rules Datalog** (20 mono-relation + 56 composites + 8 CWE + 7 heuristiques inspirées de cross-discipline math), wire les hooks git + Claude Code (PreToolUse + PostToolUse avec **live Datalog gate à 70ms par edit**), et te livre une mental map déterministe régénérée à chaque commit.
@@ -46,23 +47,18 @@ Le toolkit est un monorepo. Le **noyau publishable** (4 packages) :
 
 | Package | Version | Rôle | Status |
 |---|---|---|---|
-| [`@liby-tools/codegraph`](packages/codegraph/) | `0.3.0` | Static analyzer + 50+ extracteurs + synopsis builder déterministe | core |
+| [`@liby-tools/codegraph`](packages/codegraph/) | `0.6.0` | Static analyzer + Datalog runner γ + Salsa incremental + composite cross-cut | core |
 | [`@liby-tools/adr-toolkit`](packages/adr-toolkit/) | `0.3.0` | ADR governance (anchors, asserts ts-morph, boot brief, hooks) | core |
 | [`@liby-tools/datalog`](packages/datalog/) | `0.3.0` | Pure-TS Datalog interpreter — zero binary, multi-dir loader | core |
 | [`@liby-tools/salsa`](packages/salsa/) | `0.3.0` | Salsa-style incremental computation runtime (peer dep de codegraph) | core |
+| [`@liby-tools/invariants-postgres-ts`](packages/invariants-postgres-ts/) | `0.1.0` | 78 composite Datalog rules pour stack TS+Postgres | published |
+| [`@liby-tools/runtime-graph`](packages/runtime-graph/) | `0.1.0-alpha.5` | OTel runtime capture + bridge Salsa pour cross-cut composite | published |
 
-Les **packages expérimentaux** (présents dans le monorepo, pas dans le quickstart) :
+Les **packages expérimentaux** :
 
-| Package | Status | Pourquoi pas dans le quickstart |
+| Package | Status | Pourquoi |
 |---|---|---|
 | [`@liby-tools/codegraph-mcp`](packages/codegraph-mcp/) | experimental | demande client MCP (Claude Code). Tests faibles (2). |
-| [`@liby-tools/invariants-postgres-ts`](packages/invariants-postgres-ts/) | WIP | rules `.dl` only, pas de code TS. Pack à valider sur ≥3 projets externes. |
-| [`@liby-tools/runtime-graph`](packages/runtime-graph/) | experimental | OTel attach, dépend du shape du projet observé. Pas validé sur projets externes. |
-
-**Décision honnête (consolidation 2026-05)** : seuls les 4 packages "core"
-sont visés pour publication npm immédiate. Les 3 expérimentaux restent
-dogfoodés sur Sentinel + le toolkit lui-même mais ne sont pas annoncés
-comme "prêts à brancher" sur un projet sérieux.
 
 ---
 
@@ -167,7 +163,72 @@ Le serveur MCP `codegraph-mcp` expose le snapshot comme outils queryable. Ton ag
 | `codegraph_memory_recall(scope?)` | **Mémoire inter-sessions** : false-positives marqués, decisions, incidents |
 | `codegraph_memory_mark(kind, fp, reason)` | Persiste un FP/decision/incident — survit aux sessions |
 
-### 5. Watch mode + hook PostToolUse + **Live Datalog gate** (~70ms par edit)
+### 5. Pipeline composite statique × dynamique × Salsa incremental (ADR-026)
+
+**v0.6.0 — pipeline unifié warm path < 500ms sur Sentinel (220 fichiers TS).**
+
+Trois sources, une jointure Datalog, cache à tous les niveaux :
+
+```
+┌──────────────────────┐    ┌──────────────────────┐
+│  STATIQUE            │    │  DYNAMIQUE           │
+│  codegraph analyze   │    │  liby-runtime-graph  │
+│  + ts-morph AST walk │    │  + OpenTelemetry     │
+│  + Datalog runner γ  │    │  + 7 facts runtime   │
+│  + Salsa cells per-fn│    │  + push Salsa cells  │
+└──────────┬───────────┘    └──────────┬───────────┘
+           ▼                           ▼
+   .codegraph/facts/         .codegraph/facts-runtime/
+           │                           │
+           └────────────┬──────────────┘
+                        ▼
+               codegraph cross-check
+               (composite-runner cache)
+                        ▼
+                Violations cross-cut
+```
+
+Bench Sentinel (`useDatalog: true, incremental: true`) :
+
+| Mode | Total | Runner Datalog |
+|---|---|---|
+| Legacy v0.4 | 16.6s | — |
+| Cold incremental | 16.2s | 3.7s |
+| **Warm incremental** | **400ms** | **20ms** |
+| | **41× speedup** | **184× speedup** |
+
+Composite rules cross-cut typiques (charger via `cross-check`) :
+
+- `DEAD_HANDLER` — exporté statique mais jamais touché runtime
+- `DEAD_ROUTE` — route HTTP déclarée mais 0 trafic observé
+- `RUNTIME_DRIFT` — symbol référencé statique jamais touché à runtime
+- `HOT_PATH_UNTESTED` — fonction haute fréquence runtime sans tests
+- `STALE_QUERY` — table avec writers déclarés mais 0 activity DB
+- `COMPOSITE_CYCLE_RUNTIME_CONFIRMED` — cycle statique + edge bidirectionnel runtime
+- `COMPOSITE_HUB_BOTTLENECK` — fichier hub statique + p95 runtime > 500ms
+
+Activable end-to-end :
+
+```bash
+codegraph analyze                                   # statique
+liby-runtime-graph run --duration 60                # dynamique
+codegraph cross-check rules-cross-cut/              # composite
+```
+
+Ou en mode programmatique pour watcher unifié :
+
+```ts
+import { analyze, setRuntimeFacts, runCompositeRules } from '@liby-tools/codegraph'
+import { aggregateSpans, pushFactsToSalsa } from '@liby-tools/runtime-graph'
+
+await analyze(cfg, { useDatalog: true, incremental: true })  // 400ms warm
+const snapshot = aggregateSpans(spans, runMeta)
+await pushFactsToSalsa(snapshot)                              // bridge runtime → codegraph
+const r = runCompositeRules({ rulesDl, staticFactsByRelation })
+// r.stats.cacheHit warm = 0.02ms (80× cache miss)
+```
+
+### 6. Watch mode + hook PostToolUse + **Live Datalog gate** (~70ms par edit)
 
 `codegraph watch &` maintient `.codegraph/snapshot-live.json` à jour à chaque save (~50ms warm via cache Salsa). Le hook PostToolUse Claude Code lit ce snapshot live et injecte le contexte structurel **plus** :
 
@@ -177,7 +238,7 @@ Le serveur MCP `codegraph-mcp` expose le snapshot comme outils queryable. Ton ag
 
 Le résultat : l'agent voit l'impact structurel + les invariants violés + la mémoire historique AVANT chaque réponse.
 
-### 6. Mémoire inter-sessions (Tier 3)
+### 7. Mémoire inter-sessions (Tier 3)
 
 Store local `~/.codegraph-toolkit/memory/<projet>.json` qui survit aux sessions. 3 kinds : `false-positive`, `decision`, `incident`. Per-projet, slug stable, soft-validation au load.
 
@@ -189,7 +250,7 @@ codegraph memory obsolete <id>
 
 Sans mémoire, l'agent redécouvre chaque session ce que tu as déjà validé. Avec : il consulte avant de proposer, il marque au passage, la prochaine session bénéficie. Privacy : `recall()` retourne uniquement une projection scopée — jamais le dump complet via MCP.
 
-### 7. Drift agentique (Tier 4)
+### 8. Drift agentique (Tier 4)
 
 5 patterns AST/regex déterministe que l'agent crée plus que les humains :
 
@@ -201,7 +262,7 @@ Sans mémoire, l'agent redécouvre chaque session ce que tu as déjà validé. A
 
 Convention exempt : `// drift-ok: <reason>` sur ligne précédente. Skip fichiers de test. Le but n'est pas de bloquer mais de **ralentir** l'agent au bon moment.
 
-### 8. Stacks DB supportées (mêmes invariants partout)
+### 9. Stacks DB supportées (mêmes invariants partout)
 
 Le pattern "**mêmes facts Datalog, plusieurs back-ends d'extraction**" :
 
@@ -219,11 +280,13 @@ La rule Datalog `sql-fk-needs-index.dl` que tu écris **une seule fois** marche 
 ## Quickstart 30 secondes
 
 ```bash
-# 1. Install dans ton projet
-npm install --save-dev @liby-tools/codegraph @liby-tools/adr-toolkit @liby-tools/codegraph-mcp \
-                       @liby-tools/datalog @liby-tools/invariants-postgres-ts
+# 1. Install dans ton projet (tous packages publiés sur npm)
+npm install --save-dev @liby-tools/codegraph @liby-tools/adr-toolkit \
+                       @liby-tools/datalog @liby-tools/salsa \
+                       @liby-tools/invariants-postgres-ts \
+                       @liby-tools/runtime-graph
 
-# 2. Init complet (91 rules Datalog + 4 hooks Claude + test runner Datalog + git hooks)
+# 2. Init complet (91 rules Datalog + hooks Claude + git hooks)
 cd ton-projet
 npx adr-toolkit init --with-invariants postgres --with-claude-hooks
 
@@ -237,6 +300,10 @@ npx adr-toolkit regen
 npx codegraph analyze
 npx adr-toolkit brief
 git commit -am "feat: ADR-001"
+
+# 5. (Optionnel — pipeline composite statique × dynamique)
+npx liby-runtime-graph run --duration 60     # capture trafic OTel
+npx codegraph cross-check                     # joint statique + runtime
 ```
 
 À partir d'ici :
@@ -244,6 +311,7 @@ git commit -am "feat: ADR-001"
 - **post-commit** : `codegraph analyze` + brief regen + datalog baseline update
 - **Edit/Write Claude** : PreToolUse (ADR check) + PostToolUse (HIGH-RISK + drift + mémoire + **live Datalog 70ms**)
 - **Watch mode** (optionnel, recommandé) : `codegraph watch &` régen facts à chaque save (~50ms)
+- **Cross-cut composite** : `codegraph cross-check` joint statique + dynamique → DEAD_HANDLER, HOT_PATH_UNTESTED, etc.
 
 ---
 
@@ -394,6 +462,9 @@ codegraph facts <out-dir>                      # Datalog facts emission
 # Datalog gating (Tier 8 live + post-commit baseline)
 codegraph datalog-check [--diff] [--update-baseline] [--json]
 
+# Composite cross-cut (statique × dynamique unifié — ADR-026 phase D)
+codegraph cross-check [--rules-dir DIR] [--facts-dir DIR] [--facts-runtime-dir DIR] [--json]
+
 # Memory inter-sessions (Tier 3)
 codegraph memory list [--kind X] [--file F]
 codegraph memory mark <kind> <fingerprint> <reason> [--scope-file F]
@@ -497,9 +568,23 @@ Détails des 14 outils : voir [`packages/codegraph-mcp/README.md`](packages/code
 5. **Post-snapshot metrics** : `module-metrics` (PageRank, fan-in/out, Henry-Kafura), `component-metrics` (Martin I/A/D), `dsm` (Design Structure Matrix)
 6. **Persistence** : `.codegraph/snapshot-{timestamp}-{commit}.json` + facts `.codegraph/facts/*.facts`
 
-### Mode incremental (Salsa)
+### Mode incremental (Salsa) + Datalog runner γ (ADR-026)
 
 `codegraph analyze --incremental` route le pipeline via `@liby-tools/salsa` (runtime de computation incrémentale ~600 LOC pure-TS). Cache per-file via mtime. Sur Sentinel : warm 149ms (vs 21s legacy → 99% plus rapide).
+
+**v0.6 ajoute le pipeline Datalog runner** (ADR-026 phase γ→E) — 21 détecteurs ts-morph portés en rules `.dl` qui consomment des facts dénormalisés émis par UN seul AST walk partagé. Activé par défaut quand `incremental: true` (env `LIBY_DATALOG_LEGACY=1` pour rollback).
+
+Trois caches en cascade :
+1. **Phase C.1** — Salsa cells per-file (`astFactsOfFile`) cachant le visit AST. Warm = 0 re-walk pour les fichiers non-modifiés.
+2. **Phase C.2** — Cache module-level de `parse(rules) + loadFacts + evaluate`. Hash SHA-256 sur factsByRelation TSV. Warm < 20ms eval (vs 150ms cold).
+3. **Phase D** — Cache module-level du composite cross-cut runner. Hash combiné statique + runtime + rules. Warm = 0.02ms cache hit (80× cache miss).
+
+Bench Sentinel `analyze({useDatalog: true, incremental: true})` :
+| Mode | Total | Runner Datalog | vs Legacy |
+|---|---|---|---|
+| Legacy v0.4 | 16.6s | — | 1× |
+| Cold incremental | 16.2s | 3.7s | 1.02× |
+| **Warm incremental** | **400ms** | **20ms** | **41×** |
 
 `codegraph watch` daemon = Salsa + fs.watch + persistence delta. Snapshot-live.json + facts régénérés ~50ms par save.
 
@@ -634,6 +719,32 @@ import {
 import {
   buildStructuralDiff, renderStructuralDiffMarkdown,
 } from '@liby-tools/codegraph/diff'
+
+// v0.6 — pipeline composite statique × dynamique × salsa (ADR-026 phase D)
+import {
+  setRuntimeFacts, clearRuntimeFacts,
+  runCompositeRules,
+  // Salsa cells (set par runtime-graph, get par composite runner)
+  runtimeSymbolsTouched, runtimeHttpRouteHits, runtimeDbQueriesExecuted,
+  allRuntimeFactsByRelation,
+} from '@liby-tools/codegraph'
+import type {
+  RuntimeFactsSnapshot, CompositeRunOptions, CompositeRunResult,
+} from '@liby-tools/codegraph'
+
+import {
+  attachRuntimeCapture, aggregateSpans,
+  pushFactsToSalsa,                  // bridge runtime-graph → codegraph cells
+  syntheticDriver, replayTestsDriver, chaosDriver,
+} from '@liby-tools/runtime-graph'
+
+// Watcher unifié (1 process pour analyze + capture + composite check)
+const handle = attachRuntimeCapture()
+await analyze(cfg, { useDatalog: true, incremental: true })  // 400ms warm
+const snap = aggregateSpans(handle.flush(), runMeta)
+await pushFactsToSalsa(snap)
+const r = runCompositeRules({ rulesDl, staticFactsByRelation })
+// r.stats.cacheHit = true au 2e run sans changement → 0.02ms
 ```
 
 ---
@@ -653,6 +764,8 @@ import {
 - **Reconstruction transitions FSM (V2)** — actuellement le détecteur `fsm` capture les write sites + le contexte fonction. V2 : reconstruire `read state X → write state Y` par control flow analysis.
 - **PR diff GitHub Action template** — workflow YAML générique à `npx adr-toolkit init-ci` qui poste le diff structurel auto sur les PR.
 - **codegraph_changes_since incremental** — actuellement reload les deux snapshots, possible streaming live.
+- **`useDatalog` default-on en CLI one-shot** — actuellement legacy par défaut sans `incremental: true` (cold runner = +3s overhead inutile). Nécessite extract Salsa-isé out of incremental context, à investiguer.
+- **Composite rules suite cross-cut** — élargir les `.dl` cross-cut au-delà des 4 rules runtime existantes (DEAD_HANDLER/ROUTE/HOT_PATH/STALE_QUERY) en exploitant les 78 composite rules de `@liby-tools/invariants-postgres-ts`.
 
 ---
 
@@ -671,6 +784,19 @@ import {
   - Live Datalog gate dans hook PostToolUse (Tier 8) — 70ms wall clock par edit, delta vs baseline post-commit
   - Packaging shipping-ready (Tier 9) — `--with-invariants postgres --with-claude-hooks` install tout en 1 commande
   - Snapshot relations émises 17 → 37, suite tests toolkit 191 → 452
+- `v0.6.0` — **Phase 6 ADR-026 : pipeline composite statique × dynamique × Salsa** :
+  - Phases γ.4 → γ.15 : 21 détecteurs ts-morph portés au pattern Datalog runner (1 visit AST + N rules .dl)
+  - Phase A.1 (shadow mode) : `analyze({ datalogShadow: true })` compare outputs runner vs legacy, parité 32 facts validée bench BIT-IDENTICAL
+  - Phase A.3 (full swap) : `useDatalog: true` route 19 fields snapshot via runner — adapter shape-compat
+  - Phase A.4 (close outliers) : couverture 100% des fields portables (hardcodedSecrets.trigger, deadCode 6 kinds, driftSignals + isTodoExempt)
+  - Phase C (Salsa caching) : cells per-file `astFactsOfFile` + cache module-level eval Datalog → warm path runner 13ms
+  - Phase D : pipeline composite runner statique × dynamique unifié + 8 input cells runtime + bridge `pushFactsToSalsa` côté runtime-graph
+  - Phase E : `useDatalog` default-on quand `incremental: true` (watcher mode warm 400ms total, 41× legacy)
+  - Fix root-cause : `discoverFiles` sort déterministe (cause du bug cache invalidation Salsa)
+  - Nouvelle CLI `codegraph cross-check` : composite runner statique × dynamique end-to-end via fs facts/
+  - 9 nouveaux exports publics : `setRuntimeFacts`, `runCompositeRules`, 8 input cells runtime, types associés
+  - Hooks dedup PreToolUse + PostToolUse via SHA40 cache TTL 5min — 94-98% réduction tokens hook répétés
+  - Suite tests 510 → 726 ; 4 commits Phase D/E publiés en npm v0.6.0
 - `v0.5.0` — **Phase 5 cross-discipline + composition orthogonale** (Tiers 14-18) :
   - 67 nouvelles rules : 56 composites (Tiers 14-18) + 8 CWE (Tier 14) + 7 cross-discipline mathématique
   - **6 disciplines mathématiques portées** : Fiedler λ₂ (théorie spectrale, Cheeger inequality), Shannon entropy (théorie de l'information), Hamming distance (théorie des codes), TDA persistent homology (Edelsbrunner-Letscher-Zomorodian 2002), Lyapunov exponent (systèmes dynamiques chaos), Ford-Fulkerson min-cut (théorie des flots)
