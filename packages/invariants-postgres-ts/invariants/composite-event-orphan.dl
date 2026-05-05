@@ -24,4 +24,5 @@ Violation("COMPOSITE-EVENT-ORPHAN", F, L,
   "event emis sans aucun listener — feature WIP ou subscribe disparu") :-
     EmitsLiteral(F, L, E),
     !EventHasListener(E),
-    !EventOrphanGrandfathered(E).
+    !EventOrphanGrandfathered(E),
+    !FileTag(F, "test-fixture").

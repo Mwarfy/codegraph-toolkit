@@ -226,6 +226,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+dedf3f3 chore(invariants): grandfather 15 singleton violations avec rationale
 fe6ae41 docs: SELF-OBSERVABILITY.md — référence Tier 1 pattern repeat detector
 0226020 feat(hooks): self-observability Tier 1 — in-session pattern repeat detector
 40c8ee0 chore: regenerate CLAUDE-CONTEXT + CHANGELOG post doc-claims feature
@@ -237,7 +238,6 @@ cd09bc2 fix(codegraph): exclude auto-generated files from BayesianCoChange follo
 dbe0aef feat(hooks): F.2 — auto-injected fix hints + memory match dans NEW violations
 d5b3511 feat(hooks): ADR-028 — token-efficient session-aware hook injection
 d469668 docs(readme): update for v0.6.0 — pipeline composite statique × dynamique × salsa
-48c4c78 chore(codegraph): bump @liby-tools/codegraph to v0.6.0
 ```
 
 ## Comment contribuer à ce brief

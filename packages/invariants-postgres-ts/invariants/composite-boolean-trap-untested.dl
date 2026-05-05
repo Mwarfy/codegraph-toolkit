@@ -32,3 +32,16 @@ Violation("COMPOSITE-BOOLEAN-TRAP-UNTESTED", File, Line,
   "boolean positionnel dans fichier non teste — double risque, prioriser refactor options object") :-
     BoolTrapUntested(File, Line, Name),
     !BoolTrapUntestedGrandfathered(File, Name).
+
+// MCP tools : helpers locaux de formatting/scoring, 1 caller chacun.
+// Note : le 3e arg de BooleanParam est le `name` de la fonction (pas du param).
+BoolTrapUntestedGrandfathered("packages/codegraph-mcp/src/tools/drift.ts", "emptyScopeMessage").
+BoolTrapUntestedGrandfathered("packages/codegraph-mcp/src/tools/uncovered.ts", "scoreEntry").
+
+// http-routes : flag interne pour interpoler les `${...}` dans patterns de route.
+BoolTrapUntestedGrandfathered("packages/codegraph/src/detectors/http-routes.ts", "HttpRouteDetector.collectApiFetchCalls").
+
+// stratify.ts : 3 helpers internes du datalog stratifier avec flag `allowRecursion`.
+BoolTrapUntestedGrandfathered("packages/datalog/src/stratify.ts", "validateNoBadRecursion").
+BoolTrapUntestedGrandfathered("packages/datalog/src/stratify.ts", "validateSingletonScc").
+BoolTrapUntestedGrandfathered("packages/datalog/src/stratify.ts", "validateMutualScc").

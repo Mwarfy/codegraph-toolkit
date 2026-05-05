@@ -20,3 +20,13 @@ Violation("COMPOSITE-LONG-FUNCTION-BY-PARAMS", F, 0,
     MaxParamIdx(F, S, M),
     M >= 6,
     !LongFnByParamsGrandfathered(F, S).
+
+// Helpers internes d'extracteurs avec 7 params (contexte AST/file partagé).
+// Refactor options-object pertinent mais low-priority — appelés depuis
+// 1-2 sites, pas du surface API. Ratchet bloque les nouveaux > 7.
+LongFnByParamsGrandfathered("packages/codegraph/src/detectors/ts-imports.ts", "resolveLocalImport").
+LongFnByParamsGrandfathered("packages/codegraph/src/extractors/data-flows.ts", "pushMatchesForRoutePattern").
+LongFnByParamsGrandfathered("packages/codegraph/src/extractors/deprecated-usage.ts", "pushSiteIfDeprecated").
+LongFnByParamsGrandfathered("packages/codegraph/src/extractors/tainted-vars.ts", "collectFromBindingPattern").
+LongFnByParamsGrandfathered("packages/codegraph/src/extractors/tainted-vars.ts", "pushTaintedDecl").
+LongFnByParamsGrandfathered("packages/codegraph/src/synopsis/tensions.ts", "pushFsmStates").
