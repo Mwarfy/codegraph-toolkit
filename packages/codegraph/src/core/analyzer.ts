@@ -275,16 +275,22 @@ export async function analyze(
   const skipPersistenceLoad = options.skipPersistenceLoad ?? false
   const skipPersistenceSave = options.skipPersistenceSave ?? false
   const datalogShadow = options.datalogShadow ?? (process.env['LIBY_DATALOG_DETECTORS'] === '1')
-  // Phase E (deferred) : useDatalog reste opt-in. Le default-on
-  // conditional (sur `incremental: true`) introduisait une régression
-  // sur self-runtime-regression — datalog-runner mean=537ms warm sur
-  // 5 runs incremental, suggérant un bug de persistence Salsa entre
-  // runs (cache miss à chaque run vs 13ms attendu). À investiguer en
-  // v0.6 avant flip default-on.
+  // Phase E (v0.5+) : useDatalog est ON par défaut quand `incremental:
+  // true` (watcher mode). Le default-on était initialement bloqué par
+  // un bug de hash instable du runner Datalog (chaque run = facts
+  // arrangés différemment → cache miss systématique). Cause root :
+  // `discoverFiles` retournait un array d'ordre non-déterministe à cause
+  // de `Promise.all(subdirs)` parallèle. Fix livré dans
+  // `core/file-discovery.ts` (sort final). Datalog-runner warm passe
+  // de 553ms → 23ms (24×).
   //
-  // Pour activer le runner Datalog : `useDatalog: true` ou env
-  // `LIBY_DATALOG_DETECTORS_LIVE=1`.
-  const useDatalog = options.useDatalog ?? (process.env['LIBY_DATALOG_DETECTORS_LIVE'] === '1')
+  // Override : `useDatalog: true` force partout, `useDatalog: false`
+  // ou env `LIBY_DATALOG_LEGACY=1` force legacy. Legacy-mode sera
+  // deprecated en v0.6 et retiré en v1.0.
+  const useDatalog = options.useDatalog ?? (
+    process.env['LIBY_DATALOG_DETECTORS_LIVE'] === '1' ||
+    (incremental && process.env['LIBY_DATALOG_LEGACY'] !== '1')
+  )
   const t0 = performance.now()
   const timing: AnalyzeResult['timing'] = {
     total: 0,

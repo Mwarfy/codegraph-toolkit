@@ -36,11 +36,19 @@ export async function discoverFiles(
   const allFiles: string[] = []
   await walkDir(rootDir, rootDir, allFiles)
 
-  return allFiles.filter((file) => {
-    const matches = include.some((pattern) => minimatch(file, pattern))
-    const excluded = exclude.some((pattern) => minimatch(file, pattern))
-    return matches && !excluded
-  })
+  // Phase E pré-requis : sort déterministe cross-runs. Sans ça, l'ordre
+  // d'insertion via `Promise.all(subdirs)` parallèle dépend du
+  // filesystem + ordre d'achèvement des promises → arrays différents
+  // entre 2 runs successifs → projectFiles bump revision → toute la
+  // chaîne Salsa derived re-vérifie/recompute. Le sort fixe le contract
+  // "même contenu disque → même array" indispensable au caching warm.
+  return allFiles
+    .filter((file) => {
+      const matches = include.some((pattern) => minimatch(file, pattern))
+      const excluded = exclude.some((pattern) => minimatch(file, pattern))
+      return matches && !excluded
+    })
+    .sort()
 }
 
 async function walkDir(

@@ -5,7 +5,7 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-05T12:28:15Z
+Last update : 2026-05-05T12:33:52Z
 
 ## By type
 
@@ -33,10 +33,9 @@ Last update : 2026-05-05T12:28:15Z
 - **06c21b1** feat(codegraph): Phase γ.3b — wire batch warmup dans analyzer.ts — 2026-05-04
 
 
-### `perf` (2)
+### `perf` (1)
 
 - **fc9449a** perf(co-change): --no-merges --no-renames sur git log — 2026-05-04
-- **c626690** perf(codegraph): parallelize delta reads in applyDeltasInOrder — 2026-05-04
 
 
 ### `refactor` (1)
@@ -44,8 +43,9 @@ Last update : 2026-05-05T12:28:15Z
 - **be79c7b** refactor(codegraph): Phase γ.5 — cleanup workers cold code (Phase β/γ.2/γ.3) — 2026-05-05
 
 
-### `chore` (3)
+### `chore` (4)
 
+- **f7944a1** chore(codegraph): defer Phase E (default-on useDatalog) — bug Salsa persistence — 2026-05-05
 - **70bc566** chore(codegraph): bump @liby-tools/codegraph to v0.5.0 — 2026-05-05
 - **e2fde62** chore(codegraph): bump @liby-tools/codegraph to v0.4.0 — 2026-05-05
 - **5cc82a0** chore(hooks): dedup PreToolUse + PostToolUse via SHA40 cache TTL 5min — 2026-05-05
@@ -59,6 +59,7 @@ Last update : 2026-05-05T12:28:15Z
 
 ## Full history
 
+- **f7944a1** chore(codegraph): defer Phase E (default-on useDatalog) — bug Salsa persistence — 2026-05-05
 - **70bc566** chore(codegraph): bump @liby-tools/codegraph to v0.5.0 — 2026-05-05
 - **d65f1c4** feat(runtime-graph): wire Salsa push for composite cross-cut warm path — 2026-05-05
 - **1488e38** feat(codegraph): ADR-026 phase D — pipeline composite statique × dynamique × salsa — 2026-05-05
@@ -108,4 +109,3 @@ Last update : 2026-05-05T12:28:15Z
 - **e1b0a02** feat(runtime-graph): 5 nouvelles disciplines pluridisciplinaires — 2026-05-04
 - **410daa0** feat(runtime-graph): static↔runtime divergence — KL + Pareto + coverage drift — 2026-05-04
 - **fc9449a** perf(co-change): --no-merges --no-renames sur git log — 2026-05-04
-- **c626690** perf(codegraph): parallelize delta reads in applyDeltasInOrder — 2026-05-04

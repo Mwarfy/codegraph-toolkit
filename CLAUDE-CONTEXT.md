@@ -197,9 +197,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/env-usage/config.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/audit-listener.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/b.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
@@ -221,6 +221,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+f7944a1 chore(codegraph): defer Phase E (default-on useDatalog) — bug Salsa persistence
 70bc566 chore(codegraph): bump @liby-tools/codegraph to v0.5.0
 d65f1c4 feat(runtime-graph): wire Salsa push for composite cross-cut warm path
 1488e38 feat(codegraph): ADR-026 phase D — pipeline composite statique × dynamique × salsa
@@ -232,7 +233,6 @@ e2fde62 chore(codegraph): bump @liby-tools/codegraph to v0.4.0
 11deb4b feat(codegraph): ADR-026 phases A.1+A.3 — shadow mode + useDatalog swap
 3bcc427 docs(adr-026): close-out — 18/21 ts-morph ports done, 3 non-portables
 f8b1256 feat(codegraph): Phase γ.15 — port code-quality-patterns au pattern Datalog
-6951dc6 feat(codegraph): Phase γ.14 — port drift-patterns au pattern Datalog
 ```
 
 ## Comment contribuer à ce brief
