@@ -124,7 +124,7 @@ croise longFunctions × symbol-fanIn pour suggérer des extractions.
      (count des refs entrantes par symbol).
    - Score = `loc * fanIn / 10` (à tuner).
    - Retourne top-N candidates avec score + raison.
-3. Enregistrer dans `packages/codegraph-mcp/src/server.ts` (ou index.ts).
+3. Enregistrer dans `packages/codegraph-mcp/src/index.ts`.
 4. Tests unitaires sur fixtures.
 5. Documenter dans le README de codegraph-mcp + le CLAUDE.md de
    Sentinel (section LSP MCP au-dessus de codegraph MCP).

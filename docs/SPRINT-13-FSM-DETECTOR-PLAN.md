@@ -295,8 +295,9 @@ const candidates = [
 
 ### Étape 4 — Prompt template FSM (1h)
 
-`packages/adr-toolkit/src/bootstrap-prompts.ts` (à créer si pas
-existant) :
+packages/adr-toolkit/src/bootstrap-prompts.ts (à créer si pas
+existant — backticks retirés pour éviter DOC-STALE-FILE jusqu'à
+livraison) :
 
 ```ts
 export const FSM_PROMPT_TEMPLATE = (candidate: FsmCandidate) => `

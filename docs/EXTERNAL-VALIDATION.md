@@ -374,8 +374,9 @@ test direct.
   - `packages/codegraph/src/core/types.ts` — top hub in:74, sans test
     direct (ADR-006 le déclare contrat canonical, mais pas de tests
     de invariance schema)
-  - `packages/salsa/dist/index.d.ts` — **faux positif** (c'est du dist
-    artifact, pas du source)
+  - packages/salsa/dist/index.d.ts — **faux positif** (c'est du dist
+    artifact, pas du source — backticks retirés intentionnellement
+    pour ne pas déclencher COMPOSITE-DOC-STALE-FILE)
 
 **COMPOSITE-CYCLOMATIC-BOMB (135)** concentrés sur :
   - `packages/adr-toolkit/src/init.ts` (4 fns) — connu, init est

@@ -1,4 +1,48 @@
+---
+type: backlog
+status: shipped
+created: 2025-XX-XX
+lastVerified: 2026-05-05
+relatedRules: []
+relatedFiles:
+  - packages/adr-toolkit/src/bootstrap.ts
+relatedAdrs:
+  - ADR-004
+supersedes: null
+supersededBy: null
+---
+
 # Bootstrap Detectors — Backlog
+
+> **STATUS : SHIPPED v0.3.0.** Les 4 détecteurs sont livrés. Ce doc est
+> conservé en archive — pour une référence vivante, voir
+> `packages/adr-toolkit/src/bootstrap.ts`.
+
+## Verifiable claims
+
+### Détecteurs attendus
+- [x] `singleton` — shipped v0.1.0
+- [x] `write-isolation` — shipped v0.2.0
+- [x] `hub` — shipped v0.2.0
+- [x] `fsm` — shipped v0.3.0 (v1 = write-only ; v2 transitions déférée, voir SPRINT-13-FSM-DETECTOR-PLAN.md)
+
+### Fichiers concernés
+- `packages/adr-toolkit/src/bootstrap.ts` (runner)
+- `packages/adr-toolkit/src/bootstrap/` (détecteurs individuels)
+
+### ADRs ancrés
+- `ADR-004` — bootstrap = 3 rôles séparés (codegraph / LLM / humain)
+
+## Stale signals
+
+- ✅ Tous shipped → ce doc est candidat à archivage. Conservé pour préserver
+  le rationale "Pourquoi ces 3 détecteurs en particulier".
+- Si v2 FSM transitions est attaqué → ce doc redevient pertinent et passe
+  status: active avec un nouveau item `[ ]`.
+
+---
+
+## Historique (preservé)
 
 Suite à ADR-004 (bootstrap = 3 rôles séparés : codegraph détecte / LLM
 rédige / humain valide), 4 détecteurs de patterns architecturaux sont

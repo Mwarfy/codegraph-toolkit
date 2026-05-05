@@ -1,4 +1,93 @@
+---
+type: backlog
+status: active
+created: 2025-XX-XX
+lastVerified: 2026-05-05
+relatedRules:
+  # Tier 15 shipped (cross-checked via audit-doc-claims.mjs 2026-05-05)
+  - composite-cross-fn-sql-injection
+  - composite-cross-fn-cmd-injection
+  - composite-cross-fn-path-traversal
+  - composite-tainted-flow-strict
+  - composite-truth-point-god-reader
+  - composite-long-function-by-params
+  - composite-fat-table
+  - composite-env-var-spread
+  - composite-hub-untested
+  - composite-articulation-with-floating-promise
+  - composite-dead-export-in-hub
+  - composite-fanout-no-test-no-articulation
+  - composite-god-table
+  - composite-fanout-overload
+  - composite-god-function
+  - composite-deprecated-on-truth-point-writer
+  - composite-drift-signal-density
+  - composite-truth-point-asymmetric
+  - composite-cochange-without-cotest
+  - composite-cross-fn-taint-multi-hop
+  - composite-event-orphan
+  - composite-fsm-orphan
+  - composite-back-edge
+  - composite-dep-unused
+  - composite-barrel-low-value
+  - composite-redos
+  - composite-silent-error
+  - composite-await-in-loop
+  - composite-cross-fn-log-injection
+  - composite-clear-text-logging
+  - composite-weak-crypto-algo
+  - composite-cross-fn-redirect
+  - composite-cors-misconfig
+  - composite-disabling-cert-validation
+  - composite-insecure-randomness
+  - composite-event-payload-cross-block-taint
+relatedFiles: []
+relatedAdrs:
+  - ADR-026
+supersedes: null
+supersededBy: null
+---
+
 # Phase 5 — Composite backlog (post-Tier 14)
+
+> ⚠ **STATUS : majoritairement shipped.** Audit 2026-05-05 :
+> **36 rules sur 52 candidats sont livrées** (Tier 15 : 20/26, Tier 16 : 7/9,
+> Tier 17 : 9/11). Ce doc reste actif pour les 6 candidats restants —
+> le reste est conservé en historique. Voir `Verifiable claims` ci-dessous
+> pour le delta réel.
+
+## Verifiable claims
+
+### Rules encore à coder (6)
+- [ ] `composite-tainted-vars-destructuring` — Tier 15, ext `tainted-vars.ts` Pass 1
+- [ ] `composite-cross-pack-bypass` — Tier 15, anti-join Imports/FileTag
+- [ ] `composite-tag-mismatch` — Tier 15, FileTag + spec checks
+- [ ] `composite-missing-rate-limiting` — Tier 15, EntryPoint + count
+- [ ] `composite-event-emitter-leak` — Tier 15, count(on) > count(off)
+- [ ] `composite-cross-fn-deser-helper` — Tier 15, partiellement absorbé par cross-fn-taint-multi-hop
+
+### Rules absorbées / skipped (validées)
+- ✅ #47-48 multi-hop-* → absorbé par `composite-cross-fn-taint-multi-hop.dl`
+- ✅ #49 event-payload-cross-block-taint → shipped Tier 18
+- ⊘ #50 multi-hop-deser-with-shape-checker → skipped (CodeQL barrier concept hors scope)
+- ⊘ #51 fsm-transitions-reconstruction → skipped (voir SPRINT-13-FSM-DETECTOR-PLAN)
+- ⊘ #52 data-flows-container-aware → skipped (intent flou)
+
+### Fichiers concernés
+- `packages/invariants-postgres-ts/invariants/` (135 .dl files au total)
+
+### ADRs ancrés
+- `ADR-026` — Detectors as Datalog rules
+
+## Stale signals
+
+- Si toutes les `[ ]` ci-dessus sont shipped → status: shipped, doc archivé.
+- Si nouveau gap fact identifié (ex: `EventListener` symétrique de `EmitsLiteral`)
+  → ajouter en Tier 17 avec checkbox.
+
+---
+
+## Historique (preservé)
 
 > Audit exhaustif des invariants déterministes débloqués par Tier 14
 > (cross-fn taint 1-hop + aggregates Datalog + proof tree).
@@ -243,7 +332,7 @@
 - **Coût** : medium (~50 lignes extractor).
 - **Valeur Sentinel** : 2-3 TPs. logger.ts in:107 = surface large.
 
-### 30. composite-crypto-algo-dedicated (CWE-327 propre)
+### 30. crypto-algo-dedicated (CWE-327 propre) — ✅ shipped sous le nom `composite-weak-crypto-algo`
 - **Pattern** : V1 detecte md5/sha1 par callee name ; rate `crypto.createHash("md5")` (string arg).
 - **Facts** : NEW `CryptoCall(file, line, fn, algo, keyLengthBits)`.
 - **Inspiration** : CWE-327 ; CodeQL [`js/weak-cryptographic-algorithm`](https://github.com/github/codeql/blob/main/javascript/ql/src/Security/CWE-327/).
@@ -440,20 +529,21 @@
 
 ## Synthèse priorisation
 
-**Top 10 ROI immédiat** (PRs à ouvrir cette semaine) :
+**Top 10 ROI immédiat** (snapshot historique 2026-04 — voir frontmatter
+`relatedRules` pour le state-of-the-art) :
 
-| # | Rule | Coût | Valeur Sentinel |
+| # | Rule | Status (cross-checked 2026-05-05) | Valeur Sentinel |
 |---|---|---|---|
-| 1 | composite-cross-fn-sql-injection | trivial | 3+ TPs réels (admin.ts:151) |
-| 2 | composite-cross-fn-cmd-injection | small | 5 TPs réels (system.ts:341) |
-| 3 | composite-tainted-vars-destructuring | small | 5-10 TPs |
-| 4 | composite-tainted-flow-stricter-var-level | small | precision ÷10 |
-| 5 | composite-truth-point-god-reader | trivial | 6 TPs confirmés |
-| 6 | composite-long-function-by-params | trivial | 10+ TPs |
-| 7 | composite-fat-table | trivial | 6 TPs |
-| 8 | composite-env-var-spread | trivial | 7+ TPs |
-| 9 | composite-hub-untested | trivial | 4 TPs |
-| 10 | composite-cross-pack-bypass | trivial | 5+ TPs ADR-004 |
+| 1 | composite-cross-fn-sql-injection | ✅ shipped | 3+ TPs réels (admin.ts:151) |
+| 2 | composite-cross-fn-cmd-injection | ✅ shipped | 5 TPs réels (system.ts:341) |
+| 3 | tainted-vars-destructuring | ⏳ TODO Tier 15 | 5-10 TPs |
+| 4 | tainted-flow-stricter-var-level | ✅ shipped sous le nom composite-tainted-flow-strict | precision ÷10 |
+| 5 | composite-truth-point-god-reader | ✅ shipped | 6 TPs confirmés |
+| 6 | composite-long-function-by-params | ✅ shipped | 10+ TPs |
+| 7 | composite-fat-table | ✅ shipped | 6 TPs |
+| 8 | composite-env-var-spread | ✅ shipped | 7+ TPs |
+| 9 | composite-hub-untested | ✅ shipped | 4 TPs |
+| 10 | cross-pack-bypass | ⏳ TODO Tier 15 | 5+ TPs ADR-004 |
 
 **Tiers 15+16** : 35 candidats avec facts existants ou extension légère.
 **Tier 17** : 11 candidats nécessitent un nouveau fact emitter (snapshot data déjà là).

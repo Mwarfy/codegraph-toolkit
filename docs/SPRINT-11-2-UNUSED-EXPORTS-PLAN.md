@@ -36,7 +36,7 @@ caching Salsa per-file.
 
 ## Pourquoi unused-exports est lourd
 
-Le détecteur (`packages/codegraph/src/detectors/unused-exports.ts`,
+Le détecteur (`packages/codegraph/src/extractors/unused-exports.ts`,
 670 lignes) fait 4 passes sur tous les fichiers (~600 sur Sentinel) :
 
 1. **Build source import map** : pour chaque sourceFile,
@@ -318,7 +318,7 @@ Ces 3 fichiers doivent être identiques.
 
 1. [ ] Lire CE FICHIER en entier
 2. [ ] Lire `PHASE-1-SALSA-MIGRATION.md` (contexte global)
-3. [ ] Lire `packages/codegraph/src/detectors/unused-exports.ts` en entier (670 lignes)
+3. [ ] Lire `packages/codegraph/src/extractors/unused-exports.ts` en entier (670 lignes)
 4. [ ] `git log --oneline | head -10` côté codegraph-toolkit + Sentinel
 5. [ ] `npx vitest run` côté toolkit (106/106 attendus)
 6. [ ] Suivre les 6 étapes ci-dessus dans l'ordre

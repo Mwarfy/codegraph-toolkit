@@ -1,4 +1,55 @@
+---
+type: roadmap
+status: active
+created: 2025-XX-XX
+lastVerified: 2026-05-05
+relatedRules: []
+relatedFiles:
+  - scripts/self-runtime-probe.ts
+  - scripts/static-cost-estimator.ts
+  - scripts/inject-self-optim-brief.ts
+  - scripts/effect-analysis.ts
+  - scripts/synth-aggregation.ts
+  - packages/codegraph/src/incremental/persistence.ts
+relatedAdrs: []
+supersedes: null
+supersededBy: null
+---
+
 # Self-optim roadmap — niveaux d'automatisation
+
+## Verifiable claims
+
+### Niveaux livrés (✓)
+- [x] Niveau 1 — Math gate + brief inject (shipped)
+- [x] Niveau 2A — Static cost estimator (shipped)
+- [x] Niveau 2B — Salsa disk persist (existing)
+- [x] Niveau 4 — Aggregation synthesis (shipped)
+- [x] Niveau 5 — Effect analysis (shipped, 42% précision honnête)
+
+### Niveaux ouverts
+- [ ] Niveau 7-alt — Skip ts-morph rebuild si tous mtimes inchangés (~30 min, gain -2s cold)
+- [ ] Niveau 6 — Parallel Salsa eval avec worker_threads (déféré, attend trigger)
+- [ ] Niveau 7 — AST binary serialization (déféré, 1-2 sem)
+
+### Fichiers concernés
+- `scripts/self-runtime-probe.ts` — Niveau 1 (timing par détecteur)
+- `scripts/static-cost-estimator.ts` — Niveau 2A
+- `scripts/inject-self-optim-brief.ts` — Niveau 1 (BRIEF inject)
+- `scripts/effect-analysis.ts` — Niveau 5
+- `scripts/synth-aggregation.ts` — Niveau 4
+- `packages/codegraph/src/incremental/persistence.ts` — Niveau 2B
+
+## Stale signals
+
+- Si Niveau 7-alt est livré → cocher la box, mettre à jour `lastVerified`.
+- Si un détecteur lourd (ML/embeddings/graph algo > 500ms) est ajouté →
+  Niveau 6 devient prioritaire, déplacer en TODO actif.
+- Si plainte cold start utilisateur → Niveau 7 ou 7-alt deviennent prio.
+
+---
+
+## Historique et rationale (preservé)
 
 État actuel des niveaux d'automatisation du self-optim mathématique :
 
