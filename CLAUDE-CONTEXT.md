@@ -169,9 +169,9 @@
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
 - `packages/codegraph/src/core/types.ts` (in: 81) · gov by ADR-006
-- `packages/codegraph/src/incremental/queries.ts` (in: 41) · gov by ADR-007
-- `packages/codegraph/src/incremental/database.ts` (in: 39) · gov by ADR-007
-- `packages/salsa/dist/index.d.ts` (in: 38)
+- `packages/codegraph/src/incremental/queries.ts` (in: 42) · gov by ADR-007
+- `packages/codegraph/src/incremental/database.ts` (in: 40) · gov by ADR-007
+- `packages/salsa/dist/index.d.ts` (in: 39)
 - `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 26) · gov by ADR-012
 - `packages/codegraph/src/core/detector-registry.ts` (in: 19) · gov by ADR-008
 - `packages/runtime-graph/src/core/types.ts` (in: 14) · gov by ADR-009
@@ -181,7 +181,7 @@
 
 Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `// ADR-NNN`** dans le code. Intentionnel ? Sinon poser un marqueur ou créer un ADR :
 
-- **38** `packages/salsa/dist/index.d.ts` _(top-hub)_
+- **39** `packages/salsa/dist/index.d.ts` _(top-hub)_
 
 ## Tensions actives — invitations à explorer
 
@@ -190,15 +190,15 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 > pas verdict. Une tension non explorée n'est pas un bug — c'est un saut
 > latéral possible que le sol stable rend testable.
 
-- **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/datalog/src/cli.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/event-emit-sites/sample.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/audit-listener.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/env-usage/config.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/scheduler.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
@@ -220,6 +220,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+558aa7d feat(codegraph): ADR-026 phase C — Salsa caching for Datalog runner
 5cc82a0 chore(hooks): dedup PreToolUse + PostToolUse via SHA40 cache TTL 5min
 11deb4b feat(codegraph): ADR-026 phases A.1+A.3 — shadow mode + useDatalog swap
 3bcc427 docs(adr-026): close-out — 18/21 ts-morph ports done, 3 non-portables
@@ -231,7 +232,6 @@ cc6598b feat(codegraph): Phase γ.11 — port tainted-vars au pattern Datalog
 91912a1 feat(codegraph): Phase γ.10 — port event-emit-sites au pattern Datalog
 2cfe578 feat(codegraph): Phase γ.9 — port arguments au pattern Datalog
 dad7dc1 feat(codegraph): Phase γ.8 — port constant-expressions au pattern Datalog
-393fc2c feat(codegraph): Phase γ.7 — port barrels + env-usage au pattern Datalog
 ```
 
 ## Comment contribuer à ce brief

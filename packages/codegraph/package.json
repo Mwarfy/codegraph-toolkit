@@ -1,6 +1,6 @@
 {
   "name": "@liby-tools/codegraph",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Visual dependency graph + deterministic synopsis for AI-supervised codebases",
   "type": "module",
   "main": "./dist/index.js",
