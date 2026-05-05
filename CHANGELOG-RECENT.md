@@ -5,12 +5,13 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-05T14:28:39Z
+Last update : 2026-05-05T14:36:02Z
 
 ## By type
 
 ### `feat` (41)
 
+- **dbe0aef** feat(hooks): F.2 — auto-injected fix hints + memory match dans NEW violations — 2026-05-05
 - **d5b3511** feat(hooks): ADR-028 — token-efficient session-aware hook injection — 2026-05-05
 - **7102f13** feat(codegraph): CLI cross-check — composite statique × dynamique — 2026-05-05
 - **608d725** feat(codegraph): ADR-026 phase E — default-on useDatalog (root cause fix) — 2026-05-05
@@ -30,7 +31,6 @@ Last update : 2026-05-05T14:28:39Z
 - **dad7dc1** feat(codegraph): Phase γ.8 — port constant-expressions au pattern Datalog — 2026-05-05
 - **393fc2c** feat(codegraph): Phase γ.7 — port barrels + env-usage au pattern Datalog — 2026-05-05
 - **14fe493** feat(codegraph): Phase γ.6 — port event-listener-sites au pattern Datalog — 2026-05-05
-- **a2bc182** feat(codegraph): Phase γ.4c — 5 derniers détecteurs ts-morph portés Datalog — 2026-05-04
 
 
 ### `refactor` (1)
@@ -56,6 +56,7 @@ Last update : 2026-05-05T14:28:39Z
 
 ## Full history
 
+- **dbe0aef** feat(hooks): F.2 — auto-injected fix hints + memory match dans NEW violations — 2026-05-05
 - **d5b3511** feat(hooks): ADR-028 — token-efficient session-aware hook injection — 2026-05-05
 - **d469668** docs(readme): update for v0.6.0 — pipeline composite statique × dynamique × salsa — 2026-05-05
 - **48c4c78** chore(codegraph): bump @liby-tools/codegraph to v0.6.0 — 2026-05-05
@@ -105,4 +106,3 @@ Last update : 2026-05-05T14:28:39Z
 - **84b2f76** docs(adr-024): anchor markers sur les 3 helpers BSP — 2026-05-04
 - **190b979** feat(codegraph): Phase 2.2 — hardcoded-secrets porté + ADR-024 — 2026-05-04
 - **abd6ad7** feat(codegraph): Phase 2.1 — 2 détecteurs portés au pattern BSP monoïdal — 2026-05-04
-- **415d382** feat(codegraph): Phase 1 BSP — monoid algebra + scheduler déterministe — 2026-05-04
