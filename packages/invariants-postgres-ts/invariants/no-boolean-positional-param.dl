@@ -33,3 +33,48 @@ Violation("NO-BOOLEAN-POSITIONAL-PARAM", File, Line,
   "boolean positionnel — utiliser options object ou splitter en deux fonctions") :-
     BooleanParam(File, Line, Name, _, _, _),
     !BooleanParamGrandfathered(File, Name).
+
+// ─── Toolkit grandfather list (2026-05-05) ─────────────────────────────
+//
+// Convention : helpers internes mono-caller où le param boolean a une
+// sémantique évidente au call-site (flag de configuration / dry-run /
+// scope élargi). Refactor en options-object faisable mais ROI faible.
+//
+// Une partie de ces fns sont aussi grandfathered dans
+// COMPOSITE-BOOLEAN-TRAP-UNTESTED — la convention est cohérente
+// entre les 2 rules.
+
+// adr-toolkit : feature detection + dry-run flags.
+BooleanParamGrandfathered("packages/adr-toolkit/src/bootstrap.ts", "resolveMode").
+BooleanParamGrandfathered("packages/adr-toolkit/src/init.ts", "tryFullstackMonorepo").
+BooleanParamGrandfathered("packages/adr-toolkit/src/init.ts", "tryWorkspacesMonorepo").
+BooleanParamGrandfathered("packages/adr-toolkit/src/init.ts", "trySimpleSrc").
+BooleanParamGrandfathered("packages/adr-toolkit/src/regenerate-anchors.ts", "regenerateIndex").
+
+// codegraph-mcp tools : helpers locaux d'affichage / scope.
+BooleanParamGrandfathered("packages/codegraph-mcp/src/tools/affected.ts", "buildImporterIndex").
+BooleanParamGrandfathered("packages/codegraph-mcp/src/tools/affected.ts", "formatAffectedReport").
+BooleanParamGrandfathered("packages/codegraph-mcp/src/tools/datalog-query.ts", "runEvaluation").
+BooleanParamGrandfathered("packages/codegraph-mcp/src/tools/datalog-query.ts", "formatQueryResult").
+BooleanParamGrandfathered("packages/codegraph-mcp/src/tools/drift.ts", "emptyScopeMessage").
+BooleanParamGrandfathered("packages/codegraph-mcp/src/tools/uncovered.ts", "scoreEntry").
+
+// codegraph CLI : 1 helper interne mono-caller.
+BooleanParamGrandfathered("packages/codegraph/src/cli/index.ts", "buildCliImporterIndex").
+
+// codegraph core/analyzer : flags pipeline incremental — interface
+// stable utilisée 1 fois chacune.
+BooleanParamGrandfathered("packages/codegraph/src/core/analyzer.ts", "loadDiskCacheIfIncremental").
+BooleanParamGrandfathered("packages/codegraph/src/core/analyzer.ts", "persistDiskCacheIfIncremental").
+
+// codegraph extractors / detectors : flags de scope ou pattern
+// matching. Sémantiques claires au site d'appel.
+BooleanParamGrandfathered("packages/codegraph/src/detectors/http-routes.ts", "HttpRouteDetector.collectApiFetchCalls").
+BooleanParamGrandfathered("packages/codegraph/src/extractors/articulation-points.ts", "buildUndirectedAdjacency").
+BooleanParamGrandfathered("packages/codegraph/src/extractors/data-flows.ts", "pushMatchesForRoutePattern").
+
+// datalog stratify : 3 helpers internes du stratifier avec le même
+// flag `allowRecursion` (convention cohérente cross-helpers).
+BooleanParamGrandfathered("packages/datalog/src/stratify.ts", "validateNoBadRecursion").
+BooleanParamGrandfathered("packages/datalog/src/stratify.ts", "validateSingletonScc").
+BooleanParamGrandfathered("packages/datalog/src/stratify.ts", "validateMutualScc").
