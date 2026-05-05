@@ -56,6 +56,7 @@ import { runMemoryWhere } from './commands/memory-where.js'
 import { runAnalyzeCommand } from './commands/analyze.js'
 import { runDiffCommand } from './commands/diff.js'
 import { runDatalogCheckCommand } from './commands/datalog-check.js'
+import { runCrossCheckCommand } from './commands/cross-check.js'
 
 const program = new Command()
 
@@ -1233,6 +1234,27 @@ program
   .option('--json', 'Emit JSON instead of text (for hook consumption)', false)
   .option('--timeout <ms>', 'Hard timeout in ms (default 5000). Skip if exceeded.', '5000')
   .action(runDatalogCheckCommand)
+
+// ─── cross-check ──────────────────────────────────────────────────────────
+// ADR-026 phase D : composite runner statique × dynamique. Charge facts
+// statique (.codegraph/facts/) + facts dynamique (.codegraph/facts-runtime/)
+// + une dir de rules .dl, évalue tout via le composite runner avec cache
+// module-level. Diffère de `datalog-check` qui ne charge que le statique.
+//
+// Workflow typique :
+//   1. codegraph analyze              → .codegraph/facts/
+//   2. liby-runtime-graph run         → .codegraph/facts-runtime/
+//   3. codegraph cross-check rules-dir → DEAD_HANDLER, DEAD_ROUTE, etc.
+
+program
+  .command('cross-check')
+  .description('Statique × dynamique composite check : merge .codegraph/facts/ + facts-runtime/ + rules .dl')
+  .option('--rules-dir <path>', 'Directory containing composite cross-cut .dl rules (default: <root>/.codegraph/rules-cross-cut)')
+  .option('--facts-dir <path>', 'Directory containing static .facts (default: <root>/.codegraph/facts)')
+  .option('--facts-runtime-dir <path>', 'Directory containing runtime .facts (default: <root>/.codegraph/facts-runtime)')
+  .option('--json', 'Emit JSON instead of text', false)
+  .option('--verbose', 'Print stats cache hit + tuples breakdown', false)
+  .action(runCrossCheckCommand)
 
 // ─── memory ───────────────────────────────────────────────────────────────
 
