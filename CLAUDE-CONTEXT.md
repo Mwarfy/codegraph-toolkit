@@ -171,8 +171,8 @@
 
 - `packages/codegraph/src/core/types.ts` (in: 81) · gov by ADR-006
 - `packages/codegraph/src/incremental/queries.ts` (in: 42) · gov by ADR-007
-- `packages/codegraph/src/incremental/database.ts` (in: 40) · gov by ADR-007
-- `packages/salsa/dist/index.d.ts` (in: 39)
+- `packages/codegraph/src/incremental/database.ts` (in: 41) · gov by ADR-007
+- `packages/salsa/dist/index.d.ts` (in: 40)
 - `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 26) · gov by ADR-012
 - `packages/codegraph/src/core/detector-registry.ts` (in: 19) · gov by ADR-008
 - `packages/runtime-graph/src/core/types.ts` (in: 14) · gov by ADR-009
@@ -182,7 +182,7 @@
 
 Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `// ADR-NNN`** dans le code. Intentionnel ? Sinon poser un marqueur ou créer un ADR :
 
-- **39** `packages/salsa/dist/index.d.ts` _(top-hub)_
+- **40** `packages/salsa/dist/index.d.ts` _(top-hub)_
 
 ## Tensions actives — invitations à explorer
 
@@ -195,11 +195,11 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/cli.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
+- **ORPHELIN** `packages/codegraph/src/datalog-detectors/composite-runner.ts` — aucun importeur  
+  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/audit-listener.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/scheduler.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
@@ -221,6 +221,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+1488e38 feat(codegraph): ADR-026 phase D — pipeline composite statique × dynamique × salsa
 dd611b7 feat(codegraph): ADR-026 phase C.2 — cache module-level de l'éval Datalog
 18a45a8 feat(codegraph): ADR-026 phase A.4 — close 3 outliers (full snapshot parity)
 e2fde62 chore(codegraph): bump @liby-tools/codegraph to v0.4.0
@@ -232,7 +233,6 @@ f8b1256 feat(codegraph): Phase γ.15 — port code-quality-patterns au pattern D
 6951dc6 feat(codegraph): Phase γ.14 — port drift-patterns au pattern Datalog
 7cb5ef4 feat(codegraph): Phase γ.13 — port security-patterns au pattern Datalog
 4baa9d0 feat(codegraph): Phase γ.12 — port resource-balance au pattern Datalog
-cc6598b feat(codegraph): Phase γ.11 — port tainted-vars au pattern Datalog
 ```
 
 ## Comment contribuer à ce brief

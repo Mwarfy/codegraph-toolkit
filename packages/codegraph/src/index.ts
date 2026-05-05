@@ -30,6 +30,28 @@ export type {
 
 export { collectAdrMarkers } from './synopsis/adr-markers.js'
 
+// ─── Phase D — pipeline composite statique × dynamique × salsa ────────
+// Public API pour @liby-tools/runtime-graph (push facts) + consumers
+// composite (run rules cross-cut).
+export {
+  setRuntimeFacts, clearRuntimeFacts,
+  runtimeSymbolsTouched, runtimeHttpRouteHits, runtimeDbQueriesExecuted,
+  runtimeRedisOps, runtimeEventsEmitted, runtimeCallEdges,
+  runtimeLatencySeries, runtimeRunMeta,
+  allRuntimeFactsByRelation,
+} from './incremental/runtime-relations.js'
+export type {
+  RuntimeFactsSnapshot, RuntimeSymbolTouchedInput, RuntimeHttpRouteHitInput,
+  RuntimeDbQueryExecutedInput, RuntimeRedisOpExecutedInput,
+  RuntimeEventEmittedInput, RuntimeCallEdgeInput, RuntimeLatencySeriesInput,
+  RuntimeRunMetaInput,
+} from './incremental/runtime-relations.js'
+
+export { runCompositeRules } from './datalog-detectors/composite-runner.js'
+export type {
+  CompositeRunOptions, CompositeRunResult,
+} from './datalog-detectors/composite-runner.js'
+
 export {
   loadMemoryRaw, addEntry, markObsolete, deleteEntry, recall,
   memoryPathFor, memoryDir, entryId,

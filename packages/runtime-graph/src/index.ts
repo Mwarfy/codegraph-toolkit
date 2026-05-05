@@ -23,6 +23,10 @@ export { aggregateSpans } from './capture/span-aggregator.js'
 export { exportFactsRuntime } from './facts/exporter.js'
 export type { ExportOptions, ExportResult } from './facts/exporter.js'
 
+// ADR-026 phase D — push runtime snapshot vers Salsa cells de codegraph
+// (warm path composite statique × dynamique).
+export { pushFactsToSalsa, clearFactsInSalsa } from './facts/salsa-push.js'
+
 export { syntheticDriver } from './drivers/synthetic.js'
 export { replayTestsDriver, importBootstrapFacts } from './drivers/replay-tests.js'
 export { chaosDriver } from './drivers/chaos.js'

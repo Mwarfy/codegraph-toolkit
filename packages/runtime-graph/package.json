@@ -1,6 +1,6 @@
 {
   "name": "@liby-tools/runtime-graph",
-  "version": "0.1.0-alpha.4",
+  "version": "0.1.0-alpha.5",
   "description": "Runtime observability framework — captures actual execution graph, joins with codegraph static facts via datalog. The OSS alternative to Datadog Live Code Coverage / JFrog X-Ray.",
   "type": "module",
   "main": "./dist/index.js",
@@ -41,10 +41,14 @@
     "@types/node": "^22.0.0"
   },
   "peerDependencies": {
-    "@liby-tools/datalog": ">=0.1.0"
+    "@liby-tools/datalog": ">=0.1.0",
+    "@liby-tools/codegraph": ">=0.4.0"
   },
   "peerDependenciesMeta": {
     "@liby-tools/datalog": {
+      "optional": true
+    },
+    "@liby-tools/codegraph": {
       "optional": true
     }
   },

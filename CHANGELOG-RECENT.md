@@ -5,12 +5,13 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-05T12:15:30Z
+Last update : 2026-05-05T12:20:36Z
 
 ## By type
 
 ### `feat` (43)
 
+- **1488e38** feat(codegraph): ADR-026 phase D — pipeline composite statique × dynamique × salsa — 2026-05-05
 - **dd611b7** feat(codegraph): ADR-026 phase C.2 — cache module-level de l'éval Datalog — 2026-05-05
 - **18a45a8** feat(codegraph): ADR-026 phase A.4 — close 3 outliers (full snapshot parity) — 2026-05-05
 - **558aa7d** feat(codegraph): ADR-026 phase C — Salsa caching for Datalog runner — 2026-05-05
@@ -30,7 +31,6 @@ Last update : 2026-05-05T12:15:30Z
 - **3175c64** feat(codegraph): Phase γ.4 — prototype Datalog detectors (magic-numbers + dead-code) — 2026-05-04
 - **06c21b1** feat(codegraph): Phase γ.3b — wire batch warmup dans analyzer.ts — 2026-05-04
 - **4b218d2** feat(codegraph): Phase γ.3b — batch dispatch infrastructure (non-wired) — 2026-05-04
-- **444bc98** feat(codegraph): Phase γ.3a — affinity routing + LRU cache intra-worker — 2026-05-04
 
 
 ### `perf` (2)
@@ -58,6 +58,7 @@ Last update : 2026-05-05T12:15:30Z
 
 ## Full history
 
+- **1488e38** feat(codegraph): ADR-026 phase D — pipeline composite statique × dynamique × salsa — 2026-05-05
 - **dd611b7** feat(codegraph): ADR-026 phase C.2 — cache module-level de l'éval Datalog — 2026-05-05
 - **18a45a8** feat(codegraph): ADR-026 phase A.4 — close 3 outliers (full snapshot parity) — 2026-05-05
 - **e2fde62** chore(codegraph): bump @liby-tools/codegraph to v0.4.0 — 2026-05-05
@@ -107,4 +108,3 @@ Last update : 2026-05-05T12:15:30Z
 - **c626690** perf(codegraph): parallelize delta reads in applyDeltasInOrder — 2026-05-04
 - **b4959d9** feat(runtime-graph): math optim suggester — universel pour toute app — 2026-05-04
 - **7d4d382** feat(runtime-graph): fn-wrap iitm — capture exacte des call edges cross-module — 2026-05-04
-- **e936121** feat(runtime-graph): CPU profile capture pour apps pure-CPU — 2026-05-04
