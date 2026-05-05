@@ -32,6 +32,28 @@ if (!session) {
   session = { startedAt: Date.now(), lastEditAt: Date.now(), seenFiles: {} }
 }
 session.lastEditAt = Date.now()
+
+// ADR-028+ — In-session pattern observation (3-tier observability).
+//
+// Tier 1 (this commit) : détection des répétitions intra-session.
+// Quand une violation NEW disparaît (fix), on la mémorise dans
+// `resolvedInSession` avec son timestamp. Si une violation similaire
+// (rule|file ou rule|other-file) réapparaît plus tard, on flag
+// ↻ "pattern repeat" — signal interrogatif, pas prescriptif.
+//
+// Tier 2 (futur) : profil git ex-post — agrégat sur N sessions.
+//
+// Tier 3 (futur) : promotion de slots Liby — proposer au user des
+// patterns positifs récurrents pour formalisation explicite.
+//
+// Aujourd'hui on prépare les 3 en stockant les observations factuelles
+// (boomerangs, NEW count, RESOLVED count). Pas d'agrégation auto, pas
+// de proposition auto. La data brute est là quand on attaquera Tier 3.
+if (!session.previousViolationKeys) session.previousViolationKeys = []
+if (!session.resolvedInSession) session.resolvedInSession = {}
+if (typeof session.boomerangCount !== 'number') session.boomerangCount = 0
+if (typeof session.editCount !== 'number') session.editCount = 0
+session.editCount += 1
 const fileState = session.seenFiles[relPath]
 const isFirstTimeOnFile = !fileState
 
@@ -189,13 +211,20 @@ try {
   // Resolve fast script via require.resolve (works after npm install).
   // Fallback : try node_modules direct path.
   let fastScript = null
-  try {
-    fastScript = require.resolve('@liby-tools/codegraph/scripts/datalog-check-fast.mjs', {
-      paths: [repoRoot],
-    })
-  } catch {
-    const candidate = path.join(repoRoot, 'node_modules/@liby-tools/codegraph/scripts/datalog-check-fast.mjs')
-    if (fs.existsSync(candidate)) fastScript = candidate
+  // Préférence ordre : workspace (toolkit auto-test) > require.resolve > node_modules path.
+  // Le workspace a la version la plus récente (Tier 1 self-observability `allKeys`).
+  const workspaceCandidate = path.join(repoRoot, 'packages/codegraph/scripts/datalog-check-fast.mjs')
+  if (fs.existsSync(workspaceCandidate)) {
+    fastScript = workspaceCandidate
+  } else {
+    try {
+      fastScript = require.resolve('@liby-tools/codegraph/scripts/datalog-check-fast.mjs', {
+        paths: [repoRoot],
+      })
+    } catch {
+      const candidate = path.join(repoRoot, 'node_modules/@liby-tools/codegraph/scripts/datalog-check-fast.mjs')
+      if (fs.existsSync(candidate)) fastScript = candidate
+    }
   }
   if (fastScript) {
     const out = cp.execSync('node ' + fastScript + ' ' + repoRoot, {
@@ -204,9 +233,18 @@ try {
       stdio: ['ignore', 'pipe', 'ignore'],
     }).toString().trim()
     const data = JSON.parse(out)
-    const violations = data.violations || []
     const violationKey = (v) => v.adr + '|' + v.file + '|' + v.line
-    const currentKeys = new Set(violations.map(violationKey))
+    // `allViolations` (ADR-028+) si disponible — TOUTES les violations
+    // actuelles avec metadata complète. Permet au détecteur in-session
+    // de raisonner sur les NEW intra-session, pas seulement les NEW vs
+    // baseline disque (mode --diff). Fallback : data.violations (anciens
+    // format, NEW disk-baseline only).
+    const violations = Array.isArray(data.allViolations) && data.allViolations.length > 0
+      ? data.allViolations
+      : (data.violations || [])
+    const currentKeys = Array.isArray(data.allKeys) && data.allKeys.length > 0
+      ? new Set(data.allKeys)
+      : new Set(violations.map(violationKey))
 
     // ADR-028 — Snapshot 1ère fois dans la session : establish baseline.
     if (!Array.isArray(session.commitBaselineKeys)) {
@@ -217,6 +255,54 @@ try {
     const newSinceSession = violations.filter(v => !sessionBaseline.has(violationKey(v)))
     const resolvedSinceSessionCount = [...sessionBaseline].filter(k => !currentKeys.has(k)).length
     const grandfatheredCount = violations.length - newSinceSession.length
+
+    // ─── Pattern repeat detection (Tier 1 self-observability) ──────────
+    //
+    // Compare current violation set vs PREVIOUS hook call (pas vs baseline).
+    // Une key qui était présente au check précédent et a disparu = "résolue
+    // pendant la session". Elle est ajoutée à `resolvedInSession` avec
+    // timestamp. Si plus tard une violation avec le même `rule|file` ou
+    // `rule` (autre file) apparaît, on flag répétition.
+    //
+    // Forme du signal : interrogative (pas "fix this", mais "intentionnel ?").
+    // L'agent garde l'agency : opt-out via `// repeat-ok: <reason>` dans le code.
+    const previousKeys = new Set(session.previousViolationKeys)
+    const ruleFileLooseKey = (v) => v.adr + '|' + v.file
+    for (const k of previousKeys) {
+      if (!currentKeys.has(k)) {
+        // Cette violation était présente au précédent hook mais a disparu.
+        // Décompose key "rule|file|line" → "rule|file" (loose) + timestamp.
+        const parts = k.split('|')
+        if (parts.length >= 2) {
+          const looseKey = parts[0] + '|' + parts[1]
+          session.resolvedInSession[looseKey] = Date.now()
+        }
+      }
+    }
+
+    // Détection : NEW violations dont la rule|file (ou rule global) a déjà
+    // été résolue dans cette session.
+    const repeats = []
+    for (const v of newSinceSession) {
+      const looseKey = ruleFileLooseKey(v)
+      // Match strict : même rule + même file
+      if (session.resolvedInSession[looseKey]) {
+        const ageMs = Date.now() - session.resolvedInSession[looseKey]
+        const ageMin = Math.round(ageMs / 60000)
+        repeats.push({ v, kind: 'same-file', ageMin, where: v.file })
+        continue
+      }
+      // Match large : même rule, autre file (pattern transversal)
+      const otherFileMatch = Object.keys(session.resolvedInSession)
+        .find(k => k.startsWith(v.adr + '|') && k !== looseKey)
+      if (otherFileMatch) {
+        const ageMs = Date.now() - session.resolvedInSession[otherFileMatch]
+        const ageMin = Math.round(ageMs / 60000)
+        const otherFile = otherFileMatch.split('|')[1]
+        repeats.push({ v, kind: 'other-file', ageMin, where: otherFile })
+      }
+    }
+    if (repeats.length > 0) session.boomerangCount += repeats.length
 
     // Bucket 1 — NEW since session : full visibility (le signal qui corrige)
     // F.2 : auto-inject fix hint + memory match si applicable.
@@ -259,6 +345,25 @@ try {
       lines.push('  ✓ ' + resolvedSinceSessionCount + ' violation(s) resolved this session')
     }
 
+    // Bucket 2bis — Pattern repeat (Tier 1 self-observability).
+    // Forme interrogative, pas prescriptive. L'agent décide : ou bien
+    // c'est une vraie répétition à corriger, ou bien c'est intentionnel
+    // dans ce contexte → opt-out via `// repeat-ok: <reason>`.
+    if (repeats.length > 0) {
+      for (const r of repeats.slice(0, 3)) {
+        if (r.kind === 'same-file') {
+          lines.push('  ↻ pattern repeat : ' + r.v.adr + ' que tu as résolu il y a ' +
+            r.ageMin + 'min sur ce fichier — intentionnel cette fois ?')
+        } else {
+          lines.push('  ↻ pattern écho : ' + r.v.adr + ' résolu il y a ' +
+            r.ageMin + 'min sur ' + r.where + ' (autre fichier) — vérifier ?')
+        }
+      }
+      if (repeats.length > 3) {
+        lines.push('  ↻ +' + (repeats.length - 3) + ' autres répétitions')
+      }
+    }
+
     // Bucket 3 — grandfathered overview : ONLY 1ère fois sur fichier
     if (isFirstTimeOnFile && grandfatheredCount > 0) {
       const byAdr = new Map()
@@ -271,6 +376,16 @@ try {
       const summary = top.map(([adr, n]) => n + '× ' + adr).join(', ')
       const more = byAdr.size > 4 ? ', +' + (byAdr.size - 4) + ' rules' : ''
       lines.push('  · ' + grandfatheredCount + ' grandfathered : ' + summary + more)
+    }
+
+    // Persist previousViolationKeys pour le PROCHAIN hook call.
+    // Cap à 500 pour éviter de gonfler le state file. Tronque les plus
+    // anciennes resolvedInSession (>1h) — au-delà, peu probable que ce
+    // soit la "même hésitation".
+    session.previousViolationKeys = [...currentKeys].slice(0, 500)
+    const resolvedCutoff = Date.now() - 60 * 60 * 1000
+    for (const [k, ts] of Object.entries(session.resolvedInSession)) {
+      if (ts < resolvedCutoff) delete session.resolvedInSession[k]
     }
   }
 } catch (err) {

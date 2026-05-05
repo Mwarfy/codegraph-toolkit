@@ -161,4 +161,15 @@ console.log(JSON.stringify({
     return path ? { adr, file, line, msg, path } : { adr, file, line, msg }
   }),
   truncated: newViolations.length > 20 ? newViolations.length - 20 : 0,
+  // ADR-028+ : keys + objects complets (toutes violations actuelles).
+  // - allKeys : pour comparer rapidement les sets entre hooks
+  // - allViolations : pour l'output verbose / detection des NEW
+  //   intra-session (vs sessionBaseline en mémoire, distinct du baseline
+  //   disque qui sert au mode --diff post-commit).
+  // Coût : ~165 entries × 2 = ~33KB JSON. Acceptable pour <500 violations.
+  allKeys: violations.map((tuple) => `${tuple[0]}|${tuple[1]}|${tuple[2]}`),
+  allViolations: violations.map((tuple) => {
+    const [adr, file, line, msg] = tuple
+    return { adr, file, line, msg }
+  }),
 }))
