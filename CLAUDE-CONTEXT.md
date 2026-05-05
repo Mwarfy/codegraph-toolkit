@@ -226,6 +226,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+df3e554 chore(invariants): grandfather tier 4-7 violations (15 → 0)
 dedf3f3 chore(invariants): grandfather 15 singleton violations avec rationale
 fe6ae41 docs: SELF-OBSERVABILITY.md — référence Tier 1 pattern repeat detector
 0226020 feat(hooks): self-observability Tier 1 — in-session pattern repeat detector
@@ -237,7 +238,6 @@ f5f530f refactor(runner): extract 3 sub-projectors to reduce cog complexity
 cd09bc2 fix(codegraph): exclude auto-generated files from BayesianCoChange follower
 dbe0aef feat(hooks): F.2 — auto-injected fix hints + memory match dans NEW violations
 d5b3511 feat(hooks): ADR-028 — token-efficient session-aware hook injection
-d469668 docs(readme): update for v0.6.0 — pipeline composite statique × dynamique × salsa
 ```
 
 ## Comment contribuer à ce brief

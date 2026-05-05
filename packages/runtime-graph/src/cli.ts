@@ -439,9 +439,8 @@ export { program }
  */
 async function mergeFactsDirs(srcDir: string, dstDir: string): Promise<void> {
   const sourceDirs = await listSourceDirs(srcDir)
-  // drift-ok : CLI one-shot fact merge — séquentiel délibéré (<100ms total),
-  // Promise.all rendrait le code dur à lire pour gain négligeable.
   for (const sd of sourceDirs) {
+    // await-ok: CLI fact-merge one-shot, séquentiel délibéré (<100ms total)
     await mergeOneSourceDir(sd, dstDir)
   }
 }
@@ -466,7 +465,9 @@ async function mergeOneSourceDir(sd: string, dstDir: string): Promise<void> {
   for (const f of files) {
     if (!f.endsWith('.facts')) continue
     const srcPath = path.join(sd, f)
+    // await-ok: CLI one-shot, ordre séquentiel pour log lisibilité
     if (!(await isRegularFile(srcPath))) continue
+    // await-ok: idem — merge fichier par fichier, append-mode, ordre traçable
     await mergeOneFactsFile(srcPath, path.join(dstDir, f), f)
   }
 }

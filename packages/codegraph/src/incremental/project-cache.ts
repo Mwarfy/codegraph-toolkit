@@ -136,6 +136,7 @@ async function applyModifiedFiles(
     const mtime = await readMtimeOrUndefined(absPath)
     if (mtime === undefined || mtime === prevMtime) continue
 
+    // await-ok: ts-morph Project mutation — sériel volontaire (parallel-safe non garanti)
     await refreshSourceFile(project, absPath, f, fileCache)
   }
 }

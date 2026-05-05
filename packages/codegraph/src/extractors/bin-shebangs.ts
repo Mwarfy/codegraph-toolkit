@@ -53,15 +53,15 @@ export async function analyzeBinShebangs(rootDir: string): Promise<BinShebangIss
   const manifests: Array<{ abs: string; dir: string; rel: string; raw: any }> = []
   await walkForManifests(rootDir, rootDir, manifests)
 
-  const issues: BinShebangIssue[] = []
+  // Parallélise les check par bin entry — accès filesystem indépendants.
+  const checks: Promise<BinShebangIssue | null>[] = []
   for (const m of manifests) {
     const bins = normalizeBin(m.raw)
-    if (bins.length === 0) continue
     for (const { name, target } of bins) {
-      const issue = await checkBinEntry(rootDir, m, name, target)
-      if (issue) issues.push(issue)
+      checks.push(checkBinEntry(rootDir, m, name, target))
     }
   }
+  const issues = (await Promise.all(checks)).filter((i): i is BinShebangIssue => i !== null)
   issues.sort((a, b) => {
     if (a.packageJson !== b.packageJson) return a.packageJson.localeCompare(b.packageJson)
     return a.binName.localeCompare(b.binName)
@@ -176,25 +176,31 @@ async function walkForManifests(
     return
   }
 
+  // Sépare files (lecture parallèle) et subdirs (récursion parallèle).
+  const pkgFiles: string[] = []
+  const subdirs: string[] = []
   for (const e of entries) {
     if (e.name === 'package.json' && e.isFile()) {
-      const full = path.join(dir, e.name)
+      pkgFiles.push(path.join(dir, e.name))
+    } else if (e.isDirectory()) {
+      subdirs.push(path.join(dir, e.name))
+    }
+  }
+  const reads = await Promise.all(
+    pkgFiles.map(async (full) => {
       try {
         const raw = JSON.parse(await fs.readFile(full, 'utf-8'))
-        acc.push({
+        return {
           abs: full,
           dir,
           rel: path.relative(rootDir, full).replace(/\\/g, '/'),
           raw,
-        })
+        }
       } catch {
-        // package.json invalide — skip silencieusement.
+        return null  // package.json invalide — skip silencieusement.
       }
-    }
-  }
-  for (const e of entries) {
-    if (e.isDirectory()) {
-      await walkForManifests(path.join(dir, e.name), rootDir, acc)
-    }
-  }
+    }),
+  )
+  for (const r of reads) if (r) acc.push(r)
+  await Promise.all(subdirs.map((sd) => walkForManifests(sd, rootDir, acc)))
 }

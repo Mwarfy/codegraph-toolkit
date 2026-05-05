@@ -134,15 +134,21 @@ async function loadRulesDir(dir: string): Promise<string> {
     return ''
   }
   const dlFiles = entries.filter((f) => f.endsWith('.dl')).sort()
+  // Lecture parallèle — fichiers indépendants, ordre préservé via index.
+  const contents = await Promise.all(
+    dlFiles.map(async (f) => {
+      try {
+        return { f, content: await fs.readFile(path.join(dir, f), 'utf-8') }
+      } catch {
+        return null
+      }
+    }),
+  )
   const parts: string[] = []
-  for (const f of dlFiles) {
-    try {
-      const content = await fs.readFile(path.join(dir, f), 'utf-8')
-      parts.push(`// ─── ${f} ───`)
-      parts.push(content)
-    } catch {
-      // skip unreadable
-    }
+  for (const entry of contents) {
+    if (!entry) continue
+    parts.push(`// ─── ${entry.f} ───`)
+    parts.push(entry.content)
   }
   return parts.join('\n')
 }
@@ -163,15 +169,19 @@ async function loadFactsDir(dir: string): Promise<Map<string, string>> {
     return out
   }
   const factsFiles = entries.filter((f) => f.endsWith('.facts'))
-  for (const f of factsFiles) {
-    const relName = f.replace(/\.facts$/, '')
-    try {
-      const content = await fs.readFile(path.join(dir, f), 'utf-8')
-      out.set(relName, content.replace(/\n+$/, ''))  // strip trailing newlines
-    } catch {
-      // skip unreadable
-    }
-  }
+  // Lecture parallèle — fichiers indépendants, set sur Map après resolve.
+  const reads = await Promise.all(
+    factsFiles.map(async (f) => {
+      const relName = f.replace(/\.facts$/, '')
+      try {
+        const content = await fs.readFile(path.join(dir, f), 'utf-8')
+        return { relName, content: content.replace(/\n+$/, '') }
+      } catch {
+        return null
+      }
+    }),
+  )
+  for (const r of reads) if (r) out.set(r.relName, r.content)
   return out
 }
 

@@ -111,6 +111,7 @@ async function runWithConcurrency<Item, Result>(
     while (true) {
       const i = nextIdx++
       if (i >= items.length) return
+      // await-ok: worker pool pattern — séquentiel par worker, parallèle via Promise.all ci-dessous
       results[i] = await timed(workerFn, items[i], workerMs)
     }
   }

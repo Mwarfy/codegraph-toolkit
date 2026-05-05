@@ -222,18 +222,22 @@ async function walkForManifests(
     return
   }
 
-  // Process package.json sequentiel (peu nombreux par dir), recurse
-  // sub-dirs en parallele (push partage OK en JS single-thread).
+  // Files et subdirs traitées en parallèle — package.json indépendants
+  // entre eux ; subdirs indépendantes entre elles ; push partagé OK
+  // (JS single-thread). Push order n'est pas significatif (le caller
+  // `discoverManifests` trie ensuite).
   const subdirs: string[] = []
+  const pkgFiles: string[] = []
   for (const entry of entries) {
     const full = path.join(dir, entry.name)
     if (entry.isFile() && entry.name === 'package.json') {
-      const manifest = await readPackageManifest(full, dir, rootDir)
-      if (manifest) acc.push(manifest)
+      pkgFiles.push(full)
     } else if (entry.isDirectory()) {
       subdirs.push(full)
     }
   }
+  const manifests = await Promise.all(pkgFiles.map((f) => readPackageManifest(f, dir, rootDir)))
+  for (const m of manifests) if (m) acc.push(m)
   await Promise.all(subdirs.map((sd) => walkForManifests(sd, rootDir, acc)))
 }
 

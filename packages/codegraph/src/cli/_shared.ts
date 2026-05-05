@@ -120,6 +120,7 @@ async function tryDefaultConfigs(root: string): Promise<CodeGraphConfig | null> 
     path.join(root, 'codegraph.config.json'),
   ]
   for (const p of defaultPaths) {
+    // await-ok: probe séquentiel, return-on-first-match (3 paths max)
     const cfg = await tryLoadOneDefault(p, root)
     if (cfg) return cfg
   }
