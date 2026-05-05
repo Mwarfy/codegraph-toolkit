@@ -158,5 +158,13 @@ describe('analyze({ useDatalog: true })', () => {
     // driftSignals : 4 AST kinds direct + todo-no-owner via isTodoExempt
     expectSetEqual(legacy.snapshot.driftSignals, datalog.snapshot.driftSignals,
       (s) => `${s.kind}|${s.file}|${s.line}`, 'driftSignals')
+    // A.4.1 — hardcodedSecrets : full shape avec trigger, entropy 2-decimals
+    expectSetEqual(legacy.snapshot.hardcodedSecrets, datalog.snapshot.hardcodedSecrets,
+      (h) => `${h.file}|${h.line}|${h.context}|${h.preview}|${h.entropy}|${h.length}|${h.trigger}`,
+      'hardcodedSecrets')
+    // A.4.2 — deadCode : 6 kinds full coverage via délégation visitor → legacy
+    expectSetEqual(legacy.snapshot.deadCode, datalog.snapshot.deadCode,
+      (d) => `${d.kind}|${d.file}|${d.line}|${d.message}|${JSON.stringify(d.details ?? {})}`,
+      'deadCode')
   })
 })

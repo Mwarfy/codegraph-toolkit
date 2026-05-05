@@ -34,6 +34,20 @@ export interface DatalogDetectorResults {
     message: string
     details: { operator: string; expression: string }
   }>
+  /**
+   * A.4.2 — full dead-code coverage (6 kinds). Délégué via legacy
+   * `extractDeadCodeFileBundle` pour parité bit-pour-bit ; capture
+   * via Salsa cache per-file (warm path = 0 re-walk). Cf.
+   * `ast-facts-visitor.ts.deadCodeFindings`.
+   */
+  deadCode: Array<{
+    kind: 'identical-subexpressions' | 'return-then-else' | 'switch-fallthrough'
+      | 'switch-no-default' | 'switch-empty' | 'controlling-expression-constant'
+    file: string
+    line: number
+    message: string
+    details?: Record<string, string | number | boolean>
+  }>
   evalCalls: Array<{
     file: string
     line: number
@@ -90,6 +104,7 @@ export interface DatalogDetectorResults {
     sample: string
     entropyX1000: number
     length: number
+    trigger: 'name' | 'pattern'
   }>
   eventListenerSites: Array<{
     file: string
@@ -308,6 +323,7 @@ function collectAstFactsCold(project: Project, fileSet: Set<string>, rootDir: st
     tryCatchSwallowCandidates: [],
     awaitInLoopCandidates: [],
     allocationInLoopCandidates: [],
+    deadCodeFindings: [],
   }
   for (const sf of project.getSourceFiles()) {
     const rel = relativize(sf.getFilePath(), rootDir)
@@ -347,6 +363,7 @@ function collectAstFactsCold(project: Project, fileSet: Set<string>, rootDir: st
     merged.tryCatchSwallowCandidates.push(...b.tryCatchSwallowCandidates)
     merged.awaitInLoopCandidates.push(...b.awaitInLoopCandidates)
     merged.allocationInLoopCandidates.push(...b.allocationInLoopCandidates)
+    merged.deadCodeFindings.push(...b.deadCodeFindings)
   }
   return merged
 }
@@ -425,7 +442,7 @@ function finalizeDatalogResults(merged: AstFactsBundle, extractMs: number): Data
   )
   factsByRelation.set('HardcodedSecretCandidate',
     merged.hardcodedSecretCandidates.map((h) =>
-      [h.file, h.line, safe(h.varOrPropName), safe(h.sample), h.entropyX1000, h.length].join('\t'),
+      [h.file, h.line, safe(h.varOrPropName), safe(h.sample), h.entropyX1000, h.length, h.trigger].join('\t'),
     ).join('\n'),
   )
   factsByRelation.set('EventListenerSiteCandidate',
@@ -589,6 +606,26 @@ function finalizeDatalogResults(merged: AstFactsBundle, extractMs: number): Data
       details: { operator: String(t[4]), expression: truncate(String(t[5]), 60) },
     })))
 
+  // A.4.2 — full dead-code coverage : pass-through depuis bundle visitor
+  // (legacy `extractDeadCodeFileBundle` deja appelle pendant le walk).
+  // Sort stable identique au legacy aggregator.
+  type DeadCodeKind = 'identical-subexpressions' | 'return-then-else'
+    | 'switch-fallthrough' | 'switch-no-default' | 'switch-empty'
+    | 'controlling-expression-constant'
+  const deadCode = [...merged.deadCodeFindings]
+    .map((f) => ({
+      kind: f.kind as DeadCodeKind,
+      file: f.file,
+      line: f.line,
+      message: f.message,
+      details: f.details,
+    }))
+    .sort((a, b) => {
+      if (a.file !== b.file) return a.file < b.file ? -1 : 1
+      if (a.line !== b.line) return a.line - b.line
+      return a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0
+    })
+
   const evalCalls = fileLineSort(evalTuples.map((t: Tuple) => ({
     file: String(t[0]),
     line: Number(t[1]),
@@ -659,6 +696,7 @@ function finalizeDatalogResults(merged: AstFactsBundle, extractMs: number): Data
     sample: String(t[3]),
     entropyX1000: Number(t[4]),
     length: Number(t[5]),
+    trigger: String(t[6]) as 'name' | 'pattern',
   })))
 
   // ─── Barrels — aggregation cross-file (consumers per barrel) ─────────
@@ -1017,6 +1055,7 @@ function finalizeDatalogResults(merged: AstFactsBundle, extractMs: number): Data
   return {
     magicNumbers,
     deadCodeIdenticalSubexpressions,
+    deadCode,
     evalCalls,
     cryptoCalls,
     booleanParams,

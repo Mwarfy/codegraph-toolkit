@@ -22,6 +22,12 @@
  */
 
 import { type SourceFile, Node, SyntaxKind } from 'ts-morph'
+// ADR-026 phase A.4.2 : on délègue dead-code à l'extracteur legacy pour
+// parité 100% sur les 6 sub-kinds. La logique AST de chaque kind
+// (switch-fallthrough / return-then-else / etc.) ne s'exprime pas en
+// rules Datalog standard. Le legacy fournit la source de vérité ; le
+// runner pass-through dans son output via le bundle.
+import { extractDeadCodeFileBundle } from '../extractors/dead-code.js'
 import {
   findContainingSymbol as sharedFindContainingSymbol,
   buildLineToSymbol,
@@ -278,7 +284,17 @@ export interface EventListenerSiteCandidateFact {
  * par taille + context). Emit que les candidats qui passent les checks.
  *
  * Schéma : .decl HardcodedSecretCandidate(file:symbol, line:number,
- *   varOrPropName:symbol, sample:symbol, entropyX1000:number, length:number)
+ *   varOrPropName:symbol, sample:symbol, entropyX1000:number, length:number,
+ *   trigger:symbol)
+ *
+ * Le field `trigger` capture la raison du flag (cf. legacy
+ * `extractors/hardcoded-secrets.ts`) :
+ *   - 'pattern' : la valeur match un préfixe connu (sk-, ghp_, AKIA...)
+ *   - 'name'    : la variable contenant la string a un nom suspect
+ *                 (token, api_key, etc.) ET entropy >= 4
+ *
+ * Calculé par le visitor (regex sur la value + sur le context name) car
+ * le moteur Datalog n'a pas de string ops pour ces matches.
  */
 export interface HardcodedSecretCandidateFact {
   file: string
@@ -287,6 +303,7 @@ export interface HardcodedSecretCandidateFact {
   sample: string
   entropyX1000: number
   length: number
+  trigger: 'name' | 'pattern'
 }
 
 /**
@@ -542,6 +559,31 @@ export interface AstFactsBundle {
   tryCatchSwallowCandidates: TryCatchSwallowCandidateFact[]
   awaitInLoopCandidates: AwaitInLoopCandidateFact[]
   allocationInLoopCandidates: AllocationInLoopCandidateFact[]
+  /**
+   * ADR-026 phase A.4.2 : DeadCodeFinding[] délégué via legacy
+   * `extractDeadCodeFileBundle` pour parité 100% sur les 6 sub-kinds
+   * (identical-subexpressions + 5 autres). La logique AST de chaque kind
+   * (switch-fallthrough / return-then-else / etc.) est trop spécifique
+   * pour s'exprimer en rules Datalog ; le visitor délègue et le runner
+   * pass-through dans son output. Le Salsa cache per-file capture ce
+   * coût comme tout autre fact (warm path = 0 re-walk).
+   */
+  deadCodeFindings: DeadCodeFindingFact[]
+}
+
+/**
+ * Re-export du shape `DeadCodeFinding` legacy (cf.
+ * `extractors/dead-code.ts`) pour le bundle Datalog. Note : les `details`
+ * sont conservés tels quels (Record<string, ...>) — pas serialized en
+ * Datalog tuple car on by-pass la rule pour ce détecteur.
+ */
+export interface DeadCodeFindingFact {
+  kind: 'identical-subexpressions' | 'return-then-else' | 'switch-fallthrough'
+    | 'switch-no-default' | 'switch-empty' | 'controlling-expression-constant'
+  file: string
+  line: number
+  message: string
+  details?: Record<string, string | number | boolean>
 }
 
 // ─── Visitor ────────────────────────────────────────────────────────────────
@@ -619,6 +661,7 @@ export function extractAstFactsBundle(
   const tryCatchSwallowCandidates: TryCatchSwallowCandidateFact[] = []
   const awaitInLoopCandidates: AwaitInLoopCandidateFact[] = []
   const allocationInLoopCandidates: AllocationInLoopCandidateFact[] = []
+  const deadCodeFindings: DeadCodeFindingFact[] = []
 
   const isTest = TEST_FILE_RE.test(relPath)
   if (isTest) fileTags.push({ file: relPath, tag: 'test' })
@@ -654,6 +697,8 @@ export function extractAstFactsBundle(
       regexLiteralCandidates, tryCatchSwallowCandidates,
       awaitInLoopCandidates, allocationInLoopCandidates,
     )
+    // A.4.2 — délégation legacy pour parité 100% sur les 6 dead-code kinds.
+    deadCodeFindings.push(...extractDeadCodeFileBundle(sf, relPath).findings)
   }
   // drift-patterns : own narrow regex (no fixtures) — emit unconditionally,
   // legacy aggregator filtre `\.test\.tsx?$|\.spec\.tsx?$|(^|\/)tests?\/`.
@@ -698,6 +743,7 @@ export function extractAstFactsBundle(
     tryCatchSwallowCandidates,
     awaitInLoopCandidates,
     allocationInLoopCandidates,
+    deadCodeFindings,
   }
 }
 
@@ -1514,6 +1560,7 @@ function visitHardcodedSecretCandidates(
       sample: value.slice(0, Math.min(8, value.length)) + '…',
       entropyX1000: entX1000,
       length: value.length,
+      trigger,
     })
   }
 }

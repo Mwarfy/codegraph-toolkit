@@ -68,6 +68,7 @@ const EMPTY_BUNDLE: AstFactsBundle = {
   tryCatchSwallowCandidates: [],
   awaitInLoopCandidates: [],
   allocationInLoopCandidates: [],
+  deadCodeFindings: [],
 }
 
 /**
@@ -113,7 +114,7 @@ export function aggregateAstFactsIncremental(label: string): AstFactsBundle {
     wrapperSuperfluousCandidates: [], deepNestingCandidates: [],
     emptyCatchNoCommentCandidates: [], regexLiteralCandidates: [],
     tryCatchSwallowCandidates: [], awaitInLoopCandidates: [],
-    allocationInLoopCandidates: [],
+    allocationInLoopCandidates: [], deadCodeFindings: [],
   }
   for (const f of files) {
     const b = astFactsOfFile.get(f)
@@ -151,6 +152,7 @@ export function aggregateAstFactsIncremental(label: string): AstFactsBundle {
     merged.tryCatchSwallowCandidates.push(...b.tryCatchSwallowCandidates)
     merged.awaitInLoopCandidates.push(...b.awaitInLoopCandidates)
     merged.allocationInLoopCandidates.push(...b.allocationInLoopCandidates)
+    merged.deadCodeFindings.push(...b.deadCodeFindings)
   }
   return merged
 }

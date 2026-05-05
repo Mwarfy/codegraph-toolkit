@@ -90,7 +90,8 @@ export const SCHEMA_DL = `// AST primitive facts — extraits par ast-facts-visi
 .input FunctionComplexityFactIn
 
 .decl HardcodedSecretCandidate(file:symbol, line:number,
-  varOrPropName:symbol, sample:symbol, entropyX1000:number, length:number)
+  varOrPropName:symbol, sample:symbol, entropyX1000:number, length:number,
+  trigger:symbol)
 .input HardcodedSecretCandidate
 
 .decl EventListenerSiteCandidate(file:symbol, line:number, sym:symbol,
@@ -195,7 +196,7 @@ export const SCHEMA_DL = `// AST primitive facts — extraits par ast-facts-visi
 .output FunctionComplexityOut
 
 .decl HardcodedSecretOut(file:symbol, line:number, name:symbol, sample:symbol,
-  entropyX1000:number, length:number)
+  entropyX1000:number, length:number, trigger:symbol)
 .output HardcodedSecretOut
 
 .decl EventListenerSiteOut(file:symbol, line:number, sym:symbol,
@@ -434,8 +435,8 @@ FunctionComplexityOut(F, L, Name, Cyclo, Cog, ContainingClass) :-
 `
 
 export const HARDCODED_SECRETS_DL = `
-HardcodedSecretOut(F, L, Name, Sample, Ent, Len) :-
-  HardcodedSecretCandidate(F, L, Name, Sample, Ent, Len),
+HardcodedSecretOut(F, L, Name, Sample, Ent, Len, Trigger) :-
+  HardcodedSecretCandidate(F, L, Name, Sample, Ent, Len, Trigger),
   !FileTag(F, "test"),
   !ExemptionLine(F, L, "secret-ok").
 `

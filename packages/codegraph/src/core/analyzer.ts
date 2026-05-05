@@ -1009,25 +1009,28 @@ async function runPhase2Phase1Dependent(
 async function runPhase4SecurityAndQuality(ctx: DetectorPhaseContext) {
   const { config, files, sharedProject, snapshot, timing, incremental, datalogPatch } = ctx
 
-  // hardcoded-secrets : runner Datalog n'expose pas le field `trigger`
-  // (name vs pattern) — reste en legacy pour A.3. À porter en A.4.
+  // hardcoded-secrets : Phase A.4.1 ajoute `trigger` au runner (visitor +
+  // rule + adapter) — désormais full swap quand useDatalog actif.
   const hardcodedSecrets = await runDetectorTimed(timing, 'hardcoded-secrets',
     () => incremental
       ? Promise.resolve(incAllHardcodedSecrets.get('all'))
-      : analyzeHardcodedSecrets(config.rootDir, files, sharedProject))
+      : datalogPatch
+        ? Promise.resolve(datalogPatch.hardcodedSecrets)
+        : analyzeHardcodedSecrets(config.rootDir, files, sharedProject))
   const booleanParams = await runDetectorTimed(timing, 'boolean-params',
     () => incremental
       ? Promise.resolve(incAllBooleanParams.get('all'))
       : datalogPatch
         ? Promise.resolve(datalogPatch.booleanParams)
         : analyzeBooleanParams(config.rootDir, files, sharedProject))
-  // dead-code : runner Datalog couvre 1/6 kinds (identical-subexpressions).
-  // Les 5 autres kinds (return-then-else, switch-fallthrough, etc.) ne sont
-  // pas portés — reste en legacy pour A.3. À étendre runner en A.4.
+  // dead-code : Phase A.4.2 — runner couvre désormais les 6 kinds via
+  // délégation `extractDeadCodeFileBundle` dans le visitor (parité 100%).
   const deadCode = await runDetectorTimed(timing, 'dead-code',
     () => incremental
       ? Promise.resolve(incAllDeadCode.get('all'))
-      : analyzeDeadCode(config.rootDir, files, sharedProject))
+      : datalogPatch
+        ? Promise.resolve(datalogPatch.deadCode)
+        : analyzeDeadCode(config.rootDir, files, sharedProject))
   // floating-promises : dep sur snapshot.typedCalls (Phase 5 graph build).
   const floatingPromises = await runDetectorTimed(timing, 'floating-promises',
     () => analyzeFloatingPromises(config.rootDir, files, sharedProject, snapshot.typedCalls))

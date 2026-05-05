@@ -33,18 +33,20 @@ const DEFAULT_OPTIONAL_PARAMS_THRESHOLD = 5
 const DEFAULT_MAX_NESTING_DEPTH = 5
 
 /**
- * Les 18 fields snapshot que le runner Datalog produit avec parité
- * shape directe (validé bench γ + shadow A.1/A.2). Drift est exclu
- * car son shape `DriftSignal[]` n'est pas direct-compat (le runner
- * sort 4 sub-arrays plats sans message+severity, et le 5e kind
- * `todo-no-owner` dépend de `snapshot.todos`).
+ * Les 19 fields snapshot que le runner Datalog produit avec parité
+ * shape directe (validé bench γ + shadow A.1/A.2 ; A.4.1 ajoute
+ * `hardcodedSecrets` désormais shape-compat via le field `trigger`).
+ * Drift est exclu car son shape `DriftSignal[]` n'est pas direct-compat
+ * (le runner sort 4 sub-arrays plats sans message+severity, et le 5e
+ * kind `todo-no-owner` dépend de `snapshot.todos`).
  */
 type DirectSnapshotFields = Pick<GraphSnapshot,
   | 'magicNumbers' | 'evalCalls' | 'cryptoCalls' | 'booleanParams'
   | 'sanitizerCalls' | 'taintSinks' | 'longFunctions' | 'functionComplexity'
   | 'eventListenerSites' | 'barrels' | 'envUsage' | 'constantExpressions'
   | 'argumentsFacts' | 'eventEmitSites' | 'taintedVars' | 'resourceImbalances'
-  | 'securityPatterns' | 'codeQualityPatterns'
+  | 'securityPatterns' | 'codeQualityPatterns' | 'hardcodedSecrets'
+  | 'deadCode'
 >
 
 /**
@@ -157,6 +159,25 @@ export function buildSnapshotPatchFromDatalog(
   const argumentsFacts = dl.arguments as ArgsSnap
   const taintedVars = dl.taintedVars as TaintedVarsSnap
 
+  // hardcodedSecrets : remap shape runner → shape snapshot legacy.
+  // Mapping (cf. extractors/hardcoded-secrets.ts L112-119) :
+  //   runner.name        → snapshot.context
+  //   runner.sample      → snapshot.preview
+  //   runner.entropyX1000 → snapshot.entropy (= round*100/100)
+  //
+  // Le runner utilise `Math.trunc(entropy * 1000)` (intégrale fixe-point) ;
+  // le legacy `Math.round(entropy * 100) / 100` (2 décimales). On retrouve
+  // la précision legacy via `Math.round(entropyX1000 / 10) / 100`.
+  const hardcodedSecrets = dl.hardcodedSecrets.map((h) => ({
+    file: h.file,
+    line: h.line,
+    context: h.name,
+    preview: h.sample,
+    entropy: Math.round(h.entropyX1000 / 10) / 100,
+    length: h.length,
+    trigger: h.trigger,
+  }))
+
   return {
     magicNumbers: dl.magicNumbers,
     evalCalls: dl.evalCalls,
@@ -166,6 +187,7 @@ export function buildSnapshotPatchFromDatalog(
     taintSinks,
     longFunctions: dl.longFunctions,
     functionComplexity: dl.functionComplexities,
+    hardcodedSecrets,
     eventListenerSites: dl.eventListenerSites,
     barrels: dl.barrels,
     envUsage: dl.envUsage,
@@ -176,5 +198,6 @@ export function buildSnapshotPatchFromDatalog(
     resourceImbalances: dl.resourceImbalances,
     securityPatterns: dl.securityPatterns,
     codeQualityPatterns: dl.codeQualityPatterns,
+    deadCode: dl.deadCode,
   }
 }

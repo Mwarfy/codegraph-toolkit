@@ -5,12 +5,13 @@
 > commit type. The semantic version per package lives in each
 > `package.json`.
 
-Last update : 2026-05-05T11:02:12Z
+Last update : 2026-05-05T11:42:41Z
 
 ## By type
 
 ### `feat` (43)
 
+- **558aa7d** feat(codegraph): ADR-026 phase C — Salsa caching for Datalog runner — 2026-05-05
 - **11deb4b** feat(codegraph): ADR-026 phases A.1+A.3 — shadow mode + useDatalog swap — 2026-05-05
 - **f8b1256** feat(codegraph): Phase γ.15 — port code-quality-patterns au pattern Datalog — 2026-05-05
 - **6951dc6** feat(codegraph): Phase γ.14 — port drift-patterns au pattern Datalog — 2026-05-05
@@ -30,12 +31,6 @@ Last update : 2026-05-05T11:02:12Z
 - **444bc98** feat(codegraph): Phase γ.3a — affinity routing + LRU cache intra-worker — 2026-05-04
 - **c2ab5c7** feat(codegraph): Phase γ.2c — wire les 6 ts-morph détecteurs restants aux workers — 2026-05-04
 - **5a40459** feat(codegraph): Phase γ.2b — wire long-functions + dead-code aux workers — 2026-05-04
-- **d94cab1** feat(codegraph): Phase γ.2 — workers ts-morph via mini-Project local — 2026-05-04
-
-
-### `fix` (1)
-
-- **2a7d3cf** fix(codegraph): bayesian-cochange reads param, not snapshot — 0 → 175 rows — 2026-05-04
 
 
 ### `perf` (2)
@@ -49,8 +44,9 @@ Last update : 2026-05-05T11:02:12Z
 - **be79c7b** refactor(codegraph): Phase γ.5 — cleanup workers cold code (Phase β/γ.2/γ.3) — 2026-05-05
 
 
-### `chore` (1)
+### `chore` (2)
 
+- **e2fde62** chore(codegraph): bump @liby-tools/codegraph to v0.4.0 — 2026-05-05
 - **5cc82a0** chore(hooks): dedup PreToolUse + PostToolUse via SHA40 cache TTL 5min — 2026-05-05
 
 
@@ -62,6 +58,8 @@ Last update : 2026-05-05T11:02:12Z
 
 ## Full history
 
+- **e2fde62** chore(codegraph): bump @liby-tools/codegraph to v0.4.0 — 2026-05-05
+- **558aa7d** feat(codegraph): ADR-026 phase C — Salsa caching for Datalog runner — 2026-05-05
 - **5cc82a0** chore(hooks): dedup PreToolUse + PostToolUse via SHA40 cache TTL 5min — 2026-05-05
 - **11deb4b** feat(codegraph): ADR-026 phases A.1+A.3 — shadow mode + useDatalog swap — 2026-05-05
 - **3bcc427** docs(adr-026): close-out — 18/21 ts-morph ports done, 3 non-portables — 2026-05-05
@@ -110,5 +108,3 @@ Last update : 2026-05-05T11:02:12Z
 - **e936121** feat(runtime-graph): CPU profile capture pour apps pure-CPU — 2026-05-04
 - **924a064** feat(toolkit): wire Claude Code hooks pour le toolkit lui-même — 2026-05-04
 - **706725f** feat(toolkit): runtime-diff dans la chain post-commit — 2026-05-04
-- **2a7d3cf** fix(codegraph): bayesian-cochange reads param, not snapshot — 0 → 175 rows — 2026-05-04
-- **4db23a0** feat(canary-project): expand to 51/83 (61%) fact coverage — 2026-05-04
