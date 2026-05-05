@@ -236,6 +236,17 @@ export interface RunDatalogDetectorsOptions {
   project: Project
   files: string[]
   rootDir: string
+  /**
+   * ADR-026 phase C : si true, le visitor `extractAstFactsBundle` est
+   * appelé via les cells Salsa per-file (warm path skip le walk pour les
+   * fichiers non-modifiés). Le caller doit avoir set `fileContent` +
+   * `projectFiles` + `setIncrementalContext` AVANT d'appeler le runner —
+   * c'est déjà fait par `analyzer.ts` en mode incremental.
+   *
+   * Cold path (1er run) : équivalent à incremental: false.
+   * Warm path (re-run sans changement) : ~0ms walk au lieu de ~3s.
+   */
+  incremental?: boolean
 }
 
 export async function runDatalogDetectors(
@@ -243,7 +254,25 @@ export async function runDatalogDetectors(
 ): Promise<DatalogDetectorResults> {
   // 1. AST visitor — 1 passe, tous les facts primitifs.
   const t0 = performance.now()
-  const fileSet = new Set(opts.files)
+  let merged: AstFactsBundle
+  if (opts.incremental) {
+    // Phase C : Salsa cache per-file. Import lazy pour éviter le coût
+    // d'init du module Salsa en cold-run no-incremental.
+    const { aggregateAstFactsIncremental } = await import('../incremental/datalog-ast-facts.js')
+    merged = aggregateAstFactsIncremental('all')
+  } else {
+    merged = collectAstFactsCold(opts.project, new Set(opts.files), opts.rootDir)
+  }
+  const extractMs = performance.now() - t0
+  return finalizeDatalogResults(merged, extractMs)
+}
+
+/**
+ * Walk synchrone tous les SourceFile + extract bundle per-file. Cold path
+ * du runner Datalog. Extrait pour permettre le swap par Salsa cache via
+ * `incremental: true`.
+ */
+function collectAstFactsCold(project: Project, fileSet: Set<string>, rootDir: string): AstFactsBundle {
   const merged: AstFactsBundle = {
     numericLiterals: [],
     binaryExpressions: [],
@@ -280,10 +309,10 @@ export async function runDatalogDetectors(
     awaitInLoopCandidates: [],
     allocationInLoopCandidates: [],
   }
-  for (const sf of opts.project.getSourceFiles()) {
-    const rel = relativize(sf.getFilePath(), opts.rootDir)
+  for (const sf of project.getSourceFiles()) {
+    const rel = relativize(sf.getFilePath(), rootDir)
     if (!rel || !fileSet.has(rel)) continue
-    const b = extractAstFactsBundle(sf as SourceFile, rel, opts.rootDir)
+    const b = extractAstFactsBundle(sf as SourceFile, rel, rootDir)
     merged.numericLiterals.push(...b.numericLiterals)
     merged.binaryExpressions.push(...b.binaryExpressions)
     merged.exemptionLines.push(...b.exemptionLines)
@@ -319,8 +348,16 @@ export async function runDatalogDetectors(
     merged.awaitInLoopCandidates.push(...b.awaitInLoopCandidates)
     merged.allocationInLoopCandidates.push(...b.allocationInLoopCandidates)
   }
-  const extractMs = performance.now() - t0
+  return merged
+}
 
+/**
+ * Phase finale du runner : parse rules, charge les facts, évalue, project
+ * en types métier. Extrait pour découpler la collecte AST (cachable Salsa)
+ * du moteur Datalog (re-évalué à chaque run pour l'instant — Phase C.2
+ * pourra cacher aussi).
+ */
+function finalizeDatalogResults(merged: AstFactsBundle, extractMs: number): DatalogDetectorResults {
   // 2. Parse les rules (embedded en TS — pas de runtime fs read).
   const t1 = performance.now()
   const program = parse(ALL_RULES_DL)

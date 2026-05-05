@@ -85,6 +85,7 @@
 - `packages/codegraph/src/extractors/co-change.ts` → ADR-005
 - `packages/codegraph/src/extractors/compression-similarity.ts` → ADR-005
 - `packages/codegraph/src/extractors/constant-expressions.ts` → ADR-005
+- `packages/codegraph/src/extractors/drift-patterns.ts` → ADR-026
 - `packages/codegraph/src/extractors/eslint-import.ts` → ADR-005
 - `packages/codegraph/src/extractors/package-deps.ts` → ADR-005
 - `packages/codegraph/src/extractors/sql-schema.ts` → ADR-005
@@ -195,9 +196,9 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **ORPHELIN** `packages/runtime-graph/src/capture/auto-bootstrap.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/audit-listener.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/event-emit-sites/sample.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/data-flows/scheduler.ts` — aucun importeur  
+- **ORPHELIN** `packages/codegraph/tests/fixtures/env-usage/config.ts` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall jest + npm test_
@@ -219,6 +220,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+5cc82a0 chore(hooks): dedup PreToolUse + PostToolUse via SHA40 cache TTL 5min
 11deb4b feat(codegraph): ADR-026 phases A.1+A.3 — shadow mode + useDatalog swap
 3bcc427 docs(adr-026): close-out — 18/21 ts-morph ports done, 3 non-portables
 f8b1256 feat(codegraph): Phase γ.15 — port code-quality-patterns au pattern Datalog
@@ -230,7 +232,6 @@ cc6598b feat(codegraph): Phase γ.11 — port tainted-vars au pattern Datalog
 2cfe578 feat(codegraph): Phase γ.9 — port arguments au pattern Datalog
 dad7dc1 feat(codegraph): Phase γ.8 — port constant-expressions au pattern Datalog
 393fc2c feat(codegraph): Phase γ.7 — port barrels + env-usage au pattern Datalog
-14fe493 feat(codegraph): Phase γ.6 — port event-listener-sites au pattern Datalog
 ```
 
 ## Comment contribuer à ce brief

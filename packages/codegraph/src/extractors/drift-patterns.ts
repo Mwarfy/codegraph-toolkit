@@ -1,3 +1,4 @@
+// ADR-026
 /**
  * Drift Patterns — détecteurs de "drift agentique" (Phase 4 axe 4).
  *

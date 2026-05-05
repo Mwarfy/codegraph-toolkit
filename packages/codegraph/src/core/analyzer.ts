@@ -810,16 +810,18 @@ async function runDeterministicDetectors(args: RunDetectorsArgs): Promise<void> 
   const incremental = args.incremental ?? false
   const useDatalog = args.useDatalog ?? false
 
-  // ADR-026 phase A.3 : pre-compute Datalog runner UNE FOIS pour les
-  // phases 1-6. Coût ~3s sur Sentinel (vs ~5s gain sur les détecteurs
-  // swappés). Skip si `incremental` car Salsa fait mieux per-file.
+  // ADR-026 phase A.3 + C : pre-compute Datalog runner UNE FOIS pour les
+  // phases 1-6. Si `incremental` est aussi actif, le runner utilise le
+  // cache Salsa per-file (`incremental/datalog-ast-facts.ts`) — warm
+  // path < 200ms au lieu de ~3s sur Sentinel.
   let datalogPatch: ReturnType<typeof buildSnapshotPatchFromDatalog> | null = null
   let datalogResults: DatalogDetectorResults | null = null
-  if (useDatalog && !incremental) {
+  if (useDatalog) {
     const tDl = performance.now()
     try {
       datalogResults = await runDatalogDetectors({
         project: sharedProject, files, rootDir: config.rootDir,
+        incremental,  // active le cache Salsa per-file (Phase C.1)
       })
       datalogPatch = buildSnapshotPatchFromDatalog(datalogResults)
 
