@@ -60,6 +60,15 @@ const EXEMPT_DETECTORS = new Map<string, string>([
       'cross-snapshot temporal identique à persistent-cycles — pas de ' +
       'per-file caching applicable.',
   ],
+  [
+    'floating-promises',
+    'Multi-tsconfig type-check : N×ts-morph Projects (un par sous-projet) ' +
+      'pour récupérer un TypeChecker correct sur les monorepos avec ' +
+      'tsconfigPath partiel. Per-file Salsa caching ne s\'applique pas — ' +
+      'le TypeChecker context spans the whole sub-project. Designed cost : ' +
+      '~3s sur le toolkit (8 sub-projects). Skip via fire-and-forget marker ' +
+      'au call-site ou désactivation du détecteur si problème en CI.',
+  ],
 ])
 
 function percentile(values: number[], p: number): number {

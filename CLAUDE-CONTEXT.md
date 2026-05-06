@@ -227,6 +227,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+2e7cd7a refactor: cut metric noise across 6 detectors
 5a43915 fix(floating-promises): drop false positives when sync method shares name
 b5ec032 fix(ts-imports): handle Next.js flat layouts and cross-project @/* leaks
 0a2bdf0 refactor(ast-facts-visitor): split god file en 20 modules par domaine (69 → 68)
@@ -238,7 +239,6 @@ face7c3 chore(invariants): grandfather NO-BOOLEAN-POSITIONAL-PARAM × 20 (100 �
 df3e554 chore(invariants): grandfather tier 4-7 violations (15 → 0)
 dedf3f3 chore(invariants): grandfather 15 singleton violations avec rationale
 fe6ae41 docs: SELF-OBSERVABILITY.md — référence Tier 1 pattern repeat detector
-0226020 feat(hooks): self-observability Tier 1 — in-session pattern repeat detector
 ```
 
 ## Comment contribuer à ce brief

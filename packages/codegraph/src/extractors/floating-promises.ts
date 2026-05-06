@@ -31,6 +31,8 @@
 
 import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
 import { findContainingSymbol, makeIsExemptForMarker } from './_shared/ast-helpers.js'
+import { MultiProjectTypeChecker } from './_shared/multi-project-typecheck.js'
+import { getSubProjectRoot } from '../detectors/ts-imports.js'
 
 export interface FloatingPromiseSite {
   file: string
@@ -121,13 +123,47 @@ function isPromiseReturn(call: Node): boolean {
     if (t === 'void' || t === 'undefined' || t === 'never') return false
     // Hard YES — explicitly Promise, or a union containing Promise.
     if (/\bPromise\b/.test(t)) return true
-    // Unresolved (any/unknown/error/empty) — fail-open. Keeps the name-
-    // only filter's behavior so test fixtures with undeclared symbols
-    // continue to be flagged.
+    // TypeChecker punted (returned `any` / unresolved). Try a cheaper
+    // signal: the declared return-type annotation on the callee. Works
+    // when the call site sits in a sub-project the analysis tsconfig
+    // doesn't cover (multi-project monorepo, single tsconfigPath) but
+    // ts-morph still resolved the callee symbol via the file graph.
+    const declared = readDeclaredReturnTypeText(call)
+    if (declared) {
+      if (declared === 'void' || declared === 'undefined' || declared === 'never') return false
+      if (/\bPromise\b/.test(declared)) return true
+    }
+    // Still unresolved → fail-open (preserves name-only filter behavior
+    // for test fixtures with undeclared symbols).
     return true
   } catch {
     return true
   }
+}
+
+/** Read the declared (annotated) return type text from the callee's
+ *  function/method declaration. Returns null if no declaration is
+ *  resolvable or no annotation is present. Doesn't depend on a fully
+ *  configured TypeChecker. */
+function readDeclaredReturnTypeText(call: Node): string | null {
+  if (!Node.isCallExpression(call)) return null
+  const callee = call.getExpression()
+  let sym
+  try { sym = callee.getSymbol() } catch { return null }
+  if (!sym) return null
+  for (const decl of sym.getDeclarations()) {
+    if (
+      Node.isFunctionDeclaration(decl) ||
+      Node.isMethodDeclaration(decl) ||
+      Node.isMethodSignature(decl) ||
+      Node.isFunctionExpression(decl) ||
+      Node.isArrowFunction(decl)
+    ) {
+      const rt = decl.getReturnTypeNode?.()
+      if (rt) return rt.getText().trim()
+    }
+  }
+  return null
 }
 
 /**
@@ -240,10 +276,28 @@ export async function analyzeFloatingPromises(
   // Pas de signatures = on ne peut rien détecter de fiable. Retourne vide.
   if (asyncSymbolNames.size === 0) return all
 
+  // Multi-tsconfig type-check is expensive (loads N × ts-morph Projects).
+  // Strategy: lazy. We only build a sub-project Project when a specific
+  // file proves the shared Project's TypeChecker can't resolve it (call
+  // return types come back as `any`). On a project with a single root
+  // tsconfig covering everything, no file triggers it → zero overhead.
+  // On a monorepo with a partial tsconfigPath (the morovar case where
+  // backend code wasn't typed by frontend/tsconfig.json), only the
+  // unresolved files pay the cost.
+  // Always route through MultiProjectTypeChecker. We tried per-file /
+  // per-sub-project probes to skip it on healthy projects, but every
+  // probe was either too lax (missed files where the shared TC silently
+  // returns `any` while sym.getSymbol() still resolves through cached
+  // imports) or too strict (paid the cost everywhere anyway). The
+  // checker is lazy — sub-project Projects build only on first request,
+  // and `null` sub-projects (single-tsconfig projects) cost a tree walk.
+  const multiTc = new MultiProjectTypeChecker(rootDir, files)
+
   for (const sf of project.getSourceFiles()) {
     const rel = relativize(sf.getFilePath(), rootDir)
     if (!rel || !fileSet.has(rel)) continue
-    const bundle = extractFloatingPromisesFileBundle(sf, rel, asyncSymbolNames)
+    const scopedSf = multiTc.getSourceFile(rel) ?? sf
+    const bundle = extractFloatingPromisesFileBundle(scopedSf, rel, asyncSymbolNames)
     all.push(...bundle.sites)
   }
 

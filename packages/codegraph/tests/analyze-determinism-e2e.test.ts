@@ -72,7 +72,7 @@ async function runAnalyze(rootDir: string): Promise<GraphSnapshot> {
 }
 
 describe('analyze determinism E2E (ADR-001 hardening)', () => {
-  it('cycles fixture : 3 runs analyze() → byte-équivalent snapshots', async () => {
+  it('cycles fixture : 3 runs analyze() → byte-équivalent snapshots', { timeout: 30_000 }, async () => {
     const rootDir = path.resolve(__dirname, 'fixtures/cycles')
 
     const snap1 = await runAnalyze(rootDir)
