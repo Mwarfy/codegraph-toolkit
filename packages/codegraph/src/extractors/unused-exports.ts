@@ -24,6 +24,7 @@ import { Project, Node, SyntaxKind, type SourceFile } from 'ts-morph'
 import * as path from 'node:path'
 import * as fs from 'node:fs/promises'
 import type { ExportSymbol, ExportConfidence } from '../core/types.js'
+import { resolveAliasStandalone } from '../detectors/ts-imports.js'
 
 export interface FileExportInfo {
   /** Relative file path */
@@ -115,11 +116,12 @@ function collectImportRefs(
   rootDir: string,
   importedSymbols: UnusedExportsImportRef[],
   namespaceTargets: string[],
+  fromPath: string,
+  allFiles: readonly string[],
 ): void {
   for (const imp of sourceFile.getImportDeclarations()) {
-    const targetFile = imp.getModuleSpecifierSourceFile()
-    if (!targetFile) continue
-    const targetPath = relativize(targetFile.getFilePath(), rootDir)
+    const specifier = imp.getModuleSpecifierValue()
+    const targetPath = resolveImportTarget(imp.getModuleSpecifierSourceFile(), specifier, fromPath, rootDir, allFiles)
     if (!targetPath) continue
 
     if (imp.getNamespaceImport()) {
@@ -135,16 +137,39 @@ function collectImportRefs(
   }
 }
 
+/** Resolve an import specifier to a project-relative file path.
+ *  Falls back to the alias resolver (handles `@/foo` / `~/foo` shapes
+ *  the bundled tsconfig may not know about — typically when codegraph
+ *  is pointed at a single tsconfig in a multi-project monorepo). */
+function resolveImportTarget(
+  resolvedSf: SourceFile | undefined,
+  specifier: string,
+  fromPath: string,
+  rootDir: string,
+  allFiles: readonly string[],
+): string | null {
+  if (resolvedSf) {
+    const p = relativize(resolvedSf.getFilePath(), rootDir)
+    if (p) return p
+  }
+  if (specifier.startsWith('@/') || specifier.startsWith('~/')) {
+    return resolveAliasStandalone(specifier, fromPath, allFiles as string[])
+  }
+  return null
+}
+
 function collectExportRefs(
   sourceFile: SourceFile,
   rootDir: string,
   importedSymbols: UnusedExportsImportRef[],
   namespaceTargets: string[],
+  fromPath: string,
+  allFiles: readonly string[],
 ): void {
   for (const exp of sourceFile.getExportDeclarations()) {
-    const targetFile = exp.getModuleSpecifierSourceFile()
-    if (!targetFile) continue
-    const targetPath = relativize(targetFile.getFilePath(), rootDir)
+    const specifier = exp.getModuleSpecifierValue()
+    if (!specifier) continue  // `export { X }` without `from`
+    const targetPath = resolveImportTarget(exp.getModuleSpecifierSourceFile(), specifier, fromPath, rootDir, allFiles)
     if (!targetPath) continue
 
     if (!exp.getNamedExports().length && exp.isNamespaceExport()) {
@@ -254,13 +279,13 @@ export function extractUnusedExportsFileBundle(
   relPath: string,
   rootDir: string,
   project: Project,
+  allFiles: readonly string[] = [],
 ): UnusedExportsFileBundle {
-  void relPath  // signature contract, used by callers for lookup
   const importedSymbols: UnusedExportsImportRef[] = []
   const namespaceTargets: string[] = []
 
-  collectImportRefs(sourceFile, rootDir, importedSymbols, namespaceTargets)
-  collectExportRefs(sourceFile, rootDir, importedSymbols, namespaceTargets)
+  collectImportRefs(sourceFile, rootDir, importedSymbols, namespaceTargets, relPath, allFiles)
+  collectExportRefs(sourceFile, rootDir, importedSymbols, namespaceTargets, relPath, allFiles)
   collectDynamicImports(sourceFile, rootDir, project, importedSymbols, namespaceTargets)
 
   const text = sourceFile.getFullText()
@@ -299,7 +324,7 @@ export async function analyzeExports(
   for (const sourceFile of project.getSourceFiles()) {
     const filePath = relativize(sourceFile.getFilePath(), rootDir)
     if (!filePath) continue
-    const bundle = extractUnusedExportsFileBundle(sourceFile, filePath, rootDir, project)
+    const bundle = extractUnusedExportsFileBundle(sourceFile, filePath, rootDir, project, files)
     bundlesByFile.set(filePath, bundle)
   }
 

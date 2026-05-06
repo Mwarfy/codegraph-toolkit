@@ -2,6 +2,12 @@ import { type SourceFile, Node, SyntaxKind } from 'ts-morph'
 import { findContainingSymbol } from '../../extractors/_shared/ast-helpers.js'
 import type { TaintSinkCandidateFact } from './types.js'
 
+// Sinks where tainted data flowing in IS a real injection vector. Logs
+// were intentionally dropped: OWASP Top 10 doesn't list logging as a
+// sink (PII-in-logs is a separate compliance check, not taint analysis),
+// and the matching method names (info/warn/error/debug/log/trace/fatal)
+// are far too common — flagging every logger.error(err) call dwarfs the
+// real signal (~80% of TaintSink hits on a typical project were `logger.*`).
 const SINK_METHOD_TO_KIND = new Map<string, string>()
 ;(() => {
   const patterns: Array<[string, string[]]> = [
@@ -12,7 +18,6 @@ const SINK_METHOD_TO_KIND = new Map<string, string>()
     ['fs-write', ['writeFile', 'writeFileSync', 'createWriteStream', 'appendFile', 'unlink', 'rm', 'rmSync']],
     ['http-out', ['fetch', 'request', 'get', 'post', 'put', 'delete', 'patch']],
     ['html-out', ['send', 'render', 'innerHTML', 'outerHTML']],
-    ['log',      ['info', 'warn', 'error', 'debug', 'log', 'trace', 'fatal']],
     ['redirect', ['redirect', 'setHeader', 'writeHead']],
   ]
   for (const [kind, methods] of patterns) {
@@ -28,7 +33,6 @@ const SINK_HIGH_CONFIDENCE: Record<string, RegExp> = {
   'fs-write': /^(fs|fsPromises|fsp)$/i,
   'http-out': /^(axios|http|https|got|fetch|node_fetch|nodeFetch)$/i,
   'html-out': /^(res|response|element|document)$/i,
-  'log':      /^(logger|log|console|pino|winston|bunyan)$/i,
   'redirect': /^(res|response|ctx|reply)$/i,
 }
 

@@ -70,12 +70,28 @@ export interface CrossDisciplineContext {
  * Run les 11 disciplines en séquence. Mutate `timing.detectors` pour
  * chaque discipline. Retourne `CrossDisciplineResults` agrégé.
  */
+/** Below this file count the cross-discipline math signals (spectral,
+ *  Lyapunov, Granger, persistent cycles, modularity, …) produce more
+ *  noise than actionable insight. Override with
+ *  CODEGRAPH_MATH_FORCE=1 to run them anyway. */
+const MATH_DISCIPLINES_MIN_FILES = 500
+
 export async function runCrossDisciplineDetectors(
   ctx: CrossDisciplineContext,
 ): Promise<CrossDisciplineResults> {
   const { rootDir, files, sharedProject, snapshot, coChangePairs, timing } = ctx
   const incremental = ctx.incremental ?? false
   const results: CrossDisciplineResults = {}
+
+  // Default-disable on small projects: the math heuristics need a lot of
+  // signal to surface meaningful patterns. On a 200-file project they
+  // mostly pad the report with hard-to-action numbers.
+  if (
+    files.length < MATH_DISCIPLINES_MIN_FILES
+    && process.env.CODEGRAPH_MATH_FORCE !== '1'
+  ) {
+    return results
+  }
 
   // Cross-discipline metrics (Cycle 2bis) — théorie spectrale (Fiedler),
   // info theory (Shannon), coding theory (Hamming).

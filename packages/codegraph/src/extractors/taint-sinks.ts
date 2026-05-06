@@ -33,8 +33,11 @@ export type TaintSinkKind =
   | 'fs-write'
   | 'http-out'
   | 'html-out'
-  | 'log'        // Tier 16 — logger.info/warn/error/debug (CWE-117 log injection)
   | 'redirect'   // Tier 16 — res.redirect / Location header (CWE-601 open redirect)
+  // 'log' (CWE-117 log injection) was dropped: matching info/warn/error/
+  // debug across logger/console/pino/winston produced ~80% of the noise
+  // on typical projects with no actionable signal. PII-in-logs and log
+  // injection are better covered by dedicated detectors.
 
 export interface TaintSink {
   file: string
@@ -64,8 +67,6 @@ const SINK_PATTERNS: Array<{ kind: TaintSinkKind; methods: string[] }> = [
   { kind: 'fs-write', methods: ['writeFile', 'writeFileSync', 'createWriteStream', 'appendFile', 'unlink', 'rm', 'rmSync'] },
   { kind: 'http-out', methods: ['fetch', 'request', 'get', 'post', 'put', 'delete', 'patch'] },
   { kind: 'html-out', methods: ['send', 'render', 'innerHTML', 'outerHTML'] },
-  // Tier 16
-  { kind: 'log',      methods: ['info', 'warn', 'error', 'debug', 'log', 'trace', 'fatal'] },
   { kind: 'redirect', methods: ['redirect', 'setHeader', 'writeHead'] },
 ]
 
@@ -86,7 +87,6 @@ const HIGH_CONFIDENCE_OBJECTS: Record<TaintSinkKind, RegExp> = {
   'fs-write': /^(fs|fsPromises|fsp)$/i,
   'http-out': /^(axios|http|https|got|fetch|node_fetch|nodeFetch)$/i,
   'html-out': /^(res|response|element|document)$/i,
-  'log':      /^(logger|log|console|pino|winston|bunyan)$/i,
   'redirect': /^(res|response|ctx|reply)$/i,
 }
 

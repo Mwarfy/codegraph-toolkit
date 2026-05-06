@@ -335,7 +335,7 @@ function resolveLocalImport(
  *  `frontend/components/Layout.tsx` → `frontend`
  *  `packages/codegraph/src/foo.ts` → `packages` (good enough — disambiguation
  *  beyond top-level needs config). */
-function getSubProjectRoot(filePath: string): string {
+export function getSubProjectRoot(filePath: string): string {
   const i = filePath.indexOf('/')
   return i > 0 ? filePath.slice(0, i) : filePath
 }
@@ -442,7 +442,7 @@ function resolveRelativeStandalone(
  *
  *  Le filtrage par sous-projet évite la cross-pollution quand plusieurs
  *  sous-projets utilisent `@/*` avec des bases différentes. */
-function resolveAliasStandalone(
+export function resolveAliasStandalone(
   specifier: string,
   fromFilePath: string,
   allFiles: string[],

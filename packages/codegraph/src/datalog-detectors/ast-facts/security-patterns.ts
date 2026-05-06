@@ -7,8 +7,11 @@ import type {
   WeakRandomCandidateFact,
 } from './types.js'
 
+// `sessionid` removed — it's an internal session IDENTIFIER (opaque key
+// in a server-side store), not a crypto secret. Real session secrets use
+// `sessionToken` / `sessionSecret` which match `token`/`secret`.
 const SECURITY_SECRET_NAME_RE =
-  /^(password|passwd|pwd|secret|token|api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|client[-_]?secret|jwt|nonce|sessionid|csrf|otp|priv(ate)?[-_]?key|encryption[-_]?key)$/i
+  /^(password|passwd|pwd|secret|token|api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|client[-_]?secret|jwt|nonce|csrf|otp|priv(ate)?[-_]?key|encryption[-_]?key)$/i
 
 function detectSecuritySecretKind(name: string): string {
   const m = name.match(SECURITY_SECRET_NAME_RE)
@@ -68,9 +71,20 @@ interface SecretRefSink {
   out: SecretVarRefCandidateFact[]
 }
 
+// Crypto / auth library APIs where passing a `password`/`secret`/`token`
+// variable is the documented contract — flagging these is 100% false
+// positive (eg `bcrypt.hash(password, …)`, `jwtVerify(token, secret)`,
+// `crypto.createHmac(…).update(secret)`).
+const CRYPTO_LEGITIMATE_RE =
+  /\b(bcrypt|argon2|scrypt(?:Sync)?|pbkdf2|hkdf|jose|jwt|jsonwebtoken|jwtVerify|jwtSign|SignJWT|EncryptJWT|signJwt|verifyJwt|hashPassword|verifyPassword|comparePassword|createHmac|createHash|createCipheriv|createDecipheriv|hash|compare|sign|verify|encrypt|decrypt)\b/i
+
 function pushSecretRefIfMatch(varName: string, sink: SecretRefSink): void {
   const kind = detectSecuritySecretKind(varName)
   if (!kind) return
+  // Skip when the receiving call is a known crypto/auth API. The
+  // signature of those functions REQUIRES a secret/password argument,
+  // so passing a variable named `password` is correct usage.
+  if (CRYPTO_LEGITIMATE_RE.test(sink.calleeText)) return
   sink.out.push({
     file: sink.relPath, line: sink.line,
     varName, kind, callee: sink.calleeText,

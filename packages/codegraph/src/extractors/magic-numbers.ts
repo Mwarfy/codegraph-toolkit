@@ -218,7 +218,21 @@ export async function analyzeMagicNumbers(
     extractor: (sf, rel) => extractMagicNumbersFileBundle(sf, rel, minMagnitude),
     selectItems: (b) => b.numbers,
     sortKey: (m) => `${m.file}:${String(m.line).padStart(8, '0')}`,
-    skipFile: (rel) => rel.includes('/tests/') || rel.includes('/__tests__/') || rel.endsWith('.test.ts'),
+    skipFile: (rel) => {
+      // Tests
+      if (rel.includes('/tests/') || rel.includes('/__tests__/') || rel.endsWith('.test.ts')) return true
+      // Config / constants / static data files — by definition they DEFINE
+      // numeric values with semantic names. Flagging them creates noise on
+      // typical projects (eg morovar `gameConfig.ts`, `data/auras.ts`,
+      // `data/shops.ts` — all are legitimate constant tables).
+      const lower = rel.toLowerCase()
+      if (/\b(config|constants?|conf|settings|magic-numbers)\b/.test(lower)) return true
+      // /data/ as a path segment (avoids matching `database`, `metadata`,
+      // `dataset` in non-segment positions). Conservative: only literal
+      // `/data/`, `\data\`, or root-level `data/`.
+      if (/(^|\/)data\//.test(lower)) return true
+      return false
+    },
   })
   return r.items
 }

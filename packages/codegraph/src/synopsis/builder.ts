@@ -92,7 +92,16 @@ export interface Phase38Summary {
   packageDeps?: { missing: number; declaredUnused: number; devOnly: number }
   barrels?: { total: number; lowValue: number }
   taint?: { total: number; critical: number; high: number; medium: number; low: number }
-  dsm?: { containers: number; backEdges: number; sccSizeGt1: number }
+  dsm?: {
+    containers: number
+    backEdges: number
+    sccSizeGt1: number
+    /** Members of each SCC with size ≥ 2 (max 6 SCCs, max 5 members
+     *  each — keeps the synopsis short while making the metric
+     *  actionable). The summary `sccSizeGt1` count alone was
+     *  unactionable: "2 SCCs somewhere" → "which 2?". */
+    scc?: Array<{ size: number; members: string[]; truncated?: boolean }>
+  }
 }
 
 export interface SynopsisJSON {
@@ -328,10 +337,22 @@ function buildPhase38Summary(snapshot: GraphSnapshot): Phase38Summary | undefine
     phase38Parts.taint = { total: snapshot.taintViolations.length, ...sev }
   }
   if (snapshot.dsm) {
+    const sccsBig = snapshot.dsm.levels.filter((l) => l.length >= 2)
     phase38Parts.dsm = {
       containers: snapshot.dsm.order.length,
       backEdges: snapshot.dsm.backEdges.length,
-      sccSizeGt1: snapshot.dsm.levels.filter((l) => l.length >= 2).length,
+      sccSizeGt1: sccsBig.length,
+      ...(sccsBig.length > 0 && {
+        scc: sccsBig.slice(0, 6).map((members) => {
+          const max = 5
+          const trimmed = members.slice(0, max)
+          return {
+            size: members.length,
+            members: trimmed,
+            ...(members.length > max && { truncated: true }),
+          }
+        }),
+      }),
     }
   }
   return Object.keys(phase38Parts).length > 0 ? phase38Parts : undefined
@@ -518,7 +539,16 @@ function renderL1Phase38(p: SynopsisJSON['phase38']): string[] {
   if (p.packageDeps) sig.push(`**Deps** — ${p.packageDeps.missing} missing · ${p.packageDeps.declaredUnused} unused · ${p.packageDeps.devOnly} devOnly`)
   if (p.barrels) sig.push(`**Barrels** — ${p.barrels.total} total · ${p.barrels.lowValue} low-value`)
   if (p.taint) sig.push(`**Taint** — ${p.taint.total} violations (crit ${p.taint.critical} · high ${p.taint.high} · med ${p.taint.medium} · low ${p.taint.low})`)
-  if (p.dsm) sig.push(`**DSM** — ${p.dsm.containers} containers · ${p.dsm.backEdges} back-edges · ${p.dsm.sccSizeGt1} SCC(s) ≥ 2`)
+  if (p.dsm) {
+    sig.push(`**DSM** — ${p.dsm.containers} containers · ${p.dsm.backEdges} back-edges · ${p.dsm.sccSizeGt1} SCC(s) ≥ 2`)
+    if (p.dsm.scc && p.dsm.scc.length > 0) {
+      for (const s of p.dsm.scc) {
+        const memberList = s.members.map((m) => `\`${m}\``).join(', ')
+        const ellipsis = s.truncated ? `, … (${s.size - s.members.length} more)` : ''
+        sig.push(`  - SCC × ${s.size}: ${memberList}${ellipsis}`)
+      }
+    }
+  }
   const out: string[] = []
   for (const line of sig) {
     out.push(line, '')

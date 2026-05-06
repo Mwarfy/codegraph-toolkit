@@ -25,7 +25,11 @@ import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
 import { findContainingSymbol, makeIsExemptForMarker } from './_shared/ast-helpers.js'
 
 const TEST_FILE_RE = /(\.test\.tsx?|\.spec\.tsx?|(^|\/)tests?\/|(^|\/)fixtures?\/)/
-const SECRET_NAME_RE = /^(password|passwd|pwd|secret|token|api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|client[-_]?secret|jwt|nonce|sessionid|csrf|otp|priv(ate)?[-_]?key|encryption[-_]?key)$/i
+// Note: `sessionid` was intentionally removed — it's an internal session
+// IDENTIFIER (opaque key in a server-side store), not a secret in the
+// crypto sense. Real session SECRETS use names like `sessionToken` or
+// `sessionSecret` which already match `token` / `secret`.
+const SECRET_NAME_RE = /^(password|passwd|pwd|secret|token|api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|client[-_]?secret|jwt|nonce|csrf|otp|priv(ate)?[-_]?key|encryption[-_]?key)$/i
 
 export interface SecretVarRef {
   file: string
@@ -185,6 +189,30 @@ function collectShorthandSecretRefs(
   }
 }
 
+// Calls where passing a `password`/`secret`/`token` variable IS the
+// documented contract. Two categories:
+//   1. Crypto / auth library APIs (bcrypt.hash, jwtVerify, …)
+//   2. Internal token bookkeeping (cache.setSession, store.deleteToken, …)
+// Flagging these is 100% false positive. Mirrors the same list in
+// datalog-detectors/ast-facts/security-patterns.ts.
+// Library names that imply crypto context.
+const CRYPTO_LEGITIMATE_RE =
+  /\b(bcrypt|argon2|scrypt(?:Sync)?|pbkdf2|hkdf|jose|jsonwebtoken|jwt\w*|SignJWT|EncryptJWT|createHmac|createHash|createCipheriv|createDecipheriv)\b/i
+
+// Method-name shape that implies crypto: verify*, sign*, encrypt*, decrypt*,
+// hash*, compare*. Matches both standalone calls (verifyToken(t)) and
+// member calls (auth.verifyToken(t), bcrypt.compare(p, h)).
+const CRYPTO_METHOD_RE =
+  /(?:^|\.)(verify|sign|encrypt|decrypt|hash|compare)\w*$/i
+
+// Method-name shape that implies token bookkeeping: any method whose name
+// ends with Session, Token, Refresh, or Auth (eg setSession, deleteToken,
+// setRefreshToken). Receiver-agnostic — `this.getSession(token)` and
+// `cache.setRefreshToken(rt)` both match. Tokens flowing into these are
+// internal state, not a leak vector.
+const TOKEN_STORE_METHOD_RE =
+  /(?:^|\.)\w*(Session|Token|Refresh|Auth)$/i
+
 function pushSecretRefIfNamed(
   name: string,
   line: number,
@@ -194,6 +222,9 @@ function pushSecretRefIfNamed(
 ): void {
   const kind = detectSecretKind(name)
   if (!kind) return
+  if (CRYPTO_LEGITIMATE_RE.test(calleeText)) return
+  if (CRYPTO_METHOD_RE.test(calleeText)) return
+  if (TOKEN_STORE_METHOD_RE.test(calleeText)) return
   ctx.out.secretRefs.push({
     file: ctx.relPath,
     line,
