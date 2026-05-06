@@ -290,7 +290,16 @@ function maybePushExternalImport(
   })
 }
 
-/** Résout un import local : ts-morph natif → alias `@/`/`~/` → relative. */
+/** Résout un import local : ts-morph natif → alias `@/`/`~/` → relative.
+ *
+ * Cross-project leak guard : quand un monorepo a plusieurs sous-projets qui
+ * réutilisent le même alias `@/*` (ex: backend `@/*` → `./src/*`, frontend
+ * `@/*` → `./*`), un seul `tsconfigPath` ne peut pas représenter les deux.
+ * ts-morph résout donc certains imports vers le mauvais sous-projet.
+ *
+ * On détecte ce cas (résolu vers un autre top-level dir que l'importeur) et
+ * on retombe sur le resolver alias standalone qui restreint au sous-projet
+ * de l'importeur. */
 function resolveLocalImport(
   imp: import('ts-morph').ImportDeclaration,
   specifier: string,
@@ -303,7 +312,14 @@ function resolveLocalImport(
   const resolvedSf = imp.getModuleSpecifierSourceFile()
   if (resolvedSf) {
     const rel = relativizeAbs(resolvedSf.getFilePath(), rootDir)
-    if (rel) return rel
+    if (rel) {
+      const isAlias = specifier.startsWith('@/') || specifier.startsWith('~/')
+      if (isAlias && getSubProjectRoot(rel) !== getSubProjectRoot(fromPath)) {
+        const aliased = resolveAliasStandalone(specifier, fromPath, allFiles)
+        if (aliased) return aliased
+      }
+      return rel
+    }
   }
   if (specifier.startsWith('@/') || specifier.startsWith('~/')) {
     return resolveAliasStandalone(specifier, fromPath, allFiles)
@@ -312,6 +328,16 @@ function resolveLocalImport(
     return resolveRelativeStandalone(specifier, sourceFile.getFilePath(), rootDir, project)
   }
   return null
+}
+
+/** Sub-project root = top-level directory of a monorepo file path.
+ *  `backend/src/lib/auth.ts` → `backend`
+ *  `frontend/components/Layout.tsx` → `frontend`
+ *  `packages/codegraph/src/foo.ts` → `packages` (good enough — disambiguation
+ *  beyond top-level needs config). */
+function getSubProjectRoot(filePath: string): string {
+  const i = filePath.indexOf('/')
+  return i > 0 ? filePath.slice(0, i) : filePath
 }
 
 // ─── Dynamic imports : import('...') ────────────────────────────────────────
@@ -409,22 +435,29 @@ function resolveRelativeStandalone(
   return null
 }
 
+/** Résout un alias `@/foo` ou `~/foo` en cherchant dans le sous-projet de
+ *  l'importeur. Essaie deux conventions, du plus précis au plus permissif :
+ *    1. `<sub-project>/src/<alias>` — convention TS classique (backend, packages)
+ *    2. `<sub-project>/<alias>`     — convention Next.js flat (app/, components/)
+ *
+ *  Le filtrage par sous-projet évite la cross-pollution quand plusieurs
+ *  sous-projets utilisent `@/*` avec des bases différentes. */
 function resolveAliasStandalone(
   specifier: string,
   fromFilePath: string,
   allFiles: string[],
 ): string | null {
   const aliasPath = specifier.replace(/^[@~]\//, '')
-  const parts = fromFilePath.split('/')
-  const srcIndex = parts.indexOf('src')
-  if (srcIndex < 0) return null
-  const projectPrefix = parts.slice(0, srcIndex + 1).join('/')
-  const candidateBase = `${projectPrefix}/${aliasPath}`
+  const subProject = getSubProjectRoot(fromFilePath)
+  if (!subProject) return null
   const extensions = ['.ts', '.tsx', '.js', '.jsx', '/index.ts', '/index.tsx', '/index.js']
-  for (const ext of extensions) {
-    const candidate = candidateBase + ext
-    if (allFiles.includes(candidate)) return candidate
+  const bases = [`${subProject}/src/${aliasPath}`, `${subProject}/${aliasPath}`]
+  for (const base of bases) {
+    for (const ext of extensions) {
+      const candidate = base + ext
+      if (allFiles.includes(candidate)) return candidate
+    }
+    if (allFiles.includes(base)) return base
   }
-  if (allFiles.includes(candidateBase)) return candidateBase
   return null
 }

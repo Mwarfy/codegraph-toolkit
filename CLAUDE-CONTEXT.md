@@ -227,6 +227,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+0a2bdf0 refactor(ast-facts-visitor): split god file en 20 modules par domaine (69 → 68)
 804e963 refactor(ast-facts-visitor): phase 2 — 3 visitors bombs résolus (75 → 69)
 32c50d1 refactor(ast-facts-visitor): extract helpers — 4 visitors bombs résolus (80 → 75)
 face7c3 chore(invariants): grandfather NO-BOOLEAN-POSITIONAL-PARAM × 20 (100 → 80)
@@ -238,7 +239,6 @@ fe6ae41 docs: SELF-OBSERVABILITY.md — référence Tier 1 pattern repeat detect
 0226020 feat(hooks): self-observability Tier 1 — in-session pattern repeat detector
 40c8ee0 chore: regenerate CLAUDE-CONTEXT + CHANGELOG post doc-claims feature
 df32201 docs: YAML frontmatter migration + cross-check audit
-807c2b1 feat(codegraph): doc-claims extractor + composite-doc-stale rule
 ```
 
 ## Comment contribuer à ce brief
