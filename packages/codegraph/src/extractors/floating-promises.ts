@@ -78,6 +78,13 @@ export function extractFloatingPromisesFileBundle(
     if (!calleeName) continue
     if (!asyncSymbolNames.has(calleeName)) continue
 
+    // Type-check confirmation step. The name-only asyncSymbolNames set
+    // is a fast pre-filter but produces collisions when sync methods
+    // share names with async ones (typical "initialize" overloaded
+    // across classes — some return void, some return Promise<void>).
+    // Resolve the actual return type to drop the false positives.
+    if (!isPromiseReturn(call)) continue
+
     // Check si le call est consommé proprement.
     if (isAwaitedOrConsumed(call)) continue
 
@@ -93,6 +100,34 @@ export function extractFloatingPromisesFileBundle(
   }
 
   return { sites }
+}
+
+/**
+ * Vérifie via le TypeChecker que le call retourne bien une Promise.
+ * Évite les faux-positifs quand un nom de method est partagé entre
+ * une classe async et une classe sync (ex : `initialize` partout).
+ *
+ * Coût : un getReturnType() par candidate (déjà filtrée par nom). Le
+ * pre-filter par nom maintient ça à un nombre raisonnable de calls
+ * vers le TypeChecker.
+ */
+function isPromiseReturn(call: Node): boolean {
+  if (!Node.isCallExpression(call)) return false
+  try {
+    const t = call.getReturnType().getText().trim()
+    // Hard NO — these return types prove the call is synchronous, even
+    // if its name collides with an async method elsewhere ("initialize"
+    // overloaded across many classes is the classic case).
+    if (t === 'void' || t === 'undefined' || t === 'never') return false
+    // Hard YES — explicitly Promise, or a union containing Promise.
+    if (/\bPromise\b/.test(t)) return true
+    // Unresolved (any/unknown/error/empty) — fail-open. Keeps the name-
+    // only filter's behavior so test fixtures with undeclared symbols
+    // continue to be flagged.
+    return true
+  } catch {
+    return true
+  }
 }
 
 /**
