@@ -227,6 +227,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+5c47441 feat(dashboard): time-travel, diff view, focus mode, hook timeline
 ac1b3ea feat(dashboard): live cockpit + agent transparency telemetry
 e9b880a feat(floating-promises): multi-tsconfig TypeChecker for monorepos
 2e7cd7a refactor: cut metric noise across 6 detectors
@@ -238,7 +239,6 @@ b5ec032 fix(ts-imports): handle Next.js flat layouts and cross-project @/* leaks
 face7c3 chore(invariants): grandfather NO-BOOLEAN-POSITIONAL-PARAM × 20 (100 → 80)
 843062f refactor: tame COMPOSITE-NEAR-DUPLICATE-FN × 24 (123 → 100 violations)
 4aa2e6a refactor: tame COMPOSITE-AWAIT-IN-LOOP × 12 (135 → 123 violations)
-df3e554 chore(invariants): grandfather tier 4-7 violations (15 → 0)
 ```
 
 ## Comment contribuer à ce brief

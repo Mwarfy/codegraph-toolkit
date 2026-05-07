@@ -43,7 +43,7 @@ async function loadSnap(codegraphDir: string, file: string): Promise<SnapshotSha
   }
 }
 
-function diffSets(a: string[], b: string[]): { added: string[]; removed: string[]; commonCount: number } {
+export function diffSets(a: string[], b: string[]): { added: string[]; removed: string[]; commonCount: number } {
   const sa = new Set(a)
   const sb = new Set(b)
   const added: string[] = []
@@ -55,7 +55,7 @@ function diffSets(a: string[], b: string[]): { added: string[]; removed: string[
   return { added, removed, commonCount: common }
 }
 
-function countTensionDelta(from: SnapshotShape, to: SnapshotShape): DiffResult['tensions'] {
+export function countTensionDelta(from: SnapshotShape, to: SnapshotShape): DiffResult['tensions'] {
   const fromCycles = (from.cycles ?? []).length
   const toCycles = (to.cycles ?? []).length
   const fromLowBarrels = (from.barrels ?? []).filter((b) => b.lowValue).length

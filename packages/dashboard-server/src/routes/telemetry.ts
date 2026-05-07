@@ -3,7 +3,7 @@ import * as path from 'node:path'
 import type { FastifyInstance } from 'fastify'
 import type { DashboardState } from '../state.js'
 
-interface TelemetryRecord {
+export interface TelemetryRecord {
   ts: number
   hook: string
   event: string
@@ -14,7 +14,7 @@ interface TelemetryRecord {
   dedupAgeSec: number | null
 }
 
-interface TelemetrySummary {
+export interface TelemetrySummary {
   totalEvents: number
   totalBytes: number
   totalTokensApprox: number
@@ -44,7 +44,7 @@ async function readTelemetry(file: string, limit: number): Promise<TelemetryReco
   return out
 }
 
-function summarize(records: TelemetryRecord[]): TelemetrySummary {
+export function summarize(records: TelemetryRecord[]): TelemetrySummary {
   const byHook: TelemetrySummary['byHook'] = {}
   const byFileMap = new Map<string, { count: number; tokens: number }>()
   let totalBytes = 0

@@ -28,42 +28,57 @@ interface NodeDetails {
   coChange: Array<{ partner: string; rate: number; sharedCommits: number }>
 }
 
-function nodeFromSnap(snap: SnapshotShape, id: string): NodeDetails | null {
-  const node = (snap.nodes ?? []).find((n) => n.id === id)
-  if (!node) return null
-
+export function extractEdges(snap: SnapshotShape, id: string): {
+  importers: NodeDetails['importers']
+  imports: NodeDetails['imports']
+} {
   const importers: NodeDetails['importers'] = []
   const imports: NodeDetails['imports'] = []
   for (const e of snap.edges ?? []) {
     if (e.to === id) importers.push({ from: e.from, type: e.type })
     if (e.from === id) imports.push({ to: e.to, type: e.type })
   }
+  return { importers, imports }
+}
 
-  const truth = (snap.truthPoints ?? []).find((tp) => tp.file === id)
-  const longFunctions = (snap.longFunctions ?? [])
+export function extractLongFunctions(snap: SnapshotShape, id: string): NodeDetails['longFunctions'] {
+  return (snap.longFunctions ?? [])
     .filter((lf) => lf.file === id)
     .map((lf) => ({ name: lf.name ?? '<anon>', lines: lf.lines }))
-  const todos = (snap.todos ?? [])
+}
+
+export function extractTodos(snap: SnapshotShape, id: string): NodeDetails['todos'] {
+  return (snap.todos ?? [])
     .filter((t) => t.file === id)
     .map((t) => ({ line: t.line, text: t.text }))
-  const envVars = Array.from(
-    new Set((snap.envUsage ?? []).filter((u) => u.file === id).map((u) => u.var)),
-  )
-  const driftSignals = (snap.driftSignals ?? [])
+}
+
+export function extractEnvVars(snap: SnapshotShape, id: string): string[] {
+  return Array.from(new Set((snap.envUsage ?? []).filter((u) => u.file === id).map((u) => u.var)))
+}
+
+export function extractDriftSignals(snap: SnapshotShape, id: string): NodeDetails['driftSignals'] {
+  return (snap.driftSignals ?? [])
     .filter((d) => d.file === id)
     .map((d) => ({ kind: d.kind ?? 'drift', detail: d.detail ?? '' }))
+}
 
-  const coChange: NodeDetails['coChange'] = []
+export function extractCoChange(snap: SnapshotShape, id: string): NodeDetails['coChange'] {
+  const out: NodeDetails['coChange'] = []
   for (const p of snap.coChangePairs ?? []) {
-    let partner: string | null = null
-    if (p.a === id) partner = p.b
-    else if (p.b === id) partner = p.a
-    if (partner) {
-      coChange.push({ partner, rate: p.coChangeRate, sharedCommits: p.sharedCommits })
-    }
+    const partner = p.a === id ? p.b : p.b === id ? p.a : null
+    if (!partner) continue
+    out.push({ partner, rate: p.coChangeRate, sharedCommits: p.sharedCommits })
   }
-  coChange.sort((a, b) => b.rate - a.rate)
+  out.sort((a, b) => b.rate - a.rate)
+  return out.slice(0, 20)
+}
 
+export function nodeFromSnap(snap: SnapshotShape, id: string): NodeDetails | null {
+  const node = (snap.nodes ?? []).find((n) => n.id === id)
+  if (!node) return null
+  const { importers, imports } = extractEdges(snap, id)
+  const truth = (snap.truthPoints ?? []).find((tp) => tp.file === id)
   return {
     id,
     type: node.type,
@@ -72,11 +87,11 @@ function nodeFromSnap(snap: SnapshotShape, id: string): NodeDetails | null {
     importers,
     imports,
     truthPoint: truth ? { reason: truth.reason } : undefined,
-    longFunctions,
-    todos,
-    envVars,
-    driftSignals,
-    coChange: coChange.slice(0, 20),
+    longFunctions: extractLongFunctions(snap, id),
+    todos: extractTodos(snap, id),
+    envVars: extractEnvVars(snap, id),
+    driftSignals: extractDriftSignals(snap, id),
+    coChange: extractCoChange(snap, id),
   }
 }
 

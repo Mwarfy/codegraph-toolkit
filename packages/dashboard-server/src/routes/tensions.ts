@@ -2,14 +2,14 @@ import type { FastifyInstance } from 'fastify'
 import type { DashboardState } from '../state.js'
 import { loadSnapshot } from '../state.js'
 
-interface Tension {
+export interface Tension {
   kind: string
   target: string
   detail: string
   hint: string
 }
 
-interface SnapshotShape {
+export interface SnapshotShape {
   nodes?: Array<{ id: string; status?: string; type?: string }>
   edges?: Array<{ from: string; to: string }>
   cycles?: Array<{ files: string[] }>
@@ -19,7 +19,7 @@ interface SnapshotShape {
   driftSignals?: Array<{ kind?: string; file?: string; detail?: string }>
 }
 
-function fromCycles(data: SnapshotShape): Tension[] {
+export function fromCycles(data: SnapshotShape): Tension[] {
   return (data.cycles ?? []).map((c) => ({
     kind: 'cycle',
     target: c.files.join(' → '),
@@ -28,7 +28,7 @@ function fromCycles(data: SnapshotShape): Tension[] {
   }))
 }
 
-function fromBarrels(data: SnapshotShape): Tension[] {
+export function fromBarrels(data: SnapshotShape): Tension[] {
   return (data.barrels ?? [])
     .filter((b) => b.lowValue)
     .map((b) => ({
@@ -39,7 +39,7 @@ function fromBarrels(data: SnapshotShape): Tension[] {
     }))
 }
 
-function fromOrphans(data: SnapshotShape): Tension[] {
+export function fromOrphans(data: SnapshotShape): Tension[] {
   return (data.nodes ?? [])
     .filter((n) => n.status === 'disconnected' && n.type === 'file')
     .map((n) => ({
@@ -50,7 +50,7 @@ function fromOrphans(data: SnapshotShape): Tension[] {
     }))
 }
 
-function fromLongFunctions(data: SnapshotShape): Tension[] {
+export function fromLongFunctions(data: SnapshotShape): Tension[] {
   return (data.longFunctions ?? [])
     .filter((lf) => lf.lines >= 80)
     .map((lf) => ({
@@ -61,7 +61,7 @@ function fromLongFunctions(data: SnapshotShape): Tension[] {
     }))
 }
 
-function fromDriftSignals(data: SnapshotShape): Tension[] {
+export function fromDriftSignals(data: SnapshotShape): Tension[] {
   return (data.driftSignals ?? []).map((d) => ({
     kind: d.kind ?? 'drift',
     target: d.file ?? 'unknown',

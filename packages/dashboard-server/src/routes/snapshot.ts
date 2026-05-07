@@ -16,7 +16,7 @@ interface SnapshotEntry {
  * Filename pattern: snapshot-<ISO-with-dashes>-<sha>.json
  * Example: snapshot-2026-05-06T20-25-01-e9b880a.json
  */
-function parseSnapshotName(filename: string): { ts: string; sha: string; isoDate: string } | null {
+export function parseSnapshotName(filename: string): { ts: string; sha: string; isoDate: string } | null {
   const m = filename.match(/^snapshot-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})-([a-f0-9]+)\.json$/)
   if (!m) return null
   const [, ts, sha] = m
@@ -87,20 +87,26 @@ export async function registerSnapshotRoutes(
     } catch {
       return { count: 0, snapshots: [] as SnapshotEntry[] }
     }
-    const out: SnapshotEntry[] = []
-    for (const filename of entries) {
-      const parsed = parseSnapshotName(filename)
-      if (!parsed) continue
-      const abs = path.join(state.codegraphDir, filename)
-      let bytes = 0
-      try {
-        const stat = await fs.stat(abs)
-        bytes = stat.size
-      } catch {
-        continue
-      }
-      out.push({ file: filename, ...parsed, bytes })
-    }
+    // Parallel stat — N=50 entries on a typical repo, sequential await
+    // adds ~50ms × N for nothing.
+    const candidates = entries
+      .map((filename) => {
+        const parsed = parseSnapshotName(filename)
+        return parsed ? { filename, parsed } : null
+      })
+      .filter((c): c is { filename: string; parsed: NonNullable<ReturnType<typeof parseSnapshotName>> } => c !== null)
+
+    const out = await Promise.all(
+      candidates.map(async ({ filename, parsed }): Promise<SnapshotEntry | null> => {
+        try {
+          const stat = await fs.stat(path.join(state.codegraphDir, filename))
+          return { file: filename, ...parsed, bytes: stat.size }
+        } catch {
+          return null
+        }
+      }),
+    ).then((results) => results.filter((r): r is SnapshotEntry => r !== null))
+
     out.sort((a, b) => a.ts.localeCompare(b.ts))
     return { count: out.length, snapshots: out }
   })
