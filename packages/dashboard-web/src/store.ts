@@ -15,6 +15,10 @@ const [pinnedFile, setPinnedFile] = createSignal<string | null>(null)
 // node. Takes priority over diff/tensions panels.
 const [focusedNode, setFocusedNode] = createSignal<string | null>(null)
 
+// Search/filter: when non-empty, the graph dims nodes that don't match
+// the pattern. Pure substring (lowercased). Empty string = no filter.
+const [filterPattern, setFilterPattern] = createSignal<string>('')
+
 const [snapshot, { refetch: refetchSnapshot }] = createResource(
   pinnedFile,
   async (pinned): Promise<SnapshotPayload> => {
@@ -67,6 +71,8 @@ export const store = {
   setPinnedFile,
   focusedNode,
   setFocusedNode,
+  filterPattern,
+  setFilterPattern,
   refetch: {
     snapshot: refetchSnapshot,
     tensions: refetchTensions,

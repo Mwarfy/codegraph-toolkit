@@ -57,7 +57,14 @@ export function Header() {
           </>
         )}
       </Show>
-      <span class="ml-auto flex items-center gap-2">
+      <input
+        type="text"
+        placeholder="filter (substring match)…"
+        value={store.filterPattern()}
+        onInput={(e) => store.setFilterPattern(e.currentTarget.value)}
+        class="ml-auto bg-zinc-900 border border-zinc-800 rounded px-2 py-0.5 text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500 w-56"
+      />
+      <span class="flex items-center gap-2">
         <span class={`h-2 w-2 rounded-full ${pulse() ? 'bg-emerald-400' : 'bg-zinc-700'} transition-colors`} />
         <span class="text-zinc-500">live</span>
       </span>

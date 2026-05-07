@@ -30,7 +30,11 @@ export async function resolveSnapshotFile(codegraphDir: string): Promise<string 
   try {
     await fs.access(live)
     return live
-  } catch {}
+  } catch {
+    // No snapshot-live.json — watcher isn't running. Falls through to
+    // the historical snapshot resolution below; this is the expected
+    // path on a cold-start.
+  }
 
   let entries: string[]
   try {

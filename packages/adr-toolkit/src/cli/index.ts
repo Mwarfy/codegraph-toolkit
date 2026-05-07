@@ -83,6 +83,11 @@ program
       console.log(chalk.dim('💡 Pour activer le hook Claude Code (auto-injection ADR avant chaque Edit) :'))
       console.log(chalk.dim('   npx adr-toolkit init --with-claude-settings'))
     }
+    console.log('')
+    console.log(chalk.dim('💡 Cockpit humain (alpha) — graphe + tensions + transparence en live :'))
+    console.log(chalk.dim('   npm install --save-dev @liby-tools/dashboard-server @liby-tools/dashboard-web'))
+    console.log(chalk.dim('   npx codegraph-dashboard --root . --port 4242'))
+    console.log(chalk.dim('   → http://127.0.0.1:4242  (read-only viewer du .codegraph/)'))
   })
 
 program

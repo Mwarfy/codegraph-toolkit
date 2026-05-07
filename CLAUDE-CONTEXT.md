@@ -227,6 +227,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+0184159 test(dashboard-server): 37 tests + clear two real bombs the toolkit flagged
 5c47441 feat(dashboard): time-travel, diff view, focus mode, hook timeline
 ac1b3ea feat(dashboard): live cockpit + agent transparency telemetry
 e9b880a feat(floating-promises): multi-tsconfig TypeChecker for monorepos
@@ -238,7 +239,6 @@ b5ec032 fix(ts-imports): handle Next.js flat layouts and cross-project @/* leaks
 32c50d1 refactor(ast-facts-visitor): extract helpers — 4 visitors bombs résolus (80 → 75)
 face7c3 chore(invariants): grandfather NO-BOOLEAN-POSITIONAL-PARAM × 20 (100 → 80)
 843062f refactor: tame COMPOSITE-NEAR-DUPLICATE-FN × 24 (123 → 100 violations)
-4aa2e6a refactor: tame COMPOSITE-AWAIT-IN-LOOP × 12 (135 → 123 violations)
 ```
 
 ## Comment contribuer à ce brief

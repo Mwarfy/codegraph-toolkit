@@ -82,9 +82,29 @@ export function GraphView() {
       labelRenderedSizeThreshold: 4,
       defaultEdgeColor: '#27272a',
       defaultNodeColor: '#10b981',
+      // Live filter via reducer — preserves layout, just dims unmatched.
+      nodeReducer: (id, data) => {
+        const pat = store.filterPattern().toLowerCase()
+        if (!pat) return data
+        const matches = id.toLowerCase().includes(pat)
+        return matches
+          ? { ...data, size: (data.size as number) * 1.5, zIndex: 1 }
+          : { ...data, color: '#1f1f23', label: '', size: 1 }
+      },
+      edgeReducer: (_id, data) => {
+        const pat = store.filterPattern().toLowerCase()
+        if (!pat) return data
+        return { ...data, hidden: true }
+      },
     })
     sigma.on('clickNode', ({ node }) => store.setFocusedNode(node))
     sigma.on('clickStage', () => store.setFocusedNode(null))
+  })
+
+  // Refresh sigma whenever the filter pattern changes (reducer reads from store)
+  createEffect(() => {
+    store.filterPattern()
+    sigma?.refresh()
   })
 
   createEffect(() => {

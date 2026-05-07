@@ -1,6 +1,7 @@
 import { For, Show, createMemo } from 'solid-js'
 import { store } from '../store.js'
 import { CallTimeline } from './CallTimeline.js'
+import { TokenSparkline } from './TokenSparkline.js'
 
 function fmtTokens(n: number): string {
   if (n >= 1000) return (n / 1000).toFixed(1) + 'k'
@@ -61,6 +62,7 @@ export function TransparencyPanel() {
         )}
       </Show>
 
+      <TokenSparkline />
       <CallTimeline />
 
       <div class="px-3 py-2 border-b border-zinc-800 text-[11px] text-zinc-500">
