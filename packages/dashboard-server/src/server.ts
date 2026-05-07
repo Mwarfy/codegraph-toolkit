@@ -10,6 +10,8 @@ import { registerTensionRoutes } from './routes/tensions.js'
 import { registerTelemetryRoutes } from './routes/telemetry.js'
 import { registerRuntimeRoutes } from './routes/runtime.js'
 import { registerCommitRoutes } from './routes/commits.js'
+import { registerDiffRoutes } from './routes/diff.js'
+import { registerNodeRoutes } from './routes/node.js'
 
 export interface ServerOptions {
   rootDir: string
@@ -40,6 +42,8 @@ export async function startServer(opts: ServerOptions): Promise<{ stop: () => Pr
   await registerTelemetryRoutes(app, state)
   await registerRuntimeRoutes(app, state)
   await registerCommitRoutes(app, state)
+  await registerDiffRoutes(app, state)
+  await registerNodeRoutes(app, state)
 
   app.register(async (instance) => {
     instance.get('/ws', { websocket: true }, (socket) => {

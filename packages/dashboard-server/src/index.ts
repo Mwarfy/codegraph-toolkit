@@ -10,6 +10,17 @@ interface CliArgs {
   webStaticDir: string | null
 }
 
+type FlagHandler = (args: CliArgs, value: string) => void
+
+const FLAG_HANDLERS: Record<string, FlagHandler> = {
+  '--root': (a, v) => (a.rootDir = path.resolve(v)),
+  '-r': (a, v) => (a.rootDir = path.resolve(v)),
+  '--port': (a, v) => (a.port = parseInt(v, 10)),
+  '-p': (a, v) => (a.port = parseInt(v, 10)),
+  '--host': (a, v) => (a.host = v),
+  '--web-static': (a, v) => (a.webStaticDir = path.resolve(v)),
+}
+
 function parseArgs(argv: string[]): CliArgs {
   const args: CliArgs = {
     rootDir: process.cwd(),
@@ -19,22 +30,15 @@ function parseArgs(argv: string[]): CliArgs {
   }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
-    const next = argv[i + 1]
-    if ((a === '--root' || a === '-r') && next) {
-      args.rootDir = path.resolve(next)
-      i++
-    } else if ((a === '--port' || a === '-p') && next) {
-      args.port = parseInt(next, 10)
-      i++
-    } else if (a === '--host' && next) {
-      args.host = next
-      i++
-    } else if (a === '--web-static' && next) {
-      args.webStaticDir = path.resolve(next)
-      i++
-    } else if (a === '--help' || a === '-h') {
+    if (a === '--help' || a === '-h') {
       printHelp()
       process.exit(0)
+    }
+    const handler = FLAG_HANDLERS[a]
+    const next = argv[i + 1]
+    if (handler && next !== undefined) {
+      handler(args, next)
+      i++
     }
   }
   return args

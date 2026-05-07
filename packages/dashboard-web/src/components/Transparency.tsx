@@ -1,5 +1,6 @@
 import { For, Show, createMemo } from 'solid-js'
 import { store } from '../store.js'
+import { CallTimeline } from './CallTimeline.js'
 
 function fmtTokens(n: number): string {
   if (n >= 1000) return (n / 1000).toFixed(1) + 'k'
@@ -59,6 +60,8 @@ export function TransparencyPanel() {
           </div>
         )}
       </Show>
+
+      <CallTimeline />
 
       <div class="px-3 py-2 border-b border-zinc-800 text-[11px] text-zinc-500">
         <span>Hooks observés : </span>

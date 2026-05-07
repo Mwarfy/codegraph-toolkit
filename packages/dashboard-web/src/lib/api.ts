@@ -70,10 +70,53 @@ async function getJson<T>(url: string): Promise<T> {
   return (await r.json()) as T
 }
 
+export interface SnapshotEntry {
+  file: string
+  ts: string
+  sha: string
+  isoDate: string
+  bytes: number
+}
+
+export interface NodeDetails {
+  id: string
+  type?: string
+  status?: string
+  tags?: string[]
+  importers: Array<{ from: string; type?: string }>
+  imports: Array<{ to: string; type?: string }>
+  truthPoint?: { reason?: string }
+  longFunctions: Array<{ name: string; lines: number }>
+  todos: Array<{ line: number; text: string }>
+  envVars: string[]
+  driftSignals: Array<{ kind: string; detail: string }>
+  coChange: Array<{ partner: string; rate: number; sharedCommits: number }>
+}
+
+export interface DiffResult {
+  from: { file: string; commit?: string; generatedAt?: string }
+  to: { file: string; commit?: string; generatedAt?: string }
+  nodes: { added: string[]; removed: string[]; commonCount: number }
+  edges: { added: string[]; removed: string[]; commonCount: number }
+  tensions: {
+    cyclesAdded: number
+    cyclesRemoved: number
+    barrelsLowAdded: number
+    barrelsLowRemoved: number
+    longFunctionsAdded: number
+    longFunctionsRemoved: number
+  }
+}
+
 export const api = {
   status: () => getJson<{ ok: boolean; rootDir: string; snapshotLoaded: boolean; wsClients: number }>('/api/status'),
   snapshotMeta: () => getJson<SnapshotMeta>('/api/snapshot/meta'),
   snapshot: () => getJson<SnapshotPayload>('/api/snapshot'),
+  snapshotByFile: (file: string) => getJson<SnapshotPayload>(`/api/snapshot?file=${encodeURIComponent(file)}`),
+  snapshots: () => getJson<{ count: number; snapshots: SnapshotEntry[] }>('/api/snapshots'),
+  diff: (from: string, to: string) =>
+    getJson<DiffResult>(`/api/diff?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+  node: (id: string) => getJson<NodeDetails>(`/api/node?id=${encodeURIComponent(id)}`),
   tensions: () => getJson<{ count: number; tensions: Tension[] }>('/api/tensions'),
   telemetry: (limit = 200) => getJson<{ count: number; records: TelemetryRecord[] }>(`/api/telemetry?limit=${limit}`),
   telemetrySummary: () => getJson<TelemetrySummary>('/api/telemetry/summary'),

@@ -1,9 +1,21 @@
+import { Show } from 'solid-js'
 import { Header } from './components/Header.js'
 import { GraphView } from './components/Graph.js'
 import { TensionsPanel } from './components/Tensions.js'
 import { TransparencyPanel } from './components/Transparency.js'
 import { RuntimePanel } from './components/Runtime.js'
 import { CommitsPanel } from './components/Commits.js'
+import { TimeTravelBar } from './components/TimeTravel.js'
+import { DiffPanel } from './components/Diff.js'
+import { FocusPanel } from './components/Focus.js'
+import { store } from './store.js'
+
+function RightTopPanel() {
+  // Priority: focus > diff > tensions
+  if (store.focusedNode()) return <FocusPanel />
+  if (store.pinnedFile()) return <DiffPanel />
+  return <TensionsPanel />
+}
 
 export function App() {
   return (
@@ -14,7 +26,7 @@ export function App() {
           <GraphView />
         </section>
         <section class="col-span-4 row-span-5 bg-zinc-950 overflow-hidden">
-          <TensionsPanel />
+          <RightTopPanel />
         </section>
         <section class="col-span-4 row-span-4 bg-zinc-950 overflow-hidden">
           <TransparencyPanel />
@@ -26,6 +38,7 @@ export function App() {
           <CommitsPanel />
         </section>
       </div>
+      <TimeTravelBar />
     </div>
   )
 }
