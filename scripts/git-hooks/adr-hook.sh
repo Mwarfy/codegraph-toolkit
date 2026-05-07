@@ -92,9 +92,36 @@ if [ -f "$CACHE_FILE" ]; then
 fi
 printf '%s %s\n' "$NEW_HASH" "$NOW" > "$CACHE_FILE"
 
+# ─── Telemetry log (transparency for dashboard) ───
+# Append a JSONL line so the dashboard can render a token-cost timeline.
+# Best-effort, never fails the hook.
+DEDUP_HIT=0
+DEDUP_AGE=-1
+if [ -n "$AGE" ] && [ "$AGE" -lt "$DEDUP_TTL" ]; then
+  DEDUP_HIT=1
+  DEDUP_AGE="$AGE"
+fi
+TELEMETRY_FILE="$REPO_ROOT/.codegraph/hook-telemetry.jsonl"
+TS="$NOW" HOOK="adr-hook" EVENT="PreToolUse" REL="$RELATIVE" \
+  DH="$DEDUP_HIT" DA="$DEDUP_AGE" TF="$TELEMETRY_FILE" \
 python3 -c '
-import json, sys
+import json, os, sys
 ctx = sys.stdin.read()
+rec = {
+  "ts": int(os.environ["TS"]),
+  "hook": os.environ["HOOK"],
+  "event": os.environ["EVENT"],
+  "file": os.environ["REL"],
+  "bytes": len(ctx.encode("utf-8")),
+  "tokensApprox": max(1, len(ctx.encode("utf-8")) // 4),
+  "dedupHit": os.environ["DH"] == "1",
+  "dedupAgeSec": (int(os.environ["DA"]) if os.environ["DA"] != "-1" else None),
+}
+try:
+    with open(os.environ["TF"], "a") as f:
+        f.write(json.dumps(rec) + "\n")
+except Exception:
+    pass
 print(json.dumps({
   "hookSpecificOutput": {
     "hookEventName": "PreToolUse",

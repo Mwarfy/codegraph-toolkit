@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+/* Sigma container needs explicit height. */
+.sigma-host {
+  position: relative;
+  background: #09090b;
+}
+
+/* Dense scrollbars to match cockpit aesthetic. */
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border-radius: 3px;
+}
+*::-webkit-scrollbar-track {
+  background: #18181b;
+}

@@ -1,0 +1,37 @@
+{
+  "name": "@liby-tools/dashboard-server",
+  "version": "0.1.0-alpha.0",
+  "description": "Live cockpit server for codegraph-toolkit — graph + tensions + runtime + agent transparency, streamed via WebSocket.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "codegraph-dashboard": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "fastify": "^5.2.0",
+    "@fastify/websocket": "^11.0.1",
+    "@fastify/static": "^8.0.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "typescript": "^5.6",
+    "tsx": "^4"
+  }
+}

@@ -227,6 +227,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+e9b880a feat(floating-promises): multi-tsconfig TypeChecker for monorepos
 2e7cd7a refactor: cut metric noise across 6 detectors
 5a43915 fix(floating-promises): drop false positives when sync method shares name
 b5ec032 fix(ts-imports): handle Next.js flat layouts and cross-project @/* leaks
@@ -238,7 +239,6 @@ face7c3 chore(invariants): grandfather NO-BOOLEAN-POSITIONAL-PARAM × 20 (100 �
 4aa2e6a refactor: tame COMPOSITE-AWAIT-IN-LOOP × 12 (135 → 123 violations)
 df3e554 chore(invariants): grandfather tier 4-7 violations (15 → 0)
 dedf3f3 chore(invariants): grandfather 15 singleton violations avec rationale
-fe6ae41 docs: SELF-OBSERVABILITY.md — référence Tier 1 pattern repeat detector
 ```
 
 ## Comment contribuer à ce brief
