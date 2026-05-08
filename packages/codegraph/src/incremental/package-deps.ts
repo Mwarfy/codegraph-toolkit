@@ -87,6 +87,12 @@ export const allPackageDeps = derived<string, PackageDepsIssue[]>(
     const workspaceNames = new Set<string>()
     for (const m of active) if (m.packageName) workspaceNames.add(m.packageName)
 
-    return buildPackageDepsIssues(active, importsByManifest, runtimeAssetsByManifest, DEFAULT_TEST_RES, workspaceNames)
+    // Mode incremental : pas de pre-fetch des `bin` fields (I/O async,
+    // incompatible Salsa pure derivation). En mode incremental, le check
+    // `bin` est skip → conservateur (peut over-report unused). Le mode
+    // legacy non-incremental reste precis.
+    const binPackages = new Set<string>()
+
+    return buildPackageDepsIssues(active, importsByManifest, runtimeAssetsByManifest, DEFAULT_TEST_RES, workspaceNames, binPackages)
   },
 )

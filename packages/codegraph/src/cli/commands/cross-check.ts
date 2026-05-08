@@ -25,6 +25,38 @@ import * as path from 'node:path'
 import chalk from 'chalk'
 import { runCompositeRules } from '../../datalog-detectors/composite-runner.js'
 
+/**
+ * Resolve le dossier de rules cross-cut par defaut. Ordre :
+ *   1. `<root>/.codegraph/rules-cross-cut/` (custom user)
+ *   2. `<root>/node_modules/@liby-tools/runtime-graph/rules/` (canonical)
+ *
+ * Sans cette resolution auto, l'utilisateur doit explicitement passer
+ * `--rules-dir node_modules/@liby-tools/runtime-graph/rules` apres install
+ * (cf. F-006 dogfood Janus).
+ */
+async function resolveDefaultCrossCutRulesDir(root: string): Promise<string> {
+  const localPath = path.join(root, '.codegraph/rules-cross-cut')
+  try {
+    const stat = await fs.stat(localPath)
+    if (stat.isDirectory()) {
+      const entries = await fs.readdir(localPath)
+      if (entries.some((e) => e.endsWith('.dl'))) return localPath
+    }
+  } catch {
+    // local absent — fall through au canonical
+  }
+  // Canonical : @liby-tools/runtime-graph ship ses rules cross-cut dans
+  // `rules/` (cf. package.json#files). Si installed, on les utilise.
+  const canonicalPath = path.join(root, 'node_modules/@liby-tools/runtime-graph/rules')
+  try {
+    const stat = await fs.stat(canonicalPath)
+    if (stat.isDirectory()) return canonicalPath
+  } catch {
+    // pas installe — return localPath qui declenchera le warning de fallback
+  }
+  return localPath
+}
+
 export interface CrossCheckOpts {
   rulesDir?: string
   factsDir?: string
@@ -41,7 +73,7 @@ interface ViolationOut {
 
 export async function runCrossCheckCommand(opts: CrossCheckOpts): Promise<void> {
   const root = process.cwd()
-  const rulesDir = opts.rulesDir ?? path.join(root, '.codegraph/rules-cross-cut')
+  const rulesDir = opts.rulesDir ?? await resolveDefaultCrossCutRulesDir(root)
   const factsDir = opts.factsDir ?? path.join(root, '.codegraph/facts')
   const factsRuntimeDir = opts.factsRuntimeDir ?? path.join(root, '.codegraph/facts-runtime')
 
@@ -50,6 +82,7 @@ export async function runCrossCheckCommand(opts: CrossCheckOpts): Promise<void> 
   if (rulesDl.length === 0) {
     if (!opts.json) {
       console.error(chalk.yellow(`⚠ no .dl rule found in ${rulesDir}`))
+      console.error(chalk.dim(`  Pass --rules-dir <path> to specify rules location.`))
     } else {
       console.log(JSON.stringify({ violations: [], stats: { rulesLoaded: 0 } }))
     }

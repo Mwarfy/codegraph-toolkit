@@ -157,6 +157,14 @@ export async function analyzePackageDeps(
   // 345 faux positifs declared-unused sur monorepos).
   const workspaceNames = collectWorkspaceNames(manifests)
 
+  // Pre-fetch les `bin` fields de toutes les deps declarees dans
+  // node_modules. Packages avec `bin` sont utilises via `npx <cmd>` ou
+  // npm scripts — leur absence d'`import` est attendue et legitime.
+  // Cf. F-005 dogfood Janus : le toolkit lui-meme s'auto-flag (codegraph,
+  // adr-toolkit, datalog, salsa, runtime-graph ont tous un `bin` mais
+  // aucun import direct de l'app consumer).
+  const binPackages = await collectPackagesWithBin(rootDir, manifests)
+
   const fileSet = new Set(files)
   const buckets = emptyManifestBuckets(active)
 
@@ -164,7 +172,34 @@ export async function analyzePackageDeps(
     recordPackageRefs(sf, rootDir, fileSet, active, buckets)
   }
 
-  return buildPackageDepsIssues(active, buckets.importsByManifest, buckets.runtimeAssetsByManifest, testREs, workspaceNames)
+  return buildPackageDepsIssues(active, buckets.importsByManifest, buckets.runtimeAssetsByManifest, testREs, workspaceNames, binPackages)
+}
+
+/**
+ * Resolve les `bin` fields de toutes les deps declarees a travers les
+ * manifests du repo. Lit en parallele les `node_modules/<dep>/package.json`
+ * a la racine du repo (les workspaces s'hoist normalement vers la racine).
+ * Si node_modules n'existe pas, retourne un set vide (no-op).
+ */
+async function collectPackagesWithBin(
+  rootDir: string,
+  manifests: PackageManifest[],
+): Promise<Set<string>> {
+  const allDeps = new Set<string>()
+  for (const m of manifests) {
+    for (const name of m.declared.keys()) allDeps.add(name)
+  }
+  const out = new Set<string>()
+  await Promise.all(Array.from(allDeps).map(async (depName) => {
+    const pkgPath = path.join(rootDir, 'node_modules', depName, 'package.json')
+    try {
+      const raw = JSON.parse(await fs.readFile(pkgPath, 'utf-8'))
+      if (raw.bin) out.add(depName)
+    } catch {
+      // node_modules absent ou pas hoisted — silently skip
+    }
+  }))
+  return out
 }
 
 /**
@@ -438,6 +473,7 @@ function classifyDeclaredDeps(
   runtimeAssets: Map<string, Set<string>>,
   issues: PackageDepsIssue[],
   workspaceNames: Set<string>,
+  binPackages: Set<string>,
 ): void {
   for (const [name, block] of m.declared) {
     if (importedNames.has(name)) continue
@@ -449,6 +485,10 @@ function classifyDeclaredDeps(
     // importees par du code applicatif, consommees via npm scripts ou
     // par d'autres outils.
     if (isBuildTimeDep(name)) continue
+    // Packages avec un `bin` field dans node_modules — utilises via
+    // `npx <cmd>` ou `package.json#scripts`, pas par import. Cf. F-005
+    // dogfood Janus.
+    if (binPackages.has(name)) continue
 
     const runtimeRefs = runtimeAssets.get(name)
     if (runtimeRefs && runtimeRefs.size > 0) {
@@ -519,6 +559,7 @@ function buildPackageDepsIssues(
   runtimeAssetsByManifest: Map<string, Map<string, Set<string>>>,
   testREs: RegExp[],
   workspaceNames: Set<string>,
+  binPackages: Set<string>,
 ): PackageDepsIssue[] {
   const issues: PackageDepsIssue[] = []
 
@@ -527,7 +568,7 @@ function buildPackageDepsIssues(
     const runtimeAssets = runtimeAssetsByManifest.get(m.abs)!
     const importedNames = new Set(imports.keys())
 
-    classifyDeclaredDeps(m, importedNames, runtimeAssets, issues, workspaceNames)
+    classifyDeclaredDeps(m, importedNames, runtimeAssets, issues, workspaceNames, binPackages)
     classifyImportedDeps(m, imports, testREs, issues)
   }
 
