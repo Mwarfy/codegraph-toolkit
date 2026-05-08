@@ -20,6 +20,7 @@ import { buildSynopsis, renderLevel1, renderLevel2, renderLevel3 } from '../../s
 import { collectAdrMarkers } from '../../synopsis/adr-markers.js'
 import { buildMap } from '../../map/builder.js'
 import { exportFacts } from '../../facts/index.js'
+import { detectWorkspaces } from '../../core/workspaces.js'
 import { loadConfig, defaultSnapshotPath, pruneSnapshots, formatHealth } from '../_shared.js'
 
 export interface AnalyzeOpts {
@@ -240,9 +241,14 @@ async function persistAnalyzeOutputs(
 
   // Datalog facts derivative — un fichier .facts par relation + schema.dl.
   // Régen à chaque analyze (cf. ADR-022).
+  // Workspace paths : passes pour skip les paires near-duplicate /
+  // copy-paste-fork qui vivent dans 2 workspaces distincts (P3 — adapter
+  // pattern intentionnel, cf. tanstack-query react-query/vue-query/...).
   try {
+    const wsMap = await detectWorkspaces(config.rootDir)
     const factsResult = await exportFacts(snapshot, {
       outDir: path.join(snapDir, 'facts'),
+      workspacePaths: wsMap.paths,
     })
     const totalTuples = factsResult.relations.reduce((s, r) => s + r.tuples, 0)
     console.log(chalk.green(
