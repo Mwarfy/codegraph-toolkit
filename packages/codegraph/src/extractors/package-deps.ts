@@ -451,6 +451,10 @@ export {
   findClosestManifest,
   DEFAULT_TEST_RES,
   buildPackageDepsIssues,
+  // Internal helpers exposes pour tests unitaires (cf. tests/package-deps-extras.test.ts)
+  isBuildTimeDep,
+  collectWorkspaceNames,
+  collectPackagesWithBin,
 }
 
 /**

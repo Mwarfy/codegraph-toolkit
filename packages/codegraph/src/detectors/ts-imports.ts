@@ -250,7 +250,7 @@ function scanStaticImports(
   for (const imp of sourceFile.getImportDeclarations()) {
     const specifier = imp.getModuleSpecifierValue()
     if (isExternalModule(specifier)) {
-      maybePushExternalImport(imp, fromPath, rootDir, specifier, links)
+      maybePushExternalImport(imp, fromPath, rootDir, specifier, links, allFiles)
       continue
     }
     const toPath = resolveLocalImport(imp, specifier, sourceFile, project, rootDir, allFiles, fromPath)
@@ -278,16 +278,48 @@ function maybePushExternalImport(
   rootDir: string,
   specifier: string,
   links: DetectedLink[],
+  allFiles: readonly string[],
 ): void {
   const resolved = imp.getModuleSpecifierSourceFile()
   if (!resolved) return
-  const rel = relativizeAbs(resolved.getFilePath(), rootDir)
+  let rel = relativizeAbs(resolved.getFilePath(), rootDir)
   if (!rel || rel.includes('node_modules')) return
+  // Mapping `dist/X.d.ts` → `src/X.ts` quand le source existe dans
+  // allFiles. Sans ca, un workspace local dont le `package.json#types`
+  // pointe vers `dist/index.d.ts` produit des nodes parasites en
+  // `dist/` + `.d.ts` malgre les exclude config (cf. self-audit toolkit
+  // 2026-05-09 : packages/{salsa,codegraph,datalog}/dist/index.d.ts en
+  // top-hub).
+  rel = mapDistToSrcIfPossible(rel, allFiles)
   links.push({
     from: fromPath, to: rel, type: 'import',
     label: specifier, resolved: true,
     line: imp.getStartLineNumber(),
   })
+}
+
+/**
+ * Si le file resolu vit dans `<pkg>/dist/...` ET qu'un fichier source
+ * equivalent existe dans `allFiles` (sous `<pkg>/src/...`), le retourne
+ * pour que le graphe pointe vers la source plutot que le build artifact.
+ */
+function mapDistToSrcIfPossible(rel: string, allFiles: readonly string[]): string {
+  if (!rel.includes('/dist/')) return rel
+  const allSet = new Set(allFiles)
+  const candidates = [
+    rel.replace(/\/dist\//, '/src/').replace(/\.d\.mts$/, '.ts'),
+    rel.replace(/\/dist\//, '/src/').replace(/\.d\.cts$/, '.ts'),
+    rel.replace(/\/dist\//, '/src/').replace(/\.d\.ts$/, '.ts'),
+    rel.replace(/\/dist\//, '/src/').replace(/\.d\.ts$/, '.tsx'),
+    rel.replace(/\/dist\//, '/src/').replace(/\.mjs$/, '.ts'),
+    rel.replace(/\/dist\//, '/src/').replace(/\.cjs$/, '.ts'),
+    rel.replace(/\/dist\//, '/src/').replace(/\.js$/, '.ts'),
+    rel.replace(/\/dist\//, '/src/').replace(/\.jsx$/, '.tsx'),
+  ]
+  for (const c of candidates) {
+    if (allSet.has(c)) return c
+  }
+  return rel  // fallback : preserve l'original (dist) si pas de source equivalent
 }
 
 /** Résout un import local : ts-morph natif → alias `@/`/`~/` → relative.
