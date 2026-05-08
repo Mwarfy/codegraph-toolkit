@@ -118,8 +118,11 @@ export const TOOL_CONFIG_BASENAMES = new Set([
   'vite.config',
   'jest.config', 'jest.setup',
   'playwright.config',
-  // CSS / build
+  // CSS / build / bundlers
   'tailwind.config', 'postcss.config', 'tsup.config', 'rollup.config',
+  'tsdown.config',  // tsdown bundler (2025+, used by mcp-sdk & co.)
+  'unbuild.config', // unbuild bundler
+  'esbuild.config',
   // Frameworks
   'next.config', 'nuxt.config', 'astro.config', 'svelte.config',
   // Linters — ESLint flat config (eslint.config.{js,mjs,cjs,ts}) est lu
@@ -160,12 +163,25 @@ export function isToolConfigExport(filePath: string, symbolName: string): boolea
 
 const TEST_FILE_REGEX = /\.(?:test|spec)\.[mc]?[tj]sx?$/
 const STORIES_FILE_REGEX = /\.stories\.[mc]?[tj]sx?$/
+// `*.test-d.ts` = vitest type-only tests (charges par `vitest typecheck`)
+const TYPE_TEST_REGEX = /\.test-d\.[mc]?ts$/
+// `*.svelte.ts` = Svelte 5 runes/reactive files (charges par le compilateur Svelte)
+const SVELTE_REACTIVE_REGEX = /\.svelte\.[mc]?ts$/
+// `test-setup.ts` (variant generique de vitest.setup.ts/jest.setup.ts) =
+// charge par le test runner via `setupFiles` config
+const TEST_SETUP_REGEX = /(?:^|\/)test-setup\.[mc]?[tj]sx?$/
 
 export function isTestEntryPoint(filePath: string): boolean {
   if (TEST_FILE_REGEX.test(filePath)) return true
   if (STORIES_FILE_REGEX.test(filePath)) return true
-  // `__tests__/` directory anywhere in the tree
+  if (TYPE_TEST_REGEX.test(filePath)) return true
+  if (SVELTE_REACTIVE_REGEX.test(filePath)) return true
+  if (TEST_SETUP_REGEX.test(filePath)) return true
+  // `__tests__/` (jest convention) + `__testfixtures__/` (jscodeshift codemods) +
+  // `__mocks__/` (vitest/jest manual mocks) anywhere in the tree
   if (filePath.includes('/__tests__/') || filePath.startsWith('__tests__/')) return true
+  if (filePath.includes('/__testfixtures__/') || filePath.startsWith('__testfixtures__/')) return true
+  if (filePath.includes('/__mocks__/') || filePath.startsWith('__mocks__/')) return true
   return false
 }
 
@@ -181,6 +197,54 @@ export function isScriptEntryPoint(filePath: string): boolean {
   return false
 }
 
+// ─── OSS layout conventions ─────────────────────────────────────────────────
+//
+// Conventions universelles des projets open-source : repertoires qui
+// contiennent du code "demonstration" / "benchmark" / "site doc" — chacun
+// de leurs fichiers est un entry-point autonome charge directement par un
+// runtime (node script, deno run, bun run, framework dev server pour
+// `www/`), pas importe par d'autres fichiers de la lib.
+//
+// Sans ces conventions, un projet OSS typique se retrouve avec des
+// dizaines a des centaines d'orphans (cf. OSS-AUDIT-2026-05-08 :
+// tanstack-query 75 orphans `examples/`, trpc 67 + `www/` 30, etc.).
+
+const OSS_LAYOUT_DIRS = new Set([
+  'examples',      // standalone tutorials/demos shipped avec la lib
+  'example',       // singulier (vite, next-forge)
+  'benchmarks',    // perf comparisons, runners independants
+  'benchmark',     // singulier
+  'samples',       // synonyme examples (Microsoft repos)
+  'demos',         // synonyme examples (Vue ecosystem)
+  'demo',          // singulier
+  'playground',    // exploration scripts (svelte-kit, solid)
+  'playgrounds',   // pluriel (nuxt)
+  'fixtures',      // test fixtures niveau racine (sans __ prefix)
+  'runtime-tests', // hono pattern : tests par runtime cible (bun/deno/...)
+  'perf-measures', // hono pattern : mesures perf
+  'www',           // site docs Next.js classique des projets OSS
+  'website',       // synonyme www (Docusaurus generally)
+  'docs-site',     // variant explicite
+  'site',          // variant minimal
+])
+
+// Suffix `*.examples.{ts,tsx}` — convention mcp-sdk et autres : fichiers
+// d'exemples colocalises avec le source (alternative au dossier `examples/`).
+const EXAMPLES_SUFFIX_REGEX = /\.examples\.[mc]?[tj]sx?$/
+const BENCH_SUFFIX_REGEX = /\.bench\.[mc]?[tj]sx?$/
+
+export function isOssLayoutEntryPoint(filePath: string): boolean {
+  if (EXAMPLES_SUFFIX_REGEX.test(filePath)) return true
+  if (BENCH_SUFFIX_REGEX.test(filePath)) return true
+  const segments = filePath.split('/')
+  // Match si l'un des segments du path est dans la liste — ex: `www/src/..`
+  // OU `packages/something/examples/foo.ts`.
+  for (const seg of segments) {
+    if (OSS_LAYOUT_DIRS.has(seg)) return true
+  }
+  return false
+}
+
 // ─── Aggregate ──────────────────────────────────────────────────────────────
 
 /**
@@ -190,8 +254,9 @@ export function isScriptEntryPoint(filePath: string): boolean {
  * Combine Next.js App Router (page/layout/route/middleware/proxy/...),
  * Expo Router (mobile/app/...), tous les fichiers de config outillage
  * (next.config, vitest.config, sentry.*.config, vercel.ts, ...), les
- * fichiers de test (vitest/jest/playwright/storybook), et les scripts
- * CLI (`scripts/`, `bin/`).
+ * fichiers de test (vitest/jest/playwright/storybook + type tests +
+ * fixtures + mocks), les scripts CLI (`scripts/`, `bin/`), et les layouts
+ * OSS conventionnels (`examples/`, `benchmarks/`, `www/`, ...).
  */
 export function isFrameworkEntryPoint(filePath: string): boolean {
   return isNextJsRouteFile(filePath)
@@ -199,4 +264,5 @@ export function isFrameworkEntryPoint(filePath: string): boolean {
       || isToolConfigFile(filePath)
       || isTestEntryPoint(filePath)
       || isScriptEntryPoint(filePath)
+      || isOssLayoutEntryPoint(filePath)
 }

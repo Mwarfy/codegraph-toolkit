@@ -27,13 +27,19 @@ export class CodeGraph {
   private graph: AnyGraph
   private rootDir: string
   private entryPointPatterns: string[]
+  private workspaceEntryPoints: Set<string>
 
-  constructor(rootDir: string, entryPointPatterns: string[] = []) {
+  constructor(
+    rootDir: string,
+    entryPointPatterns: string[] = [],
+    workspaceEntryPoints: Set<string> = new Set(),
+  ) {
     // graphology's default export varies by bundler — handle both shapes
     const GraphCtor = (Graph as any).default || Graph
     this.graph = new GraphCtor({ multi: true, type: 'directed' })
     this.rootDir = rootDir
     this.entryPointPatterns = entryPointPatterns
+    this.workspaceEntryPoints = workspaceEntryPoints
   }
 
   // ─── Node Management ────────────────────────────────────────────────
@@ -129,6 +135,14 @@ export class CodeGraph {
   private isEntryPoint(nodeId: string): boolean {
     // Patterns explicites depuis codegraph.config.json (entryPoints).
     if (this.entryPointPatterns.some(pattern => minimatch(nodeId, pattern))) {
+      return true
+    }
+    // Workspace entry-points (main, exports, types, bin) detectes au boot
+    // depuis pnpm-workspace.yaml / package.json#workspaces / lerna.json. Sans
+    // ca, les `packages/<pkg>/src/index.ts` sont marques orphan car les
+    // imports `@scope/pkg` resolvent vers node_modules au lieu du workspace
+    // local — alors qu'ils sont l'API publique du package.
+    if (this.workspaceEntryPoints.has(nodeId)) {
       return true
     }
     // Conventions framework implicites — Next.js App Router (page/layout/

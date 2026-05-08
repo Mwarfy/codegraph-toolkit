@@ -39,7 +39,7 @@ export async function runAnalyzeCommand(opts: AnalyzeOpts): Promise<void> {
   console.log(chalk.bold('\n🔍 CodeGraph — Analyzing...\n'))
   console.log(`  Root:       ${config.rootDir}`)
   console.log(`  Include:    ${config.include.join(', ')}`)
-  console.log(`  Detectors:  ${config.detectors.join(', ')}`)
+  console.log(`  Detectors:  ${config.detectors.join(', ')} ${chalk.dim('(graph base)')}`)
   if (incremental) console.log(`  Mode:       ${chalk.cyan('incremental (Salsa)')}`)
   console.log()
 
@@ -49,9 +49,10 @@ export async function runAnalyzeCommand(opts: AnalyzeOpts): Promise<void> {
   printAnalyzeStats(snapshot)
   printExportsSummary(snapshot)
   printTiming(timing)
+  printDetectorsRunSummary(timing)
 
   if (opts.save !== false) {
-    await persistAnalyzeOutputs(opts, snapshot, config)
+    await persistAnalyzeOutputs(opts, snapshot, config, timing)
   } else {
     process.stdout.write(JSON.stringify(snapshot, null, 2))
   }
@@ -154,6 +155,20 @@ function printTopDeadExportFiles(
   }
 }
 
+/**
+ * Affiche un recap court des detecteurs reellement executes (au-dela des
+ * 6 base detectors listes en tete d'output). L'analyzer enchaine ~60+
+ * detectors composite/quality/security en aval — sans cette ligne, le
+ * user croit que `Detectors:` represente la totalite alors que c'est
+ * juste la base graphe.
+ */
+function printDetectorsRunSummary(timing: import('../../core/analyzer.js').AnalyzeResult['timing']): void {
+  const detectors = Object.keys(timing.detectors)
+  if (detectors.length === 0) return
+  console.log(chalk.dim(`  ${detectors.length} detectors total ran (graph base + composite/quality/security/etc).`))
+  console.log(chalk.dim(`  Run \`codegraph detectors\` for the full list with descriptions.\n`))
+}
+
 function printTiming(timing: import('../../core/analyzer.js').AnalyzeResult['timing']): void {
   console.log(chalk.dim(`  Timing:`))
   console.log(chalk.dim(`    File discovery: ${timing.fileDiscovery.toFixed(0)}ms`))
@@ -169,11 +184,24 @@ async function persistAnalyzeOutputs(
   opts: AnalyzeOpts,
   snapshot: import('../../core/types.js').GraphSnapshot,
   config: import('../../core/types.js').CodeGraphConfig,
+  timing: import('../../core/analyzer.js').AnalyzeResult['timing'],
 ): Promise<void> {
   const outPath = opts.output || await defaultSnapshotPath(config)
   await fs.mkdir(path.dirname(outPath), { recursive: true })
   await fs.writeFile(outPath, JSON.stringify(snapshot, null, 2))
   console.log(chalk.green(`  ✓ Snapshot saved: ${outPath}\n`))
+
+  // Side-channel pour `codegraph detectors` : timing du dernier run, hors
+  // snapshot.json (qui est un format public versionne ADR-009 — on
+  // n'ajoute pas de champs internes dedans).
+  const timingPath = path.join(path.dirname(outPath), 'last-run-timing.json')
+  await fs.writeFile(timingPath, JSON.stringify({
+    generatedAt: snapshot.generatedAt,
+    detectors: timing.detectors,
+    fileDiscovery: timing.fileDiscovery,
+    graphBuild: timing.graphBuild,
+    total: timing.total,
+  }, null, 2))
 
   // Prune anciens snapshots. config.maxSnapshots cap (default 50).
   // On garde les N plus récents par nom de fichier (timestamp lex-sortable).
