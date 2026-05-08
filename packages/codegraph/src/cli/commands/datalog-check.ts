@@ -67,7 +67,7 @@ async function loadDatalogRunner(): Promise<(args: {
   rulesDir: string
   factsDir: string
   allowRecursion?: boolean
-}) => Promise<{ outputs: Map<string, ViolationTuple[]> }>> {
+}) => Promise<{ result: { outputs: Map<string, ViolationTuple[]> } }>> {
   try {
     const datalog = await import('@liby-tools/datalog')
     return datalog.runFromDirs as any
@@ -108,8 +108,11 @@ async function runRulesWithTimeout(
     process.exit(1)
   }
 
-  const result = raced as { outputs: Map<string, ViolationTuple[]> }
-  return result.outputs.get('Violation') ?? []
+  // `runFromDirs` retourne `{ program, result: { outputs, stats } }` — voir
+  // packages/datalog/src/runner.ts. Le shape `{ outputs }` direct n'a jamais
+  // existé, c'était une signature périmée qui plantait à la première rule.
+  const wrapped = raced as { result: { outputs: Map<string, ViolationTuple[]> } }
+  return wrapped.result.outputs.get('Violation') ?? []
 }
 
 /** Stable key per violation tuple — pour set-based diff. */
