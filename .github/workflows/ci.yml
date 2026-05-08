@@ -31,6 +31,9 @@ jobs:
       - name: Typecheck (root tsc -b)
         run: npx tsc -b --verbose 2>&1 | tail -20
 
+      - name: Generate self-snapshot for math-discipline tests
+        run: node packages/codegraph/dist/cli/index.js analyze
+
       - name: Run vitest
         run: npx vitest run
 
