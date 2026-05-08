@@ -47,6 +47,17 @@ import { discoverManifests } from '../extractors/package-deps.js'
 export interface ExportFactsOptions {
   /** Dossier cible. Sera créé. Les fichiers existants seront écrasés. */
   outDir: string
+  /**
+   * Liste des paths workspace (relatifs depuis rootDir) — ex.
+   * `["packages/server", "packages/client", "apps/web"]`. Quand fournie,
+   * les facts `CompressionDistance` et `SignatureNearDuplicate` skippent
+   * les paires de symbols qui vivent dans deux workspaces differents
+   * (= adapter pattern intentionnel sur multi-framework libraries comme
+   * tanstack-query react/vue/svelte/solid). Cf. OSS-AUDIT P3 — sans ce
+   * filtre, tanstack-query : 559 violations COPY-PASTE-FORK + NEAR-DUPL,
+   * presque toutes by-design.
+   */
+  workspacePaths?: string[]
 }
 
 export interface ExportFactsResult {
@@ -65,11 +76,47 @@ interface RelationDef {
   rows: string[][]
 }
 
+/**
+ * Pour les rules near-duplicate / copy-paste-fork : 2 symbols dans 2
+ * workspaces differents = adapter pattern intentionnel (ex. tanstack-query
+ * react-query ↔ vue-query ↔ svelte-query partagent volontairement la meme
+ * API). On considere la paire comme legitime et on skippe le fact.
+ *
+ * Si workspacePaths est vide ou undefined, retourne false (single-package
+ * repo, comportement inchange).
+ */
+function areSymbolsCrossWorkspace(
+  symbolA: string,
+  symbolB: string,
+  workspacePaths: string[] | undefined,
+): boolean {
+  if (!workspacePaths || workspacePaths.length === 0) return false
+  const wsA = findWorkspaceForSymbol(symbolA, workspacePaths)
+  const wsB = findWorkspaceForSymbol(symbolB, workspacePaths)
+  if (!wsA || !wsB) return false
+  return wsA !== wsB
+}
+
+function findWorkspaceForSymbol(symbol: string, workspacePaths: string[]): string | null {
+  // Symbol format : `<file>:<symbolName>` (ex. `packages/foo/src/bar.ts:fn`).
+  const colonIdx = symbol.indexOf(':')
+  const filePath = colonIdx === -1 ? symbol : symbol.slice(0, colonIdx)
+  // Trouve le workspace path le plus long qui prefixe le file (most-specific).
+  let best: string | null = null
+  for (const ws of workspacePaths) {
+    if (filePath === ws || filePath.startsWith(ws + '/')) {
+      if (!best || ws.length > best.length) best = ws
+    }
+  }
+  return best
+}
+
 export async function exportFacts(
   snapshot: GraphSnapshot,
   options: ExportFactsOptions,
 ): Promise<ExportFactsResult> {
   const relations: RelationDef[] = []
+  const workspacePaths = options.workspacePaths
 
   emitFileMetadataFacts(snapshot, relations)
   emitBarrelAndDepFacts(snapshot, relations)
@@ -77,7 +124,7 @@ export async function exportFacts(
   emitGraphMetricFacts(snapshot, relations)
   emitListenerFacts(snapshot, relations)
   emitCodeQualityAndComplexityFacts(snapshot, relations)
-  emitCrossDisciplineFacts(snapshot, relations)
+  emitCrossDisciplineFacts(snapshot, relations, workspacePaths)
 
   emitImportAndEmitsFacts(snapshot, relations)
   emitConfigSiteFacts(snapshot, relations)
@@ -1208,9 +1255,10 @@ function emitCodeQualityAndComplexityFacts(
 function emitCrossDisciplineFacts(
   snapshot: GraphSnapshot,
   relations: RelationDef[],
+  workspacePaths?: string[],
 ): void {
   emitSpectralAndEntropyFacts(snapshot, relations)
-  emitDuplicateAndDriftFacts(snapshot, relations)
+  emitDuplicateAndDriftFacts(snapshot, relations, workspacePaths)
   emitCommunityAndCausalityFacts(snapshot, relations)
 }
 
@@ -1294,13 +1342,19 @@ function emitSpectralAndEntropyFacts(snapshot: GraphSnapshot, relations: Relatio
  * - LyapunovMetric (systèmes dynamiques, exposant de divergence).
  * - CompressionDistance (NCD, Kolmogorov).
  */
-function emitDuplicateAndDriftFacts(snapshot: GraphSnapshot, relations: RelationDef[]): void {
+function emitDuplicateAndDriftFacts(
+  snapshot: GraphSnapshot,
+  relations: RelationDef[],
+  workspacePaths?: string[],
+): void {
   const sigDupRel: RelationDef = {
     name: 'SignatureNearDuplicate',
     decl: '(symbolA:symbol, symbolB:symbol, hamming:number)',
     rows: [],
   }
   for (const d of snapshot.signatureDuplicates ?? []) {
+    // Skip cross-workspace pairs (intentional adapter pattern). Cf. P3.
+    if (areSymbolsCrossWorkspace(d.symbolA, d.symbolB, workspacePaths)) continue
     sigDupRel.rows.push([sym(d.symbolA), sym(d.symbolB), num(d.hamming)])
   }
   relations.push(sigDupRel)
@@ -1337,6 +1391,8 @@ function emitDuplicateAndDriftFacts(snapshot: GraphSnapshot, relations: Relation
     rows: [],
   }
   for (const ncd of snapshot.compressionDistances ?? []) {
+    // Skip cross-workspace pairs (intentional adapter pattern). Cf. P3.
+    if (areSymbolsCrossWorkspace(ncd.symbolA, ncd.symbolB, workspacePaths)) continue
     ncdRel.rows.push([
       sym(ncd.symbolA), sym(ncd.symbolB), num(ncd.ncdX1000),
     ])
