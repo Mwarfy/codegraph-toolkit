@@ -32,6 +32,7 @@
     "typescript"
   ],
   "scripts": {
+    "build": "echo \"(no build — datalog rules catalogue, distributed as-is)\"",
     "test": "vitest run"
   },
   "peerDependencies": {
