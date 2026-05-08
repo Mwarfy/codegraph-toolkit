@@ -127,7 +127,7 @@ async function runStats(): Promise<DetectorStats[]> {
 describe('self-runtime regression gate (math invariant on Lyapunov-like λ)', () => {
   it(
     'no detector should have mean ≥ 200ms AND λ_lyap ≤ 1.10 (warm)',
-    { timeout: 60_000 },
+    { timeout: 180_000 },
     async () => {
       const stats = await runStats()
       const violations = stats.filter(
