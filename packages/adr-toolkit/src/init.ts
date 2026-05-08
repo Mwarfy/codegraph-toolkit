@@ -58,7 +58,7 @@ export interface InitOptions {
   withClaudeHooks?: boolean
 }
 
-type LayoutKind = 'simple' | 'fullstack-monorepo' | 'workspaces-monorepo' | 'flat'
+type LayoutKind = 'simple' | 'fullstack-monorepo' | 'workspaces-monorepo' | 'nextjs' | 'flat'
 
 interface DetectedLayout {
   kind: LayoutKind
@@ -127,6 +127,7 @@ async function detectStack(rootDir: string): Promise<DetectedStack> {
     'backend/migrations',
     'backend/src/db/migrations',
     'src/db/migrations',
+    'supabase/migrations',  // Supabase convention (cf. F-004 dogfood Janus)
   ]
   for (const rel of sqlPaths) {
     // await-ok: short-circuit sur première match, séquentiel requis
@@ -143,6 +144,11 @@ async function detectLayout(rootDir: string): Promise<DetectedLayout> {
   const has = (p: string) => exists(path.join(rootDir, p))
   const hasGit = await has('.git')
 
+  // Next.js d'abord : son layout (app/, lib/, components/) chevauche
+  // simple/workspaces detection — on veut le specialise quand present.
+  const nextjs = await tryNextJs(has, hasGit)
+  if (nextjs) return nextjs
+
   const fullstack = await tryFullstackMonorepo(has, hasGit)
   if (fullstack) return fullstack
 
@@ -158,6 +164,50 @@ async function detectLayout(rootDir: string): Promise<DetectedLayout> {
     tsconfigPath: 'tsconfig.json',
     codegraphInclude: ['**/*.{ts,tsx}'],
     codegraphEntryPoints: ['index.ts', 'main.ts'],
+    hasGit,
+  }
+}
+
+/**
+ * Detect Next.js (App Router ou Pages Router). Trigger si `next.config.{ts,js,mjs,cjs}`
+ * est present a la racine. Couvre F-004 dogfood Janus : un projet Next.js
+ * 13+ avec app/lib/components etait classifie 'flat' avec entryPoints
+ * ["index.ts","main.ts"] (qui n'existent pas) — config inutilisable.
+ */
+async function tryNextJs(has: HasFn, hasGit: boolean): Promise<DetectedLayout | null> {
+  const hasNextConfig =
+    (await has('next.config.ts')) ||
+    (await has('next.config.js')) ||
+    (await has('next.config.mjs')) ||
+    (await has('next.config.cjs'))
+  if (!hasNextConfig) return null
+
+  const srcDirs: string[] = []
+  if (await has('app')) srcDirs.push('app')
+  if (await has('lib')) srcDirs.push('lib')
+  if (await has('components')) srcDirs.push('components')
+  if (await has('pages')) srcDirs.push('pages') // Pages Router legacy
+  if (await has('src')) srcDirs.push('src')     // src/app pattern Next 13+
+  if (srcDirs.length === 0) srcDirs.push('.')
+
+  const codegraphInclude = srcDirs.map((d) => d === '.' ? '**/*.{ts,tsx}' : `${d}/**/*.{ts,tsx}`)
+  // Inclure les configs root-level (proxy.ts, middleware.ts, instrumentation.ts).
+  codegraphInclude.push('*.{ts,tsx,mjs}')
+
+  // Detection automatique des conventions framework par codegraph
+  // (page.tsx / layout.tsx / route.ts / proxy.ts / middleware.ts) — ces
+  // fichiers n'ont pas besoin d'etre listes en entryPoints. Seuls les
+  // entry-points NON-conventionnels meriteraient d'etre listes ici.
+  const entryPoints: string[] = []
+  if (await has('proxy.ts')) entryPoints.push('proxy.ts')
+  else if (await has('middleware.ts')) entryPoints.push('middleware.ts')
+
+  return {
+    kind: 'nextjs',
+    srcDirs,
+    tsconfigPath: 'tsconfig.json',
+    codegraphInclude,
+    codegraphEntryPoints: entryPoints,
     hasGit,
   }
 }
@@ -631,6 +681,17 @@ async function copyDatalogTestRunner(
   layout: DetectedLayout,
   result: InitResult,
 ): Promise<void> {
+  // F-007 dogfood Janus : le test importe `from 'vitest'` — sans vitest
+  // installe, l'import casse au runtime. On skip + warning explicite si
+  // vitest n'est pas dans les deps.
+  if (!(await hasVitestInstalled(rootDir))) {
+    result.warnings.push(
+      'vitest absent du package.json — skip de tests/unit/datalog-invariants.test.ts. ' +
+      'Run `npm i -D vitest` puis relance init pour generer le test runner.',
+    )
+    return
+  }
+
   const testDirCandidates = [
     'tests/unit',
     '__tests__',
@@ -668,4 +729,26 @@ async function copyDatalogTestRunner(
     .replaceAll('__INVARIANTS_DIR__', 'invariants')
   await writeFile(testTarget, rendered, 'utf-8')
   result.created.push(`${testDir}/datalog-invariants.test.ts`)
+}
+
+/** True si vitest est dans deps/devDeps de package.json (root ou monorepo workspace). */
+async function hasVitestInstalled(rootDir: string): Promise<boolean> {
+  const candidates = [
+    'package.json',
+    'backend/package.json',
+    'apps/backend/package.json',
+  ]
+  // await-ok: short-circuit sur premier match, sequentiel acceptable (3 candidates max)
+  for (const rel of candidates) {
+    const p = path.join(rootDir, rel)
+    if (!(await exists(p))) continue
+    try {
+      const pkg = JSON.parse(await readFile(p, 'utf-8'))
+      const allDeps = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) }
+      if (allDeps.vitest) return true
+    } catch {
+      // malformed package.json — try next candidate
+    }
+  }
+  return false
 }
