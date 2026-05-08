@@ -109,6 +109,11 @@ export function mergePrograms(
   sources: Array<{ name: string; content: string }>,
 ): Program {
   const decls = new Map<string, RelationDecl>()
+  // Track le fichier source de chaque decl pour des error messages
+  // explicites en cas de redeclaration (cf. F-003 dogfood Janus :
+  // l'ancien message disait `already in '17'` qui etait le numero de
+  // ligne, pas le nom du fichier — incomprehensible).
+  const declSource = new Map<string, string>()
   const rules: Rule[] = []
   const inlineFacts: Program['inlineFacts'] = []
   const aggregates: NonNullable<Program['aggregates']> = []
@@ -120,11 +125,16 @@ export function mergePrograms(
     const sub = parse(content, { source: name, skipReferenceCheck: true })
     for (const [k, d] of sub.decls) {
       if (decls.has(k)) {
+        const prevSource = declSource.get(k) ?? '<unknown>'
+        const prevLine = decls.get(k)!.pos.line
         throw new DatalogError('runner.duplicateDecl',
-          `relation '${k}' declared in multiple files (already in '${decls.get(k)!.pos.line}', re-declared in '${name}')`,
+          `relation '${k}' declared in '${prevSource}:${prevLine}' and re-declared in '${name}:${d.pos.line}' ` +
+          `(relations cannot be redeclared across dirs — if you copied the canonical rules from ` +
+          `node_modules into your project, remove the local copy)`,
           d.pos, name)
       }
       decls.set(k, d)
+      declSource.set(k, name)
     }
     for (const r of sub.rules) {
       rules.push({ ...r, index: nextIndex++ })

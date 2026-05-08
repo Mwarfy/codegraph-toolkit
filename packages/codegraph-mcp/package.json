@@ -37,7 +37,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@liby-tools/codegraph": ">=0.3.0",
+    "@liby-tools/codegraph": ">=0.6.0",
     "@liby-tools/datalog": ">=0.3.0"
   },
   "devDependencies": {
