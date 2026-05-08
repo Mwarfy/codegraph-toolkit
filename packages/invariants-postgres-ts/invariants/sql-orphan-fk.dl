@@ -22,8 +22,47 @@
 .decl TableExists(t: symbol)
 TableExists(T) :- SqlTable(T, _, _).
 
+// Tables managed par Supabase (schemas auth/storage/realtime/...) — leurs
+// CREATE TABLE vivent dans des migrations Supabase non incluses dans
+// l'audit projet. Sans cette whitelist, tout projet Supabase recoit du
+// bruit systemique sur "references auth.users(id)" (idiome standard pour
+// lier une row metier a un user authentifie).
+//
+// Source officielle des schemas managed :
+//   https://supabase.com/docs/guides/database/postgres/roles
+//   https://supabase.com/docs/guides/auth/users
+.decl SupabaseManagedTable(t: symbol)
+// auth schema (Supabase Auth)
+SupabaseManagedTable("auth.users").
+SupabaseManagedTable("auth.identities").
+SupabaseManagedTable("auth.sessions").
+SupabaseManagedTable("auth.refresh_tokens").
+SupabaseManagedTable("auth.mfa_factors").
+SupabaseManagedTable("auth.mfa_challenges").
+SupabaseManagedTable("auth.mfa_amr_claims").
+SupabaseManagedTable("auth.sso_providers").
+SupabaseManagedTable("auth.sso_domains").
+SupabaseManagedTable("auth.saml_providers").
+SupabaseManagedTable("auth.saml_relay_states").
+SupabaseManagedTable("auth.flow_state").
+SupabaseManagedTable("auth.audit_log_entries").
+SupabaseManagedTable("auth.instances").
+// storage schema (Supabase Storage)
+SupabaseManagedTable("storage.objects").
+SupabaseManagedTable("storage.buckets").
+SupabaseManagedTable("storage.migrations").
+SupabaseManagedTable("storage.s3_multipart_uploads").
+SupabaseManagedTable("storage.s3_multipart_uploads_parts").
+// realtime schema (Supabase Realtime)
+SupabaseManagedTable("realtime.subscription").
+SupabaseManagedTable("realtime.messages").
+// vault schema (Supabase Vault)
+SupabaseManagedTable("vault.secrets").
+SupabaseManagedTable("vault.decrypted_secrets").
+
 Violation("SQL-ORPHAN-FK", File, Line,
   "FK vers table inexistante — reliquat refactor migration ; supprimer ou corriger le ref") :-
     SqlForeignKey(FT, FC, TT, _, File, Line),
     !TableExists(TT),
+    !SupabaseManagedTable(TT),
     !OrphanFkGrandfathered(FT, FC).

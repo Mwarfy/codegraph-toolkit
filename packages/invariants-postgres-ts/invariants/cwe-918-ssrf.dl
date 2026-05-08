@@ -35,9 +35,14 @@ HasUrlValidation(F) :- SanitizerCall(F, _, "isInternalIp", _).
 HasUrlValidation(F) :- SanitizerCall(F, _, "validateBody", _).  // schema valide URL
 HasUrlValidation(F) :- SanitizerCall(F, _, "parse", _).         // URL.parse / zod parse
 
+// Sources tainted user-controlled : req.body, req.query, req.params, etc.
+// Exclut process.env (admin-controlled, pas user input → pas de surface
+// SSRF exploitable depuis l'exterieur). Un attaquant qui peut modifier
+// process.env a deja root sur le serveur, le SSRF n'est plus la priorite.
 Violation("CWE-918", File, Line,
   "fetch/axios avec user input URL — SSRF possible ; allowlist domains + skip private IPs") :-
-    TaintedArgCall(File, Line, _, _, _, _, _),
+    TaintedArgCall(File, Line, _, _, _, Source, _),
+    Source != "process.env",
     TaintSink(File, Line, "http-out", _, _),
     !HasUrlValidation(File),
     !Cwe918Grandfathered(File, Line).

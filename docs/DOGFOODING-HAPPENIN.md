@@ -117,125 +117,76 @@ recopier la liste include au lieu de réutiliser l'`exclude` unique.
 
 ---
 
-## 🔵 À traiter
+## ✅ Résolu (suite — batch 2)
 
 ### F-006 · Détecteur SQL ne reconnaît pas le schéma `auth` Supabase
 
-**Symptôme** : sur Happenin, 2 violations `SQL-ORPHAN-FK` :
+**Symptôme initial** : 2 violations `SQL-ORPHAN-FK` sur Happenin sur des
+FK `references auth.users(id)` — table managed par Supabase, pas un
+orphan. Pattern systémique sur tout projet Supabase.
 
-- `001_initial_schema.sql:5` → `references auth.users(id)`
-- `064_web_push_subscriptions.sql:19` → `references auth.users(id) ON DELETE CASCADE`
+**Fix appliqué** :
+1. `stripSchema(qualifiedName)` ne strip que le schéma `public.` (default,
+   omissible). Tout autre préfixe (`auth.`, `storage.`, `realtime.`,
+   `vault.`) est préservé dans les facts `SqlForeignKey`.
+2. `sql-orphan-fk.dl` enrichi d'un fact `SupabaseManagedTable(t)` listant
+   24 tables managed par Supabase Auth/Storage/Realtime/Vault. La rule
+   exempte les FKs vers ces tables.
 
-Le message « FK vers table inexistante — reliquat refactor migration ;
-supprimer ou corriger le ref » est trompeur : `auth.users` est une table
-managed par Supabase (schéma `auth`), pas un orphan.
+Validation fixture : `auth.users(id)` → plus de SQL-ORPHAN-FK reportée.
+Les FK vers tables locales orphelines restent flaggées.
 
-**Pourquoi c'est gênant** : la quasi-totalité des projets Supabase ont des
-FK vers `auth.users` — c'est l'idiome standard pour lier une row métier à
-un user authentifié. Sans whitelist, le toolkit produit du bruit
-systématique sur tout projet Supabase.
+### F-007 · Rule `SQL-NAMING-CONVENTION` flag les colonnes `_by`
 
-**Pistes de fix** :
+**Symptôme initial** : 3 violations Happenin sur `created_by`, `reviewed_by`,
+`resolved_by` (idiome Postgres standard pour colonnes audit/workflow).
 
-1. **Whitelist hardcodée des schémas Supabase** : `auth`, `storage`,
-   `realtime`, `vault`, `extensions`, `pgsodium`, `graphql`. Le détecteur
-   ne flag pas les FK qui référencent ces schémas.
-2. **Option config** `detectorOptions.sqlSchema.allowedExternalSchemas: string[]`
-   pour permettre à l'utilisateur d'ajouter ses propres schémas managed.
-3. **Auto-détection** : si une migration contient `create extension if not
-   exists ...`, ajouter le schéma de l'extension à la whitelist runtime.
-
-**Workaround projet** : aucun élégant — il faudrait baseline ces 2 violations
-ou accepter le bruit.
-
-### F-007 · Rule `SQL-NAMING-CONVENTION` flag les colonnes `_by` (auteur d'action)
-
-**Symptôme** : sur Happenin, 3 violations sur des colonnes au pattern
-`<verb>_by` :
-
-- `001_initial_schema.sql:20` → `created_by uuid`
-- `030_photo_moderation.sql:13` → `reviewed_by uuid`
-- `035_event_stories.sql:71` → `resolved_by uuid`
-
-Le message dit « voir kind (snake_case, _at suffix, _id suffix) » — apparemment
-la rule veut que les colonnes UUID se terminent en `_id`.
-
-**Pourquoi c'est gênant** : le pattern `<verb>_by` est un idiome Postgres
-parfaitement standard pour les colonnes d'audit/auteur d'action :
-
-- `created_by`, `updated_by`, `deleted_by` — qui a fait l'action
-- `reviewed_by`, `approved_by`, `assigned_to` — workflow patterns
-- `resolved_by`, `closed_by` — état machine
-
-Tous ces noms communiquent une SÉMANTIQUE différente d'un FK généraliste
-(p. ex. `user_id`). Renommer en `created_by_id` est verbeux et casse
-l'idiome.
-
-**Pistes de fix** :
-
-1. **Whitelist suffix `_by`** : si une colonne UUID finit par `_by` ET
-   référence une table avec un PK uuid, considérer le naming valide.
-2. **Option config** `detectorOptions.sqlNaming.allowedSuffixes: string[]`
-   avec default `["_id", "_by", "_to"]`.
-3. **Documenter** dans la rule `.dl` pourquoi `_id` est requis (probablement
-   pour faciliter le matching avec les FK auto-detected) et permettre une
-   exception explicite via commentaire SQL.
+**Fix appliqué** : `checkForeignKeyIdSuffix` (sql-naming.ts) accepte la
+liste `_id`, `_by`, `_to`, `_for` au lieu d'exiger seulement `_id`. Couvre
+les patterns audit (`created_by`, `updated_by`), workflow (`assigned_to`,
+`approved_by`), et planification (`scheduled_for`).
 
 ### F-008 · Rule `SQL-AUDIT-COLUMNS` rigide pour les tables append-only
 
-**Symptôme** : sur Happenin, 1 violation `SQL-AUDIT-COLUMNS` sur
-`011_push_tokens.sql:4` (table `push_tokens`).
+**Symptôme initial** : `push_tokens` flagué `audit-column-missing-updated-at`
+alors que la table est INSERT-only (UPSERT via UNIQUE constraint).
 
-La table est conçue **immutable** :
+**Fix appliqué** : marqueur SQL `-- @append-only` parsé par `sql-schema.ts`
+dans les 5 lignes précédant le `CREATE TABLE`. Quand présent, la table
+est marquée `appendOnly: true` et `checkAuditColumns` (sql-naming.ts)
+exempte cette table de l'exigence `updated_at`.
+
+Exemple :
 
 ```sql
-CREATE TABLE IF NOT EXISTS push_tokens (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  token TEXT NOT NULL,
-  platform TEXT NOT NULL CHECK (platform IN ('ios', 'android')),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (user_id, token)
+-- @append-only
+CREATE TABLE push_tokens (
+  id UUID PRIMARY KEY,
+  ...
 );
 ```
 
-L'application UPSERT (delete + insert sur conflit unique). `updated_at`
-n'a aucun sens.
-
-**Pourquoi c'est gênant** : forcer `updated_at` sur des tables append-only
-introduit du noise mental ("on doit le mettre à jour à la main quand ?")
-et du code applicatif inutile (triggers, hooks Supabase).
-
-**Pistes de fix** :
-
-1. **Heuristique** : si la table a une contrainte UNIQUE sur des colonnes
-   non-PK ET pas d'`UPDATE` dans aucune migration, considérer append-only
-   et skip la rule.
-2. **Marqueur explicite** : convention de commentaire SQL `-- @append-only`
-   au-dessus du `CREATE TABLE` qui désactive la rule sur cette table.
-3. **Option config** `detectorOptions.sqlSchema.appendOnlyTables: string[]`
-   avec liste des tables exemptées.
+Validation fixture : `push_tokens` avec marker → pas de violation.
+`orders_2` sans marker ni `updated_at` → violation BIEN reportée.
 
 ---
 
 ## 💡 Suggestions
 
-### F-009 · Reconnaître les fichiers test colocalisés sous `app/` (Next.js)
+### F-009 · Reconnaître les fichiers test colocalisés sous `app/` (Next.js) ✅ Résolu
 
-Pas un bug, mais un défaut d'ergonomie : sur Happenin, ~150 fichiers
-`*.test.tsx` colocalisés dans `src/app/**/` étaient marqués orphans
-parce qu'ils ne sont importés par personne (vitest les charge par
-convention `**/*.test.{ts,tsx}`).
+> Resolu par PR [#6](https://github.com/Mwarfy/codegraph-toolkit/pull/6) (mergee).
 
-Workaround projet en place dans `codegraph.config.json#entryPoints`.
+**Fix applique** : `core/framework-conventions.ts` etendu avec :
+- `isTestEntryPoint()` matche `*.test.{ts,tsx}`, `*.spec.{ts,tsx}`,
+  `*.stories.{ts,tsx}`, `__tests__/`
+- `isScriptEntryPoint()` matche `scripts/`, `bin/`
+- ajout `proxy` (Next.js 16) et `vercel` (Vercel TS config 2026) aux
+  basenames reconnus
+- ajout `vitest.setup`, `jest.setup` aux configs implicites
 
-**Suggestion** : ajouter `**/*.test.{ts,tsx}`, `**/*.spec.{ts,tsx}`,
-`**/__tests__/**/*.{ts,tsx}` aux conventions framework reconnues dans
-`core/framework-conventions.ts#isFrameworkEntryPoint`. Idem pour
-`*.stories.{ts,tsx}` (Storybook).
-
-Ces conventions sont universelles (vitest, jest, Storybook), pas
-spécifiques à un projet.
+Workaround `codegraph.config.json#entryPoints` n'est plus necessaire pour
+ces patterns universels.
 
 ### F-010 · `codegraph init` génère-t-il un config Supabase-aware ?
 
@@ -248,26 +199,27 @@ Sur Happenin, le `codegraph.config.json` final fait 50 lignes pour absorber :
 Une commande `codegraph init --stack supabase-nextjs` qui génère ce config
 out-of-the-box ferait gagner ~30min à chaque nouveau projet du genre.
 
-### F-011 · Faux positif CWE-918 sur fetch d'env var
+### F-011 · Faux positif CWE-918 sur fetch d'env var ✅ Résolu
 
-Sur Happenin, 1 violation CWE-918 (SSRF) sur :
+**Symptôme initial** : `fetch(process.env.WEBHOOK_URL)` flaggué CWE-918
+(SSRF) alors que `process.env` est admin-controlled, pas user input.
 
-```ts
-const url = process.env.DISCORD_CSAM_WEBHOOK_URL ?? process.env.DISCORD_WEBHOOK_URL;
-const res = await fetch(url, { ... });
-```
+**Fix appliqué** : `cwe-918-ssrf.dl` ajoute la contrainte
+`Source != "process.env"` dans la matching rule. Les patterns
+`fetch(req.body.url)`, `fetch(req.query.url)` continuent de trigger
+correctement.
 
-L'URL vient d'une env var ops, pas du user input. La rule trigger sur
-toute `fetch(variable)` sans tracker l'origine env-vs-user.
-
-**Suggestion** : ajouter un check « origin is `process.env` » dans la
-règle `cwe-918.dl` pour exclure ce pattern (env vars sont admin-controlled).
+Validation fixture :
+- `fetch(req.body.url)` → CWE-918 reportée ✓
+- `fetch(process.env.WEBHOOK_URL)` → pas de violation ✓
 
 ---
 
 ## Stats globales
 
-Sur Happenin après les fixes (F-001 à F-005 appliqués + workarounds projet) :
+Sur Happenin après les fixes (F-001 à F-005 appliqués + workarounds projet ;
+batch 2 ci-dessous resout F-006/F-007/F-008/F-011 et permet de retirer
+les workarounds correspondants) :
 
 | Métrique | Avant | Après |
 |---|---|---|
