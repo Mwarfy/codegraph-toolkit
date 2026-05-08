@@ -1274,6 +1274,7 @@ program
   .option('--diff', 'Show only violations NOT in baseline (i.e. introduced since baseline)', false)
   .option('--update-baseline', 'After running, write current violations to baseline file (typically post-commit)', false)
   .option('--json', 'Emit JSON instead of text (for hook consumption)', false)
+  .option('--format <type>', 'Alternative output format. `sarif` emits SARIF 2.1.0 (consumable by GitHub Code Scanning, VS Code SARIF Viewer, etc.)')
   .option('--timeout <ms>', 'Hard timeout in ms (default 5000). Skip if exceeded.', '5000')
   .action(runDatalogCheckCommand)
 

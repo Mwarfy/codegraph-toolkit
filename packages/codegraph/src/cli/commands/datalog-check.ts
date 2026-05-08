@@ -17,8 +17,23 @@
  */
 
 import chalk from 'chalk'
+import { readFileSync } from 'node:fs'
 import * as path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { exists } from '../_shared.js'
+import { buildSarifReport } from '../../output/sarif.js'
+
+/** Lit la version du toolkit depuis package.json (runtime, pour SARIF). */
+function getToolkitVersion(): string {
+  try {
+    const here = path.dirname(fileURLToPath(import.meta.url))
+    const pkgPath = path.resolve(here, '../../../package.json')
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { version?: string }
+    return pkg.version ?? '0.0.0'
+  } catch {
+    return '0.0.0'
+  }
+}
 
 export interface DatalogCheckOpts {
   rulesDir?: string
@@ -27,6 +42,9 @@ export interface DatalogCheckOpts {
   diff?: boolean
   updateBaseline?: boolean
   json?: boolean
+  /** Format de sortie alternatif. `sarif` emet du SARIF 2.1.0 (consommable
+   * par GitHub Code Scanning, VS Code SARIF Viewer, etc.). */
+  format?: 'sarif'
   timeout?: string
 }
 
@@ -169,6 +187,15 @@ function emitDatalogCheckOutput(args: {
   elapsed: number
 }): void {
   const { opts, violations, newViolations, baselineCount, elapsed } = args
+
+  if (opts.format === 'sarif') {
+    const report = buildSarifReport(
+      newViolations.map(([adr, file, line, msg]) => ({ adr, file, line, msg })),
+      { toolVersion: getToolkitVersion() },
+    )
+    console.log(JSON.stringify(report, null, 2))
+    return
+  }
 
   if (opts.json) {
     console.log(JSON.stringify({
