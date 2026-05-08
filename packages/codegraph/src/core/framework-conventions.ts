@@ -39,15 +39,16 @@ export const NEXTJS_ROUTE_BASENAMES = new Set([
   'page', 'layout', 'template', 'loading', 'error',
   'global-error', 'not-found', 'default', 'route',
   // Root-level conventions (peuvent vivre hors de app/)
-  'middleware', 'instrumentation', 'instrumentation-client',
+  'middleware', 'proxy', 'instrumentation', 'instrumentation-client',
   // Metadata files
   'opengraph-image', 'twitter-image', 'icon', 'apple-icon',
   'sitemap', 'robots', 'manifest',
 ])
 
 // Basenames acceptés n'importe où dans l'arbre (root-level Next.js).
+// `proxy` est ajouté pour Next.js 16 (remplace `middleware.ts`).
 const NEXTJS_ROOT_BASENAMES = new Set([
-  'middleware', 'instrumentation', 'instrumentation-client',
+  'middleware', 'proxy', 'instrumentation', 'instrumentation-client',
 ])
 
 /**
@@ -111,8 +112,12 @@ export function isExpoRouterFile(filePath: string): boolean {
 // importées par du code applicatif.
 
 export const TOOL_CONFIG_BASENAMES = new Set([
-  // Test runners
-  'vitest.config', 'vite.config', 'jest.config', 'playwright.config',
+  // Test runners — config + setup files (referenced by config, but config
+  // is itself a tool-config file → setup chain n'est pas suivie)
+  'vitest.config', 'vitest.setup', 'vitest.workspace',
+  'vite.config',
+  'jest.config', 'jest.setup',
+  'playwright.config',
   // CSS / build
   'tailwind.config', 'postcss.config', 'tsup.config', 'rollup.config',
   // Frameworks
@@ -126,6 +131,8 @@ export const TOOL_CONFIG_BASENAMES = new Set([
   'sentry.client.config', 'sentry.server.config', 'sentry.edge.config',
   // Expo
   'app.config', 'metro.config', 'babel.config',
+  // Vercel — `vercel.ts` (2026, remplace vercel.json) lu par Vercel CLI
+  'vercel',
 ])
 
 export function isToolConfigFile(filePath: string): boolean {
@@ -143,18 +150,53 @@ export function isToolConfigExport(filePath: string, symbolName: string): boolea
   return isToolConfigFile(filePath)
 }
 
+// ─── Test files ─────────────────────────────────────────────────────────────
+//
+// Tests sont lus par leur runner (vitest / jest / playwright) — jamais
+// importés par du code applicatif. Sans ça, un projet sans
+// `entryPoints: ["**/*.test.ts"]` configuré manuellement se retrouve avec
+// tous ses tests classifiés orphan, ce qui cascade : les helpers de test
+// utilisés UNIQUEMENT par ces tests deviennent eux aussi orphans.
+
+const TEST_FILE_REGEX = /\.(?:test|spec)\.[mc]?[tj]sx?$/
+const STORIES_FILE_REGEX = /\.stories\.[mc]?[tj]sx?$/
+
+export function isTestEntryPoint(filePath: string): boolean {
+  if (TEST_FILE_REGEX.test(filePath)) return true
+  if (STORIES_FILE_REGEX.test(filePath)) return true
+  // `__tests__/` directory anywhere in the tree
+  if (filePath.includes('/__tests__/') || filePath.startsWith('__tests__/')) return true
+  return false
+}
+
+// ─── Scripts ────────────────────────────────────────────────────────────────
+//
+// Convention `scripts/` directory à la racine = CLI scripts lancés via
+// `npm run …` ou `node scripts/foo.ts`. Pas un import target — leur seul
+// "importer" est le shell. Idem pour `bin/`.
+
+export function isScriptEntryPoint(filePath: string): boolean {
+  if (filePath.startsWith('scripts/') || filePath.includes('/scripts/')) return true
+  if (filePath.startsWith('bin/') || filePath.includes('/bin/')) return true
+  return false
+}
+
 // ─── Aggregate ──────────────────────────────────────────────────────────────
 
 /**
  * `true` ssi `filePath` est un entry-point implicite chargé par un
  * framework/runtime, donc à exclure de la classification "orphan".
  *
- * Combine Next.js App Router (page/layout/route/middleware/...),
- * Expo Router (mobile/app/...), et tous les fichiers de config outillage
- * (next.config, vitest.config, sentry.*.config, ...).
+ * Combine Next.js App Router (page/layout/route/middleware/proxy/...),
+ * Expo Router (mobile/app/...), tous les fichiers de config outillage
+ * (next.config, vitest.config, sentry.*.config, vercel.ts, ...), les
+ * fichiers de test (vitest/jest/playwright/storybook), et les scripts
+ * CLI (`scripts/`, `bin/`).
  */
 export function isFrameworkEntryPoint(filePath: string): boolean {
   return isNextJsRouteFile(filePath)
       || isExpoRouterFile(filePath)
       || isToolConfigFile(filePath)
+      || isTestEntryPoint(filePath)
+      || isScriptEntryPoint(filePath)
 }

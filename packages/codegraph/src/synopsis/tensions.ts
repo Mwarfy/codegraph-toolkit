@@ -86,9 +86,25 @@ function extractCycleTensions(snapshot: GraphSnapshot, max: number, out: Tension
 
 // ─── Orphelins (fichiers sans importeur) ───────────────────────────────────
 
+/**
+ * Test/spec/stories files ne sont JAMAIS importés (vitest/jest/storybook
+ * les chargent via runner) — leur rapport en tension "orphan" est un
+ * faux positif systémique avec un testHint trompeur ("supprimer + npm
+ * test : si vert → mort"). Toujours vrai → toujours faux conseil.
+ */
+const TEST_FILE_PATTERNS = [
+  /\.(?:test|spec)\.[mc]?[tj]sx?$/,
+  /\.stories\.[mc]?[tj]sx?$/,
+  /\/__tests__\//,
+]
+
+function isTestFile(filePath: string): boolean {
+  return TEST_FILE_PATTERNS.some((re) => re.test(filePath))
+}
+
 function extractOrphanTensions(snapshot: GraphSnapshot, max: number, out: Tension[]): void {
   const orphans = (snapshot.nodes ?? [])
-    .filter((n) => n.status === 'orphan' && n.type === 'file')
+    .filter((n) => n.status === 'orphan' && n.type === 'file' && !isTestFile(n.id))
     .slice(0, max)
   for (const n of orphans) {
     out.push({
