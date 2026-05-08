@@ -30,6 +30,16 @@ export class SqlSchemaDetector implements Detector<SqlSchemaResult> {
 
     const opts = ctx.config.detectorOptions?.['sqlSchema'] ?? {}
     const globs = (opts['globs'] as string[] | undefined) ?? ['**/*.sql']
-    return await analyzeSqlSchema(ctx.config.rootDir, globs)
+    // Respecte `config.exclude` au même titre que les extracteurs TS.
+    // Sans ça, les patterns comme `docs/migration-drift/**` mis dans
+    // `exclude` étaient ignorés et le détecteur scannait des fichiers
+    // explicitement exclus du scope projet → bruit dans SQL-FK-INDEX,
+    // SQL-NAMING-CONVENTION, etc. typiquement sur des dumps de drift
+    // detection ou des schemas archivés.
+    return await analyzeSqlSchema(
+      ctx.config.rootDir,
+      globs,
+      ctx.config.exclude,
+    )
   }
 }
