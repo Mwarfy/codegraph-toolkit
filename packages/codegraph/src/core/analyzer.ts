@@ -344,12 +344,20 @@ export async function analyze(
   // ─── 3. Load disk cache (Sprint 7) ──────────────────────────────────
   await loadDiskCacheIfIncremental(config, incremental, skipPersistenceLoad)
 
-  // ─── 3b. Pre-build shared Project (incremental mode only, Sprint 6) ──
+  // ─── 3b. Pre-build shared Project (P4 — Sprint 6 etendu mode legacy) ──
+  // Avant : seul le mode incremental pre-buildait le sharedProject. En
+  // mode legacy, ts-imports creait son propre Project, le jetait, puis
+  // resolveTsConfigAndSharedProject recreait un Project distinct → double
+  // parse (cout ts-morph dupplique sur des projets de 200+ files).
+  // Maintenant : pre-build dans les 2 modes, ts-imports reutilise via
+  // setTsImportPrebuiltProject. Gain perf legacy ~30-40% sur gros repos.
   let preBuiltSharedProject: ReturnType<typeof createSharedProject> | null = null
   if (incremental) {
     preBuiltSharedProject = await prebuildSharedProjectIncremental(
       config, files, fileCache,
     )
+  } else {
+    preBuiltSharedProject = await prebuildSharedProjectLegacy(config, files)
   }
 
   // ─── 4. Run base detectors + build graph ───────────────────────────
@@ -587,7 +595,10 @@ async function runBaseDetectorsAndBuildGraph(
     }
   }
 
-  if (incremental) setTsImportPrebuiltProject(null)
+  // Reset le prebuilt apres consommation par ts-imports (mode incremental
+  // ET mode legacy depuis P4) — evite les fuites de state entre runs si
+  // analyze() est invoque plusieurs fois dans le meme process.
+  setTsImportPrebuiltProject(null)
 
   const tGraph = performance.now()
   // Workspace entry-points : main/exports/types/bin de chaque package
@@ -705,11 +716,38 @@ async function resolveTsConfigAndSharedProject(
     sharedProject = preBuiltSharedProject!
     await feedActiveManifestsInput(config.rootDir, files)
     await feedSqlDefaultsInput(config.rootDir)
+  } else if (preBuiltSharedProject) {
+    // P4 : reuse le Project pre-build a la phase 3b (mode legacy etendu).
+    sharedProject = preBuiltSharedProject
   } else {
+    // Fallback : ancien comportement si pre-build a echoue.
     sharedProject = createSharedProject(config.rootDir, files, tsConfigPath)
   }
 
   return { tsConfigPath, sharedProject }
+}
+
+/**
+ * Pre-build le sharedProject ts-morph en mode legacy (non-incremental).
+ *
+ * P4 mutualization (cf. OSS-AUDIT-2026-05-08) : sans pre-build,
+ * `ts-imports` cree son propre Project, le jette, puis l'analyzer
+ * recree un Project distinct via `createSharedProject` au moment de
+ * `resolveTsConfigAndSharedProject` → double parse ts-morph (1.5-2s
+ * sur Sentinel, 5s+ sur tanstack-query).
+ *
+ * Le pre-build expose le Project a ts-imports via `setTsImportPrebuilt
+ * Project` ET le retourne pour reuse downstream (complexity, unused-
+ * exports, taint, etc.).
+ */
+async function prebuildSharedProjectLegacy(
+  config: CodeGraphConfig,
+  files: string[],
+): Promise<ReturnType<typeof createSharedProject>> {
+  const tsConfigPath = await findTsConfigPath(config)
+  const project = createSharedProject(config.rootDir, files, tsConfigPath)
+  setTsImportPrebuiltProject(project)
+  return project
 }
 
 /**
