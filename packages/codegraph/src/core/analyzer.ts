@@ -18,6 +18,7 @@ import * as path from 'node:path'
 import { minimatch } from 'minimatch'
 import { CodeGraph } from './graph.js'
 import { discoverFiles } from './file-discovery.js'
+import { detectWorkspaces, buildWorkspaceEntryPointSet } from './workspaces.js'
 import type {
   CodeGraphConfig,
   DetectorContext,
@@ -589,7 +590,14 @@ async function runBaseDetectorsAndBuildGraph(
   if (incremental) setTsImportPrebuiltProject(null)
 
   const tGraph = performance.now()
-  const graph = new CodeGraph(config.rootDir, config.entryPoints)
+  // Workspace entry-points : main/exports/types/bin de chaque package
+  // declare dans pnpm-workspace.yaml / package.json#workspaces / lerna.json.
+  // Sans ca, sur un monorepo, les `packages/<pkg>/src/index.ts` sont
+  // classifies orphan car les imports `@scope/pkg` ne resolvent pas vers
+  // le workspace local. Cf. OSS-AUDIT-2026-05-08 P2.1.
+  const wsMap = await detectWorkspaces(config.rootDir)
+  const workspaceEntryPoints = buildWorkspaceEntryPointSet(wsMap)
+  const graph = new CodeGraph(config.rootDir, config.entryPoints, workspaceEntryPoints)
   for (const file of files) {
     const content = fileCache.get(file) || ''
     const loc = content.split('\n').length

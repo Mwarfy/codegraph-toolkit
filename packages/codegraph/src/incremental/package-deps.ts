@@ -81,6 +81,12 @@ export const allPackageDeps = derived<string, PackageDepsIssue[]>(
       }
     }
 
-    return buildPackageDepsIssues(active, importsByManifest, runtimeAssetsByManifest, DEFAULT_TEST_RES)
+    // Workspace names derives directement des manifests — pas besoin
+    // d'input Salsa separe (la liste des manifests change deja en cas
+    // d'ajout/retrait de workspace).
+    const workspaceNames = new Set<string>()
+    for (const m of active) if (m.packageName) workspaceNames.add(m.packageName)
+
+    return buildPackageDepsIssues(active, importsByManifest, runtimeAssetsByManifest, DEFAULT_TEST_RES, workspaceNames)
   },
 )

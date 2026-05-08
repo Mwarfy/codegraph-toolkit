@@ -54,6 +54,9 @@ interface PackageManifest {
   abs: string
   rel: string
   dir: string
+  /** Nom du package depuis `package.json#name`. Permet d'identifier les
+   * workspaces internes pour les exempter de declared-unused. */
+  packageName: string
   declared: Map<string, DepBlock>
   /**
    * Texte concaténé des `scripts` (npm scripts) du manifest. Servir au
@@ -148,6 +151,12 @@ export async function analyzePackageDeps(
   const active = filterActiveManifests(manifests, rootDir, files)
   if (active.length === 0) return []
 
+  // Workspace names : si une dep declaree matche le name d'un workspace
+  // local, l'usage est conditionnel via le runtime — on ne peut pas verifier
+  // par scan static. Cf. OSS-AUDIT-2026-05-08 P2.2 (trpc 257, tanstack-query
+  // 345 faux positifs declared-unused sur monorepos).
+  const workspaceNames = collectWorkspaceNames(manifests)
+
   const fileSet = new Set(files)
   const buckets = emptyManifestBuckets(active)
 
@@ -155,7 +164,64 @@ export async function analyzePackageDeps(
     recordPackageRefs(sf, rootDir, fileSet, active, buckets)
   }
 
-  return buildPackageDepsIssues(active, buckets.importsByManifest, buckets.runtimeAssetsByManifest, testREs)
+  return buildPackageDepsIssues(active, buckets.importsByManifest, buckets.runtimeAssetsByManifest, testREs, workspaceNames)
+}
+
+/**
+ * Set des `name` de tous les manifests du repo. Sur un monorepo
+ * pnpm/npm/yarn workspace, ces noms correspondent aux deps internes
+ * (`workspace:*`). Le scan static ne peut pas verifier leur usage runtime
+ * (linker, virtuel imports, etc.) — donc on les exempte du check
+ * declared-unused.
+ */
+function collectWorkspaceNames(manifests: PackageManifest[]): Set<string> {
+  const names = new Set<string>()
+  for (const m of manifests) {
+    if (m.packageName) names.add(m.packageName)
+  }
+  return names
+}
+
+/**
+ * Build-time deps qui ne sont jamais importees par du code applicatif —
+ * elles tournent comme commandes via les npm scripts ou sont consommees
+ * par d'autres outils (linter, formatter, type-checker, bundler).
+ *
+ * Sans cette whitelist, le scan static les flag systematiquement
+ * `declared-unused` car aucun `import 'X'` ne les reference. Faux positif
+ * universel sur tout projet TS — cf. OSS-AUDIT-2026-05-08 P2.2.
+ */
+const BUILD_TIME_DEPS_LITERAL = new Set([
+  // Type-checkers
+  'typescript',
+  // Linters / formatters
+  'eslint', 'prettier', 'biome', '@biomejs/biome',
+  // Test runners (les configs sont importees, mais les binaries non)
+  'vitest', 'jest', 'mocha', 'ava', 'tap', 'bun-types',
+  // Bundlers / build tools
+  'tsup', 'tsx', 'tsdown', 'unbuild', 'rollup', 'esbuild', 'webpack',
+  'parcel', 'vite', '@vitejs/plugin-react', '@vitejs/plugin-vue',
+  'turbo', 'lerna', 'nx', 'changesets', '@changesets/cli',
+  // Codemod / scripts runners
+  'jscodeshift', 'tsm', 'concurrently', 'npm-run-all', 'wireit',
+  // Husky / git hooks (configures par script)
+  'husky', 'lint-staged', 'simple-git-hooks',
+])
+
+const BUILD_TIME_DEPS_PREFIX = [
+  'eslint-config-', 'eslint-plugin-',
+  'prettier-plugin-',
+  '@types/',  // toujours type-only
+  '@typescript-eslint/',
+  '@cloudflare/workers-types',
+]
+
+function isBuildTimeDep(name: string): boolean {
+  if (BUILD_TIME_DEPS_LITERAL.has(name)) return true
+  for (const prefix of BUILD_TIME_DEPS_PREFIX) {
+    if (name.startsWith(prefix)) return true
+  }
+  return false
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -200,6 +266,7 @@ async function readPackageManifest(
       abs: full,
       rel: path.relative(rootDir, full).replace(/\\/g, '/'),
       dir,
+      packageName: typeof raw.name === 'string' ? raw.name : '',
       declared: buildDeclaredDeps(raw),
       scriptsText,
     }
@@ -370,10 +437,18 @@ function classifyDeclaredDeps(
   importedNames: Set<string>,
   runtimeAssets: Map<string, Set<string>>,
   issues: PackageDepsIssue[],
+  workspaceNames: Set<string>,
 ): void {
   for (const [name, block] of m.declared) {
     if (importedNames.has(name)) continue
     if (name.startsWith('@types/')) continue
+    // Workspace interne (cf. P2.2) — usage conditionnel via workspace
+    // linker, le scan static ne peut pas verifier.
+    if (workspaceNames.has(name)) continue
+    // Build-time deps (typescript, eslint, vitest, tsup, ...) — jamais
+    // importees par du code applicatif, consommees via npm scripts ou
+    // par d'autres outils.
+    if (isBuildTimeDep(name)) continue
 
     const runtimeRefs = runtimeAssets.get(name)
     if (runtimeRefs && runtimeRefs.size > 0) {
@@ -443,6 +518,7 @@ function buildPackageDepsIssues(
   importsByManifest: Map<string, Map<string, Set<string>>>,
   runtimeAssetsByManifest: Map<string, Map<string, Set<string>>>,
   testREs: RegExp[],
+  workspaceNames: Set<string>,
 ): PackageDepsIssue[] {
   const issues: PackageDepsIssue[] = []
 
@@ -451,7 +527,7 @@ function buildPackageDepsIssues(
     const runtimeAssets = runtimeAssetsByManifest.get(m.abs)!
     const importedNames = new Set(imports.keys())
 
-    classifyDeclaredDeps(m, importedNames, runtimeAssets, issues)
+    classifyDeclaredDeps(m, importedNames, runtimeAssets, issues, workspaceNames)
     classifyImportedDeps(m, imports, testREs, issues)
   }
 
