@@ -25,6 +25,12 @@ import * as path from 'node:path'
 import * as fs from 'node:fs/promises'
 import type { ExportSymbol, ExportConfidence } from '../core/types.js'
 import { resolveAliasStandalone } from '../detectors/ts-imports.js'
+import {
+  isNextJsRouteFile as _isNextJsRouteFile,
+  isNextJsFrameworkExport as _isNextJsFrameworkExport,
+  isToolConfigFile as _isToolConfigFile,
+  isToolConfigExport as _isToolConfigExport,
+} from '../core/framework-conventions.js'
 
 export interface FileExportInfo {
   /** Relative file path */
@@ -697,108 +703,21 @@ function isTestFile(filePath: string): boolean {
          filePath.includes('/tests/')
 }
 
-// ─── Next.js Framework Convention Exports ──────────────────────────────
+// ─── Framework conventions (single source of truth) ──────────────────────
 //
-// Fix M-008 : les fichiers de routing Next.js App Router exposent plusieurs
-// exports nommés que le runtime lit par réflexion (metadata, viewport, etc.).
-// Ils ne sont jamais importés par du code applicatif, donc le detector les
-// classait systématiquement safe-to-remove — polluant la liste avec ~10
-// faux positifs par projet Next.js.
+// Fix M-008 + M-010 : les fichiers de routing Next.js App Router (page,
+// layout, route, middleware, instrumentation...) et les configs outillage
+// (next.config, vitest.config, sentry.*.config, ...) sont chargés par
+// réflexion depuis le runtime, pas par import explicite. Sans whitelist,
+// le detector les classait safe-to-remove.
 //
-// La whitelist est hard-codée : ces noms sont dictés par Next.js, pas par
-// le projet. Si un jour on voulait la rendre configurable, un champ
-// `frameworkExports[]` dans la config codegraph serait le bon endroit.
-//
-// Références :
-//   https://nextjs.org/docs/app/api-reference/file-conventions/metadata
-//   https://nextjs.org/docs/app/api-reference/file-conventions/route-segment-config
+// La logique vit dans `core/framework-conventions.ts` pour être partagée
+// avec `core/graph.ts` (classification orphan/entry-point).
 
-const NEXTJS_CONVENTION_EXPORTS = new Set([
-  // Metadata API
-  'metadata', 'generateMetadata',
-  'viewport', 'generateViewport',
-  // Route segment config
-  'dynamic', 'dynamicParams', 'revalidate', 'fetchCache',
-  'runtime', 'preferredRegion', 'maxDuration', 'experimental_ppr',
-  // generateStaticParams pour les segments dynamiques
-  'generateStaticParams',
-  // Image/icon conventions (opengraph-image, twitter-image, icon, apple-icon)
-  'alt', 'size', 'contentType',
-])
-
-const NEXTJS_ROUTE_BASENAMES = new Set([
-  'page', 'layout', 'template', 'loading', 'error',
-  'global-error', 'not-found', 'default', 'route',
-  // Root-level conventions
-  'middleware', 'instrumentation',
-  // Metadata files
-  'opengraph-image', 'twitter-image', 'icon', 'apple-icon', 'sitemap', 'robots', 'manifest',
-])
-
-/**
- * Un fichier est "route Next.js" si son basename correspond à une convention
- * (page, layout, route, middleware, etc.) ET qu'il est sous un répertoire
- * `app/` (App Router).
- */
-function isNextJsRouteFile(filePath: string): boolean {
-  const inAppRouter = filePath.includes('/app/') || filePath.startsWith('app/')
-  // middleware.ts et instrumentation.ts vivent à la racine de `src/` ou du
-  // projet — pas sous `app/`. On accepte n'importe où pour ces deux-là.
-  const basenameNoExt = (filePath.split('/').pop() ?? filePath).replace(/\.(ts|tsx|js|jsx)$/, '')
-  if (basenameNoExt === 'middleware' || basenameNoExt === 'instrumentation') return true
-  if (!inAppRouter) return false
-  return NEXTJS_ROUTE_BASENAMES.has(basenameNoExt)
-}
-
-/**
- * Un export convention Next.js n'est pas "unused" même si personne ne l'importe —
- * le runtime Next le lit par réflexion depuis les fichiers de route.
- * Couvre :
- *   - le `default` export (la page / layout / route handler lui-même)
- *   - les exports nommés conventionnels (metadata, viewport, dynamic, etc.)
- */
-function isNextJsFrameworkExport(filePath: string, symbolName: string): boolean {
-  if (!isNextJsRouteFile(filePath)) return false
-  if (symbolName === 'default') return true
-  return NEXTJS_CONVENTION_EXPORTS.has(symbolName)
-}
-
-// ─── Tool Config Files (vitest / vite / jest / tailwind / postcss / next) ──
-//
-// Fix M-010 : les fichiers de config outillage (`vitest.config.ts`,
-// `tailwind.config.ts`, etc.) exportent typiquement un `default` lu par
-// le runner/tooling — jamais importé par du code applicatif. Sans
-// whitelist, le detector les classait safe-to-remove.
-//
-// Même esprit que M-008 (Next.js conventions) : le symbole est lu par
-// réflexion depuis l'extérieur du graphe TS.
-
-const TOOL_CONFIG_BASENAMES = new Set([
-  'vitest.config',
-  'vite.config',
-  'jest.config',
-  'tailwind.config',
-  'postcss.config',
-  'next.config',
-  'playwright.config',
-  'drizzle.config',
-  'tsup.config',
-])
-
-function isToolConfigFile(filePath: string): boolean {
-  const basename = filePath.split('/').pop() ?? filePath
-  const noExt = basename.replace(/\.(ts|tsx|js|jsx|mjs|cjs)$/, '')
-  return TOOL_CONFIG_BASENAMES.has(noExt)
-}
-
-/**
- * Le `default` export d'un fichier de config outillage est lu par le
- * runner (vitest, vite, jest, etc.), pas par du code applicatif.
- */
-function isToolConfigExport(filePath: string, symbolName: string): boolean {
-  if (symbolName !== 'default') return false
-  return isToolConfigFile(filePath)
-}
+const isNextJsRouteFile = _isNextJsRouteFile
+const isNextJsFrameworkExport = _isNextJsFrameworkExport
+const isToolConfigFile = _isToolConfigFile
+const isToolConfigExport = _isToolConfigExport
 
 // ─── Local Usage Detection ──────────────────────────────────────────
 

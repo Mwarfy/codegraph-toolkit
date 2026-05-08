@@ -18,6 +18,7 @@ import { type GraphNode, type GraphEdge, type GraphSnapshot, type GraphStats,
 import { minimatch } from 'minimatch'
 import { execSync } from 'node:child_process'
 import * as path from 'node:path'
+import { isFrameworkEntryPoint } from './framework-conventions.js'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyGraph = any
@@ -126,7 +127,17 @@ export class CodeGraph {
   }
 
   private isEntryPoint(nodeId: string): boolean {
-    return this.entryPointPatterns.some(pattern => minimatch(nodeId, pattern))
+    // Patterns explicites depuis codegraph.config.json (entryPoints).
+    if (this.entryPointPatterns.some(pattern => minimatch(nodeId, pattern))) {
+      return true
+    }
+    // Conventions framework implicites — Next.js App Router (page/layout/
+    // route/middleware/instrumentation), Expo Router (mobile/app/**), et
+    // configs outillage (vitest.config, next.config, sentry.*.config...).
+    // Sans ça, un projet Next.js typique se retrouve avec ~50% des fichiers
+    // marqués orphan car le runtime les charge par convention de fichier
+    // plutôt que par import explicite.
+    return isFrameworkEntryPoint(nodeId)
   }
 
   private hasOnlyUncertainEdges(nodeId: string): boolean {
