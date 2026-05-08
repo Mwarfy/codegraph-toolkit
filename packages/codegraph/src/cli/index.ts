@@ -29,7 +29,9 @@
 import { Command } from 'commander'
 import chalk from 'chalk'
 import * as fs from 'node:fs/promises'
+import { readFileSync } from 'node:fs'
 import * as path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { analyze } from '../core/analyzer.js'
 import { CodeGraph } from '../core/graph.js'
 import type { CodeGraphConfig, GraphSnapshot } from '../core/types.js'
@@ -60,10 +62,21 @@ import { runCrossCheckCommand } from './commands/cross-check.js'
 
 const program = new Command()
 
+const PKG_VERSION: string = (() => {
+  try {
+    const here = path.dirname(fileURLToPath(import.meta.url))
+    const pkgPath = path.resolve(here, '../../package.json')
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { version?: string }
+    return pkg.version ?? '0.0.0'
+  } catch {
+    return '0.0.0'
+  }
+})()
+
 program
   .name('codegraph')
   .description('Visual dependency graph for AI-supervised codebases')
-  .version('0.1.0')
+  .version(PKG_VERSION)
 
 // ─── analyze ──────────────────────────────────────────────────────────────
 

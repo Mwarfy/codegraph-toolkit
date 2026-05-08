@@ -193,9 +193,13 @@ async function persistAnalyzeOutputs(
   await fs.writeFile(path.join(snapDir, 'synopsis-level1.md'), l1)
   await fs.writeFile(path.join(snapDir, 'synopsis.md'), l1)
   await fs.writeFile(path.join(snapDir, 'synopsis-level2.md'), renderLevel2(synopsis))
-  // Write level3 files en parallèle (par container, indépendants).
+  // Skip level3 pour les containers de moins de 3 fichiers — un singleton
+  // (ex: `_root` quand un seul config présent, ou un sous-dir avec 1-2 files)
+  // produit un .md sans valeur narrative. Seuil 3 = sortir de la singularité
+  // accidentelle (cf. invariant load-bearing toolkit).
+  const level3Containers = synopsis.containers.filter((c) => c.fileCount >= 3)
   await Promise.all(
-    synopsis.containers.map((c) =>
+    level3Containers.map((c) =>
       fs.writeFile(
         path.join(snapDir, `synopsis-level3-${c.id}.md`),
         renderLevel3(synopsis, c.id),
@@ -203,7 +207,7 @@ async function persistAnalyzeOutputs(
     ),
   )
   console.log(chalk.green(
-    `  ✓ Synopsis written: synopsis.json + ${synopsis.containers.length + 2} markdown files in ${snapDir}\n`,
+    `  ✓ Synopsis written: synopsis.json + ${level3Containers.length + 3} markdown files in ${snapDir}\n`,
   ))
 
   // Datalog facts derivative — un fichier .facts par relation + schema.dl.

@@ -116,6 +116,12 @@ export interface SynopsisJSON {
     healthScore: number
   }
   edgesByType: Partial<Record<EdgeType, number>>
+  /** Liste plate des fichiers orphelins (sans importeur). Permet aux
+   * consumers (dashboards, agents IA) d'éviter de re-parser le snapshot. */
+  orphans: string[]
+  /** Liste plate des fichiers entry-points (Next.js pages, route handlers,
+   * configs, etc.). Idem orphans : exposé pour éviter le re-parse. */
+  entryPoints: string[]
   containers: ContainerEntry[]
   topHubs: HubEntry[]          // global top-10
   crossContainerEdges: CrossEdge[]
@@ -169,16 +175,38 @@ function buildSynopsisCtx(snapshot: GraphSnapshot, options: SynopsisOptions): Sy
   const files = snapshot.nodes.filter(n => n.type === 'file')
   const edges = snapshot.edges
   const adrMarkers = options.adrMarkers
-  const hubThreshold = options.hubThreshold ?? 15
   const inDeg = new Map<string, number>()
   const outDeg = new Map<string, number>()
   for (const e of edges) {
     inDeg.set(e.to, (inDeg.get(e.to) || 0) + 1)
     outDeg.set(e.from, (outDeg.get(e.from) || 0) + 1)
   }
-  const containerOf = (fileId: string): string => fileId.split('/')[0] || fileId
+  const hubThreshold = resolveHubThreshold(options.hubThreshold, inDeg)
+  // Tous les fichiers top-level (sans `/` dans le path) sont regroupés
+  // sous `_root`. Sinon chaque `next.config.ts`, `vercel.ts`, `proxy.ts`,
+  // `vitest.{config,setup}.ts`, `sentry.*.config.ts`, `instrumentation*.ts`
+  // génère son propre container singleton — bruit qui dépasse les
+  // containers utiles (`app`, `lib`, `components`).
+  const containerOf = (fileId: string): string => {
+    const idx = fileId.indexOf('/')
+    return idx === -1 ? '_root' : fileId.slice(0, idx)
+  }
   const adrsFor = (fileId: string): string[] | undefined => adrMarkers?.get(fileId)
   return { files, edges, inDeg, outDeg, containerOf, adrMarkers, hubThreshold, adrsFor }
+}
+
+/**
+ * Seuil "load-bearing" adaptatif. Sur petits projets (top fan-in < 15) un
+ * seuil absolu de 15 ne déclenche aucune ADR suggestion alors que les hubs
+ * existent — ils sont juste relatifs à l'échelle. Floor à 5 pour rester en
+ * cohérence avec le seuil "sortir de la singularité accidentelle"
+ * (cf. SELF-AUDIT-2026-05-01 — fan-in 3 = pattern, fan-in 5 = système).
+ */
+function resolveHubThreshold(explicit: number | undefined, inDeg: Map<string, number>): number {
+  if (typeof explicit === 'number') return explicit
+  let topInDeg = 0
+  for (const v of inDeg.values()) if (v > topInDeg) topInDeg = v
+  return Math.max(5, Math.ceil(topInDeg * 0.25))
 }
 
 function buildHubEntry(file: GraphNode, ctx: SynopsisCtx, container: string): HubEntry {
@@ -405,6 +433,9 @@ export function buildSynopsis(snapshot: GraphSnapshot, options: SynopsisOptions 
   const phase38 = buildPhase38Summary(snapshot)
   const adrSuggestions = buildAdrSuggestions(snapshot, ctx)
 
+  const orphans = ctx.files.filter(f => f.status === 'orphan').map(f => f.id).sort()
+  const entryPoints = ctx.files.filter(f => f.status === 'entry-point').map(f => f.id).sort()
+
   return {
     version: '1',
     generatedAt: snapshot.generatedAt,
@@ -417,6 +448,8 @@ export function buildSynopsis(snapshot: GraphSnapshot, options: SynopsisOptions 
       healthScore: snapshot.stats.healthScore,
     },
     edgesByType,
+    orphans,
+    entryPoints,
     containers,
     topHubs,
     crossContainerEdges,
@@ -428,9 +461,11 @@ export function buildSynopsis(snapshot: GraphSnapshot, options: SynopsisOptions 
 
 /**
  * Component id = `<container>/src/<second>` for "src-like" structure,
- * else `<container>/<first>`.
+ * else `<container>/<first>`. Pour le container synthétique `_root`,
+ * le fileId est utilisé tel quel (pas de prefix à stripper).
  */
 function deriveCompId(containerId: string, fileId: string): string {
+  if (containerId === '_root') return `${containerId}/${fileId}`
   const rel = fileId.slice(containerId.length + 1)
   const parts = rel.split('/')
   if (parts[0] === 'src' && parts.length >= 3) {
@@ -509,7 +544,13 @@ function buildComponents(
   adrMarkers?: Map<string, string[]>,
 ): ComponentEntry[] {
   const byComp = groupFilesByComponent(containerId, cFiles)
-  const compIdToLabel = (cid: string): string => cid.slice(containerId.length + 1).split('/').slice(-1)[0]
+  // Tail = segment final du compId. Empty quand container = file (singleton
+  // top-level type `next.config.ts`) — fallback sur containerId pour éviter
+  // d'afficher des backticks vides dans le synopsis.
+  const compIdToLabel = (cid: string): string => {
+    const tail = cid.slice(containerId.length + 1).split('/').slice(-1)[0]
+    return tail || containerId
+  }
 
   const entries: ComponentEntry[] = Array.from(byComp.entries()).map(([cid, nodes]) => {
     const idSet = new Set(nodes.map(n => n.id))
