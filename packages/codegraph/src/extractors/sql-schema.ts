@@ -50,6 +50,14 @@ export interface SqlTable {
   file: string
   line: number
   columns: SqlColumn[]
+  /**
+   * `true` si la table est explicitement marquée append-only via le
+   * commentaire SQL `-- @append-only` situé dans les 5 lignes precedant
+   * le `CREATE TABLE`. Les tables append-only sont exemptees de la rule
+   * `SQL-AUDIT-COLUMNS` pour `updated_at` (l'app fait UPSERT/INSERT
+   * uniquement, jamais UPDATE — le champ n'a pas de sens).
+   */
+  appendOnly?: boolean
 }
 
 // Types canoniques extraits dans `_shared/sql-types.ts` pour casser le
@@ -362,11 +370,40 @@ function parseCreateTable(content: string, file: string, r: ParseSqlResult): voi
     const block = content.slice(startIdx, blockEnd)
 
     const columns = parseTableColumns(block, tableStartLine)
-    r.tables.push({ name: tableName, file, line: tableStartLine, columns })
+    const appendOnly = hasAppendOnlyMarker(content, m.index)
+    r.tables.push({
+      name: tableName,
+      file,
+      line: tableStartLine,
+      columns,
+      ...(appendOnly ? { appendOnly: true } : {}),
+    })
 
     emitInlineFksAndImplicitIndexes(columns, tableName, file, r)
     r.indexes.push(...parseTableLevelConstraints(block, tableName, tableStartLine, file))
   }
+}
+
+/**
+ * Detecte le marqueur `-- @append-only` (line comment SQL) dans les ~5
+ * lignes precedant le `CREATE TABLE`. Convention pour signaler
+ * explicitement qu'une table est INSERT-only (UPSERT via UNIQUE, jamais
+ * UPDATE) — exempte de l'exigence `updated_at` de SQL-AUDIT-COLUMNS.
+ *
+ * Exemple SQL :
+ *   -- @append-only
+ *   CREATE TABLE push_tokens (...);
+ *
+ * Match liberal : `-- @append-only`, `--@append-only`, `-- append-only`.
+ */
+const APPEND_ONLY_MARKER_RE = /--\s*@?append-only\b/i
+
+function hasAppendOnlyMarker(content: string, createTableIdx: number): boolean {
+  const before = content.slice(0, createTableIdx)
+  const lines = before.split('\n')
+  // Regarde les 5 dernieres lignes (== les 5 lignes precedant le CREATE).
+  const window = lines.slice(Math.max(0, lines.length - 5)).join('\n')
+  return APPEND_ONLY_MARKER_RE.test(window)
 }
 
 /** Émet les FK inline + indexes implicites (PRIMARY KEY / UNIQUE) per column. */
@@ -765,7 +802,12 @@ function countNewlines(s: string): number {
 }
 
 function stripSchema(qualifiedName: string): string {
-  // `public.users` → `users`. Garde tel quel si pas de point.
+  // `public.users` → `users` (default schema, omissible). Preserve tout
+  // autre prefixe (`auth.users`, `storage.objects`, `realtime.subscription`)
+  // car il est significatif — SQL-ORPHAN-FK + SupabaseManagedTable
+  // s'appuient sur ce prefixe pour distinguer les FKs vers schemas managed.
   const idx = qualifiedName.indexOf('.')
-  return idx === -1 ? qualifiedName : qualifiedName.slice(idx + 1)
+  if (idx === -1) return qualifiedName
+  const schema = qualifiedName.slice(0, idx).toLowerCase()
+  return schema === 'public' ? qualifiedName.slice(idx + 1) : qualifiedName
 }

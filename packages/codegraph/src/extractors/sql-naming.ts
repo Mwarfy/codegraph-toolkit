@@ -45,6 +45,9 @@ interface SqlSchema {
       type: string
       line: number
     }>
+    /** True si la table est marquee `-- @append-only` dans le SQL —
+     * exempte de l'exigence `updated_at`. Cf. sql-schema.ts. */
+    appendOnly?: boolean
   }>
   foreignKeys: Array<{
     fromTable: string
@@ -170,6 +173,18 @@ function isAcceptedTemporalPattern(name: string, type: string): boolean {
   return hasAcceptedSuffix || hasAcceptedPrefix || isAcceptedSynonym || isDateTypePure
 }
 
+/**
+ * Suffixes alternatifs reconnus pour les colonnes FK. `_id` est le default
+ * (user_id, project_id) mais Postgres communautaire utilise aussi :
+ *   - `_by` : auteur d'action (created_by, reviewed_by, resolved_by) —
+ *     audit/workflow patterns standards
+ *   - `_to` : destinataire d'action (assigned_to, transferred_to)
+ *   - `_for` : sujet d'action (registered_for, scheduled_for)
+ * Ces patterns communiquent une SÉMANTIQUE distincte d'un FK généraliste,
+ * et `created_by_id` casse l'idiome.
+ */
+const FK_ACCEPTED_SUFFIXES = ['_id', '_by', '_to', '_for']
+
 function checkForeignKeyIdSuffix(
   col: SqlSchema['tables'][number]['columns'][number],
   table: SqlSchema['tables'][number],
@@ -177,7 +192,7 @@ function checkForeignKeyIdSuffix(
   violations: SqlNamingViolation[],
 ): void {
   const isFk = fkSet.has(table.name + '\x00' + col.name)
-  if (!isFk || col.name.endsWith('_id')) return
+  if (!isFk || FK_ACCEPTED_SUFFIXES.some((s) => col.name.endsWith(s))) return
   violations.push({
     kind: 'fk-missing-id-suffix',
     table: table.name,
@@ -207,7 +222,11 @@ function checkAuditColumns(
       line: table.line,
     })
   }
-  if (!APPEND_ONLY_NAME_RE.test(table.name) && !colNames.has('updated_at')) {
+  // Skip si la table est explicitement marquee append-only via le SQL
+  // marker `-- @append-only` (parse par sql-schema.ts) ou si son nom matche
+  // les patterns append-only par convention (events/logs/history/audit).
+  const isAppendOnly = table.appendOnly === true || APPEND_ONLY_NAME_RE.test(table.name)
+  if (!isAppendOnly && !colNames.has('updated_at')) {
     violations.push({
       kind: 'audit-column-missing-updated-at',
       table: table.name,
