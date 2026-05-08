@@ -117,6 +117,9 @@ export const TOOL_CONFIG_BASENAMES = new Set([
   'tailwind.config', 'postcss.config', 'tsup.config', 'rollup.config',
   // Frameworks
   'next.config', 'nuxt.config', 'astro.config', 'svelte.config',
+  // Linters — ESLint flat config (eslint.config.{js,mjs,cjs,ts}) est lu
+  // implicitement par eslint, jamais importé par du code applicatif.
+  'eslint.config',
   // ORM
   'drizzle.config',
   // Sentry — chargés implicitement par @sentry/nextjs et @sentry/node
