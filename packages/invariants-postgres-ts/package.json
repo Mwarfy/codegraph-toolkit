@@ -35,8 +35,8 @@
     "test": "vitest run"
   },
   "peerDependencies": {
-    "@liby-tools/codegraph": "^0.3.0",
-    "@liby-tools/datalog": "^0.3.0"
+    "@liby-tools/codegraph": ">=0.3.0",
+    "@liby-tools/datalog": ">=0.3.0"
   },
   "devDependencies": {
     "@liby-tools/datalog": "^0.3.0",
