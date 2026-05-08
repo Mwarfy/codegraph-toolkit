@@ -105,11 +105,16 @@ const SKIP_DIRS = new Set([
   'rollbacks',
 ])
 
-async function discoverSqlFiles(rootDir: string, globs: string[]): Promise<string[]> {
+async function discoverSqlFiles(
+  rootDir: string,
+  globs: string[],
+  excludes: readonly string[] = [],
+): Promise<string[]> {
   const files: string[] = []
   await walk(rootDir, rootDir, files)
   return files
     .filter((f) => globs.some((g) => minimatch(f, g)))
+    .filter((f) => !excludes.some((e) => minimatch(f, e)))
     .sort()
 }
 
@@ -252,8 +257,9 @@ function applyAlterTableMerges(agg: SqlAggregated): void {
 export async function analyzeSqlSchema(
   rootDir: string,
   globs: string[] = DEFAULT_GLOBS,
+  excludes: readonly string[] = [],
 ): Promise<SqlSchemaResult> {
-  const sqlFiles = await discoverSqlFiles(rootDir, globs)
+  const sqlFiles = await discoverSqlFiles(rootDir, globs, excludes)
   const agg = await readAndParseSqlFiles(rootDir, sqlFiles)
 
   applyDropTableTimeline(agg)
