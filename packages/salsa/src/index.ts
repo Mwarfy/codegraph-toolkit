@@ -1,3 +1,5 @@
+// ADR-007 — public API exposee aux consumers (fileContent + sharedDb sont
+// les contrats canoniques pour toute computation Salsa).
 /**
  * @liby-tools/salsa — public API.
  *

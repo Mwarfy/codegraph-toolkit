@@ -1,3 +1,4 @@
+// ADR-010 — interpreter Datalog pure-TS, deterministe, zero binary.
 /**
  * @liby-tools/datalog — public API.
  *
