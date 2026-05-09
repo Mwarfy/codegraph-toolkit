@@ -26,8 +26,14 @@
 
 .decl BayesianDriverGrandfathered(driver: symbol, follower: symbol)
 
+// Skip si l'un des 2 est un fichier convention framework — les configs
+// triple-Sentry, vitest.config.ts, sentry.*.config.ts ont des git history
+// quasi-couplees a 100% (rebase ensemble) → bruit systemique.
+// Cf. F-203 audit v3.
 Violation("COMPOSITE-BAYESIAN-DRIVER", Driver, 0,
   "couplage causal directionnel >=80% — follower suit driver presque toujours, expliciter (co-localisation ou shared abstraction)") :-
     BayesianCoChange(Driver, Follower, P),
     P >= 800,
+    !IsFrameworkConventionFile(Driver),
+    !IsFrameworkConventionFile(Follower),
     !BayesianDriverGrandfathered(Driver, Follower).

@@ -69,6 +69,7 @@
 .decl TryCatchSwallow(file: symbol, line: number, kind: symbol, containingSymbol: symbol)
 .decl AwaitInLoop(file: symbol, line: number, loopKind: symbol, containingSymbol: symbol)
 .decl IsPackageEntryPoint(file: symbol)
+.decl IsFrameworkConventionFile(file: symbol)
 .decl ModuleCentrality(file: symbol, pageRank: number, henryKafura: number)
 .decl FunctionComplexity(file: symbol, name: symbol, line: number, cyclomatic: number, cognitive: number, containingClass: symbol)
 .decl AllocationInLoop(file: symbol, line: number, allocKind: symbol, containingSymbol: symbol)
@@ -153,6 +154,7 @@
 .input TryCatchSwallow
 .input AwaitInLoop
 .input IsPackageEntryPoint
+.input IsFrameworkConventionFile
 .input ModuleCentrality
 .input FunctionComplexity
 .input AllocationInLoop

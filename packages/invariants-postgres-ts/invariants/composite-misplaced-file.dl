@@ -26,9 +26,14 @@
 
 .decl MisplacedFileGrandfathered(file: symbol)
 
+// Skip si fichier reconnu convention framework (Next.js routes, configs
+// outillage, tests, scripts, layouts OSS). Newman-Girvan classifie ces
+// fichiers naturellement isoles "wrong community" (e2e/, sentry.*.config.ts,
+// mobile/Expo, scripts/) → bruit massif sans valeur. Cf. F-202 audit v3.
 Violation("COMPOSITE-MISPLACED-FILE", F, 0,
   "fichier dans une community != son package physique (Newman-Girvan modularity claire) — candidat co-localisation") :-
     ImportCommunity(F, _, _, 1),
     ModularityScore(Q, _, _),
     Q > 300,
+    !IsFrameworkConventionFile(F),
     !MisplacedFileGrandfathered(F).

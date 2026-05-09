@@ -633,6 +633,26 @@ async function emitPackageEntryFacts(
     }
   }
   relations.push(isPackageEntryPointRel)
+
+  // IsFrameworkConventionFile — superset elargi de IsPackageEntryPoint
+  // qui inclut TOUTES les conventions reconnues par le toolkit (Next.js
+  // routes, configs outillage, tests, scripts CLI, OSS layouts).
+  // Utilise par les rules COMPOSITE-MISPLACED-FILE et BAYESIAN-DRIVER
+  // pour skip ces fichiers — naturellement isoles par design (e2e/,
+  // sentry.*.config.ts, mobile/Expo, scripts/), Newman-Girvan modularity
+  // les classifie systematiquement "wrong community" → bruit massif.
+  // Cf. AUDIT-EXTERNAL-V3 F-202/F-203.
+  const isFrameworkConventionRel: RelationDef = {
+    name: 'IsFrameworkConventionFile',
+    decl: '(file:symbol)',
+    rows: [],
+  }
+  for (const node of snapshot.nodes) {
+    if (node.type === 'file' && isFrameworkEntryPoint(node.id)) {
+      isFrameworkConventionRel.rows.push([sym(node.id)])
+    }
+  }
+  relations.push(isFrameworkConventionRel)
 }
 
 /**

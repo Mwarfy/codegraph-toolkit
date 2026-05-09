@@ -241,6 +241,17 @@ const BUILD_TIME_DEPS_LITERAL = new Set([
   'jscodeshift', 'tsm', 'concurrently', 'npm-run-all', 'wireit',
   // Husky / git hooks (configures par script)
   'husky', 'lint-staged', 'simple-git-hooks',
+  // CSS / PostCSS plugins (charges via postcss.config.{js,mjs}, jamais imports)
+  'tailwindcss', 'autoprefixer', 'tw-animate-css',
+  // Vitest plugins/environments (utilises via vitest.config.ts settings)
+  '@vitest/coverage-v8', '@vitest/coverage-istanbul', '@vitest/ui',
+  'jsdom', 'happy-dom',
+  // Next.js implicit deps (peer auto-loaded mais jamais import direct par app)
+  'react-dom',
+  // Vercel Workflow runtime (charge implicitement par le runtime)
+  '@workflow/ai', '@workflow/next', '@workflow/core',
+  // CSS frameworks runtime-loaded
+  'tailwindcss-animate',
 ])
 
 const BUILD_TIME_DEPS_PREFIX = [
@@ -249,6 +260,17 @@ const BUILD_TIME_DEPS_PREFIX = [
   '@types/',  // toujours type-only
   '@typescript-eslint/',
   '@cloudflare/workers-types',
+  // PostCSS plugins (chain dans postcss.config)
+  '@tailwindcss/',  // @tailwindcss/postcss, @tailwindcss/typography, ...
+  'postcss-',       // postcss-import, postcss-nested, ...
+  // Expo Router + RN runtime (auto-loaded par le runtime, jamais imports)
+  'expo-',          // expo-router, expo-linking, expo-updates, ...
+  '@expo/',         // @expo/vector-icons, @expo/config, ...
+  'react-native-',  // react-native-screens, react-native-gesture-handler, ...
+  '@react-native-', // @react-native-community/*, @react-native-async-storage/*
+  '@react-navigation/', // navigation libs charges au runtime
+  // Workflow scope
+  '@workflow/',
 ]
 
 function isBuildTimeDep(name: string): boolean {
