@@ -178,7 +178,7 @@
 - `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 34) · gov by ADR-012
 - `packages/codegraph/src/datalog-detectors/ast-facts/types.ts` (in: 21)
 - `packages/codegraph/src/core/detector-registry.ts` (in: 19) · gov by ADR-008
-- `packages/runtime-graph/src/core/types.ts` (in: 15) · gov by ADR-009
+- `packages/dashboard-web/src/store.ts` (in: 15)
 
 ## ⚠ ADR anchor suggestions
 
@@ -186,6 +186,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 
 - **40** `packages/salsa/dist/index.d.ts` _(top-hub)_
 - **21** `packages/codegraph/src/datalog-detectors/ast-facts/types.ts` _(top-hub)_
+- **15** `packages/dashboard-web/src/store.ts` _(top-hub)_
 
 ## Tensions actives — invitations à explorer
 
@@ -228,6 +229,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+8523e30 feat(dashboard-web): cockpit redesign — cosmos + IDE tree + compact pipeline
 f921d03 feat(dashboard): graph filter, token sparkline, init wiring, publishable
 361e46e test(dashboard-server): 37 tests + clear two real bombs the toolkit flagged
 34ee70a feat(dashboard): time-travel, diff view, focus mode, hook timeline
@@ -239,7 +241,6 @@ c15730c Merge pull request #26 from Mwarfy/feat/articulation-auto-baseline
 fcd19de Merge pull request #25 from Mwarfy/feat/audit-v3-batch2
 4db5c60 Merge pull request #23 from Mwarfy/docs/audit-v3-external
 42ee084 fix(rules): F-205 + F-208 audit v3 — peer deps transitive + FSM JSX/setter writes
-b784c65 Merge pull request #24 from Mwarfy/feat/audit-v3-quickwins
 ```
 
 ## Comment contribuer à ce brief

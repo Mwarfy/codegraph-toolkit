@@ -51,8 +51,10 @@ export function App() {
     }
   })
 
-  function onClickNode(n: CosmosNode): void {
-    store.setFocusedNode(n.apiId)
+  function onClickNode(_n: CosmosNode): void {
+    // Click handler reserved for the upcoming FilePeek modal — wire when
+    // the inspector overlay lands. Today it's a no-op so the canvas
+    // doesn't intercept drags.
   }
 
   return (
