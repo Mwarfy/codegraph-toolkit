@@ -51,8 +51,13 @@
 - `packages/codegraph/src/cli/_shared.ts` → ADR-005
 - `packages/codegraph/src/cli/commands/affected.ts` → ADR-005
 - `packages/codegraph/src/cli/commands/analyze.ts` → ADR-005
+- `packages/codegraph/src/cli/commands/arch-check.ts` → ADR-005
+- `packages/codegraph/src/cli/commands/check.ts` → ADR-005
 - `packages/codegraph/src/cli/commands/datalog-check.ts` → ADR-005
+- `packages/codegraph/src/cli/commands/deps.ts` → ADR-005
 - `packages/codegraph/src/cli/commands/diff.ts` → ADR-005
+- `packages/codegraph/src/cli/commands/exports.ts` → ADR-005
+- `packages/codegraph/src/cli/commands/serve.ts` → ADR-005
 - `packages/codegraph/src/core/analyzer.ts` → ADR-008
 - `packages/codegraph/src/core/detector-registry.ts` → ADR-008
 - `packages/codegraph/src/core/detectors/barrels-detector.ts` → ADR-008
@@ -229,6 +234,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+477aaaa refactor(cli): extract \`affected\` command + BFS helpers to commands/affected.ts
 5822a17 fix(test): exclude packages/dashboard-* from hub-ADR governance gate
 332cb8f docs(refactor): rewrite analyzer plan to reflect post-audit reality
 eeebc41 fix(dashboard-web): @import fonts before @tailwind so PostCSS keeps them
@@ -240,7 +246,6 @@ f921d03 feat(dashboard): graph filter, token sparkline, init wiring, publishable
 0fff050 feat(dashboard): live cockpit + agent transparency telemetry
 6804098 Merge pull request #27 from Mwarfy/feat/audit-v4-final-cleanup
 381de34 fix(rules): F-301/F-302/F-303 audit v4 + doc verdict final
-c15730c Merge pull request #26 from Mwarfy/feat/articulation-auto-baseline
 ```
 
 ## Comment contribuer à ce brief
