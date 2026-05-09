@@ -20,7 +20,9 @@
 // Pattern ratchet : grandfather TOUS les articulation points actuels
 // au moment du premier run. La rule attrape uniquement les nouveaux.
 
-.decl ArticulationPointGrandfathered(file: symbol)
+// `ArticulationPointGrandfathered` declaree + .input dans schema-subset.dl.
+// Auto-peuplee depuis .codegraph/articulation-baseline.json (auto-cree au
+// premier run). Cf. core/articulation-baseline.ts.
 
 // Exclut les package entry points (index.ts, main, bin, exports) ET les
 // fichiers convention framework (configs Sentry, proxy.ts, instrumentation*,

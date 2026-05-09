@@ -802,6 +802,17 @@ export interface GraphSnapshot {
   }>
 
   /**
+   * Set de fichiers articulation-point grandfathered au baseline. Persiste
+   * dans `<snapshotDir>/articulation-baseline.json` (auto-cree au premier
+   * run). Consomme par le facts emitter pour produire la relation
+   * `ArticulationPointGrandfathered(file)` que la rule
+   * `no-new-articulation-point.dl` utilise comme exemption.
+   *
+   * Cf. core/articulation-baseline.ts.
+   */
+  articulationGrandfathered?: string[]
+
+  /**
    * Constant expressions — patterns de simplification symbolique
    * (tautology, contradiction, gratuitous bool comparison, etc.).
    * Cf. extractors/constant-expressions.ts.

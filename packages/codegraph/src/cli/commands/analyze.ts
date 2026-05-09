@@ -21,6 +21,7 @@ import { collectAdrMarkers } from '../../synopsis/adr-markers.js'
 import { buildMap } from '../../map/builder.js'
 import { exportFacts } from '../../facts/index.js'
 import { detectWorkspaces } from '../../core/workspaces.js'
+import { resolveGrandfatheredArticulations } from '../../core/articulation-baseline.js'
 import { loadConfig, defaultSnapshotPath, pruneSnapshots, formatHealth } from '../_shared.js'
 
 export interface AnalyzeOpts {
@@ -238,6 +239,28 @@ async function persistAnalyzeOutputs(
   console.log(chalk.green(
     `  ✓ Synopsis written: synopsis.json + ${level3Containers.length + 3} markdown files in ${snapDir}\n`,
   ))
+
+  // Auto-baseline pour NO-NEW-ARTICULATION-POINT. Au premier run, capture
+  // les cut-vertex actuels dans .codegraph/articulation-baseline.json
+  // (ratchet implicit). Aux runs suivants, charge le baseline pour emettre
+  // les facts grandfather. Cf. core/articulation-baseline.ts + F-201.
+  try {
+    const apFiles = (snapshot.articulationPoints ?? []).map((ap) => ap.file)
+    const { grandfathered, created } = await resolveGrandfatheredArticulations(
+      config.rootDir, apFiles, snapDir,
+    )
+    snapshot.articulationGrandfathered = [...grandfathered].sort()
+    if (created) {
+      console.log(chalk.dim(
+        `  ✓ Articulation baseline created: ${grandfathered.size} cut-vertex(es) grandfathered ` +
+        `(commit .codegraph/articulation-baseline.json to share with the team).\n`,
+      ))
+    }
+  } catch (err) {
+    console.error(
+      chalk.yellow(`  ⚠ Articulation baseline resolve failed: ${err instanceof Error ? err.message : String(err)}`),
+    )
+  }
 
   // Datalog facts derivative — un fichier .facts par relation + schema.dl.
   // Régen à chaque analyze (cf. ADR-022).
