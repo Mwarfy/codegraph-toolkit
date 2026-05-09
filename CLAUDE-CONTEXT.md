@@ -49,6 +49,7 @@
 - `packages/codegraph-mcp/src/snapshot-loader.ts` → ADR-008
 - `packages/codegraph/src/check/types.ts` → ADR-006
 - `packages/codegraph/src/cli/_shared.ts` → ADR-005
+- `packages/codegraph/src/cli/commands/affected.ts` → ADR-005
 - `packages/codegraph/src/cli/commands/analyze.ts` → ADR-005
 - `packages/codegraph/src/cli/commands/datalog-check.ts` → ADR-005
 - `packages/codegraph/src/cli/commands/diff.ts` → ADR-005
@@ -228,6 +229,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+eeebc41 fix(dashboard-web): @import fonts before @tailwind so PostCSS keeps them
 c2a0784 chore(dashboard-web): drop 9 legacy panels superseded by cockpit redesign
 8523e30 feat(dashboard-web): cockpit redesign — cosmos + IDE tree + compact pipeline
 f921d03 feat(dashboard): graph filter, token sparkline, init wiring, publishable
@@ -239,7 +241,6 @@ f921d03 feat(dashboard): graph filter, token sparkline, init wiring, publishable
 c15730c Merge pull request #26 from Mwarfy/feat/articulation-auto-baseline
 5b27518 feat(rules): auto-baseline pour NO-NEW-ARTICULATION-POINT
 fcd19de Merge pull request #25 from Mwarfy/feat/audit-v3-batch2
-4db5c60 Merge pull request #23 from Mwarfy/docs/audit-v3-external
 ```
 
 ## Comment contribuer à ce brief

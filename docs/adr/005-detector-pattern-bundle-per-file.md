@@ -67,6 +67,7 @@ post-coup). Forcer le pattern dès la naissance évite la dette.
 <!-- AUTO-GÉNÉRÉ depuis les marqueurs ADR-NNN du code source. Voir @liby-tools/adr-toolkit. NE PAS éditer à la main. -->
 
 - `packages/codegraph/src/cli/_shared.ts`
+- `packages/codegraph/src/cli/commands/affected.ts`
 - `packages/codegraph/src/cli/commands/analyze.ts`
 - `packages/codegraph/src/cli/commands/datalog-check.ts`
 - `packages/codegraph/src/cli/commands/diff.ts`

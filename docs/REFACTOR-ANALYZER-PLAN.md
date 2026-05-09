@@ -1,437 +1,174 @@
 # Refactor `core/analyzer.ts` — pattern visiteur / detector registry
 
-> **Pour Claude qui reprend dans une nouvelle session :** lis CE FICHIER
-> EN ENTIER avant toute action. C'est un refactor RISQUÉ — la parité
-> snapshot bit-pour-bit est critique. Les tests `parity.test.ts` doivent
-> passer après chaque étape.
+> **Status** : objectifs principaux atteints (audit 2026-05-09).
+> Ce doc est conservé comme retro + pointeur vers le refactor suivant.
 
-## Contexte
+## TL;DR (post-audit 2026-05-09)
 
-`packages/codegraph/src/core/analyzer.ts` est le god-file du toolkit :
-- **1188 LOC** total
-- Fonction `analyze()` : **855 lignes brutes / 591 LOC effectives**
-- **46 imports** au top
-- 4 exports
-- Orchestrateur séquentiel de 15+ blocs détecteurs
+Le plan original ciblait `analyze()` à 591 LOC effectives (god-file).
+**Aujourd'hui `analyze()` fait 178 LOC** structurées en 8 phases nommées.
+Les fondations (`DetectorRegistry`, `DetectorRunContext`, `runDetectorTimed`,
+6 sous-phases) ont toutes été livrées. **Le refactor mécaniquement
+"completer" le plan ajouterait du code au lieu d'en enlever** — donc on
+arrête ici.
 
-**État actuel** (post Sprint avril 2026) :
-- 2 sections déjà extraites en helpers privés :
-  - `prebuildSharedProjectIncremental(config, files, fileCache)` — section 3b
-  - `runDeterministicDetectors(config, files, readFile, sharedProject, snapshot, timing)` — section 6b
-- analyze() reste un god-file mais avec ces 2 helpers extraits, il est
-  plus lisible (-100 LOC effectives).
+Le god-file s'est déplacé vers `packages/codegraph/src/cli/index.ts`
+(1 696 LOC) — c'est la prochaine cible (cf. section "Refactor suivant"
+en bas).
 
-## Pourquoi refactor
+## Ce qui est fait
 
-**Maintenabilité long terme** :
-- Ajouter un nouveau détecteur demande de toucher analyze() qui est
-  déjà le hot path.
-- Tests cross-détecteurs difficiles (chaque détecteur est inline dans
-  l'orchestrateur).
-- Cognitive load : lire analyze() complet pour comprendre le pipeline
-  est onéreux.
+### Architecture livrée
 
-**Pattern naturellement émergent** :
-- Tous les blocs suivent le même squelette :
-  ```
-  const tXxx = performance.now()
-  if (!factsOnly) try {
-    result = incremental ? incAllXxx.get('all') : await analyzeXxx(...)
-    // patch into snapshot/graph
-    timing.detectors['xxx'] = performance.now() - tXxx
-  } catch (err) {
-    timing.detectors['xxx'] = performance.now() - tXxx
-    console.error(`  ✗ xxx failed: ${err}`)
-  }
-  ```
-- C'est un pattern visiteur déguisé. L'abstraction est attendue.
+- `core/analyzer.ts` : `analyze()` réduit de **591 LOC → 178 LOC**, 8 phases :
+  1. Discover files
+  2. Build read cache
+  3. Load disk cache (Sprint 7)
+  3b. Pre-build shared Project (P4)
+  4. Run base detectors + build graph
+  5. Resolve tsconfig + shared Project
+  5. Run detectors via Registry
+  6. Generate snapshot + patch
+  6b. Deterministic detectors
+  7. Post-snapshot metrics
+  7b. Doc claims extraction
+  8. Datalog shadow run
 
-## Architecture cible
+- `core/detector-registry.ts` : interface `Detector` + `DetectorRunContext` +
+  `DetectorRegistry.runAll()` avec timing et error handling uniformes.
 
-### Type `AnalysisContext`
+- `core/detectors/*-detector.ts` : **17 détecteurs Phase 5 migrés**
+  (oauth-scope, event-emit, env-usage, package-deps, bin-shebangs, barrels,
+  unused-exports, complexity, symbol-refs, typed-calls, cycles, truth-points,
+  data-flows, state-machines, taint, sql-schema, drizzle-schema).
 
-Carrier object qui porte tout l'état partagé entre détecteurs :
+- 6 sous-phases extraites dans `runDeterministicDetectors` :
+  - `runPhase1IndependentDetectors` (5 détecteurs : todos, long-functions,
+    magic-numbers, test-coverage, co-change)
+  - `runPhase2Phase1Dependent` (7 détecteurs)
+  - `runPhase4SecurityAndQuality` (8 détecteurs)
+  - `runPhase5SqlAndResource` (3 détecteurs)
+  - `runPhase6TaintChain` (4 détecteurs)
+  - Phase 3 cross-discipline → orchestrateur dédié dans
+    `extractors/_shared/cross-discipline-orchestrator.ts`.
 
-```ts
-// packages/codegraph/src/core/analysis-context.ts (nouveau fichier)
+- `runDetectorTimed<T>(timing, name, fn)` : helper générique qui wrap
+  un appel détecteur avec timing + try/catch + log d'erreur. Remplace
+  les 27 blocs dupliqués originaux. Architecture équivalente à
+  `Detector.run()` mais sans la cérémonie de classe.
 
-export interface AnalysisContext {
-  // Inputs
-  config: CodeGraphConfig
-  options: AnalyzeOptions
-  files: string[]
-  readFile: (relPath: string) => Promise<string>
-  fileCache: Map<string, string>
+- `patchSnapshotWithDetectorResults(snapshot, results)` : centralise la
+  patch des outputs détecteurs dans le snapshot final.
 
-  // Resolved
-  tsConfigPath: string | undefined
-  sharedProject: Project  // ts-morph Project, prebuilt en mode incremental
+- `runPostSnapshotMetrics()` : phase métriques (module, component, dsm)
+  isolée.
 
-  // Outputs (mutated by detectors)
-  graph: CodeGraph
-  snapshot: GraphSnapshot
-  timing: AnalyzeResult['timing']
-}
+### Tests parité
+
+- `tests/parity.test.ts` : valide `legacy === --incremental` snapshot
+  bit-pour-bit. Passe.
+- `tests/types-snapshot-invariant.test.ts` : valide les types canoniques
+  (ADR-006). Passe.
+
+## Ce qui n'est PAS fait — et pourquoi on arrête
+
+Le plan original demandait de transformer chaque appel inline `analyze*()`
+en classe `Detector` enregistrée dans le registry. Il en reste **27**
+réparties dans les 5 sous-phases.
+
+**Ratio coût/bénéfice inversé** :
+
 ```
+Pattern actuel (inline) :
+  const todos = await runDetectorTimed(timing, 'todos',
+    () => analyzeTodos(config.rootDir, files, readFile))
+  // 3 lignes
 
-### Interface `Detector`
-
-Tout détecteur implémente ce contract :
-
-```ts
-// packages/codegraph/src/core/detector-registry.ts (nouveau fichier)
-
-export interface Detector {
-  /** Nom unique pour timing tracking et debug. */
-  name: string
-
-  /**
-   * Si true, le détecteur tourne aussi en mode factsOnly (pour les
-   * facts Datalog). Sinon, skip en factsOnly.
-   */
-  factsOnlyEligible: boolean
-
-  /**
-   * Détecteurs prerequisites — exécutés AVANT celui-ci. Permet de
-   * déclarer des dépendances (typedCalls avant dataFlows, etc.).
-   */
-  dependsOn?: string[]
-
-  /**
-   * Run le détecteur. Mutate ctx.snapshot / ctx.graph.
-   * Le orchestrateur gère timing + error handling.
-   */
-  run(ctx: AnalysisContext): Promise<void>
-}
-
-export class DetectorRegistry {
-  private detectors: Detector[] = []
-
-  register(d: Detector): void { this.detectors.push(d) }
-
-  /**
-   * Trie topologiquement par dependsOn et exécute. Timing + errors
-   * gérés ici.
-   */
-  async runAll(ctx: AnalysisContext): Promise<void> {
-    const sorted = topologicalSort(this.detectors)
-    for (const d of sorted) {
-      if (ctx.options.factsOnly && !d.factsOnlyEligible) continue
-      const t0 = performance.now()
-      try {
-        await d.run(ctx)
-        ctx.timing.detectors[d.name] = performance.now() - t0
-      } catch (err) {
-        ctx.timing.detectors[d.name] = performance.now() - t0
-        console.error(`  ✗ ${d.name} failed: ${err}`)
-      }
+Pattern Detector class :
+  // detectors/todos-detector.ts (~25 lignes)
+  export class TodosDetector implements Detector<TodoMarker[]> {
+    name = 'todos'
+    factsOnlyEligible = true
+    async run(ctx: DetectorRunContext) {
+      return analyzeTodos(ctx.config.rootDir, ctx.files, ctx.readFile)
     }
   }
-}
+  // + import + register ailleurs
 ```
 
-### Détecteurs concrets
+Migration mécanique = **+675 LOC ajoutées** dans `core/detectors/*` pour
+**~128 LOC économisées** dans analyze() (178 → 50). **Net : +547 LOC**.
 
-Chaque section actuelle de analyze() devient un Detector :
+Le gain de "uniformité de pattern" ne compense pas l'augmentation du
+volume de code. `runDetectorTimed` apporte déjà :
+- timing per-detector
+- try/catch + log uniforme
+- composition simple (pas de registry à maintenir)
 
-```ts
-// packages/codegraph/src/core/detectors/unused-exports-detector.ts
+Décision : **garder le pattern actuel**. Si un jour on a besoin de la
+flexibilité d'un registry pour ces 27 détecteurs (parallélisation par
+ex.), on migrera. Pas avant.
 
-export class UnusedExportsDetector implements Detector {
-  name = 'unused-exports'
-  factsOnlyEligible = false  // skip en factsOnly
+## Refactor suivant — `cli/index.ts` (god-file actuel)
 
-  async run(ctx: AnalysisContext) {
-    const exportInfos = ctx.options.incremental
-      ? incAllUnusedExports.get('all')
-      : await analyzeExports(ctx.config.rootDir, ctx.files, ctx.tsConfigPath, ctx.sharedProject)
+**Cible** : `packages/codegraph/src/cli/index.ts`, **1 696 LOC**, 26
+commandes CLI dont 23 ont leur `.action()` body inline.
 
-    for (const info of exportInfos) {
-      const node = ctx.graph.getNodeById(info.file)
-      if (node) {
-        ctx.graph.setNodeExports(info.file, info.exports, info.totalCount)
-      }
-    }
-  }
-}
-```
+**Pattern existant (à étendre)** : 5 commandes ont déjà leur body
+extrait dans `cli/commands/<name>.ts` (`analyze`, `cross-check`,
+`datalog-check`, `diff`, `memory-where`). Le `.command(...)` chain
+reste dans `cli/index.ts` (description + options), mais `.action()`
+appelle `await runXxxCommand(opts)`.
 
-Idem pour `ComplexityDetector`, `SymbolRefsDetector`, `TypedCallsDetector`,
-`CyclesDetector`, `TruthPointsDetector`, `DataFlowsDetector`, etc.
+**Top targets par taille** (à extraire) :
 
-### `analyze()` simplifié
+| Commande | LOC | Fichier cible |
+|----------|----:|---------------|
+| `affected` (+ helpers BFS) | ~407 | `commands/affected.ts` |
+| `serve` | ~240 | `commands/serve.ts` |
+| `arch-check` | ~129 | `commands/arch-check.ts` |
+| `exports` | ~130 | `commands/exports.ts` |
+| `deps` | ~92 | `commands/deps.ts` |
+| `check` | ~78 | `commands/check.ts` |
+| `taint` | ~62 | `commands/taint.ts` |
+| `facts` | ~61 | `commands/facts.ts` |
+| `orphans` | ~53 | `commands/orphans.ts` |
+| `reach` | ~52 | `commands/reach.ts` |
+| `watch`, `map`, `synopsis`, `dsm` | ~30-50 chacun | idem |
+| memory subcommands (list, mark, obsolete, delete, prune, export) | ~20-40 chacun | `commands/memory-*.ts` |
 
-```ts
-export async function analyze(
-  config: CodeGraphConfig,
-  options: AnalyzeOptions = {},
-): Promise<AnalyzeResult> {
-  const ctx = await buildAnalysisContext(config, options)
+**Estimation gain** : extraction des 5 plus grosses commandes
+(affected + serve + arch-check + exports + deps) = **~1 000 LOC sortis
+de cli/index.ts**, file passe à ~700 LOC. Si on continue jusqu'au bout,
+cli/index.ts devient une simple table de commands ~150-200 LOC.
 
-  // Phase 1 : graph build (légacy, pas un Detector)
-  await buildGraphPhase(ctx)
+**Risques** : chaque extraction peut casser un import ou un side-effect
+(commander attache à `program` global). Faut tester chaque commande
+manuellement après extraction (ex: `npx codegraph affected --help`).
+Pas de test automatisé qui garde la parité CLI (bug latent à corriger
+si on veut sécuriser les futurs refactors).
 
-  // Phase 2 : run all registered detectors
-  const registry = createDefaultRegistry()
-  await registry.runAll(ctx)
+## Pièges génériques (toujours valides)
 
-  // Phase 3 : metrics + persistence
-  await runMetricsPhase(ctx)
-  await persistenceSavePhase(ctx)
+### Parité bit-pour-bit
+Tout refactor de l'analyzer doit passer `tests/parity.test.ts`.
+Pour la CLI : `npx codegraph analyze --output /tmp/before.json` puis
+diff après refactor — même output exigé.
 
-  return { snapshot: ctx.snapshot, timing: ctx.timing }
-}
+### Error handling subtil
+Certains blocs inline ont un try/catch SPÉCIFIQUE qui swallow
+silencieusement. À auditer cas par cas.
 
-function createDefaultRegistry(): DetectorRegistry {
-  const reg = new DetectorRegistry()
-  reg.register(new UnusedExportsDetector())
-  reg.register(new ComplexityDetector())
-  reg.register(new SymbolRefsDetector())
-  reg.register(new TypedCallsDetector())
-  reg.register(new CyclesDetector())
-  reg.register(new TruthPointsDetector({ dependsOn: ['typed-calls'] }))
-  reg.register(new DataFlowsDetector({ dependsOn: ['typed-calls', 'truth-points'] }))
-  // ...
-  return reg
-}
-```
+### Salsa wrappers
+Le mode incremental utilise des derived queries qu'il ne faut pas
+toucher. Le détecteur ne fait que router vers legacy ou Salsa selon
+`ctx.options.incremental`.
 
-## Pièges critiques
+### Timing tracking
+Chaque détecteur a `timing.detectors[name]` mesuré. Préserver le naming
+exact (ex: `'unused-exports'` pas `'unusedExports'`). Tests qui inspectent
+timing peuvent péter.
 
-### Piège 1 — Ordre des détecteurs
-
-Beaucoup de blocs ont des dépendances cachées :
-- `data-flows` lit `typedCalls` (déjà calculé avant)
-- `truth-points` lit `graphEdges` set par les blocs précédents
-- `module-metrics` lit `snapshot.edges` final
-
-Si on permute l'ordre, output change. Le `dependsOn` doit être déclaré
-avec précision. **Mapping actuel à reverse-engineer dans analyze()** :
-
-```
-event-emit-sites    → no dep (pure scan)
-oauth-scope-literals→ no dep
-ts-imports          → graph.addEdge — utilisé par tous les autres
-unused-exports      → sharedProject seulement
-complexity          → sharedProject
-symbol-refs         → sharedProject + symbolRefs reads
-typed-calls         → sharedProject
-cycles              → graph.edges (post ts-imports)
-truth-points        → typed-calls + graphEdges
-data-flows          → typed-calls + truth-points
-state-machines      → SQL files + sharedProject
-env-usage           → sharedProject
-package-deps        → manifests (lus async)
-barrels             → sharedProject
-taint               → sharedProject + rules
-module-metrics      → snapshot final (post graph build)
-component-metrics   → snapshot final
-dsm                 → snapshot final
-```
-
-À documenter dans chaque Detector.
-
-### Piège 2 — Parité bit-pour-bit
-
-`tests/parity.test.ts` valide que le snapshot legacy === --incremental.
-Tout refactor doit passer ce test. Approche :
-
-1. Avant refactor : prendre snapshot Sentinel actuel `npx codegraph
-   analyze --output /tmp/before.json`
-2. Refactor (par étape, commit fréquents)
-3. Après refactor : `npx codegraph analyze --output /tmp/after.json`
-4. `diff /tmp/before.json /tmp/after.json` doit être vide
-
-Aussi : les tests `incremental.test.ts` qui vérifient la parité Salsa
-doivent continuer à passer. Le refactor ne doit toucher que le mode
-legacy (Salsa wrappers existants restent inchangés).
-
-### Piège 3 — Error handling subtil
-
-Dans analyze() actuel, certains blocs ont un try/catch SPÉCIFIQUE :
-```ts
-try {
-  taintViolations = await analyzeTaint(...)
-} catch (err) {
-  // certains errors sont swallow, d'autres remontent
-}
-```
-
-Pas tous les blocs sont symétriques. À auditer cas par cas avant
-d'abstraire en `runDetector()` générique. Risque : changer
-silencieusement le comportement d'un détecteur sur erreur.
-
-### Piège 4 — Timing tracking
-
-Chaque détecteur a `timing.detectors[name]` mesuré. Le wrapper
-`runAll()` doit préserver le naming exact (ex: `'unused-exports'` pas
-`'unusedExports'`). Tests qui inspectent timing peuvent péter.
-
-### Piège 5 — factsOnly comportement
-
+### factsOnly comportement
 Mode factsOnly skip 80% des détecteurs. Le flag `factsOnlyEligible: boolean`
-sur chaque Detector code ça explicitement. Vérifier que la liste des
-détecteurs factsOnly-eligible matche EXACTEMENT le comportement actuel :
-- ✅ event-emit-sites
-- ✅ env-usage
-- ✅ oauth-scope-literals
-- ✅ module-metrics
-- ✅ ts-imports / event-bus / http-routes / bullmq-queues / db-tables (base detectors via createDetectors registry — déjà gérés ailleurs)
-- ❌ unused-exports / complexity / symbol-refs / typed-calls / cycles /
-  truth-points / data-flows / state-machines / package-deps / barrels /
-  taint / component-metrics / dsm / todos / long-functions /
-  magic-numbers / test-coverage
-
-## Plan d'attaque pas-à-pas
-
-### Étape 0 — Snapshot baseline (15min)
-
-```bash
-cd ~/Documents/Sentinel
-codegraph analyze --output /tmp/snapshot-before-refactor.json
-# Save it. C'est le golden snapshot pour la parité.
-```
-
-### Étape 1 — Extract AnalysisContext + buildAnalysisContext (1h)
-
-Créer `core/analysis-context.ts`. Refactor analyze() pour construire
-AnalysisContext en début puis mutate via les sections existantes.
-Snapshot toujours identique au baseline.
-
-Test après : run analyze sur Sentinel, diff vs baseline. Doit être 0.
-
-### Étape 2 — Extract DetectorRegistry skeleton (1h)
-
-Créer `core/detector-registry.ts`. Pas encore de Detector concret —
-juste l'interface + classe. analyze() reste inchangé.
-
-Build clean.
-
-### Étape 3 — Migrer 1 détecteur simple (30min) — `EventEmitSitesDetector`
-
-Choisir le plus simple (pas de dépendances inter-détecteurs). Convertir
-la section actuelle en Detector class. Register dans analyze() AVANT
-le code legacy de cette section. Vérifier que ça produit le même
-résultat. Supprimer le code legacy.
-
-Test parité bit-pour-bit.
-
-### Étape 4 — Migrer les autres détecteurs un par un (4-6h)
-
-Dans l'ordre suggéré (par complexité croissante) :
-1. ✅ event-emit-sites (étape 3)
-2. env-usage
-3. oauth-scope-literals
-4. package-deps
-5. barrels
-6. unused-exports
-7. complexity
-8. symbol-refs
-9. typed-calls
-10. cycles
-11. truth-points
-12. state-machines
-13. data-flows
-14. taint
-
-Pour chaque migration : commit séparé + tests parité passants.
-
-### Étape 5 — Migrer les phases hors-Detector (2h)
-
-Module-metrics, component-metrics, dsm tournent APRÈS le snapshot
-build. Garder en `runMetricsPhase(ctx)` séparé OU les Detector-iser
-aussi avec `dependsOn: ['snapshot-built']`.
-
-Décision pragmatique : garder en phase séparée pour v1. Refactor
-ultérieur si besoin.
-
-### Étape 6 — Cleanup analyze() (30min)
-
-Une fois tous les détecteurs migrés, analyze() devrait être ~50-80
-LOC :
-
-```ts
-export async function analyze(config, options = {}): Promise<AnalyzeResult> {
-  const ctx = await buildAnalysisContext(config, options)
-  await buildGraphPhase(ctx)
-  await createDefaultRegistry().runAll(ctx)
-  await runMetricsPhase(ctx)
-  await persistenceSavePhase(ctx)
-  return { snapshot: ctx.snapshot, timing: ctx.timing }
-}
-```
-
-### Étape 7 — Tests + commit final (30min)
-
-- 108/108 tests toolkit passent
-- parity.test.ts passent
-- Sentinel snapshot == baseline
-- Commit avec mesures :
-  ```
-  refactor(codegraph): pattern visiteur / detector registry pour analyze()
-  
-  -1100 LOC dans analyze() (591 → 50 LOC)
-  +250 LOC dans detectors/* (15 nouveaux fichiers, 1 par détecteur)
-  +100 LOC core/detector-registry.ts + analysis-context.ts
-  
-  Net : ~-750 LOC, distribution claire, tests parité 100%.
-  ```
-
-## Estimation effort
-
-**1-2 jours dédiés** (pas en mode auto cumulatif sur plusieurs sessions
-courtes — le contexte cross-section est trop important pour fragmenter
-sainement).
-
-Breakdown :
-- Étape 0-2 : 2h (setup AnalysisContext + Registry, pas de migration)
-- Étape 3 : 30min (PoC sur 1 détecteur simple)
-- Étape 4 : 4-6h (15 détecteurs × 15-30min, parité tests à chaque)
-- Étape 5-6 : 2h (phases métriques + cleanup)
-- Étape 7 : 30min (final tests + commit)
-- Buffer : +2-3h pour debug parité (les pièges sont là)
-
-**Total : 9-13h soit 1.5-2 jours dédiés.**
-
-## Décisions architecturales prises (ne pas remettre en cause)
-
-- **Detector classes plutôt que functions** : permettent les dépendances
-  déclarées et l'extensibilité (subclassing si besoin un jour).
-- **AnalysisContext mutable** : passer par mutation plutôt que par
-  retour. Plus simple pour 15+ détecteurs qui contribuent chacun au
-  snapshot final.
-- **Phase metrics SÉPARÉE de Detector** : module-metrics nécessite le
-  snapshot final post-graph-build, donc différent du flow détecteur.
-- **factsOnlyEligible explicite par Detector** : remplace le
-  `if (!factsOnly)` répété dans analyze(). Plus déclaratif.
-- **Salsa wrappers inchangés** : le mode incremental utilise toujours
-  les mêmes derived queries. Le Detector ne fait que router vers
-  legacy ou Salsa selon `ctx.options.incremental`.
-
-## Reprise rapide checklist
-
-1. [ ] Lire CE FICHIER en entier
-2. [ ] Lire `packages/codegraph/src/core/analyzer.ts` en entier
-   (1188 LOC, prends le temps)
-3. [ ] `git log --oneline | head -20` pour voir l'état actuel
-4. [ ] `npx vitest run` côté toolkit doit donner 136/136
-5. [ ] Mapper les dépendances inter-détecteurs (cf. piège 1) avant
-   commencer migration
-6. [ ] Étape 0 : snapshot baseline AVANT toute modif
-7. [ ] Suivre les étapes 1-7 dans l'ordre, commits fréquents
-8. [ ] Pas de squash final — la granularité aide la review
-9. [ ] Bump à 0.3.0 ou 0.4.0 (selon ce qui est livré entre temps)
-10. [ ] Republish + tag + push
-
-## Si tu fais ça en plusieurs sessions
-
-Le refactor est continu — DIFFICILE de fragmenter. Mais si tu DOIS :
-- **Phase A (1 session)** : étapes 0-3 (PoC + 1 détecteur migré).
-  Snapshot bit-pour-bit identique. Commit + déploiement OK.
-- **Phase B (1 session)** : étapes 4 (migrer le reste). Beaucoup de
-  petits commits.
-- **Phase C (0.5 session)** : étapes 5-7 (cleanup + final).
-
-Entre les phases, le code est en transition (mix Detector + legacy
-inline). C'est OK fonctionnellement mais inesthétique. Garder ça en
-tête pour ne pas merger à GitHub un état mid-refactor sans flagger.
+sur chaque Detector code ça explicitement.
