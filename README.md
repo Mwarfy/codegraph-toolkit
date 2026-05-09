@@ -47,18 +47,20 @@ Le toolkit est un monorepo. Le **noyau publishable** (4 packages) :
 
 | Package | Version | Rôle | Status |
 |---|---|---|---|
-| [`@liby-tools/codegraph`](packages/codegraph/) | `0.6.0` | Static analyzer + Datalog runner γ + Salsa incremental + composite cross-cut | core |
-| [`@liby-tools/adr-toolkit`](packages/adr-toolkit/) | `0.3.0` | ADR governance (anchors, asserts ts-morph, boot brief, hooks) | core |
+| [`@liby-tools/codegraph`](packages/codegraph/) | `0.6.1` | Static analyzer + Datalog runner γ + Salsa incremental + composite cross-cut + SARIF output | core |
+| [`@liby-tools/adr-toolkit`](packages/adr-toolkit/) | `0.3.1` | ADR governance (anchors, asserts ts-morph, boot brief, hooks) | core |
 | [`@liby-tools/datalog`](packages/datalog/) | `0.3.0` | Pure-TS Datalog interpreter — zero binary, multi-dir loader | core |
 | [`@liby-tools/salsa`](packages/salsa/) | `0.3.0` | Salsa-style incremental computation runtime (peer dep de codegraph) | core |
-| [`@liby-tools/invariants-postgres-ts`](packages/invariants-postgres-ts/) | `0.1.0` | 78 composite Datalog rules pour stack TS+Postgres | published |
+| [`@liby-tools/invariants-postgres-ts`](packages/invariants-postgres-ts/) | `0.1.0` | 78 composite Datalog rules pour stack TS+Postgres | core |
 | [`@liby-tools/runtime-graph`](packages/runtime-graph/) | `0.1.0-alpha.5` | OTel runtime capture + bridge Salsa pour cross-cut composite | published |
 
 Les **packages expérimentaux** :
 
-| Package | Status | Pourquoi |
-|---|---|---|
-| [`@liby-tools/codegraph-mcp`](packages/codegraph-mcp/) | experimental | demande client MCP (Claude Code). Tests faibles (2). |
+| Package | Version | Status | Pourquoi |
+|---|---|---|---|
+| [`@liby-tools/codegraph-mcp`](packages/codegraph-mcp/) | `0.3.1` | experimental | demande client MCP (Claude Code). Tests faibles (2). |
+
+> **Note publication** : voir [`docs/RELEASE-PLAN.md`](docs/RELEASE-PLAN.md) pour la liste des packages à publier sur npm et l'ordre recommandé.
 
 ---
 
@@ -427,10 +429,36 @@ Maintient `.codegraph/snapshot-live.json` à jour en temps réel (~50ms par save
 
 | Layout | Détection | Config générée |
 |---|---|---|
+| **Next.js** | `next.config.{ts,js,mjs,cjs}` | `srcDirs: ["app","lib","components","pages","src"]`, entryPoints: `["proxy.ts"]` ou `["middleware.ts"]`, sql-schema auto-activé si `supabase/migrations/` |
 | **Simple** | `src/` à la racine | `srcDirs: ["src"]`, tsconfig: `tsconfig.json` |
 | **Fullstack monorepo** | `backend/src/` + `frontend/` | `srcDirs: ["backend/src", "shared/src", "frontend"]`, tsconfig: `backend/tsconfig.json` |
 | **Workspaces monorepo** | `apps/*` ou `packages/*` | `srcDirs: ["apps", "packages"]` |
 | **Flat** | Rien d'évident | Fallback minimal — ajuste `srcDirs` à la main |
+
+### Auto-détection workspaces (monorepo-aware)
+
+L'analyzer détecte automatiquement les workspaces via :
+
+- `pnpm-workspace.yaml` (parser intégré, glob `packages/*` + `packages/**/*` récursif)
+- `package.json#workspaces` (npm 7+, yarn classic + berry object form)
+- `lerna.json#packages`
+
+Conséquences :
+- Les `packages/<pkg>/src/index.ts` (résolus via `package.json#main`/`exports`) sont marqués entry-point — plus de cascade orphans sur monorepo
+- Le détecteur `package-deps` exempte les workspaces internes du check `declared-unused`
+- Les paires near-duplicate cross-workspace (adapter pattern multi-framework type tanstack-query react/vue/svelte) sont skip — moins de bruit
+
+### Conventions d'entry-points reconnues automatiquement
+
+Le toolkit reconnaît sans config explicite :
+
+- **Next.js App Router + Pages** : `app/page.tsx`, `app/layout.tsx`, `app/api/route.ts`, `pages/*`, `proxy.ts` (Next.js 16), `middleware.ts`, `instrumentation.ts`, `instrumentation-client.ts`
+- **Tests** : `*.test.{ts,tsx}`, `*.spec.{ts,tsx}`, `*.stories.{ts,tsx}`, `*.test-d.ts` (vitest type tests), `*.svelte.ts` (Svelte 5), `test-setup.ts`, `__tests__/`, `__testfixtures__/`, `__mocks__/`
+- **Configs outillage** : `vitest.config`, `vitest.setup`, `jest.config`, `jest.setup`, `playwright.config`, `next.config`, `nuxt.config`, `eslint.config` (flat), `tailwind.config`, `tsup.config`, `tsdown.config`, `unbuild.config`, `vercel.ts` (Vercel 2026), `sentry.{client,server,edge}.config`, etc.
+- **Scripts CLI** : `scripts/*`, `bin/*`
+- **Layouts OSS conventionnels** : `examples/`, `benchmarks/`, `samples/`, `demos/`, `playground/`, `runtime-tests/`, `perf-measures/`, `www/`, `website/`, suffixes `*.examples.ts`, `*.bench.ts`
+
+→ Sur 5 projets OSS audités (vercel/commerce, mcp-sdk, hono, trpc, tanstack-query) : health 95-100% sans config custom.
 
 ---
 
@@ -460,7 +488,12 @@ codegraph deps [--only declared-unused|missing|devOnly]
 codegraph facts <out-dir>                      # Datalog facts emission
 
 # Datalog gating (Tier 8 live + post-commit baseline)
-codegraph datalog-check [--diff] [--update-baseline] [--json]
+codegraph datalog-check [--diff] [--update-baseline] [--json] [--format sarif]
+#   --format sarif : SARIF 2.1.0 output → consommable par GitHub Code Scanning
+#                    (github/codeql-action/upload-sarif@v3) ou VS Code SARIF Viewer
+
+# Detector introspection (montre les detecteurs reellement executes)
+codegraph detectors
 
 # Composite cross-cut (statique × dynamique unifié — ADR-026 phase D)
 codegraph cross-check [--rules-dir DIR] [--facts-dir DIR] [--facts-runtime-dir DIR] [--json]
