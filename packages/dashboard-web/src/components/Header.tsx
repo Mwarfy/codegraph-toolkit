@@ -7,67 +7,134 @@ export function Header() {
   const [pulse, setPulse] = createSignal(false)
 
   let timer: number | undefined
+  let pulseTimer: number | undefined
+  let lastSnap = 0
+
   onMount(() => {
     const refresh = () => api.status().then(setStatus).catch(() => setStatus(null))
     refresh()
     timer = window.setInterval(refresh, 5000)
+    pulseTimer = window.setInterval(() => {
+      const snap = store.snapshot()
+      if (!snap) return
+      if (snap.mtime !== lastSnap) {
+        if (lastSnap !== 0) {
+          setPulse(true)
+          window.setTimeout(() => setPulse(false), 600)
+        }
+        lastSnap = snap.mtime
+      }
+    }, 500)
   })
+
   onCleanup(() => {
     if (timer) clearInterval(timer)
+    if (pulseTimer) clearInterval(pulseTimer)
   })
 
-  // Brief flash when a snapshot update lands
-  let lastSnap = 0
-  setInterval(() => {
-    const snap = store.snapshot()
-    if (snap && snap.mtime !== lastSnap) {
-      if (lastSnap !== 0) {
-        setPulse(true)
-        setTimeout(() => setPulse(false), 600)
-      }
-      lastSnap = snap.mtime
-    }
-  }, 500)
-
   return (
-    <header class="h-10 border-b border-zinc-800 px-4 flex items-center gap-4 text-xs">
-      <span class="font-bold tracking-wider text-emerald-400">CODEGRAPH · COCKPIT</span>
-      <span class="text-zinc-600">|</span>
+    <header
+      class="flex items-center gap-4 mono"
+      style={{
+        height: '40px',
+        padding: '0 16px',
+        'border-bottom': '1px solid var(--bg-line)',
+        background: 'var(--bg-1)',
+        'font-size': '11px',
+        'flex-shrink': 0,
+      }}
+    >
+      <span
+        class="uppercase"
+        style={{
+          'font-weight': 700,
+          'letter-spacing': '0.08em',
+          color: 'var(--fg-0)',
+        }}
+      >
+        codegraph<span style={{ color: 'var(--cyan)' }}>·</span>cockpit
+      </span>
+
       <Show when={status()}>
         {(s) => (
           <>
-            <span class="text-zinc-400">root:</span>
-            <code class="text-zinc-300 truncate max-w-md" title={s().rootDir}>
+            <Divider />
+            <span style={{ color: 'var(--fg-2)' }}>root</span>
+            <code class="truncate max-w-md" style={{ color: 'var(--fg-1)' }} title={s().rootDir}>
               {s().rootDir.split('/').slice(-2).join('/')}
             </code>
-            <span class="text-zinc-600">|</span>
-            <span class="text-zinc-400">ws:</span>
-            <span class="text-emerald-400">{s().wsClients} client(s)</span>
+            <Divider />
+            <span style={{ color: 'var(--fg-2)' }}>ws</span>
+            <span style={{ color: 'var(--green)' }}>{s().wsClients}</span>
           </>
         )}
       </Show>
+
       <Show when={store.snapshot()}>
         {(snap) => (
           <>
-            <span class="text-zinc-600">|</span>
-            <span class="text-zinc-400">graphe:</span>
-            <span class="text-zinc-200">
-              {snap().data.nodes.length} nodes · {snap().data.edges.length} edges
+            <Divider />
+            <span style={{ color: 'var(--fg-2)' }}>graph</span>
+            <span class="tnum" style={{ color: 'var(--fg-0)' }}>
+              {snap().data.nodes.length} · {snap().data.edges.length}
             </span>
           </>
         )}
       </Show>
+
+      <button
+        type="button"
+        onClick={() => store.setViewer({ kind: 'boot' })}
+        class="ml-auto"
+        style={{
+          padding: '3px 10px',
+          'font-size': '10px',
+          color: 'var(--cyan)',
+          background: 'rgba(120,200,220,0.08)',
+          border: '1px solid rgba(120,200,220,0.25)',
+          'border-radius': '3px',
+          cursor: 'pointer',
+        }}
+        title="Boot context envoyé à Claude au démarrage"
+      >
+        boot context
+      </button>
+
       <input
         type="text"
-        placeholder="filter (substring match)…"
+        placeholder="filter…"
         value={store.filterPattern()}
         onInput={(e) => store.setFilterPattern(e.currentTarget.value)}
-        class="ml-auto bg-zinc-900 border border-zinc-800 rounded px-2 py-0.5 text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500 w-56"
+        class="mono"
+        style={{
+          background: 'var(--bg-2)',
+          border: '1px solid var(--bg-line)',
+          color: 'var(--fg-1)',
+          padding: '4px 10px',
+          'font-size': '11px',
+          'border-radius': '3px',
+          outline: 'none',
+          width: '220px',
+        }}
       />
-      <span class="flex items-center gap-2">
-        <span class={`h-2 w-2 rounded-full ${pulse() ? 'bg-emerald-400' : 'bg-zinc-700'} transition-colors`} />
-        <span class="text-zinc-500">live</span>
+
+      <span class="flex items-center gap-1.5">
+        <span
+          class="rounded-full"
+          style={{
+            width: '6px',
+            height: '6px',
+            background: pulse() ? 'var(--green)' : 'var(--bg-3)',
+            'box-shadow': pulse() ? '0 0 8px var(--green)' : 'none',
+            transition: 'background 200ms',
+          }}
+        />
+        <span style={{ color: 'var(--fg-2)' }}>live</span>
       </span>
     </header>
   )
+}
+
+function Divider() {
+  return <span style={{ color: 'var(--fg-4)' }}>|</span>
 }

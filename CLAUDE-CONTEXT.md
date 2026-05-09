@@ -72,6 +72,7 @@
 - `packages/codegraph/src/core/detectors/typed-calls-detector.ts` → ADR-008
 - `packages/codegraph/src/core/detectors/unused-exports-detector.ts` → ADR-008
 - `packages/codegraph/src/core/file-discovery.ts` → ADR-008
+- `packages/codegraph/src/core/framework-conventions.ts` → ADR-006
 - `packages/codegraph/src/core/graph.ts` → ADR-008
 - `packages/codegraph/src/core/types.ts` → ADR-006
 - `packages/codegraph/src/detectors/block-loader.ts` → ADR-003
@@ -227,18 +228,18 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
-0184159 test(dashboard-server): 37 tests + clear two real bombs the toolkit flagged
-5c47441 feat(dashboard): time-travel, diff view, focus mode, hook timeline
-ac1b3ea feat(dashboard): live cockpit + agent transparency telemetry
-e9b880a feat(floating-promises): multi-tsconfig TypeChecker for monorepos
-2e7cd7a refactor: cut metric noise across 6 detectors
-5a43915 fix(floating-promises): drop false positives when sync method shares name
-b5ec032 fix(ts-imports): handle Next.js flat layouts and cross-project @/* leaks
-0a2bdf0 refactor(ast-facts-visitor): split god file en 20 modules par domaine (69 → 68)
-804e963 refactor(ast-facts-visitor): phase 2 — 3 visitors bombs résolus (75 → 69)
-32c50d1 refactor(ast-facts-visitor): extract helpers — 4 visitors bombs résolus (80 → 75)
-face7c3 chore(invariants): grandfather NO-BOOLEAN-POSITIONAL-PARAM × 20 (100 → 80)
-843062f refactor: tame COMPOSITE-NEAR-DUPLICATE-FN × 24 (123 → 100 violations)
+f921d03 feat(dashboard): graph filter, token sparkline, init wiring, publishable
+361e46e test(dashboard-server): 37 tests + clear two real bombs the toolkit flagged
+34ee70a feat(dashboard): time-travel, diff view, focus mode, hook timeline
+0fff050 feat(dashboard): live cockpit + agent transparency telemetry
+6804098 Merge pull request #27 from Mwarfy/feat/audit-v4-final-cleanup
+381de34 fix(rules): F-301/F-302/F-303 audit v4 + doc verdict final
+c15730c Merge pull request #26 from Mwarfy/feat/articulation-auto-baseline
+5b27518 feat(rules): auto-baseline pour NO-NEW-ARTICULATION-POINT
+fcd19de Merge pull request #25 from Mwarfy/feat/audit-v3-batch2
+4db5c60 Merge pull request #23 from Mwarfy/docs/audit-v3-external
+42ee084 fix(rules): F-205 + F-208 audit v3 — peer deps transitive + FSM JSX/setter writes
+b784c65 Merge pull request #24 from Mwarfy/feat/audit-v3-quickwins
 ```
 
 ## Comment contribuer à ce brief
