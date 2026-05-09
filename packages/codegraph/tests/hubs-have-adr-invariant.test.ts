@@ -81,6 +81,11 @@ function shouldGate(filePath: string): boolean {
   if (filePath.includes('/examples/')) return false
   if (filePath.endsWith('.d.ts')) return false
   if (!filePath.endsWith('.ts')) return false
+  // dashboard-* est la couche UX consommatrice du toolkit, pas la
+  // toolkit core. Ses fan-ins reflètent le couplage interne du cockpit
+  // (api → store → composants), pas une décision architecturale qui
+  // mérite un ADR au sens des décisions du moteur (ADR-001..ADR-026).
+  if (filePath.includes('packages/dashboard-')) return false
   return true
 }
 
