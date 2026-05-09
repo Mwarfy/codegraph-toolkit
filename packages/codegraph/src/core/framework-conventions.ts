@@ -227,6 +227,7 @@ const OSS_LAYOUT_DIRS = new Set([
   'website',       // synonyme www (Docusaurus generally)
   'docs-site',     // variant explicite
   'site',          // variant minimal
+  'e2e',           // Playwright/Cypress end-to-end tests + helpers
 ])
 
 // Suffix `*.examples.{ts,tsx}` — convention mcp-sdk et autres : fichiers

@@ -18,9 +18,14 @@
 
 .decl AwaitInLoopGrandfathered(file: symbol, line: number)
 
+// Skip les fichiers convention framework (e2e/helpers, scripts/, configs).
+// Tests e2e ont des sequential setup steps intentionnels (login → navigate
+// → assert), scripts CLI font frequemment des I/O sequentielles voulues.
+// Cf. F-301 audit v4.
 Violation("COMPOSITE-AWAIT-IN-LOOP", F, L,
   "await dans une boucle — sequential I/O, considerer Promise.all si pas d'ordre requis") :-
     AwaitInLoop(F, L, _, _),
+    !IsFrameworkConventionFile(F),
     !AwaitInLoopGrandfathered(F, L).
 
 // Grandfather list — 2026-05-01 (auto-generated, 150 entries).
