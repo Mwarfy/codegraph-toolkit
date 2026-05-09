@@ -70,6 +70,10 @@
 .decl AwaitInLoop(file: symbol, line: number, loopKind: symbol, containingSymbol: symbol)
 .decl IsPackageEntryPoint(file: symbol)
 .decl IsFrameworkConventionFile(file: symbol)
+// Auto-baseline pour NO-NEW-ARTICULATION-POINT : peuple a partir de
+// .codegraph/articulation-baseline.json via facts/index.ts. Cf.
+// core/articulation-baseline.ts.
+.decl ArticulationPointGrandfathered(file: symbol)
 .decl ModuleCentrality(file: symbol, pageRank: number, henryKafura: number)
 .decl FunctionComplexity(file: symbol, name: symbol, line: number, cyclomatic: number, cognitive: number, containingClass: symbol)
 .decl AllocationInLoop(file: symbol, line: number, allocKind: symbol, containingSymbol: symbol)
@@ -155,6 +159,7 @@
 .input AwaitInLoop
 .input IsPackageEntryPoint
 .input IsFrameworkConventionFile
+.input ArticulationPointGrandfathered
 .input ModuleCentrality
 .input FunctionComplexity
 .input AllocationInLoop

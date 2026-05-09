@@ -1186,6 +1186,21 @@ function emitDiagnosticFacts(snapshot: GraphSnapshot, relations: RelationDef[]):
   }
   relations.push(articulationPointRel)
 
+  // Auto-grandfather : peuple `ArticulationPointGrandfathered(file)` depuis
+  // le baseline (ou auto-cree au premier run via resolveGrandfatheredArticulations).
+  // Cf. core/articulation-baseline.ts. Le baseline est resolu cote analyzer
+  // et passe via snapshot.articulationGrandfathered (champ optionnel).
+  const articulationGrandfatheredRel: RelationDef = {
+    name: 'ArticulationPointGrandfathered',
+    decl: '(file:symbol)',
+    rows: [],
+  }
+  const grandfathered = (snapshot as { articulationGrandfathered?: string[] }).articulationGrandfathered ?? []
+  for (const file of grandfathered) {
+    articulationGrandfatheredRel.rows.push([sym(file)])
+  }
+  relations.push(articulationGrandfatheredRel)
+
   const constantExprRel: RelationDef = {
     name: 'ConstantExpression',
     decl: '(kind:symbol, file:symbol, line:number, exprRepr:symbol)',
