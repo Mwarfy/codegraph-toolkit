@@ -181,7 +181,7 @@
 
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
-- `packages/codegraph/src/core/types.ts` (in: 84) · gov by ADR-006
+- `packages/codegraph/src/core/types.ts` (in: 85) · gov by ADR-006
 - `packages/codegraph/src/incremental/queries.ts` (in: 42) · gov by ADR-007
 - `packages/codegraph/src/incremental/database.ts` (in: 41) · gov by ADR-007
 - `packages/salsa/src/index.ts` (in: 40)
@@ -195,7 +195,6 @@
 Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `// ADR-NNN`** dans le code. Intentionnel ? Sinon poser un marqueur ou créer un ADR :
 
 - **40** `packages/salsa/src/index.ts` _(top-hub)_
-- **21** `packages/codegraph/src/datalog-detectors/ast-facts/types.ts` _(top-hub)_
 
 ## Tensions actives — invitations à explorer
 
@@ -238,6 +237,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+bc5c60b feat(synopsis,hook): synopsis dynamique --focus + token budget hiérarchique
 730bf13 feat(synopsis): personalized PageRank pour ranking dynamique LLM (à la Aider)
 c7c8929 fix(hook): mettre en tête les violations introduites par CET edit
 9e6b72c refactor(cli): extract 5 more commands (deps, check, exports, arch-check, serve)
@@ -249,7 +249,6 @@ c2a0784 chore(dashboard-web): drop 9 legacy panels superseded by cockpit redesig
 8523e30 feat(dashboard-web): cockpit redesign — cosmos + IDE tree + compact pipeline
 f921d03 feat(dashboard): graph filter, token sparkline, init wiring, publishable
 361e46e test(dashboard-server): 37 tests + clear two real bombs the toolkit flagged
-34ee70a feat(dashboard): time-travel, diff view, focus mode, hook timeline
 ```
 
 ## Comment contribuer à ce brief
