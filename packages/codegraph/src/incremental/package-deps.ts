@@ -87,12 +87,13 @@ export const allPackageDeps = derived<string, PackageDepsIssue[]>(
     const workspaceNames = new Set<string>()
     for (const m of active) if (m.packageName) workspaceNames.add(m.packageName)
 
-    // Mode incremental : pas de pre-fetch des `bin` fields (I/O async,
-    // incompatible Salsa pure derivation). En mode incremental, le check
-    // `bin` est skip → conservateur (peut over-report unused). Le mode
-    // legacy non-incremental reste precis.
+    // Mode incremental : pas de pre-fetch des `bin` fields ni peer deps
+    // (I/O async, incompatible Salsa pure derivation). Le mode legacy
+    // non-incremental reste precis. Mode incremental est conservateur
+    // — peut over-report unused.
     const binPackages = new Set<string>()
+    const peerRequiredPackages = new Set<string>()
 
-    return buildPackageDepsIssues(active, importsByManifest, runtimeAssetsByManifest, DEFAULT_TEST_RES, workspaceNames, binPackages)
+    return buildPackageDepsIssues(active, importsByManifest, runtimeAssetsByManifest, DEFAULT_TEST_RES, workspaceNames, binPackages, peerRequiredPackages)
   },
 )
