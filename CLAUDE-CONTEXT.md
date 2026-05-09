@@ -229,6 +229,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+5822a17 fix(test): exclude packages/dashboard-* from hub-ADR governance gate
 332cb8f docs(refactor): rewrite analyzer plan to reflect post-audit reality
 eeebc41 fix(dashboard-web): @import fonts before @tailwind so PostCSS keeps them
 c2a0784 chore(dashboard-web): drop 9 legacy panels superseded by cockpit redesign
@@ -240,7 +241,6 @@ f921d03 feat(dashboard): graph filter, token sparkline, init wiring, publishable
 6804098 Merge pull request #27 from Mwarfy/feat/audit-v4-final-cleanup
 381de34 fix(rules): F-301/F-302/F-303 audit v4 + doc verdict final
 c15730c Merge pull request #26 from Mwarfy/feat/articulation-auto-baseline
-5b27518 feat(rules): auto-baseline pour NO-NEW-ARTICULATION-POINT
 ```
 
 ## Comment contribuer à ce brief
