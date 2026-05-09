@@ -45,6 +45,10 @@ export interface DatalogCheckOpts {
   /** Format de sortie alternatif. `sarif` emet du SARIF 2.1.0 (consommable
    * par GitHub Code Scanning, VS Code SARIF Viewer, etc.). */
   format?: 'sarif'
+  /** Alias court de `--format sarif`. Reflexe attendu par les users
+   * (cf. F-110 dpl-rag dogfood) — sans cet alias, `--sarif` plante avec
+   * `unknown option` sans suggestion. */
+  sarif?: boolean
   timeout?: string
 }
 
@@ -52,6 +56,9 @@ type ViolationTuple = [string, string, number, string]
 
 export async function runDatalogCheckCommand(opts: DatalogCheckOpts): Promise<void> {
   const startTs = performance.now()
+  // Alias `--sarif` → `format: 'sarif'`. Resoud via simple normalisation
+  // pour eviter de toucher tous les sites qui lisent `opts.format`.
+  if (opts.sarif && !opts.format) opts.format = 'sarif'
   const root = process.cwd()
   const rulesDir = opts.rulesDir ?? (
     await exists(path.join(root, 'sentinel-core/invariants'))
