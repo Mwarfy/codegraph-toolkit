@@ -165,6 +165,13 @@ export async function analyzePackageDeps(
   // aucun import direct de l'app consumer).
   const binPackages = await collectPackagesWithBin(rootDir, manifests)
 
+  // Pre-fetch les peer dependencies transitives. Une dep `X` declaree
+  // mais jamais importee est legitime si elle est peer dep d'une autre
+  // dep `Y` que l'app utilise (npm/pnpm exigent l'install pour resolution).
+  // Cf. F-205 audit v3 : `@liby-tools/salsa` declared mais jamais importe,
+  // c'est un peer dep de `@liby-tools/codegraph`.
+  const peerRequiredPackages = await collectPeerRequiredPackages(rootDir, manifests)
+
   const fileSet = new Set(files)
   const buckets = emptyManifestBuckets(active)
 
@@ -172,7 +179,53 @@ export async function analyzePackageDeps(
     recordPackageRefs(sf, rootDir, fileSet, active, buckets)
   }
 
-  return buildPackageDepsIssues(active, buckets.importsByManifest, buckets.runtimeAssetsByManifest, testREs, workspaceNames, binPackages)
+  return buildPackageDepsIssues(active, buckets.importsByManifest, buckets.runtimeAssetsByManifest, testREs, workspaceNames, binPackages, peerRequiredPackages)
+}
+
+/**
+ * Resolve les dependencies transitives (peer + regular) des packages
+ * installes. Pour chaque dep declaree dans le repo, lit son
+ * `node_modules/<dep>/package.json` et collecte ses peer deps + regular
+ * deps. Si une dep `X` du repo apparait comme transitive d'une autre
+ * dep `Y` utilisee, `X` est legitime meme sans import direct.
+ *
+ * Cas typique :
+ *   - peer dep : `@testing-library/dom` peer de `@testing-library/react`
+ *   - regular transitive : `@liby-tools/salsa` declared dans regular deps
+ *     de `@liby-tools/codegraph` (le user lock la version explicitement)
+ *
+ * Cf. F-205 audit v3.
+ */
+async function collectPeerRequiredPackages(
+  rootDir: string,
+  manifests: PackageManifest[],
+): Promise<Set<string>> {
+  const allDeps = new Set<string>()
+  for (const m of manifests) {
+    for (const name of m.declared.keys()) allDeps.add(name)
+  }
+  const out = new Set<string>()
+  await Promise.all(Array.from(allDeps).map(async (depName) => {
+    const pkgPath = path.join(rootDir, 'node_modules', depName, 'package.json')
+    try {
+      const raw = JSON.parse(await fs.readFile(pkgPath, 'utf-8'))
+      if (raw.peerDependencies && typeof raw.peerDependencies === 'object') {
+        for (const peer of Object.keys(raw.peerDependencies)) out.add(peer)
+      }
+      // Regular dependencies transitives — exempte les packages que l'app
+      // declare aussi (typiquement pour lock une version explicite ou
+      // satisfait un peer requirement non-declared as peerDep).
+      if (raw.dependencies && typeof raw.dependencies === 'object') {
+        for (const dep of Object.keys(raw.dependencies)) {
+          // Skip ne s'applique que si l'app declare aussi cette dep.
+          if (allDeps.has(dep)) out.add(dep)
+        }
+      }
+    } catch {
+      // node_modules absent ou pas hoisted — silently skip
+    }
+  }))
+  return out
 }
 
 /**
@@ -271,6 +324,11 @@ const BUILD_TIME_DEPS_PREFIX = [
   '@react-navigation/', // navigation libs charges au runtime
   // Workflow scope
   '@workflow/',
+  // Storybook plugins charges via .storybook/main.ts config (pas import direct)
+  '@storybook/',
+  '@chromatic-com/',  // @chromatic-com/storybook visual testing
+  // Testing libraries (jamais importees direct, peer deps de others)
+  '@testing-library/',
 ]
 
 function isBuildTimeDep(name: string): boolean {
@@ -500,6 +558,7 @@ function classifyDeclaredDeps(
   issues: PackageDepsIssue[],
   workspaceNames: Set<string>,
   binPackages: Set<string>,
+  peerRequiredPackages: Set<string>,
 ): void {
   for (const [name, block] of m.declared) {
     if (importedNames.has(name)) continue
@@ -515,6 +574,10 @@ function classifyDeclaredDeps(
     // `npx <cmd>` ou `package.json#scripts`, pas par import. Cf. F-005
     // dogfood Janus.
     if (binPackages.has(name)) continue
+    // Peer dep transitif d'une autre dep installee — npm/pnpm exigent
+    // l'install pour resolution, meme sans import direct par l'app.
+    // Cf. F-205 audit v3 (`@liby-tools/salsa` peer de codegraph).
+    if (peerRequiredPackages.has(name)) continue
 
     const runtimeRefs = runtimeAssets.get(name)
     if (runtimeRefs && runtimeRefs.size > 0) {
@@ -586,6 +649,7 @@ function buildPackageDepsIssues(
   testREs: RegExp[],
   workspaceNames: Set<string>,
   binPackages: Set<string>,
+  peerRequiredPackages: Set<string>,
 ): PackageDepsIssue[] {
   const issues: PackageDepsIssue[] = []
 
@@ -594,7 +658,7 @@ function buildPackageDepsIssues(
     const runtimeAssets = runtimeAssetsByManifest.get(m.abs)!
     const importedNames = new Set(imports.keys())
 
-    classifyDeclaredDeps(m, importedNames, runtimeAssets, issues, workspaceNames, binPackages)
+    classifyDeclaredDeps(m, importedNames, runtimeAssets, issues, workspaceNames, binPackages, peerRequiredPackages)
     classifyImportedDeps(m, imports, testREs, issues)
   }
 

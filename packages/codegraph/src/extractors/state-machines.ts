@@ -609,8 +609,80 @@ function scanObjectWrites(
       tryObjectPropertyWrite(node as any, ranges, file, out)
     } else if (k === SyntaxKind.BinaryExpression) {
       tryBinaryAssignmentWrite(node as any, ranges, file, out)
+    } else if (k === SyntaxKind.JsxAttribute) {
+      tryJsxAttributeWrite(node as any, ranges, file, out)
+    } else if (k === SyntaxKind.CallExpression) {
+      tryCallArgWrite(node as any, ranges, file, out)
     }
   })
+}
+
+/**
+ * `<Component prop="peek" />` — JsxAttribute avec StringLiteral
+ * initializer. Capture les valeurs FSM passees en props (cas typique
+ * react/vue : `<Sheet position="half" />`, `<Modal status="open" />`).
+ *
+ * Cf. F-208 audit v3 : RequestStatus#accepted, MobileSheetState#peek/half/full
+ * apparaissaient en `fsm-orphan` car jamais detectes en write — alors qu'ils
+ * sont passes en props JSX dans happenin.
+ */
+function tryJsxAttributeWrite(
+  node: any,
+  ranges: FnRange[],
+  file: string,
+  out: WriteSignal[],
+): void {
+  const nameNode = node.getNameNode?.()
+  const init = node.getInitializer?.()
+  if (!nameNode || !init) return
+  const field = nameNode.getText?.()
+  if (!field) return
+  // L'initializer peut etre un StringLiteral direct OU un JsxExpression
+  // qui wrap un StringLiteral (`prop={"value"}`).
+  let valueNode = init
+  if (init.getKind?.() === SyntaxKind.JsxExpression) {
+    valueNode = init.getExpression?.()
+    if (!valueNode) return
+  }
+  const value = literalStringOrNull(valueNode)
+  if (!value) return
+  emitWriteSignal(field, value, node.getStartLineNumber?.() ?? 0, ranges, file, out)
+}
+
+/**
+ * `setStatus("accepted")` — CallExpression avec callee qui ressemble a
+ * un setter (set<X>, update<X>, dispatch<X>) et args[0] StringLiteral.
+ *
+ * Pattern React : `setStatus("active")`. Pattern Redux : `dispatch({ type:
+ * 'STATUS_ACCEPTED' })` est deja capture par scanObjectWrites.
+ */
+const SETTER_PATTERN = /^(?:set|update|change|dispatch|to|on)[A-Z]/
+
+function tryCallArgWrite(
+  node: any,
+  ranges: FnRange[],
+  file: string,
+  out: WriteSignal[],
+): void {
+  const expr = node.getExpression?.()
+  if (!expr) return
+  // callee = soit un Identifier (`setStatus`), soit PropertyAccess (`x.setStatus`)
+  let calleeName: string | undefined
+  const k = expr.getKind?.()
+  if (k === SyntaxKind.Identifier) {
+    calleeName = expr.getText?.()
+  } else if (k === SyntaxKind.PropertyAccessExpression) {
+    calleeName = expr.getName?.()
+  }
+  if (!calleeName || !SETTER_PATTERN.test(calleeName)) return
+  const args = node.getArguments?.()
+  if (!args || args.length === 0) return
+  const value = literalStringOrNull(args[0])
+  if (!value) return
+  // field derive du callee : `setStatus` → `status`
+  const field = calleeName.replace(/^(set|update|change|dispatch|to|on)/, '')
+  const fieldLower = field.charAt(0).toLowerCase() + field.slice(1)
+  emitWriteSignal(fieldLower, value, node.getStartLineNumber?.() ?? 0, ranges, file, out)
 }
 
 // ─── SQL schema DEFAULT scanner (phase 3.6 #2) ──────────────────────────────
