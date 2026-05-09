@@ -195,6 +195,45 @@ if (isFirstTimeOnFile) {
     const topImports = imports.slice(0, 3).map((e) => e.to)
     lines.push(`  imports (${Math.min(3, outDegree)}/${outDegree}): ${topImports.join(', ')}`)
   }
+
+  // ─── Personalized PageRank — top fichiers pertinents pour ce focus ───
+  // Aider-style ranking : recalcule un score par fichier où le focus
+  // (= relPath) reçoit weight 100, ses 1-hop neighbors weight 50, et ses
+  // co-change partners weight 20. Le résultat surface des fichiers que
+  // l'agent devrait regarder AVANT de modifier celui-ci, qui ne sont pas
+  // forcément ses importers directs (ex: fichiers co-change qui co-évoluent
+  // historiquement, ou hubs structurels en aval).
+  //
+  // Skip si le fichier édité a déjà beaucoup de signal direct (importers
+  // ≥ 30) — dans ce cas le brief synopsis-level1 fait déjà le job.
+  if (inDegree < 30) {
+    try {
+      const rankPath = path.join(repoRoot, 'packages/codegraph/dist/synopsis/rank.js')
+      if (fs.existsSync(rankPath)) {
+        const { rankFiles } = await import(rankPath)
+        const ranked = rankFiles(snapshot, { focus: [relPath] })
+        // Filter out the focus file itself and its 1-hop importers/imports
+        // (already shown above) — surface only the "non-obvious" pertinents.
+        const directNeighbors = new Set([
+          relPath,
+          ...importers.map((e) => e.from),
+          ...imports.map((e) => e.to),
+        ])
+        const top = ranked
+          .filter((r) => !directNeighbors.has(r.file))
+          .slice(0, 4)
+        if (top.length > 0) {
+          lines.push('  ─── 🎯 Top related (PageRank, non-évident) ───')
+          for (const r of top) {
+            const reason = r.reasons.slice(0, 1).join('') || 'structural hub'
+            lines.push(`    ${r.file}  — ${reason}`)
+          }
+        }
+      }
+    } catch {
+      // Module not built yet, skip silently — hook stays usable.
+    }
+  }
 }
 
 // ─── Section "Datalog NEW violations" (Tier 8 live gate) ───

@@ -75,6 +75,7 @@ post-coup). Forcer le pattern dès la naissance évite la dette.
 - `packages/codegraph/src/cli/commands/deps.ts`
 - `packages/codegraph/src/cli/commands/diff.ts`
 - `packages/codegraph/src/cli/commands/exports.ts`
+- `packages/codegraph/src/cli/commands/rank.ts`
 - `packages/codegraph/src/cli/commands/serve.ts`
 - `packages/codegraph/src/extractors/_internal/code-quality/_helpers.ts`
 - `packages/codegraph/src/extractors/co-change.ts`
@@ -86,6 +87,7 @@ post-coup). Forcer le pattern dès la naissance évite la dette.
 - `packages/codegraph/src/extractors/sql-schema.ts`
 - `packages/codegraph/src/extractors/state-machines.ts`
 - `packages/codegraph/src/extractors/unused-exports.ts`
+- `packages/codegraph/src/synopsis/rank.ts`
 
 
 ## Tested by

@@ -65,6 +65,7 @@ import { runCheckCommand } from './commands/check.js'
 import { runExportsCommand } from './commands/exports.js'
 import { runArchCheckCommand } from './commands/arch-check.js'
 import { runServeCommand } from './commands/serve.js'
+import { runRankCommand } from './commands/rank.js'
 
 const program = new Command()
 
@@ -337,6 +338,20 @@ program
   .option('--json', 'Output violations as JSON')
   .action(async (opts) => {
     await runArchCheckCommand(opts)
+  })
+
+// ─── rank ─────────────────────────────────────────────────────────────────
+
+program
+  .command('rank')
+  .description('Personalized PageRank — top fichiers pertinents pour un focus donné (Aider-style context selection)')
+  .option('-c, --config <path>', 'Path to codegraph config file')
+  .option('-f, --focus <file...>', 'Files in current focus (repeatable: -f a.ts -f b.ts)')
+  .option('--top <n>', 'Number of files to show (default 30)', '30')
+  .option('--recent', 'Boost files modified in the last 3 weeks (git log)')
+  .option('--json', 'Output as JSON for programmatic consumption')
+  .action(async (opts) => {
+    await runRankCommand(opts)
   })
 
 // ─── reach ────────────────────────────────────────────────────────────────

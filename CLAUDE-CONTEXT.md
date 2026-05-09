@@ -57,6 +57,7 @@
 - `packages/codegraph/src/cli/commands/deps.ts` → ADR-005
 - `packages/codegraph/src/cli/commands/diff.ts` → ADR-005
 - `packages/codegraph/src/cli/commands/exports.ts` → ADR-005
+- `packages/codegraph/src/cli/commands/rank.ts` → ADR-005
 - `packages/codegraph/src/cli/commands/serve.ts` → ADR-005
 - `packages/codegraph/src/core/analyzer.ts` → ADR-008
 - `packages/codegraph/src/core/detector-registry.ts` → ADR-008
@@ -150,6 +151,7 @@
 - `packages/codegraph/src/parallel/per-file-extractor.ts` → ADR-024
 - `packages/codegraph/src/parallel/per-source-file-extractor.ts` → ADR-024
 - `packages/codegraph/src/synopsis/builder.ts` → ADR-001
+- `packages/codegraph/src/synopsis/rank.ts` → ADR-005
 - `packages/codegraph/src/synopsis/tensions.ts` → ADR-001
 - `packages/datalog/src/canonical.ts` → ADR-010
 - `packages/datalog/src/facts-loader.ts` → ADR-010
@@ -180,7 +182,7 @@
 - `packages/codegraph/src/core/types.ts` (in: 83) · gov by ADR-006
 - `packages/codegraph/src/incremental/queries.ts` (in: 42) · gov by ADR-007
 - `packages/codegraph/src/incremental/database.ts` (in: 41) · gov by ADR-007
-- `packages/salsa/dist/index.d.ts` (in: 40)
+- `packages/salsa/src/index.ts` (in: 40)
 - `packages/codegraph/src/extractors/_shared/ast-helpers.ts` (in: 34) · gov by ADR-012
 - `packages/codegraph/src/datalog-detectors/ast-facts/types.ts` (in: 21)
 - `packages/codegraph/src/core/detector-registry.ts` (in: 19) · gov by ADR-008
@@ -190,7 +192,7 @@
 
 Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `// ADR-NNN`** dans le code. Intentionnel ? Sinon poser un marqueur ou créer un ADR :
 
-- **40** `packages/salsa/dist/index.d.ts` _(top-hub)_
+- **40** `packages/salsa/src/index.ts` _(top-hub)_
 - **21** `packages/codegraph/src/datalog-detectors/ast-facts/types.ts` _(top-hub)_
 
 ## Tensions actives — invitations à explorer
@@ -200,15 +202,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 > pas verdict. Une tension non explorée n'est pas un bug — c'est un saut
 > latéral possible que le sol stable rend testable.
 
-- **ORPHELIN** `packages/adr-toolkit/tests/fixtures/sample-project/src/core/event-bus.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/adr-toolkit/tests/fixtures/sample-project/src/services/state-service.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/a.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/b.ts` — aucun importeur  
-  _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
-- **ORPHELIN** `packages/codegraph/tests/fixtures/cycles/c.ts` — aucun importeur  
+- **ORPHELIN** `packages/dashboard-web/src/main.tsx` — aucun importeur  
   _→ supprimer + npm test : si vert → mort, si rouge → entry-point caché_
 - **FSM-ORPHAN** `DocStatus#active` — état déclaré mais jamais écrit dans le code  
   _→ supprimer l'état OU ajouter la transition manquante_
@@ -218,22 +212,31 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
   _→ supprimer l'état OU ajouter la transition manquante_
 - **FSM-ORPHAN** `DocStatus#superseded` — état déclaré mais jamais écrit dans le code  
   _→ supprimer l'état OU ajouter la transition manquante_
-- **DEP-UNUSED** `jest` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
-  _→ npm uninstall jest + npm test_
 - **DEP-UNUSED** `test-only-in-deps` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall test-only-in-deps + npm test_
 - **DEP-UNUSED** `unused-pkg` — déclaré dans packages/codegraph/tests/fixtures/package-deps/package.json, jamais importé  
   _→ npm uninstall unused-pkg + npm test_
-- **DEP-UNUSED** `autoprefixer` — déclaré dans packages/dashboard-web/package.json, jamais importé  
-  _→ npm uninstall autoprefixer + npm test_
-- **DEP-UNUSED** `graphology` — déclaré dans packages/dashboard-web/package.json, jamais importé  
-  _→ npm uninstall graphology + npm test_
+- **DEP-UNUSED** `graphology-layout-forceatlas2` — déclaré dans packages/dashboard-web/package.json, jamais importé  
+  _→ npm uninstall graphology-layout-forceatlas2 + npm test_
+- **DEP-UNUSED** `sigma` — déclaré dans packages/dashboard-web/package.json, jamais importé  
+  _→ npm uninstall sigma + npm test_
 - **BARREL-LOW** `packages/adr-toolkit/src/index.ts` — barrel à 15 re-export(s) pour 0 consumer(s)  
   _→ inline les imports + supprimer le barrel_
+- **BARREL-LOW** `packages/codegraph/src/index.ts` — barrel à 12 re-export(s) pour 0 consumer(s)  
+  _→ inline les imports + supprimer le barrel_
+- **BARREL-LOW** `packages/codegraph/tests/fixtures/package-deps/src/barrel.ts` — barrel à 2 re-export(s) pour 1 consumer(s)  
+  _→ inline les imports + supprimer le barrel_
+- **BARREL-LOW** `packages/datalog/src/index.ts` — barrel à 13 re-export(s) pour 0 consumer(s)  
+  _→ inline les imports + supprimer le barrel_
+- **BARREL-LOW** `packages/runtime-graph/src/capture/index.ts` — barrel à 3 re-export(s) pour 0 consumer(s)  
+  _→ inline les imports + supprimer le barrel_
+- **BIN-SHEBANG** `.claude/worktrees/brave-ramanujan-4b8452/packages/adr-toolkit/package.json#adr-toolkit` — .claude/worktrees/brave-ramanujan-4b8452/packages/adr-toolkit/dist/cli/index.js — fichier introuvable (oubli de build ?)  
+  _→ npm run build OU corriger bin.adr-toolkit dans .claude/worktrees/brave-ramanujan-4b8452/packages/adr-toolkit/package.json_
 
 ## Activité récente (14 derniers jours)
 
 ```
+c7c8929 fix(hook): mettre en tête les violations introduites par CET edit
 9e6b72c refactor(cli): extract 5 more commands (deps, check, exports, arch-check, serve)
 477aaaa refactor(cli): extract \`affected\` command + BFS helpers to commands/affected.ts
 5822a17 fix(test): exclude packages/dashboard-* from hub-ADR governance gate
@@ -245,7 +248,6 @@ f921d03 feat(dashboard): graph filter, token sparkline, init wiring, publishable
 361e46e test(dashboard-server): 37 tests + clear two real bombs the toolkit flagged
 34ee70a feat(dashboard): time-travel, diff view, focus mode, hook timeline
 0fff050 feat(dashboard): live cockpit + agent transparency telemetry
-6804098 Merge pull request #27 from Mwarfy/feat/audit-v4-final-cleanup
 ```
 
 ## Comment contribuer à ce brief
