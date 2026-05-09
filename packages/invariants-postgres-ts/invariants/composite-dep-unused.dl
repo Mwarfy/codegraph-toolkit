@@ -12,9 +12,24 @@
 
 .decl DepUnusedGrandfathered(packageName: symbol)
 
-Violation("COMPOSITE-DEP-UNUSED", PJ, 0,
-  "dependance declaree mais jamais importee — npm uninstall ou justifier") :-
-    PackageDepIssue(P, PJ, "declared-unused", _),
+// Le 2eme champ du tuple Violation = le nom du PACKAGE (P), pas le path
+// du package.json (PJ). Raison : Datalog dedupe les violations par tuple.
+// Si on mettait `PJ` (toujours "package.json"), tous les packages
+// declared-unused produiraient le meme tuple
+// `("COMPOSITE-DEP-UNUSED", "package.json", 0, "<msg>")` → 1 seule
+// violation totale, peu importe combien de packages sont en cause. Le
+// pattern grandfather echouait silencieusement : grandfather 1 package =
+// la "1ere" violation passe simplement au suivant non-grandfathered.
+//
+// Avec `P` en file field, chaque package non-grandfathered produit son
+// propre tuple distinct, le grandfather marche per-package, et l'output
+// est lisible (`COMPOSITE-DEP-UNUSED @liby-tools/salsa` au lieu de
+// `COMPOSITE-DEP-UNUSED package.json` repete N fois).
+//
+// Cf. F-010 dogfood Janus.
+Violation("COMPOSITE-DEP-UNUSED", P, 0,
+  "dependance declaree dans package.json mais jamais importee — npm uninstall ou justifier") :-
+    PackageDepIssue(P, _, "declared-unused", _),
     !DepUnusedGrandfathered(P).
 
 // Grandfather list — 2026-05-01 (auto-generated, 2 entries).

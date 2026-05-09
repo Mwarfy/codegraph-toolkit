@@ -1065,6 +1065,77 @@ describe('CWE-918 ssrf (Tier 13)', () => {
   })
 })
 
+describe('composite-dep-unused (Tier 17)', () => {
+  it('flag chaque package declared-unused comme tuple distinct', async () => {
+    // Regression F-010 dogfood Janus : avant le fix, tous les packages
+    // declared-unused produisaient le meme tuple (file=PJ="package.json")
+    // donc Datalog dedupait a 1 violation, peu importe le nb de packages.
+    const facts = new Map([
+      ['PackageDepIssue', [
+        '@liby-tools/salsa\tpackage.json\tdeclared-unused\tdevDependencies',
+        'tw-animate-css\tpackage.json\tdeclared-unused\tdependencies',
+        'unused-pkg-3\tpackage.json\tdeclared-unused\tdevDependencies',
+      ].join('\n')],
+    ])
+    const { violations } = await runRule({ ruleName: 'composite-dep-unused.dl', facts })
+    // Avant fix : violations.length === 1 (tous les tuples identiques deduplicated)
+    // Apres fix : 1 violation par package (tuple discrimine via P en file field)
+    expect(violations).toHaveLength(3)
+    const files = violations.map((v) => v[1]).sort()
+    expect(files).toEqual([
+      '@liby-tools/salsa',
+      'tw-animate-css',
+      'unused-pkg-3',
+    ])
+  })
+
+  it('grandfather filtre per-package (le pattern marchait pas avant fix)', async () => {
+    const schema = await loadRule('schema-subset.dl')
+    const baseRule = await loadRule('composite-dep-unused.dl')
+    const customRule = baseRule +
+      '\nDepUnusedGrandfathered("@liby-tools/salsa").\n'
+    const program = mergePrograms([
+      { name: 'schema.dl', content: schema },
+      { name: 'rule.dl', content: customRule },
+    ])
+    const facts = new Map([
+      ['PackageDepIssue', [
+        '@liby-tools/salsa\tpackage.json\tdeclared-unused\tdevDependencies',
+        'some-real-bloat\tpackage.json\tdeclared-unused\tdependencies',
+      ].join('\n')],
+    ])
+    const db = loadFacts(program.decls, { factsByRelation: facts })
+    const result = evaluate(program, db, { allowRecursion: true })
+    const v = result.outputs.get('Violation') ?? []
+    // Avant fix : v.length === 1 mais pour @liby-tools/salsa OR some-real-bloat
+    //   selon ordre — le grandfather "deplacait" la violation au suivant,
+    //   le user pouvait jamais arriver a 0.
+    // Apres fix : v.length === 1 pour some-real-bloat specifiquement.
+    expect(v).toHaveLength(1)
+    expect(v[0][1]).toBe('some-real-bloat')
+  })
+
+  it('skip toutes les packages si toutes grandfathered', async () => {
+    const schema = await loadRule('schema-subset.dl')
+    const baseRule = await loadRule('composite-dep-unused.dl')
+    const customRule = baseRule +
+      '\nDepUnusedGrandfathered("a").\nDepUnusedGrandfathered("b").\n'
+    const program = mergePrograms([
+      { name: 'schema.dl', content: schema },
+      { name: 'rule.dl', content: customRule },
+    ])
+    const facts = new Map([
+      ['PackageDepIssue', [
+        'a\tpackage.json\tdeclared-unused\tdependencies',
+        'b\tpackage.json\tdeclared-unused\tdependencies',
+      ].join('\n')],
+    ])
+    const db = loadFacts(program.decls, { factsByRelation: facts })
+    const result = evaluate(program, db, { allowRecursion: true })
+    expect(result.outputs.get('Violation') ?? []).toEqual([])
+  })
+})
+
 describe('schema-subset.dl est valide', () => {
   it('parse sans erreur et déclare les relations attendues', async () => {
     const schema = await loadRule('schema-subset.dl')
