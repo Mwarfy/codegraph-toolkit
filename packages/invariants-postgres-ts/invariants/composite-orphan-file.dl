@@ -21,13 +21,14 @@ ImportedFile(F) :- Imports(_, F).
 .decl IsEntryPoint(file: symbol)
 IsEntryPoint(F) :- EntryPoint(F, _, _).
 
-// Raffinement Phase suivante : files framework-routed via filesystem
-// convention (Next.js, Remix, etc.) ne sont pas importés explicitement
-// — ils sont chargés dynamiquement par le bundler. FileTag("page") les
-// marque déjà côté toolkit. Avant ce raffinement, 21/21 grandfathers
-// étaient des Next.js page.tsx / layout.tsx.
+// Files framework-routed via filesystem convention (Next.js page/layout/
+// route/proxy/instrumentation, Expo Router, configs implicites tool-config,
+// tests, scripts) ne sont pas importés explicitement — ils sont chargés
+// par le bundler/runtime. Le visitor `ast-facts-visitor.ts` émet
+// `FileTag(F, "framework-routed")` pour tous ces fichiers via la source
+// unique `core/framework-conventions.ts#isFrameworkEntryPoint`.
 .decl IsFrameworkRouted(file: symbol)
-IsFrameworkRouted(F) :- FileTag(F, "page").
+IsFrameworkRouted(F) :- FileTag(F, "framework-routed").
 
 // Fixtures de tests = inputs synthetiques NON-importes par construction
 // (cf. emit-side facts/index.ts qui tag tests/fixtures/* + __fixtures__/*).

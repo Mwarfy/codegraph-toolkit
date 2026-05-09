@@ -17,11 +17,43 @@
  */
 
 import chalk from 'chalk'
+import * as fs from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
 import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { exists } from '../_shared.js'
 import { buildSarifReport } from '../../output/sarif.js'
+
+/**
+ * Résout le dossier de rules invariants par défaut. Ordre :
+ *   1. `<root>/sentinel-core/invariants/`           (legacy Sentinel)
+ *   2. `<root>/invariants/`                          (in-repo classique)
+ *   3. `<root>/.codegraph/invariants/`               (custom user, parallèle au cross-cut)
+ *   4. `<root>/node_modules/@liby-tools/invariants-postgres-ts/invariants/` (canonical npm)
+ *
+ * Sans ce fallback canonical, l'utilisateur qui suit le quickstart
+ * `npm i @liby-tools/codegraph @liby-tools/invariants-postgres-ts` se prend un
+ * `ENOENT: scandir '<root>/invariants'` au premier `npx codegraph datalog-check`.
+ * Symétrique de `cross-check` qui auto-resolve `runtime-graph/rules` (cf. F-006 Janus).
+ */
+async function resolveDefaultRulesDir(root: string): Promise<string> {
+  const candidates = [
+    path.join(root, 'sentinel-core/invariants'),
+    path.join(root, 'invariants'),
+    path.join(root, '.codegraph/invariants'),
+    path.join(root, 'node_modules/@liby-tools/invariants-postgres-ts/invariants'),
+  ]
+  for (const candidate of candidates) {
+    try {
+      const stat = await fs.stat(candidate)
+      if (stat.isDirectory()) return candidate
+    } catch {
+      // candidate absent — try next
+    }
+  }
+  // Aucun trouvé : retourne le path le plus parlant pour l'erreur ENOENT
+  // (`<root>/invariants` reste le default historique).
+  return candidates[1]
+}
 
 /** Lit la version du toolkit depuis package.json (runtime, pour SARIF). */
 function getToolkitVersion(): string {
@@ -53,11 +85,7 @@ type ViolationTuple = [string, string, number, string]
 export async function runDatalogCheckCommand(opts: DatalogCheckOpts): Promise<void> {
   const startTs = performance.now()
   const root = process.cwd()
-  const rulesDir = opts.rulesDir ?? (
-    await exists(path.join(root, 'sentinel-core/invariants'))
-      ? path.join(root, 'sentinel-core/invariants')
-      : path.join(root, 'invariants')
-  )
+  const rulesDir = opts.rulesDir ?? await resolveDefaultRulesDir(root)
   const factsDir = opts.factsDir ?? path.join(root, '.codegraph/facts')
   const baselinePath = opts.baseline ?? path.join(root, '.codegraph/violations-baseline.json')
   const timeoutMs = parseInt(String(opts.timeout ?? '5000'), 10)

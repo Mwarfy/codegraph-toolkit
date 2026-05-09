@@ -5,7 +5,8 @@
     "rootDir": "./src"
   },
   "references": [
-    { "path": "../salsa" }
+    { "path": "../salsa" },
+    { "path": "../datalog" }
   ],
   "include": ["src/**/*"],
   "exclude": ["dist", "tests"]

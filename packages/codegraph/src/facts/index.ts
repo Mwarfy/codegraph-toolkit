@@ -43,6 +43,7 @@ import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
 import type { GraphSnapshot } from '../core/types.js'
 import { discoverManifests } from '../extractors/package-deps.js'
+import { isFrameworkEntryPoint } from '../core/framework-conventions.js'
 
 export interface ExportFactsOptions {
   /** Dossier cible. Sera créé. Les fichiers existants seront écrasés. */
@@ -507,6 +508,16 @@ function emitFileMetadataFacts(snapshot: GraphSnapshot, relations: RelationDef[]
     }
     if (FIXTURE_PATH_RE.test(n.id)) {
       tagRel.rows.push([sym(n.id), sym('test-fixture')])
+    }
+    // F-103 — émet `framework-routed` pour tous les fichiers chargés par
+    // convention filesystem (Next.js page/layout/route/proxy/instrumentation,
+    // Expo Router, configs implicites, tests, scripts). Source de vérité :
+    // `core/framework-conventions.ts#isFrameworkEntryPoint` partagée avec
+    // `core/graph.ts#isEntryPoint` et `extractors/unused-exports.ts`.
+    // Sans ce tag, `composite-orphan-file.dl` flag tous ces fichiers comme
+    // dead code car ils ne sont pas importés explicitement.
+    if (isFrameworkEntryPoint(n.id)) {
+      tagRel.rows.push([sym(n.id), sym('framework-routed')])
     }
     for (const ex of n.exports ?? []) {
       // Garde tous les exports avec confidence non-vide, la rule filtre.

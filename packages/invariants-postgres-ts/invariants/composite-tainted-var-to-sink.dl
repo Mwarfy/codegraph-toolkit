@@ -21,9 +21,13 @@
 
 .decl TaintedVarToSinkGrandfathered(file: symbol, line: number)
 
+// process.env = admin-controlled (env vars ops/CI), trusted.
+// Pattern legitime ultra-courant : fetch(process.env.WEBHOOK_URL),
+// db.connect(process.env.DATABASE_URL). Symetrique du filtre F-011 sur cwe-918-ssrf.dl.
 Violation("COMPOSITE-TAINTED-VAR-TO-SINK", File, Line,
-  "user input (req.body / process.env / etc.) passe directement a un sink (sql/eval/exec/...)") :-
-    TaintedArgCall(File, Line, _, _, _, _, _),
+  "user input (req.body / req.query / req.params) passe directement a un sink (sql/eval/...)") :-
+    TaintedArgCall(File, Line, _, _, _, Source, _),
+    Source != "process.env",
     TaintSink(File, Line, _, _, _),
     !TaintedVarToSinkGrandfathered(File, Line).
 
