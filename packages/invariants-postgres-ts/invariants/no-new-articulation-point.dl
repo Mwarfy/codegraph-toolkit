@@ -22,12 +22,19 @@
 
 .decl ArticulationPointGrandfathered(file: symbol)
 
-// Exclut les package entry points (index.ts, main, bin, exports) :
-// par design, le entry point est l'unique route d'import du package
-// donc CUT-VERTEX OBLIGATOIRE. Bloquer un nouveau index.ts = bloquer
-// la creation de nouveaux packages. Faux positif systemique.
+// Exclut les package entry points (index.ts, main, bin, exports) ET les
+// fichiers convention framework (configs Sentry, proxy.ts, instrumentation*,
+// scripts/, layouts OSS) : par design ce sont des cut-vertex obligatoires
+// du graph d'imports — bloquer un nouveau index.ts = bloquer la creation
+// de packages. Faux positif systemique.
+//
+// Note : sans baseline `ArticulationPointGrandfathered`, cette rule
+// reporte TOUS les cut-vertex existants comme "nouveaux". Pour bootstrapper
+// le baseline, run : `codegraph datalog-check --update-baseline` une fois
+// post-install. Cf. F-201 audit v3.
 Violation("NO-NEW-ARTICULATION-POINT", File, 0,
   "fichier devenu cut-vertex du graphe d'imports — sa suppression deconnecterait des packs entiers") :-
     ArticulationPoint(File, _),
     !IsPackageEntryPoint(File),
+    !IsFrameworkConventionFile(File),
     !ArticulationPointGrandfathered(File).
