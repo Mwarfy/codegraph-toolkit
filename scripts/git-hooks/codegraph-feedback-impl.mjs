@@ -721,6 +721,84 @@ if (isFirstTimeOnFile) {
   lines.push(`  source: ${path.basename(snapshotPath)} (last commit)`)
 }
 
+// ─── Token budget enforcement (hiérarchique) ─────────────────────────
+//
+// Priority 1 (jamais drop) : header, RISK, 🔴 INTRODUCED, 🟠 CROSS-FILE,
+//                            ✅ RESOLVED, ↻ pattern repeat
+// Priority 2 (drop si overflow gros) : in/out/loc, importers, imports,
+//                                       Mémoire, Risques structurels, Tests,
+//                                       ✏ WIP, session-wide counts, footer
+// Priority 3 (drop en premier) : 🎯 Top related, Drift signals, Exports
+//                                problématiques, Dette / Refactor,
+//                                Souvent modifié, Activité récente,
+//                                grandfathered overview
+//
+// Default budget : 1500 tokens (≈ 6000 chars). Override via
+// CODEGRAPH_HOOK_BUDGET (en tokens).
+const budgetTokens = parseInt(process.env.CODEGRAPH_HOOK_BUDGET || '1500', 10)
+const budgetChars = budgetTokens * 4
+
+// Patterns marquant le début d'une section "droppable", ordonnés par
+// priorité ascending (le 1er à drop si overflow).
+const DROPPABLE_PATTERNS = [
+  /^ {2}─── Activité récente/, // P3
+  /^ {2}─── Souvent modifié ensemble/, // P3
+  /^ {2}─── Dette \/ Refactor/, // P3
+  /^ {2}─── Exports problématiques/, // P3
+  /^ {2}─── Drift signals/, // P3
+  /^ {2}─── 🎯 Top related/, // P3
+  /^ {2}· \d+ grandfathered/, // P3 (1-line section)
+  /^ {2}─── Mémoire \(sessions précédentes\)/, // P2
+  /^ {2}─── Risques structurels/, // P2
+  /^ {2}🧪 /, // P2 (1-line)
+  /^ {2}· \d+ violation\(s\) ouvertes/, // P2 (1-line)
+  /^ {2}✓ \+\d+ autre\(s\) violation\(s\) résolue/, // P2 (1-line)
+  /^ {2}✏ WIP/, // P2 (1-line)
+  /^─{50,}$/, // footer separator
+  /^ {2}source: /, // footer source
+  /^ {2}importers /, // P2 line
+  /^ {2}imports /, // P2 line
+]
+
+function findSectionEnd(arr, startIdx) {
+  // Une section se termine au prochain marqueur de section ou au prochain
+  // ─── header (qui annonce une autre section).
+  for (let i = startIdx + 1; i < arr.length; i++) {
+    const l = arr[i]
+    if (/^ {2}─── /.test(l)) return i
+    if (/^─{50,}$/.test(l)) return i // footer separator = nouveau bloc
+    if (/^ {2}🔴 /.test(l)) return i
+    if (/^ {2}🟠 /.test(l)) return i
+    if (/^ {2}✅ /.test(l)) return i
+    if (/^ {2}↻ /.test(l)) return i
+    if (/^ {2}· /.test(l)) return i
+    if (/^ {2}✓ /.test(l)) return i
+    if (/^ {2}🧪 /.test(l)) return i
+    if (/^ {2}✏ /.test(l)) return i
+    if (/^ {2}source: /.test(l)) return i
+    // Lignes "vides" (just spaces) = continue
+  }
+  return arr.length
+}
+
+let totalChars = lines.join('\n').length
+let dropped = 0
+if (totalChars > budgetChars) {
+  for (const pattern of DROPPABLE_PATTERNS) {
+    if (totalChars <= budgetChars) break
+    const startIdx = lines.findIndex((l) => pattern.test(l))
+    if (startIdx < 0) continue
+    const endIdx = findSectionEnd(lines, startIdx)
+    const removed = lines.splice(startIdx, endIdx - startIdx)
+    dropped += removed.length
+    totalChars = lines.join('\n').length
+  }
+  if (dropped > 0) {
+    // Marker de troncation pour transparence (l'agent voit qu'on a coupé)
+    lines.push(`  · ${dropped} line(s) dropped to fit CODEGRAPH_HOOK_BUDGET=${budgetTokens} tokens`)
+  }
+}
+
 // ADR-028 — sauvegarde du session manifest
 session.seenFiles[relPath] = {
   firstSeenAt: fileState?.firstSeenAt ?? Date.now(),

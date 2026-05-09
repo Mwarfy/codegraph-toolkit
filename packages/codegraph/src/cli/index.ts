@@ -66,6 +66,7 @@ import { runExportsCommand } from './commands/exports.js'
 import { runArchCheckCommand } from './commands/arch-check.js'
 import { runServeCommand } from './commands/serve.js'
 import { runRankCommand } from './commands/rank.js'
+import { runSynopsisCommand } from './commands/synopsis.js'
 
 const program = new Command()
 
@@ -249,40 +250,17 @@ program
 
 program
   .command('synopsis')
-  .description('Generate C4 mental map (Level 1/2/3) from an existing snapshot')
+  .description('Generate mental map — static C4 levels (default) or focused dynamic (--focus)')
   .argument('[snapshot]', 'Path to snapshot JSON file (default: latest)')
   .option('-c, --config <path>', 'Path to codegraph config file')
-  .option('-l, --level <n>', 'Level to render: 1 (context), 2 (containers), 3 (components)', '1')
+  .option('-l, --level <n>', 'Static mode: level 1 (context), 2 (containers), 3 (components)', '1')
   .option('--container <id>', 'Container id for Level 3 (e.g. sentinel-core)')
   .option('--format <fmt>', 'Output format: md | json', 'md')
+  .option('-f, --focus <file...>', 'Focused mode: render PageRank-ranked synopsis around these files')
+  .option('--tokens <n>', 'Token budget for focused mode (default 1500)', '1500')
+  .option('--recent', 'Boost recently-modified files (focused mode)')
   .action(async (snapshotPath, opts) => {
-    const snapshot = await loadSnapshot(snapshotPath, opts)
-    const cfg = await loadConfig(opts)
-    const adrMarkers = await collectAdrMarkers(cfg.rootDir)
-    const synopsis = buildSynopsis(snapshot, { adrMarkers })
-
-    if (opts.format === 'json') {
-      process.stdout.write(JSON.stringify(synopsis, null, 2))
-      return
-    }
-
-    const level = parseInt(opts.level, 10)
-    let out: string
-    if (level === 1) out = renderLevel1(synopsis)
-    else if (level === 2) out = renderLevel2(synopsis)
-    else if (level === 3) {
-      if (!opts.container) {
-        console.error(chalk.red('--container <id> required for Level 3'))
-        console.error(chalk.dim(`Available: ${synopsis.containers.map(c => c.id).join(', ')}`))
-        process.exit(1)
-      }
-      out = renderLevel3(synopsis, opts.container)
-    } else {
-      console.error(chalk.red(`Invalid level: ${opts.level} (expected 1, 2, or 3)`))
-      process.exit(1)
-    }
-
-    process.stdout.write(out)
+    await runSynopsisCommand(snapshotPath, opts)
   })
 
 // ─── orphans ──────────────────────────────────────────────────────────────
