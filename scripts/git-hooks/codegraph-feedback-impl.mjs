@@ -256,6 +256,79 @@ try {
     const resolvedSinceSessionCount = [...sessionBaseline].filter(k => !currentKeys.has(k)).length
     const grandfatheredCount = violations.length - newSinceSession.length
 
+    // ─── DELTA STRICT vs hook précédent — signal le plus actionnable ───
+    //
+    // `previousViolationKeys` est le set du HOOK PRÉCÉDENT (pas de la session).
+    // Donc `currentKeys - previousKeys` = ce que CET edit vient d'introduire.
+    // C'est ce signal qu'on met en TÊTE — c'est ce dont l'agent a besoin
+    // pour s'arrêter et corriger avant de continuer.
+    //
+    // Skip si premier hook de la session (pas de reference précédente).
+    const previousKeys = new Set(session.previousViolationKeys || [])
+    const isFirstHookCall = (session.editCount || 0) <= 1
+    const introducedThisEdit = isFirstHookCall
+      ? []
+      : violations.filter(v => !previousKeys.has(violationKey(v)))
+    const resolvedThisEdit = isFirstHookCall
+      ? 0
+      : [...previousKeys].filter(k => !currentKeys.has(k)).length
+
+    // Scope by file : split current-file vs cross-file effects
+    const introducedHere = introducedThisEdit.filter(v => v.file === relPath)
+    const introducedElsewhere = introducedThisEdit.filter(v => v.file !== relPath)
+
+    // ─── PRIMARY SIGNAL : violations introduites par cet edit (sur ce fichier) ───
+    if (introducedHere.length > 0) {
+      lines.push('  🔴 CET EDIT a ajouté ' + introducedHere.length + ' violation(s) sur ce fichier :')
+      for (const v of introducedHere.slice(0, 10)) {
+        const lineStr = v.line === 0 ? '' : ':' + v.line
+        lines.push('    [' + v.adr + '] L' + v.line + '  ' + v.msg)
+        // Proof tree compact (1 ligne max)
+        if (v.path) {
+          const pathLines = v.path.split('\n').slice(0, 1)
+          for (const p of pathLines) {
+            if (p.trim().length > 0) lines.push('      ' + p.trim())
+          }
+        }
+        // Fix hint (mapping rule → action)
+        const hint = getFixHint(v.adr)
+        if (hint) {
+          lines.push('      fix: ' + hint.fix)
+          if (hint.exempt) lines.push('      exempt: ' + hint.exempt + ' (sur ligne précédente)')
+        }
+        // Memory match : fingerprint exact ou rule-prefix
+        const fpExact = v.adr + ':' + v.file + ':' + v.line
+        const memHit = memoryByFingerprint.get(fpExact) ||
+          memoryByFingerprint.get(v.adr + ':' + v.file) ||
+          memoryEntries.find(e => e && !e.obsoleteAt && e.fingerprint &&
+            e.fingerprint.startsWith(v.adr) && e.scope?.file === v.file)
+        if (memHit) {
+          const reason = String(memHit.reason).split('\n')[0].slice(0, 80)
+          lines.push('      memory: [' + memHit.kind + '] ' + reason)
+        }
+      }
+      if (introducedHere.length > 10) {
+        lines.push('    (+' + (introducedHere.length - 10) + ' autres — codegraph datalog-check --diff)')
+      }
+    }
+
+    // ─── CROSS-FILE EFFECT : violations introduites ailleurs par cet edit ───
+    if (introducedElsewhere.length > 0) {
+      lines.push('  🟠 EFFET CROSS-FILE — ' + introducedElsewhere.length + ' violation(s) ailleurs probablement causées par cet edit :')
+      for (const v of introducedElsewhere.slice(0, 5)) {
+        const msg = v.msg.length > 70 ? v.msg.slice(0, 67) + '…' : v.msg
+        lines.push('    [' + v.adr + '] ' + v.file + ':' + v.line + '  ' + msg)
+      }
+      if (introducedElsewhere.length > 5) {
+        lines.push('    (+' + (introducedElsewhere.length - 5) + ' autres)')
+      }
+    }
+
+    // ─── POSITIVE SIGNAL : violations résolues par cet edit ───
+    if (resolvedThisEdit > 0) {
+      lines.push('  ✅ CET EDIT a résolu ' + resolvedThisEdit + ' violation(s)')
+    }
+
     // ─── Pattern repeat detection (Tier 1 self-observability) ──────────
     //
     // Compare current violation set vs PREVIOUS hook call (pas vs baseline).
@@ -266,7 +339,7 @@ try {
     //
     // Forme du signal : interrogative (pas "fix this", mais "intentionnel ?").
     // L'agent garde l'agency : opt-out via `// repeat-ok: <reason>` dans le code.
-    const previousKeys = new Set(session.previousViolationKeys)
+    // Note: `previousKeys` déjà calculé en tête de section pour le delta strict.
     const ruleFileLooseKey = (v) => v.adr + '|' + v.file
     for (const k of previousKeys) {
       if (!currentKeys.has(k)) {
@@ -304,45 +377,26 @@ try {
     }
     if (repeats.length > 0) session.boomerangCount += repeats.length
 
-    // Bucket 1 — NEW since session : full visibility (le signal qui corrige)
-    // F.2 : auto-inject fix hint + memory match si applicable.
-    if (newSinceSession.length > 0) {
-      lines.push('  --- Datalog NEW (this session, ' + data.elapsed + 'ms) ---')
-      for (const v of newSinceSession.slice(0, 5)) {
-        const lineStr = v.line === 0 ? '' : ':' + v.line
-        lines.push('    [' + v.adr + '] ' + v.file + lineStr + '  ' + v.msg)
-        // Proof tree compact (1 ligne max)
-        if (v.path) {
-          const pathLines = v.path.split('\n').slice(0, 1)
-          for (const p of pathLines) {
-            if (p.trim().length > 0) lines.push('      ' + p.trim())
-          }
-        }
-        // Fix hint (mapping rule → action)
-        const hint = getFixHint(v.adr)
-        if (hint) {
-          lines.push('      fix: ' + hint.fix)
-          if (hint.exempt) lines.push('      exempt: ' + hint.exempt + ' (sur ligne précédente)')
-        }
-        // Memory match : fingerprint exact ou rule-prefix
-        const fpExact = v.adr + ':' + v.file + ':' + v.line
-        const memHit = memoryByFingerprint.get(fpExact) ||
-          memoryByFingerprint.get(v.adr + ':' + v.file) ||
-          memoryEntries.find(e => e && !e.obsoleteAt && e.fingerprint &&
-            e.fingerprint.startsWith(v.adr) && e.scope?.file === v.file)
-        if (memHit) {
-          const reason = String(memHit.reason).split('\n')[0].slice(0, 80)
-          lines.push('      memory: [' + memHit.kind + '] ' + reason)
-        }
-      }
-      if (newSinceSession.length > 5) {
-        lines.push('    (+' + (newSinceSession.length - 5) + ' more — codegraph datalog-check --diff)')
-      }
+    // ─── Session-wide cumulative (démoted) ─────────────────────────
+    //
+    // L'ancien "Datalog NEW (this session)" affichait toutes les violations
+    // depuis le début de la session, mêlant cet edit et les précédents.
+    // C'est trop dilué pour être actionnable — l'agent passe outre.
+    //
+    // Maintenant, on remplace par une ligne synthèse uniquement, qui ne
+    // se déclenche QUE si le delta de l'edit en cours est silencieux mais
+    // qu'il reste de la dette accumulée dans la session.
+    const sessionWideStillOpen = newSinceSession.length - introducedThisEdit.length
+    if (introducedThisEdit.length === 0 && sessionWideStillOpen > 0) {
+      lines.push('  · ' + sessionWideStillOpen + ' violation(s) ouvertes depuis le début de session (codegraph datalog-check --diff pour le détail)')
     }
 
-    // Bucket 2 — RESOLVED : signal positif (l'agent voit que son fix a marché)
-    if (resolvedSinceSessionCount > 0) {
-      lines.push('  ✓ ' + resolvedSinceSessionCount + ' violation(s) resolved this session')
+    // Session-wide RESOLVED : signal positif cumulatif (différent du "✅ CET EDIT a résolu" qui est local)
+    if (resolvedSinceSessionCount > resolvedThisEdit) {
+      const cumul = resolvedSinceSessionCount - resolvedThisEdit
+      if (cumul > 0) {
+        lines.push('  ✓ +' + cumul + ' autre(s) violation(s) résolue(s) plus tôt dans la session')
+      }
     }
 
     // Bucket 2bis — Pattern repeat (Tier 1 self-observability).

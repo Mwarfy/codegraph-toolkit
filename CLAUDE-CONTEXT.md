@@ -177,7 +177,7 @@
 
 ## Top hubs (fichiers les plus importés — gros risque de régression si touchés)
 
-- `packages/codegraph/src/core/types.ts` (in: 81) · gov by ADR-006
+- `packages/codegraph/src/core/types.ts` (in: 83) · gov by ADR-006
 - `packages/codegraph/src/incremental/queries.ts` (in: 42) · gov by ADR-007
 - `packages/codegraph/src/incremental/database.ts` (in: 41) · gov by ADR-007
 - `packages/salsa/dist/index.d.ts` (in: 40)
@@ -234,6 +234,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+9e6b72c refactor(cli): extract 5 more commands (deps, check, exports, arch-check, serve)
 477aaaa refactor(cli): extract \`affected\` command + BFS helpers to commands/affected.ts
 5822a17 fix(test): exclude packages/dashboard-* from hub-ADR governance gate
 332cb8f docs(refactor): rewrite analyzer plan to reflect post-audit reality
@@ -245,7 +246,6 @@ f921d03 feat(dashboard): graph filter, token sparkline, init wiring, publishable
 34ee70a feat(dashboard): time-travel, diff view, focus mode, hook timeline
 0fff050 feat(dashboard): live cockpit + agent transparency telemetry
 6804098 Merge pull request #27 from Mwarfy/feat/audit-v4-final-cleanup
-381de34 fix(rules): F-301/F-302/F-303 audit v4 + doc verdict final
 ```
 
 ## Comment contribuer à ce brief
