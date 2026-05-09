@@ -19,6 +19,11 @@
 
 .decl CriticalInstabilityGrandfathered(file: symbol)
 
+// Skip les fichiers convention framework (configs Sentry, next.config,
+// fichiers .test.ts eux-memes). Le predicat `!TestedFile(F)` ne capture
+// pas que le file SOIT un test (un test n'a pas besoin de tester un test).
+// Sans ce skip, sentry.*.config.ts + next.config.ts + *.test.ts apparaissent
+// systematiquement comme "critical instability". Cf. F-301 audit v4.
 Violation("META-COMPOSITE-CRITICAL-INSTABILITY", F, 0,
   "fichier central + chaos amplifier + sans test — blast radius max, refactor priorité 1") :-
     LyapunovMetric(F, _, _, L),
@@ -26,4 +31,5 @@ Violation("META-COMPOSITE-CRITICAL-INSTABILITY", F, 0,
     ModuleCentrality(F, PR, _),
     PR > 5,
     !TestedFile(F),
+    !IsFrameworkConventionFile(F),
     !CriticalInstabilityGrandfathered(F).
