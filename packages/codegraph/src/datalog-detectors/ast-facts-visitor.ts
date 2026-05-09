@@ -12,6 +12,7 @@
 
 import type { SourceFile } from 'ts-morph'
 import { extractDeadCodeFileBundle } from '../extractors/dead-code.js'
+import { isFrameworkEntryPoint } from '../core/framework-conventions.js'
 import type {
   AstFactsBundle,
   NumericLiteralFact,
@@ -119,6 +120,16 @@ export function extractAstFactsBundle(
 
   const isTest = TEST_FILE_RE.test(relPath)
   if (isTest) fileTags.push({ file: relPath, tag: 'test' })
+
+  // F-103 — émettre un tag pour les fichiers chargés par convention framework
+  // (Next.js page/layout/route/proxy/instrumentation, Expo Router, configs
+  // implicites, tests, scripts). Source de vérité unique : `isFrameworkEntryPoint`,
+  // partagée avec `core/graph.ts#isEntryPoint()` et `extractors/unused-exports.ts`.
+  // Sans ce tag, `composite-orphan-file.dl` flag tous ces fichiers comme dead
+  // code car ils ne sont pas importés explicitement.
+  if (isFrameworkEntryPoint(relPath)) {
+    fileTags.push({ file: relPath, tag: 'framework-routed' })
+  }
 
   visitNumericLiterals(sf, relPath, numericLiterals)
   visitBinaryExpressions(sf, relPath, binaryExpressions)

@@ -1,3 +1,4 @@
+// ADR-006
 /**
  * Framework convention detection — fichiers et exports lus par réflexion
  * par un runtime/framework (Next.js, Expo, Sentry, vitest...) plutôt que
