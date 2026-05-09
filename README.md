@@ -303,7 +303,15 @@ npx codegraph analyze
 npx adr-toolkit brief
 git commit -am "feat: ADR-001"
 
-# 5. (Optionnel — pipeline composite statique × dynamique)
+# 5. Freeze l'existant comme baseline (1er run uniquement)
+#    Sans baseline, datalog-check rapporte la dette historique mêlée
+#    aux nouvelles régressions. Le ratchet pattern grandfather l'existant
+#    pour ne signaler que les NOUVELLES violations introduites après.
+npx codegraph datalog-check --update-baseline
+# Runs suivants (CI / pre-commit) : ne montre que les régressions
+# npx codegraph datalog-check --diff
+
+# 6. (Optionnel — pipeline composite statique × dynamique)
 npx liby-runtime-graph run --duration 60     # capture trafic OTel
 npx codegraph cross-check                     # joint statique + runtime
 ```
