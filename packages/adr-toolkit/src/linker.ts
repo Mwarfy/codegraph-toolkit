@@ -18,6 +18,31 @@ export interface ADRRef {
   anchors: string[]
 }
 
+// Le contenu de `title` et `rule` est lu depuis des .md commitables —
+// donc potentiellement contrôlés par un contributeur tiers — et injecté tel
+// quel dans le contexte LLM via le hook PreToolUse. On neutralise les balises
+// de rôle modèle qui pourraient être interprétées comme une frame système,
+// et on cappe la longueur (un title/rule légitime tient largement dessous).
+const INJECTION_PATTERNS = [
+  /<\/?(?:system|user|assistant|system-reminder)>/gi,
+  /\[\/?(?:INST|SYS)\]/gi,
+  /<\|[a-z0-9_-]+\|>/gi,
+]
+const INJECTION_REPLACEMENT = '⟨stripped⟩'
+const TITLE_MAX_LEN = 200
+const RULE_MAX_LEN = 500
+
+export function sanitize(s: string, maxLen: number): string {
+  let cleaned = s
+  for (const re of INJECTION_PATTERNS) {
+    cleaned = cleaned.replace(re, INJECTION_REPLACEMENT)
+  }
+  if (cleaned.length > maxLen) {
+    cleaned = cleaned.slice(0, maxLen) + '…'
+  }
+  return cleaned
+}
+
 export async function loadADRs(config: AdrToolkitConfig): Promise<ADRRef[]> {
   const adrDir = path.join(config.rootDir, config.adrDir)
   let files: string[]
@@ -52,9 +77,9 @@ export async function loadADRs(config: AdrToolkitConfig): Promise<ADRRef[]> {
     }
     adrs.push({
       num: titleMatch[1],
-      title: titleMatch[2].trim(),
+      title: sanitize(titleMatch[2].trim(), TITLE_MAX_LEN),
       file: path.relative(config.rootDir, path.join(adrDir, f)),
-      rule: ruleMatch ? ruleMatch[1].replace(/\s+/g, ' ').trim() : '',
+      rule: sanitize(ruleMatch ? ruleMatch[1].replace(/\s+/g, ' ').trim() : '', RULE_MAX_LEN),
       anchors,
     })
   }
