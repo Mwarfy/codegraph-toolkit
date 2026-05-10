@@ -26,8 +26,15 @@ node ../../packages/codegraph/dist/cli/index.js analyze 2>&1 | tail -3
 echo ""
 echo "=== ground-truth assertions ==="
 
-snap=$(ls .codegraph/snapshot-*.json | head -1)
-if [ ! -f "$snap" ]; then
+# ADR-027 Phase 2 — privilégie .codegraph/snapshot.json (v2 wrappé
+# { version, meta, payload }), fallback sur snapshot-*.json legacy.
+snap=""
+if [ -f .codegraph/snapshot.json ]; then
+  snap=".codegraph/snapshot.json"
+else
+  snap=$(ls .codegraph/snapshot-*.json 2>/dev/null | head -1 || true)
+fi
+if [ -z "$snap" ] || [ ! -f "$snap" ]; then
   echo "✗ FAIL : pas de snapshot"
   exit 1
 fi
@@ -37,7 +44,8 @@ assert() {
   local expr=$2
   local result
   result=$(node -e "
-    const data = JSON.parse(require('fs').readFileSync('$snap', 'utf-8'))
+    const raw = JSON.parse(require('fs').readFileSync('$snap', 'utf-8'))
+    const data = (raw && raw.version === 2 && raw.payload) ? raw.payload : raw
     const inDeg = {}
     for (const e of (data.edges ?? [])) inDeg[e.to] = (inDeg[e.to] ?? 0) + 1
     process.stdout.write(String($expr))
