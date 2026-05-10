@@ -40,6 +40,7 @@ import { runAffectedCommand } from './commands/affected.js'
 import { runDepsCommand } from './commands/deps.js'
 import { runCheckCommand } from './commands/check.js'
 import { runExportsCommand } from './commands/exports.js'
+import { runDiscoverCommand } from './commands/discover.js'
 import { runArchCheckCommand } from './commands/arch-check.js'
 import { runServeCommand } from './commands/serve.js'
 import { runRankCommand } from './commands/rank.js'
@@ -227,6 +228,21 @@ program
   .option('--json', 'Output as JSON')
   .action(async (snapshotPath, opts) => {
     await runExportsCommand(snapshotPath, opts)
+  })
+
+// ─── discover ────────────────────────────────────────────────────────────
+
+program
+  .command('discover')
+  .description('Scan Claude Code sessions (~/.claude/projects) — find where context injection missed (hub reads, repeat reads, grep on hub symbols)')
+  .argument('[snapshot]', 'Path to snapshot JSON file (default: latest)')
+  .option('-c, --config <path>', 'Path to codegraph config file')
+  .option('--project <path>', 'Project cwd (default: process.cwd())')
+  .option('--since-days <n>', 'Window of sessions to analyze in days (default: 30)', '30')
+  .option('--no-worktrees', 'Skip sessions from .claude/worktrees/ siblings')
+  .option('--json', 'Output as JSON instead of markdown')
+  .action(async (snapshotPath, opts) => {
+    await runDiscoverCommand(snapshotPath, opts)
   })
 
 // ─── taint ────────────────────────────────────────────────────────────────
