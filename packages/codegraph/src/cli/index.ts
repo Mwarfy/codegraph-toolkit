@@ -27,33 +27,10 @@
  */
 
 import { Command } from 'commander'
-import chalk from 'chalk'
-import * as fs from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
 import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { analyze } from '../core/analyzer.js'
-import { CodeGraph } from '../core/graph.js'
-import type { CodeGraphConfig, GraphSnapshot } from '../core/types.js'
-import { buildSynopsis, renderLevel1, renderLevel2, renderLevel3 } from '../synopsis/builder.js'
-import { collectAdrMarkers } from '../synopsis/adr-markers.js'
-import { buildMap } from '../map/builder.js'
-import { runCheck, ALL_RULES } from '../check/index.js'
-import { findReachablePaths, globToRegex } from '../graph/reachability.js'
-import { computeDsm } from '../graph/dsm.js'
-import { renderDsm, aggregateByContainer } from '../map/dsm-renderer.js'
-import { exportFacts } from '../facts/index.js'
-import { CodeGraphWatcher } from '../incremental/watcher.js'
-import {
-  loadMemoryRaw, addEntry, markObsolete, deleteEntry, recall,
-  memoryPathFor,
-} from '../memory/store.js'
-// Shared helpers — extraits du god-file (P2a split).
-import {
-  loadConfig, loadSnapshot, defaultSnapshotPath, pruneSnapshots,
-  formatHealth, exists, analyzeAtRef,
-} from './_shared.js'
-// Extracted commands (P2a god-file split — commands moved to cli/commands/)
+// Extracted commands (P2a/P2b god-file split — commands moved to cli/commands/)
 import { runMemoryWhere } from './commands/memory-where.js'
 import { runAnalyzeCommand } from './commands/analyze.js'
 import { runDiffCommand } from './commands/diff.js'
@@ -67,6 +44,18 @@ import { runArchCheckCommand } from './commands/arch-check.js'
 import { runServeCommand } from './commands/serve.js'
 import { runRankCommand } from './commands/rank.js'
 import { runSynopsisCommand } from './commands/synopsis.js'
+import { runDetectorsCommand } from './commands/detectors.js'
+import { runWatchCommand } from './commands/watch.js'
+import { runMapCommand } from './commands/map.js'
+import { runOrphansCommand } from './commands/orphans.js'
+import { runTaintCommand } from './commands/taint.js'
+import { runDsmCommand } from './commands/dsm.js'
+import { runFactsCommand } from './commands/facts.js'
+import { runReachCommand } from './commands/reach.js'
+import {
+  runMemoryList, runMemoryMark, runMemoryObsolete,
+  runMemoryDelete, runMemoryPrune, runMemoryExport,
+} from './commands/memory.js'
 
 const program = new Command()
 
@@ -91,29 +80,7 @@ program
 program
   .command('detectors')
   .description('List detectors that ran in the latest analyze, with timings')
-  .action(async () => {
-    const config = await loadConfig({})
-    const snapPath = await defaultSnapshotPath(config)
-    const timingPath = path.join(path.dirname(snapPath), 'last-run-timing.json')
-    const raw = await fs.readFile(timingPath, 'utf-8').catch(() => '')
-    if (!raw) {
-      console.log(chalk.yellow('No detector timing found. Run `codegraph analyze` first.'))
-      return
-    }
-    const data = JSON.parse(raw) as { detectors?: Record<string, number>; total?: number }
-    const entries = Object.entries(data.detectors ?? {}).sort((a, b) => b[1] - a[1])
-    if (entries.length === 0) {
-      console.log(chalk.yellow('Timing file empty — re-run analyze.'))
-      return
-    }
-    console.log(chalk.bold(`\n${entries.length} detectors ran (sorted by cost):\n`))
-    for (const [name, ms] of entries) {
-      console.log(`  ${name.padEnd(30)} ${chalk.dim((ms as number).toFixed(0).padStart(5) + 'ms')}`)
-    }
-    if (typeof data.total === 'number') {
-      console.log(chalk.dim(`\n  Total analyze: ${data.total.toFixed(0)}ms`))
-    }
-  })
+  .action(runDetectorsCommand)
 
 // ─── analyze ──────────────────────────────────────────────────────────────
 
@@ -137,33 +104,7 @@ program
     'Run analyze + spawn runtime probe via `liby-runtime-graph probe -- <cmd>`. ' +
     'Captures statique × runtime en une commande. Exemple : ' +
     '--with-runtime "npm test" ou --with-runtime "node app.mjs".')
-  .action(async (opts) => {
-    await runAnalyzeCommand(opts)
-    if (opts.withRuntime) {
-      await runRuntimeProbeWrapper(opts.withRuntime)
-    }
-  })
-
-/**
- * Wrapper sur `liby-runtime-graph probe -- <cmd>` pour le flag --with-runtime.
- * Lance le binaire si dispo dans node_modules, sinon log un hint.
- */
-async function runRuntimeProbeWrapper(cmdString: string): Promise<void> {
-  const { spawn } = await import('node:child_process')
-  const args = cmdString.split(' ').filter(Boolean)
-  if (args.length === 0) {
-    console.log(chalk.yellow('  ⚠ --with-runtime needs a command, e.g. "npm test"'))
-    return
-  }
-  console.log(chalk.cyan(`\n  ⓘ running runtime probe: ${cmdString}`))
-  await new Promise<void>((resolve) => {
-    const child = spawn('npx', ['liby-runtime-graph', 'probe', '--cpu-profile', ...args], {
-      stdio: 'inherit',
-      shell: false,
-    })
-    child.on('exit', () => resolve())
-  })
-}
+  .action(runAnalyzeCommand)
 
 // ─── watch ────────────────────────────────────────────────────────────────
 
@@ -178,42 +119,7 @@ program
   .option('-c, --config <path>', 'Path to codegraph config file')
   .option('-r, --root <path>', 'Project root directory (overrides config rootDir)')
   .option('--debounce <ms>', 'Debounce ms before recompute (default 50)', '50')
-  .action(async (opts) => {
-    const config = await loadConfig(opts)
-    const debounceMs = parseInt(opts.debounce, 10)
-
-    console.log(chalk.bold('\n👁  CodeGraph — Watching\n'))
-    console.log(`  Root:     ${config.rootDir}`)
-    console.log(`  Include:  ${config.include.join(', ')}`)
-    console.log(`  Debounce: ${debounceMs}ms`)
-    console.log(chalk.dim('  (Ctrl+C to stop)\n'))
-
-    const watcher = new CodeGraphWatcher(config, {
-      debounceMs,
-      onUpdate: ({ changedFiles, durationMs }) => {
-        const filesPart = changedFiles.length === 0
-          ? chalk.dim('initial')
-          : changedFiles.length === 1
-            ? changedFiles[0]
-            : `${changedFiles[0]} (+${changedFiles.length - 1} more)`
-        const ms = durationMs.toFixed(0)
-        const msColor = durationMs < 100 ? chalk.green : durationMs < 1000 ? chalk.yellow : chalk.red
-        console.log(`  ${chalk.cyan('•')} ${filesPart} ${msColor(`${ms}ms`)}`)
-      },
-      onError: (err) => {
-        console.error(chalk.red(`  ✗ recompute failed: ${err}`))
-      },
-    })
-
-    process.on('SIGINT', () => {
-      console.log(chalk.dim('\n  Stopping... (saving cache)'))
-      void watcher.stop().then(() => process.exit(0))
-    })
-
-    await watcher.start()
-    // Bloque le process en idle (les fs.watch handlers gardent l'event loop alive)
-    await new Promise(() => {})
-  })
+  .action(runWatchCommand)
 
 // ─── map ──────────────────────────────────────────────────────────────────
 
@@ -226,25 +132,7 @@ program
   .option('--stdout', 'Print to stdout instead of writing to file')
   .option('--min-indegree <n>', 'Min in-degree for a file fiche (default 2)', '2')
   .option('--max-modules <n>', 'Cap number of module fiches (default 200)', '200')
-  .action(async (snapshotPath, opts) => {
-    const snapshot = await loadSnapshot(snapshotPath, opts)
-    const config = await loadConfig(opts)
-    const content = buildMap(snapshot, {
-      minIndegree: parseInt(opts.minIndegree, 10),
-      maxModulesInFiches: parseInt(opts.maxModules, 10),
-      concerns: config.concerns,
-    })
-
-    if (opts.stdout) {
-      process.stdout.write(content)
-      return
-    }
-    const outPath = opts.output ?? path.join(config.rootDir, 'MAP.md')
-    await fs.mkdir(path.dirname(outPath), { recursive: true })
-    await fs.writeFile(outPath, content)
-    const approxTokens = Math.round(content.length / 4)
-    console.log(chalk.green(`✓ MAP.md written: ${outPath} (~${approxTokens} tokens, ${content.length} chars)`))
-  })
+  .action(runMapCommand)
 
 // ─── synopsis ─────────────────────────────────────────────────────────────
 
@@ -271,40 +159,7 @@ program
   .argument('[snapshot]', 'Path to snapshot JSON file')
   .option('-c, --config <path>', 'Path to codegraph config file')
   .option('--json', 'Output as JSON')
-  .action(async (snapshotPath, opts) => {
-    const snapshot = await loadSnapshot(snapshotPath, opts)
-    const orphans = snapshot.nodes.filter(n => n.type === 'file' && n.status === 'orphan')
-    const uncertain = snapshot.nodes.filter(n => n.type === 'file' && n.status === 'uncertain')
-
-    if (opts.json) {
-      console.log(JSON.stringify({ orphans, uncertain }, null, 2))
-      return
-    }
-
-    console.log(chalk.bold(`\n🔍 Orphan Report\n`))
-    console.log(`  Total files:    ${snapshot.stats.totalFiles}`)
-    console.log(`  Health score:   ${formatHealth(snapshot.stats.healthScore)}`)
-    console.log()
-
-    if (orphans.length === 0) {
-      console.log(chalk.green('  No orphans found! 🎉\n'))
-    } else {
-      console.log(chalk.yellow(`  ${orphans.length} orphan(s):\n`))
-      for (const node of orphans.sort((a, b) => a.id.localeCompare(b.id))) {
-        const tags = node.tags.length > 0 ? chalk.dim(` [${node.tags.join(', ')}]`) : ''
-        console.log(`    ${chalk.red('●')} ${node.id}${tags}`)
-      }
-      console.log()
-    }
-
-    if (uncertain.length > 0) {
-      console.log(chalk.dim(`  ${uncertain.length} uncertain (only unresolved incoming):\n`))
-      for (const node of uncertain.sort((a, b) => a.id.localeCompare(b.id))) {
-        console.log(`    ${chalk.yellow('◐')} ${node.id}`)
-      }
-      console.log()
-    }
-  })
+  .action(runOrphansCommand)
 
 // ─── arch-check ───────────────────────────────────────────────────────────
 
@@ -342,47 +197,7 @@ program
   .option('-c, --config <path>', 'Path to codegraph config file')
   .option('--json', 'Output paths as JSON')
   .option('--max <n>', 'Max paths to print (default 20)', '20')
-  .action(async (fromGlob: string, toGlob: string, opts) => {
-    const snapshot = await loadSnapshot(undefined, opts)
-    const fromRe = globToRegex(fromGlob)
-    const toRe = globToRegex(toGlob)
-    const files = snapshot.nodes.filter((n) => n.type === 'file').map((n) => n.id)
-    const sources = new Set(files.filter((f) => fromRe.test(f)))
-    const targets = new Set(files.filter((f) => toRe.test(f)))
-
-    if (sources.size === 0) {
-      console.error(chalk.yellow(`  No files match <from> glob: ${fromGlob}`))
-      return
-    }
-    if (targets.size === 0) {
-      console.error(chalk.yellow(`  No files match <to> glob: ${toGlob}`))
-      return
-    }
-
-    const paths = findReachablePaths(sources, targets, snapshot.edges)
-
-    if (opts.json) {
-      console.log(JSON.stringify({ from: fromGlob, to: toGlob, paths }, null, 2))
-      return
-    }
-
-    console.log(chalk.bold(`\n  Reachability ${fromGlob} → ${toGlob}\n`))
-    console.log(`  Sources: ${sources.size} files · Targets: ${targets.size} files`)
-    if (paths.length === 0) {
-      console.log(chalk.green(`  ✓ No transitive path found. ${fromGlob} cannot reach ${toGlob}.\n`))
-      return
-    }
-
-    const max = parseInt(opts.max, 10)
-    console.log(chalk.red(`  ✗ ${paths.length} transitive path(s) found:\n`))
-    for (const p of paths.slice(0, max)) {
-      console.log(`    ${p.path.join(' → ')}`)
-    }
-    if (paths.length > max) {
-      console.log(chalk.dim(`    … +${paths.length - max} more (use --max to show)`))
-    }
-    console.log()
-  })
+  .action(runReachCommand)
 
 // ─── affected ────────────────────────────────────────────────────────────
 
@@ -423,58 +238,7 @@ program
   .option('-c, --config <path>', 'Path to codegraph config file')
   .option('--json', 'Output as JSON')
   .option('--severity <level>', 'Filter by min severity: critical | high | medium | low', 'low')
-  .action(async (snapshotPath, opts) => {
-    const snapshot = await loadSnapshot(snapshotPath, opts)
-    const violations = snapshot.taintViolations ?? []
-    const order = ['low', 'medium', 'high', 'critical']
-    const minIdx = order.indexOf(opts.severity)
-    const filtered = violations.filter((v) => order.indexOf(v.severity) >= minIdx)
-
-    if (opts.json) {
-      console.log(JSON.stringify(filtered, null, 2))
-      process.exit(filtered.length > 0 ? 1 : 0)
-    }
-
-    console.log(chalk.bold('\n  Taint Analysis\n'))
-
-    if (!snapshot.taintViolations) {
-      console.log(chalk.yellow(`  ⚠ No taint data in snapshot. Enable taint in config:`))
-      console.log(chalk.dim(`      "detectorOptions": { "taint": { "enabled": true } }`))
-      console.log(chalk.dim(`  And provide a taint-rules.json at project root.\n`))
-      process.exit(0)
-    }
-
-    if (filtered.length === 0) {
-      console.log(chalk.green('  ✓ No violations at this severity.\n'))
-      process.exit(0)
-    }
-
-    const counts = { critical: 0, high: 0, medium: 0, low: 0 }
-    for (const v of filtered) counts[v.severity]++
-    console.log(
-      `  ${chalk.red(String(counts.critical))} critical · ` +
-      `${chalk.magenta(String(counts.high))} high · ` +
-      `${chalk.yellow(String(counts.medium))} medium · ` +
-      `${chalk.dim(String(counts.low))} low`,
-    )
-    console.log()
-
-    for (const v of filtered) {
-      const sevColor = v.severity === 'critical' ? chalk.red
-                     : v.severity === 'high' ? chalk.magenta
-                     : v.severity === 'medium' ? chalk.yellow
-                     : chalk.dim
-      console.log(`  ${sevColor('✗ ' + v.severity.toUpperCase().padEnd(8))} ${chalk.bold(v.sourceName)} → ${chalk.bold(v.sinkName)}`)
-      console.log(chalk.dim(`      ${v.file}:${v.line}  ${v.symbol ? `(${v.symbol})` : ''}`))
-      for (const step of v.chain) {
-        const icon = step.kind === 'source' ? '┌' : step.kind === 'sink' ? '└' : '│'
-        console.log(chalk.dim(`      ${icon} L${step.line}  ${step.detail}`))
-      }
-      console.log()
-    }
-
-    process.exit(filtered.length > 0 ? 1 : 0)
-  })
+  .action(runTaintCommand)
 
 // ─── dsm ──────────────────────────────────────────────────────────────────
 
@@ -488,43 +252,7 @@ program
   .option('--edge-types <types>', 'Comma-separated edge types (default: import)', 'import')
   .option('--json', 'Output as JSON {order, matrix, backEdges, levels}')
   .option('-o, --output <path>', 'Write markdown to file instead of stdout')
-  .action(async (snapshotPath, opts) => {
-    const snapshot = await loadSnapshot(snapshotPath, opts)
-    const edgeTypes = new Set((opts.edgeTypes as string).split(',').map((s: string) => s.trim()))
-
-    const fileNodes = snapshot.nodes.filter((n) => n.type === 'file').map((n) => n.id)
-    const rawEdges = snapshot.edges
-      .filter((e) => edgeTypes.has(e.type))
-      .map((e) => ({ from: e.from, to: e.to }))
-
-    let nodes = fileNodes
-    let edges = rawEdges
-    if (opts.granularity === 'container') {
-      const depth = parseInt(opts.depth, 10)
-      const agg = aggregateByContainer(fileNodes, rawEdges, depth)
-      nodes = agg.nodes
-      edges = agg.edges
-    }
-
-    const dsm = computeDsm(nodes, edges)
-
-    if (opts.json) {
-      console.log(JSON.stringify(dsm, null, 2))
-      return
-    }
-
-    const md = renderDsm(dsm, {
-      title: `DSM — ${opts.granularity === 'container' ? `container (depth=${opts.depth})` : 'file-level'} · ${dsm.order.length} nodes · ${dsm.backEdges.length} back-edges`,
-    })
-
-    if (opts.output) {
-      await fs.writeFile(opts.output, md)
-      console.log(chalk.green(`✓ DSM written: ${opts.output}`))
-      return
-    }
-
-    process.stdout.write(md)
-  })
+  .action(runDsmCommand)
 
 // ─── deps ─────────────────────────────────────────────────────────────────
 
@@ -587,43 +315,7 @@ program
       'faster than a full `codegraph analyze`. Use at pre-commit to refresh facts ' +
       'against the staged tree without paying the full pipeline cost.',
   )
-  .action(async (snapshotPath, opts) => {
-    const config = await loadConfig(opts)
-    let snapshot: GraphSnapshot
-    if (opts.regen) {
-      console.log(chalk.dim('  Re-analyzing in facts-only mode...'))
-      const t0 = performance.now()
-      const result = await analyze(config, { factsOnly: true })
-      snapshot = result.snapshot
-      const elapsed = (performance.now() - t0) / 1000
-      console.log(chalk.dim(`  Analyze done in ${elapsed.toFixed(2)}s`))
-    } else {
-      snapshot = await loadSnapshot(snapshotPath, opts)
-    }
-
-    const outDir: string = opts.output
-      ? path.resolve(opts.output)
-      : path.join(config.snapshotDir, 'facts')
-
-    const result = await exportFacts(snapshot, { outDir })
-
-    console.log(chalk.bold('\n  CodeGraph Facts (Datalog export)\n'))
-    console.log(`  ${chalk.dim('out')}    ${result.outDir}`)
-    console.log(`  ${chalk.dim('schema')} ${path.relative(process.cwd(), result.schemaFile)}`)
-    console.log()
-    const totalTuples = result.relations.reduce((s, r) => s + r.tuples, 0)
-    for (const r of result.relations) {
-      const tuples = r.tuples === 0
-        ? chalk.dim('0')
-        : r.tuples > 1000
-          ? chalk.yellow(String(r.tuples))
-          : chalk.green(String(r.tuples))
-      console.log(`  ${r.name.padEnd(18)} ${tuples.padStart(7)} tuples`)
-    }
-    console.log()
-    console.log(chalk.dim(`  Total: ${totalTuples} tuples across ${result.relations.length} relations`))
-    console.log()
-  })
+  .action(runFactsCommand)
 
 // ─── datalog-check ────────────────────────────────────────────────────────
 // Phase 4 Tier 8 : exécute toutes les rules .dl du projet contre les facts
@@ -684,38 +376,7 @@ memoryCmd
   .option('-f, --file <file>', 'Filter by scope.file')
   .option('--include-obsolete', 'Include obsoleted entries')
   .option('--json', 'Output raw JSON instead of formatted text')
-  .action(async (opts) => {
-    const root = opts.root ?? process.cwd()
-    const entries = await recall(root, {
-      kind: opts.kind,
-      file: opts.file,
-      includeObsolete: opts.includeObsolete,
-    })
-    if (opts.json) {
-      console.log(JSON.stringify(entries, null, 2))
-      return
-    }
-    console.log(chalk.bold(`\n  Memory — ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}`))
-    console.log(chalk.dim(`  Store: ${memoryPathFor(root)}\n`))
-    if (entries.length === 0) {
-      console.log(chalk.dim('  (empty)\n'))
-      return
-    }
-    for (const e of entries) {
-      const obsoleteTag = e.obsoleteAt ? chalk.yellow(' [OBSOLETE]') : ''
-      console.log(`  ${chalk.cyan('[' + e.kind + ']')} ${chalk.bold(e.fingerprint)}${obsoleteTag}`)
-      console.log(`    ${e.reason}`)
-      if (e.scope) {
-        const bits: string[] = []
-        if (e.scope.file) bits.push(`file=${e.scope.file}`)
-        if (e.scope.detector) bits.push(`detector=${e.scope.detector}`)
-        if (e.scope.tags && e.scope.tags.length > 0) bits.push(`tags=${e.scope.tags.join(',')}`)
-        if (bits.length > 0) console.log(chalk.dim(`    scope: ${bits.join(', ')}`))
-      }
-      console.log(chalk.dim(`    id: ${e.id}  ·  added: ${e.addedAt.slice(0, 10)}`))
-      console.log()
-    }
-  })
+  .action(runMemoryList)
 
 memoryCmd
   .command('mark <kind> <fingerprint> <reason>')
@@ -724,78 +385,31 @@ memoryCmd
   .option('--scope-file <file>', 'Scope: relative file path')
   .option('--scope-detector <detector>', 'Scope: detector name')
   .option('--scope-tags <tags>', 'Scope: comma-separated tags')
-  .action(async (kind, fingerprint, reason, opts) => {
-    if (!['false-positive', 'decision', 'incident'].includes(kind)) {
-      console.error(chalk.red(`Invalid kind: ${kind}. Must be one of: false-positive, decision, incident`))
-      process.exit(1)
-    }
-    const root = opts.root ?? process.cwd()
-    const scope = (opts.scopeFile || opts.scopeDetector || opts.scopeTags)
-      ? {
-          file: opts.scopeFile,
-          detector: opts.scopeDetector,
-          tags: opts.scopeTags ? String(opts.scopeTags).split(',') : undefined,
-        }
-      : undefined
-    const e = await addEntry(root, { kind, fingerprint, reason, scope })
-    console.log(chalk.green('  ✓ saved'))
-    console.log(chalk.dim(`    id: ${e.id}  ·  ${memoryPathFor(root)}`))
-  })
+  .action(runMemoryMark)
 
 memoryCmd
   .command('obsolete <id>')
   .description('Mark an entry as obsolete (keeps audit trail)')
   .option('-r, --root <path>', 'Project root (default: cwd)')
-  .action(async (id, opts) => {
-    const root = opts.root ?? process.cwd()
-    const ok = await markObsolete(root, id)
-    if (!ok) {
-      console.error(chalk.red(`No entry found with id: ${id}`))
-      process.exit(1)
-    }
-    console.log(chalk.yellow('  ✓ obsoleted'))
-  })
+  .action(runMemoryObsolete)
 
 memoryCmd
   .command('delete <id>')
   .description('Hard-delete an entry (no audit trail)')
   .option('-r, --root <path>', 'Project root (default: cwd)')
-  .action(async (id, opts) => {
-    const root = opts.root ?? process.cwd()
-    const ok = await deleteEntry(root, id)
-    if (!ok) {
-      console.error(chalk.red(`No entry found with id: ${id}`))
-      process.exit(1)
-    }
-    console.log(chalk.green('  ✓ deleted'))
-  })
+  .action(runMemoryDelete)
 
 memoryCmd
   .command('prune')
   .description('Hard-delete all obsolete entries (keeps active ones)')
   .option('-r, --root <path>', 'Project root (default: cwd)')
-  .action(async (opts) => {
-    const root = opts.root ?? process.cwd()
-    const store = await loadMemoryRaw(root)
-    const obsoleteIds = store.entries.filter((e) => e.obsoleteAt !== null).map((e) => e.id)
-    if (obsoleteIds.length === 0) {
-      console.log(chalk.dim('  No obsolete entries to prune.'))
-      return
-    }
-    // Delete N obsolete entries en parallèle (mutations file-store indépendantes).
-    await Promise.all(obsoleteIds.map((id) => deleteEntry(root, id)))
-    console.log(chalk.green(`  ✓ pruned ${obsoleteIds.length} obsolete entr${obsoleteIds.length === 1 ? 'y' : 'ies'}`))
-  })
+  .action(runMemoryPrune)
 
 memoryCmd
   .command('export')
   .description('Dump the raw memory store as JSON (for backup / inspection)')
   .option('-r, --root <path>', 'Project root (default: cwd)')
-  .action(async (opts) => {
-    const root = opts.root ?? process.cwd()
-    const store = await loadMemoryRaw(root)
-    console.log(JSON.stringify(store, null, 2))
-  })
+  .action(runMemoryExport)
 
 memoryCmd
   .command('where')
