@@ -92,15 +92,15 @@ async function resolveDiffSnapshots(
       process.exit(1)
     }
     return {
-      before: JSON.parse(await fs.readFile(snapshots[1], 'utf-8')),
-      after: JSON.parse(await fs.readFile(snapshots[0], 'utf-8')),
+      before: unwrapSnapshot(JSON.parse(await fs.readFile(snapshots[1], 'utf-8'))),
+      after: unwrapSnapshot(JSON.parse(await fs.readFile(snapshots[0], 'utf-8'))),
     }
   }
 
   if (beforeArg.endsWith('.json')) {
-    const before = JSON.parse(await fs.readFile(beforeArg, 'utf-8'))
+    const before = unwrapSnapshot(JSON.parse(await fs.readFile(beforeArg, 'utf-8')))
     const after = afterArg
-      ? JSON.parse(await fs.readFile(afterArg, 'utf-8'))
+      ? unwrapSnapshot(JSON.parse(await fs.readFile(afterArg, 'utf-8')))
       : (await analyze(config)).snapshot
     return { before, after }
   }
@@ -218,15 +218,44 @@ function printHealthLine(s: SnapshotDiff['summary']): void {
   console.log()
 }
 
+// ADR-027
+/**
+ * Retourne les snapshots disponibles, newest first. Phase 2 d'ADR-027 :
+ *   - V2 mode : [snapshot.json, snapshot.json.bak] (current + previous)
+ *   - Legacy  : snapshot-<ts>-<sha>.json triés par timestamp
+ *
+ * Le caller doit unwrap le payload via `unwrapSnapshot()` après lecture.
+ */
 async function listSnapshots(snapshotDir: string): Promise<string[]> {
   try {
+    const out: string[] = []
+    try {
+      await fs.access(path.join(snapshotDir, 'snapshot.json'))
+      out.push(path.join(snapshotDir, 'snapshot.json'))
+    } catch { /* v2 absent */ }
+    if (out.length > 0) {
+      try {
+        await fs.access(path.join(snapshotDir, 'snapshot.json.bak'))
+        out.push(path.join(snapshotDir, 'snapshot.json.bak'))
+      } catch { /* .bak absent (1er analyze) */ }
+      return out
+    }
+
+    // Legacy mode
     const files = await fs.readdir(snapshotDir)
     return files
-      .filter((f) => f.startsWith('snapshot-') && f.endsWith('.json'))
+      .filter((f) => /^snapshot-\d{4}-\d{2}-\d{2}T.*\.json$/.test(f))
       .sort()
       .reverse()
       .map((f) => path.join(snapshotDir, f))
   } catch {
     return []
   }
+}
+
+// ADR-027
+/** Unwrap le v2 wrapper { version, meta, payload } si présent. */
+function unwrapSnapshot(parsed: any): any {
+  if (parsed && parsed.version === 2 && parsed.payload) return parsed.payload
+  return parsed
 }

@@ -89,20 +89,23 @@ export async function runServeCommand(opts: ServeOpts): Promise<void> {
 
     try {
       // ── GET /api/snapshots — list available snapshots
+      // ADR-027 Phase 2 : inclut le snapshot.json v2 canonique + ses
+      // backups, en plus des snapshot-<ts>-<sha>.json legacy résiduels.
       if (pathname === '/api/snapshots') {
         const snapshotDir = config.snapshotDir
         try {
           const files = await fs.readdir(snapshotDir)
-          const snapshots = files
-            .filter((f) => f.startsWith('snapshot-') && f.endsWith('.json'))
+          const v2Names = files.filter((f) => f === 'snapshot.json' || f === 'snapshot.json.bak')
+          const legacyNames = files
+            .filter((f) => /^snapshot-\d{4}-\d{2}-\d{2}T.*\.json$/.test(f))
             .sort()
             .reverse()
+          const allNames = [...v2Names, ...legacyNames]
 
-          const items = await Promise.all(snapshots.map(async (f) => {
+          const items = await Promise.all(allNames.map(async (f) => {
             const filePath = path.join(snapshotDir, f)
             const stat = await fs.stat(filePath)
-            // Extract commit hash and timestamp from filename
-            // Format: snapshot-YYYY-MM-DDTHH-MM-SS-abcdef1.json
+            // Format legacy : snapshot-YYYY-MM-DDTHH-MM-SS-abcdef1.json
             const match = f.match(/^snapshot-(.+?)(?:-([a-f0-9]{7,}))?\.json$/)
             return {
               file: f,

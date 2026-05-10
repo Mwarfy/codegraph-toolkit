@@ -188,6 +188,10 @@ export interface AnalyzeResult {
     detectors: Record<string, number>
     graphBuild: number
   }
+  // ADR-027 — relpaths des fichiers source effectivement analysés,
+  // exposés pour permettre au CLI de calculer le `inputHash` Phase 2
+  // sans re-walker le filesystem.
+  files: readonly string[]
 }
 
 export interface AnalyzeOptions {
@@ -449,7 +453,7 @@ export async function analyze(
 
   timing.total = performance.now() - t0
 
-  return { snapshot, timing }
+  return { snapshot, timing, files }
 }
 
 /**

@@ -27,13 +27,20 @@ fi
 cd "$REPO_ROOT"
 
 # 1. CodeGraph analyze (si codegraph est configuré)
+# ADR-027 Phase 2 — analyze écrit le snapshot.json canonique unique +
+# supprime progressivement les snapshot-<ts>-<sha>.json legacy.
+# Le post-checkout/post-merge utilisent `refresh` (warm), seul le
+# post-commit force un analyze cold complet (régen des dérivés synopsis/
+# facts/MAP qui suivent un changement structurel).
 if [ -z "$CODEGRAPH_SKIP" ] && [ -f "$REPO_ROOT/codegraph.config.json" ] || [ -f "$REPO_ROOT/codegraph/codegraph.config.json" ]; then
   echo -e "\033[0;36m  codegraph\033[0m analyzing..."
   npx @liby-tools/codegraph analyze > /dev/null 2>&1 && \
     echo -e "\033[0;32m  codegraph\033[0m ✓ snapshot updated" || \
     echo -e "\033[0;33m  codegraph\033[0m ⚠ analyze skipped (config absent or error)"
 
-  # ADR-027 — prune les snapshots accumulés (keep N most recent, default 3).
+  # ADR-027 Phase 1 fallback — si une version legacy de codegraph tourne
+  # encore (sans la migration douce intégrée), on prune les snapshot-*.json
+  # accumulés. Sera retiré après une release de tolérance.
   if [ -x "$REPO_ROOT/scripts/prune-snapshots.sh" ]; then
     "$REPO_ROOT/scripts/prune-snapshots.sh" || true
   fi

@@ -89,6 +89,16 @@ est seul à le faire, et c'est ce qui crée les conflits structurels.
 
 <!-- AUTO-GÉNÉRÉ depuis les marqueurs ADR-NNN du code source. Voir @liby-tools/adr-toolkit. NE PAS éditer à la main. -->
 
+- `packages/codegraph-mcp/src/snapshot-loader.ts`
+- `packages/codegraph-mcp/src/tools/changes-since.ts`
+- `packages/codegraph/src/cli/_shared.ts`
+- `packages/codegraph/src/cli/commands/diff.ts`
+- `packages/codegraph/src/cli/commands/refresh.ts`
+- `packages/codegraph/src/incremental/input-hash.ts`
+- `packages/codegraph/src/incremental/snapshot-store.ts`
+- `packages/dashboard-server/src/routes/diff.ts`
+- `packages/dashboard-server/src/routes/snapshot.ts`
+
 
 ## Detail
 

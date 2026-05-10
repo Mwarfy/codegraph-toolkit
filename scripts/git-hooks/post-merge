@@ -1,0 +1,44 @@
+#!/bin/bash
+# ─── post-merge hook (générique @liby-tools/adr-toolkit) ───
+#
+# ADR-027 Phase 2 — applique le delta Salsa après un merge (fast-forward
+# ou three-way) pour resynchroniser `.codegraph/snapshot.json` avec le
+# nouveau working tree. Plus rapide que `codegraph analyze` complet.
+#
+# Args git :
+#   $1 = "1" si squash-merge, "0" sinon
+#
+# Variables d'environnement :
+#   CODEGRAPH_SKIP=1   Skip refresh entirely
+
+if [ -n "$CODEGRAPH_SKIP" ]; then
+  exit 0
+fi
+
+# Source nvm
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+  # shellcheck disable=SC1091
+  . "$NVM_DIR/nvm.sh" >/dev/null 2>&1
+  nvm use --silent >/dev/null 2>&1 || true
+fi
+
+GIT_COMMON_DIR="$(git rev-parse --git-common-dir)"
+REPO_ROOT="$(cd "$GIT_COMMON_DIR/.." && pwd)"
+cd "$REPO_ROOT" || exit 0
+
+# Skip pendant rebase/cherry-pick (post-merge peut fire à des moments
+# où le tree est instable)
+if [ -d "$REPO_ROOT/.git/rebase-merge" ] || [ -d "$REPO_ROOT/.git/rebase-apply" ]; then
+  exit 0
+fi
+
+# Skip si pas de config codegraph présente
+if [ ! -f "$REPO_ROOT/codegraph.config.json" ] && [ ! -f "$REPO_ROOT/codegraph/codegraph.config.json" ]; then
+  exit 0
+fi
+
+# Best-effort refresh — never fail the merge
+npx @liby-tools/codegraph refresh --quiet > /dev/null 2>&1 || true
+
+exit 0

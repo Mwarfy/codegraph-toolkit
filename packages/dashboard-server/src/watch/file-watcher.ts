@@ -31,7 +31,9 @@ export function startWatcher(state: DashboardState, hub: WsHub): () => void {
   const watcher = watch(state.codegraphDir, { persistent: true }, (_event, filename) => {
     if (!filename) return
 
-    if (filename.startsWith('snapshot-') && filename.endsWith('.json')) {
+    // ADR-027 — trigger reload sur snapshot.json (Phase 2) OR les
+    // snapshot-<ts>-<sha>.json legacy.
+    if (filename === 'snapshot.json' || /^snapshot-\d{4}-\d{2}-\d{2}T.*\.json$/.test(filename)) {
       if (snapshotDebounce) clearTimeout(snapshotDebounce)
       snapshotDebounce = setTimeout(() => {
         void loadSnapshot(state).then((changed) => {

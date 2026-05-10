@@ -52,11 +52,31 @@ interface Snapshot {
   truthPoints?: Array<{ concept: string; writers: string[] }>
 }
 
+// ADR-027
+/**
+ * Charge le snapshot codegraph — privilégie le v2 (`snapshot.json`,
+ * Phase 2 d'ADR-027), fallback sur le format legacy `snapshot-*.json`
+ * pour les checkouts pré-migration.
+ */
 async function loadLatestSnapshot(): Promise<Snapshot> {
   const codegraphDir = path.join(REPO_ROOT, '.codegraph')
+
+  // V2 : single snapshot.json avec wrapper { version, meta, payload }
+  const v2Path = path.join(codegraphDir, 'snapshot.json')
+  try {
+    const raw = await fs.readFile(v2Path, 'utf-8')
+    const parsed = JSON.parse(raw)
+    if (parsed?.version === 2 && parsed?.payload) {
+      return parsed.payload as Snapshot
+    }
+  } catch {
+    /* fall through to legacy */
+  }
+
+  // Legacy : snapshot-<ts>-<sha>.json
   const entries = await fs.readdir(codegraphDir).catch(() => [])
   const snapshots = entries
-    .filter((f) => f.startsWith('snapshot-') && f.endsWith('.json'))
+    .filter((f) => /^snapshot-\d{4}-\d{2}-\d{2}T.*\.json$/.test(f))
     .sort()
   if (snapshots.length === 0) {
     throw new Error('No codegraph snapshot — run `npx codegraph analyze` first')

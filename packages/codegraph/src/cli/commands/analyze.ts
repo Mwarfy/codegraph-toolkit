@@ -22,7 +22,13 @@ import { buildMap } from '../../map/builder.js'
 import { exportFacts } from '../../facts/index.js'
 import { detectWorkspaces } from '../../core/workspaces.js'
 import { resolveGrandfatheredArticulations } from '../../core/articulation-baseline.js'
-import { loadConfig, defaultSnapshotPath, pruneSnapshots, formatHealth } from '../_shared.js'
+import { loadConfig, defaultSnapshotPath, pruneLegacySnapshots, formatHealth } from '../_shared.js'
+import { computeInputHash } from '../../incremental/input-hash.js'
+import {
+  writeStoredSnapshot,
+  type SnapshotMeta,
+  SNAPSHOT_VERSION,
+} from '../../incremental/snapshot-store.js'
 
 export interface AnalyzeOpts {
   config?: string
@@ -55,7 +61,7 @@ export async function runAnalyzeCommand(opts: AnalyzeOpts): Promise<void> {
   printDetectorsRunSummary(timing)
 
   if (opts.save !== false) {
-    await persistAnalyzeOutputs(opts, snapshot, config, timing)
+    await persistAnalyzeOutputs(opts, snapshot, config, timing, result.files)
   } else {
     process.stdout.write(JSON.stringify(snapshot, null, 2))
   }
@@ -212,16 +218,41 @@ async function persistAnalyzeOutputs(
   snapshot: import('../../core/types.js').GraphSnapshot,
   config: import('../../core/types.js').CodeGraphConfig,
   timing: import('../../core/analyzer.js').AnalyzeResult['timing'],
+  files: readonly string[],
 ): Promise<void> {
-  const outPath = opts.output || await defaultSnapshotPath(config)
-  await fs.mkdir(path.dirname(outPath), { recursive: true })
-  await fs.writeFile(outPath, JSON.stringify(snapshot, null, 2))
-  console.log(chalk.green(`  ✓ Snapshot saved: ${outPath}\n`))
+  // ADR-027 — `--output <path>` reste l'override raw-JSON pour les
+  // pipelines externes qui s'attendent à un fichier autonome. Sinon
+  // on écrit le format v2 unifié (`snapshot.json` + sidecar meta).
+  if (opts.output) {
+    await fs.mkdir(path.dirname(opts.output), { recursive: true })
+    await fs.writeFile(opts.output, JSON.stringify(snapshot, null, 2))
+    console.log(chalk.green(`  ✓ Snapshot saved: ${opts.output}\n`))
+  } else {
+    const outPath = await defaultSnapshotPath(config)
+    const { hash: inputHash, ctx } = await computeInputHash(config, files)
+    const meta: SnapshotMeta = {
+      version: SNAPSHOT_VERSION,
+      inputHash,
+      generatedAt: snapshot.generatedAt,
+      baseSha: snapshot.commitHash,
+      fileCount: ctx.fileCount,
+      toolingVersion: ctx.toolingVersion,
+    }
+    await writeStoredSnapshot(config.snapshotDir, meta, snapshot)
+    console.log(chalk.green(`  ✓ Snapshot saved: ${outPath} (inputHash: ${inputHash.slice(0, 12)}…)\n`))
+
+    // Migration douce — supprime progressivement les snapshot-<ts>-<sha>.json
+    // accumulés (Phase 1). On garde 2 plus récents pour rollback manuel.
+    const prunedLegacy = await pruneLegacySnapshots(config.snapshotDir, 2)
+    if (prunedLegacy > 0) {
+      console.log(chalk.dim(`  ✓ Pruned ${prunedLegacy} legacy snapshot(s) (kept 2 for rollback)\n`))
+    }
+  }
 
   // Side-channel pour `codegraph detectors` : timing du dernier run, hors
   // snapshot.json (qui est un format public versionne ADR-009 — on
   // n'ajoute pas de champs internes dedans).
-  const timingPath = path.join(path.dirname(outPath), 'last-run-timing.json')
+  const timingPath = path.join(config.snapshotDir, 'last-run-timing.json')
   await fs.writeFile(timingPath, JSON.stringify({
     generatedAt: snapshot.generatedAt,
     detectors: timing.detectors,
@@ -230,19 +261,15 @@ async function persistAnalyzeOutputs(
     total: timing.total,
   }, null, 2))
 
-  // Prune anciens snapshots. config.maxSnapshots cap (default 50).
-  // On garde les N plus récents par nom de fichier (timestamp lex-sortable).
-  const pruned = await pruneSnapshots(path.dirname(outPath), config.maxSnapshots)
-  if (pruned > 0) {
-    console.log(chalk.dim(`  ✓ Pruned ${pruned} old snapshot(s) (kept ${config.maxSnapshots})\n`))
-  }
-
   // Dérivatifs ADR-009 : synopsis.json + synopsis-level{1,2,3}.md.
   // Lien 1+2 ADR-toolkit : collecte les marqueurs `// ADR-NNN` hors-builder
   // pour préserver la pureté (cf. ADR-009 — projection déterministe).
   const adrMarkers = await collectAdrMarkers(config.rootDir)
   const synopsis = buildSynopsis(snapshot, { adrMarkers })
-  const snapDir = path.dirname(outPath)
+  // Si --output a été utilisé, les dérivés vivent à côté du fichier custom
+  // pour préserver le comportement legacy ; sinon ils vont dans le
+  // snapshotDir canonique (ADR-027).
+  const snapDir = opts.output ? path.dirname(opts.output) : config.snapshotDir
   await fs.writeFile(path.join(snapDir, 'synopsis.json'), JSON.stringify(synopsis, null, 2))
   const l1 = renderLevel1(synopsis)
   await fs.writeFile(path.join(snapDir, 'synopsis-level1.md'), l1)
