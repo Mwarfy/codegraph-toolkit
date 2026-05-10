@@ -32,6 +32,7 @@ export interface AnalyzeOpts {
   save?: boolean
   map?: boolean
   incremental?: boolean
+  withRuntime?: string
 }
 
 export async function runAnalyzeCommand(opts: AnalyzeOpts): Promise<void> {
@@ -59,6 +60,30 @@ export async function runAnalyzeCommand(opts: AnalyzeOpts): Promise<void> {
     process.stdout.write(JSON.stringify(snapshot, null, 2))
   }
 
+  if (opts.withRuntime) {
+    await runRuntimeProbeWrapper(opts.withRuntime)
+  }
+}
+
+/**
+ * Wrapper sur `liby-runtime-graph probe -- <cmd>` pour le flag --with-runtime.
+ * Lance le binaire si dispo dans node_modules, sinon log un hint.
+ */
+async function runRuntimeProbeWrapper(cmdString: string): Promise<void> {
+  const { spawn } = await import('node:child_process')
+  const args = cmdString.split(' ').filter(Boolean)
+  if (args.length === 0) {
+    console.log(chalk.yellow('  ⚠ --with-runtime needs a command, e.g. "npm test"'))
+    return
+  }
+  console.log(chalk.cyan(`\n  ⓘ running runtime probe: ${cmdString}`))
+  await new Promise<void>((resolve) => {
+    const child = spawn('npx', ['liby-runtime-graph', 'probe', '--cpu-profile', ...args], {
+      stdio: 'inherit',
+      shell: false,
+    })
+    child.on('exit', () => resolve())
+  })
 }
 
 function printAnalyzeStats(snapshot: import('../../core/types.js').GraphSnapshot): void {
