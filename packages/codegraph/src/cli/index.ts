@@ -106,6 +106,12 @@ program
     'Run analyze + spawn runtime probe via `liby-runtime-graph probe -- <cmd>`. ' +
     'Captures statique × runtime en une commande. Exemple : ' +
     '--with-runtime "npm test" ou --with-runtime "node app.mjs".')
+  // ADR-027 Phase 3 — mode review : analyse à <base> et <head>, sort un
+  // delta de fact_ids. Format "<base>..<head>" (e.g. "main..HEAD").
+  .option('--pr <range>',
+    'PR mode: analyze <base> in a detached worktree, analyze HEAD, output ' +
+    'the fact-set delta. Format: "<base>..<head>", e.g. "main..HEAD". ' +
+    'Cached base re-used across PRs (ADR-027 Phase 3).')
   .action(runAnalyzeCommand)
 
 // ─── refresh ──────────────────────────────────────────────────────────────

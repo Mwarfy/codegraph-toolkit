@@ -43,6 +43,11 @@ export interface SnapshotMeta {
   fileCount?: number
   /** Version du tooling utilisé (info debug). */
   toolingVersion?: string
+  // ADR-027 Phase 3 — fingerprint du fact set (hash trié des fact_ids).
+  // Présent quand le pipeline Datalog a tourné (= bundle disponible).
+  // Permet aux consumers de vérifier l'identité du fact store sans le
+  // re-lire entièrement.
+  factSetHash?: string
 }
 
 export interface StoredSnapshot {
