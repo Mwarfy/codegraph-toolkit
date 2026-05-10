@@ -152,6 +152,13 @@ interface SynopsisData {
   topHubs?: Array<{ id: string; inDegree: number; adrs?: string[] }>
   adrSuggestions?: Array<{ file: string; inDegree: number; reason: string }>
   tensions?: SynopsisTension[]
+  stats?: {
+    totalFiles?: number
+    totalEdges?: number
+    orphanCount?: number
+    entryPointCount?: number
+    healthScore?: number
+  }
 }
 
 async function loadSynopsis(config: AdrToolkitConfig): Promise<SynopsisData | null> {
@@ -241,6 +248,86 @@ export interface GenerateBriefResult {
   invariantTestCount: number
 }
 
+interface CompactBriefArgs {
+  projectName: string
+  adrs: ADRSummary[]
+  hubs: string[]
+  synopsis: SynopsisData | null
+  tensions: SynopsisTension[]
+  config: AdrToolkitConfig
+}
+
+/**
+ * Rendu compact (~600-800 tokens) destiné à être auto-loaded par Claude Code
+ * via `<rootDir>/CLAUDE.md`. Calibré sur la recherche context-engineering :
+ *   - Anthropic recommandation : behavior-shaping > knowledge-dense
+ *   - Chroma context-rot : narrative cohérent dégrade vs tables structurées
+ *   - Aider default : 1K tokens repo-map maximum
+ *   - Claude Code best practices : "would removing cause mistakes ?" test
+ *
+ * Distinct du brief complet (`CLAUDE-CONTEXT.md`) qui reste accessible via
+ * tool fetch quand l'agent a besoin du détail.
+ */
+async function renderCompactBrief(args: CompactBriefArgs): Promise<string> {
+  const { projectName, adrs, hubs, synopsis, tensions, config } = args
+
+  // Health one-liner — counts denses, plus efficaces que prose
+  const stats = synopsis?.stats ?? {}
+  const fileCount = stats.totalFiles ?? 0
+  const edgeCount = stats.totalEdges ?? 0
+  const orphanCount = stats.orphanCount ?? 0
+  const tensionCount = tensions.length
+  const healthPct = Math.round((stats.healthScore ?? 0) * 100)
+  const healthLine = `\`${fileCount} files · ${edgeCount} edges · ${orphanCount} orphans · ${tensionCount} tensions · health ${healthPct}%\``
+
+  // ADR titles uniquement — pas le texte intégral. L'agent fetch via tool
+  // si pertinent, ou le pre-commit hook adr-hook.sh injecte au moment de
+  // l'edit si le fichier est gouverné.
+  const adrLines = adrs.length > 0
+    ? adrs.map((a) => `- **ADR-${a.num}** — ${a.title}`).join('\n')
+    : '- _(aucun ADR — `npx @liby-tools/adr-toolkit init`)_'
+
+  // Top 3 hubs only — pas la liste complète des fichiers gouvernés
+  const topHubsLines = hubs.slice(0, 3).map((h) => `- ${h}`).join('\n')
+
+  return `<!-- AUTO-GÉNÉRÉ par @liby-tools/adr-toolkit — NE PAS éditer à la main -->
+<!-- Compact boot pour Claude Code. Pour le détail, voir CLAUDE-CONTEXT.md ou les tools codegraph_* -->
+
+# ${projectName}
+
+${healthLine}
+
+## ADRs actives
+
+${adrLines}
+
+> Texte complet d'un ADR : voir \`${config.adrDir}/\` ou tool \`codegraph_adr(N)\`.
+> Liste fichiers gouvernés : tool \`codegraph_files_governed_by_adr(N)\`.
+
+## Top hubs (in-degree élevé — modifs à blast radius)
+
+${topHubsLines || '_(snapshot codegraph absent — `npx @liby-tools/codegraph analyze`)_'}
+
+## Pour creuser (tools on-demand)
+
+| Besoin | Tool |
+|---|---|
+| Synopsis ranké pour un focus | \`codegraph synopsis --focus <file> --tokens N\` |
+| Top fichiers liés à un focus | \`codegraph rank --focus <file>\` |
+| Violations live | \`codegraph datalog-check\` |
+| Diff vs ref | \`codegraph diff <ref>\` |
+| Affected files par BFS reverse | \`codegraph affected <files>\` |
+| Brief complet historique | lire \`${config.briefPath}\` |
+
+## Hard rules (gotchas non-évidents — would removing cause mistakes ?)
+
+- Snapshots \`.codegraph/snapshot-*.json\` sont auto-générés post-commit. Ne pas committer manuellement.
+- Ce fichier (\`CLAUDE.md\`) ET le brief complet sont auto-régénérés. Ne pas éditer à la main.
+- Datalog \`.dl\` rules : modifs cassent le baseline. Re-baseline avec \`codegraph datalog-check --update-baseline\`.
+- Le hook codegraph-feedback (PostToolUse) injecte le contexte structurel à chaque Edit. Le hook adr-hook (PreToolUse) injecte l'ADR concerné si fichier gouverné.
+`
+}
+
 export async function generateBrief(opts: GenerateBriefOptions): Promise<GenerateBriefResult> {
   const { config } = opts
   const projectName = opts.projectName ?? path.basename(config.rootDir)
@@ -311,6 +398,22 @@ ${sectionsAt('after-recent-activity')}
 
   const outputPath = path.join(config.rootDir, config.briefPath)
   await writeFile(outputPath, md, 'utf-8')
+
+  // ─── Compact boot (CLAUDE.md auto-loaded by Claude Code) ───
+  // Recherche-driven (Anthropic context engineering, Chroma context-rot, Aider 1K) :
+  // l'auto-inject doit être minimal et behavior-shaping, pas knowledge-dense.
+  // ADRs en titre seulement, lookup files via tool, narrative ≠ structuré.
+  const compactPath = path.join(config.rootDir, 'CLAUDE.md')
+  const compactMd = await renderCompactBrief({
+    projectName,
+    adrs,
+    hubs,
+    synopsis,
+    tensions,
+    config,
+  })
+  await writeFile(compactPath, compactMd, 'utf-8')
+
   return {
     outputPath,
     lineCount: md.split('\n').length,

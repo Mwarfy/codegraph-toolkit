@@ -237,6 +237,7 @@ Fichiers load-bearing (in-degree élevé ou truth-point) **sans aucun marqueur `
 ## Activité récente (14 derniers jours)
 
 ```
+57273f7 chore(release): @liby-tools/codegraph 0.6.1 → 0.6.2
 bc5c60b feat(synopsis,hook): synopsis dynamique --focus + token budget hiérarchique
 730bf13 feat(synopsis): personalized PageRank pour ranking dynamique LLM (à la Aider)
 c7c8929 fix(hook): mettre en tête les violations introduites par CET edit
@@ -248,7 +249,6 @@ eeebc41 fix(dashboard-web): @import fonts before @tailwind so PostCSS keeps them
 c2a0784 chore(dashboard-web): drop 9 legacy panels superseded by cockpit redesign
 8523e30 feat(dashboard-web): cockpit redesign — cosmos + IDE tree + compact pipeline
 f921d03 feat(dashboard): graph filter, token sparkline, init wiring, publishable
-361e46e test(dashboard-server): 37 tests + clear two real bombs the toolkit flagged
 ```
 
 ## Comment contribuer à ce brief
