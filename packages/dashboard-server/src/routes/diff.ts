@@ -28,16 +28,29 @@ interface DiffResult {
   }
 }
 
+// ADR-027
+/**
+ * Validation allowlist du nom de fichier — empêche le path traversal.
+ * Accepte le canonique v2 (`snapshot.json` + `snapshot.json.bak`) ET
+ * le legacy `snapshot-<ts>-<sha>.json`.
+ */
 function safeFilename(name: string): string | null {
   const base = path.basename(name)
-  if (!base.startsWith('snapshot-') || !base.endsWith('.json')) return null
-  return base
+  if (base === 'snapshot.json' || base === 'snapshot.json.bak') return base
+  if (/^snapshot-\d{4}-\d{2}-\d{2}T.*\.json$/.test(base)) return base
+  return null
 }
 
+// ADR-027
+/** Lit + unwrap le payload v2 (Phase 2) si présent. */
 async function loadSnap(codegraphDir: string, file: string): Promise<SnapshotShape | null> {
   try {
     const text = await fs.readFile(path.join(codegraphDir, file), 'utf-8')
-    return JSON.parse(text) as SnapshotShape
+    const parsed = JSON.parse(text)
+    if (parsed && typeof parsed === 'object' && parsed.version === 2 && parsed.payload) {
+      return parsed.payload as SnapshotShape
+    }
+    return parsed as SnapshotShape
   } catch {
     return null
   }

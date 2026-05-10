@@ -57,28 +57,41 @@ session.editCount += 1
 const fileState = session.seenFiles[relPath]
 const isFirstTimeOnFile = !fileState
 
+// ADR-027 Phase 2 — privilégie `snapshot.json` v2 (wrapper { version,
+// meta, payload }). Fallback sur le format legacy `snapshot-*.json` par
+// mtime pour les checkouts pré-migration.
 let snapshotPath
-try {
-  // Tri par mtime : préfère le snapshot le plus frais (snapshot-live.json
-  // si `codegraph watch` tourne, sinon le dernier post-commit). Cf. B2.
-  const filesWithMtime = fs.readdirSync(codegraphDir)
-    .filter(f => f.startsWith('snapshot-') && f.endsWith('.json'))
-    .map(f => {
-      const p = path.join(codegraphDir, f)
-      return { path: p, mtime: fs.statSync(p).mtimeMs }
-    })
-    .sort((a,  b) => b.mtime - a.mtime)
-  if (filesWithMtime.length === 0) process.exit(0)
-  snapshotPath = filesWithMtime[0].path
-} catch {
-  process.exit(0)
-}
-
 let snapshot
 try {
-  snapshot = JSON.parse(fs.readFileSync(snapshotPath, 'utf-8'))
-} catch {
-  process.exit(0)
+  const v2 = path.join(codegraphDir, 'snapshot.json')
+  const raw = fs.readFileSync(v2, 'utf-8')
+  const parsed = JSON.parse(raw)
+  if (parsed && parsed.version === 2 && parsed.payload) {
+    snapshot = parsed.payload
+    snapshotPath = v2
+  }
+} catch { /* try legacy */ }
+
+if (!snapshot) {
+  try {
+    const filesWithMtime = fs.readdirSync(codegraphDir)
+      .filter(f => /^snapshot-\d{4}-\d{2}-\d{2}T.*\.json$/.test(f))
+      .map(f => {
+        const p = path.join(codegraphDir, f)
+        return { path: p, mtime: fs.statSync(p).mtimeMs }
+      })
+      .sort((a,  b) => b.mtime - a.mtime)
+    if (filesWithMtime.length === 0) process.exit(0)
+    snapshotPath = filesWithMtime[0].path
+  } catch {
+    process.exit(0)
+  }
+
+  try {
+    snapshot = JSON.parse(fs.readFileSync(snapshotPath, 'utf-8'))
+  } catch {
+    process.exit(0)
+  }
 }
 
 const node = snapshot.nodes?.find(n => n.id === relPath)

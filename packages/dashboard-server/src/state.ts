@@ -42,8 +42,13 @@ export async function resolveSnapshotFile(codegraphDir: string): Promise<string 
   } catch {
     return null
   }
+  // ADR-027 Phase 2 — snapshot.json est le canonique unifié. Fallback
+  // legacy : snapshot-<ts>-<sha>.json, lex-last (timestamp).
+  if (entries.includes('snapshot.json')) {
+    return path.join(codegraphDir, 'snapshot.json')
+  }
   const snapshots = entries
-    .filter((f) => f.startsWith('snapshot-') && f.endsWith('.json') && f !== 'snapshot-live.json')
+    .filter((f) => /^snapshot-\d{4}-\d{2}-\d{2}T.*\.json$/.test(f))
     .sort()
   if (snapshots.length === 0) return null
   return path.join(codegraphDir, snapshots[snapshots.length - 1])
@@ -57,8 +62,11 @@ export async function loadSnapshot(state: DashboardState): Promise<boolean> {
     return false
   }
   const text = await fs.readFile(file, 'utf-8')
+  // ADR-027 — le v2 wrappe { version, meta, payload }. On unwrap pour
+  // exposer le payload "flat" aux consumers downstream.
+  const parsed = JSON.parse(text)
   state.snapshotPath = file
   state.snapshotMtime = stat.mtimeMs
-  state.snapshotData = JSON.parse(text)
+  state.snapshotData = (parsed && parsed.version === 2 && parsed.payload) ? parsed.payload : parsed
   return true
 }

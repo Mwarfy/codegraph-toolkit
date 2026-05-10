@@ -25,9 +25,15 @@ export function parseSnapshotName(filename: string): { ts: string; sha: string; 
   return { ts, sha, isoDate }
 }
 
+// ADR-027
+/** Lit + unwrap le payload v2 (Phase 2) si présent. */
 async function loadSnapshotFromFile(absPath: string): Promise<unknown> {
   const text = await fs.readFile(absPath, 'utf-8')
-  return JSON.parse(text)
+  const parsed = JSON.parse(text)
+  if (parsed && typeof parsed === 'object' && (parsed as any).version === 2 && (parsed as any).payload) {
+    return (parsed as any).payload
+  }
+  return parsed
 }
 
 export async function registerSnapshotRoutes(
@@ -41,7 +47,11 @@ export async function registerSnapshotRoutes(
       // Validates that the requested file lives in .codegraph/ to prevent
       // path traversal.
       const safeName = path.basename(q.file)
-      if (!safeName.startsWith('snapshot-') || !safeName.endsWith('.json')) {
+      // ADR-027 Phase 2 — accepter snapshot.json + snapshot.json.bak (v2)
+      // en plus du legacy snapshot-<ts>-<sha>.json.
+      const v2 = safeName === 'snapshot.json' || safeName === 'snapshot.json.bak'
+      const legacy = /^snapshot-\d{4}-\d{2}-\d{2}T.*\.json$/.test(safeName)
+      if (!v2 && !legacy) {
         return reply.code(400).send({ error: 'invalid snapshot filename' })
       }
       const abs = path.join(state.codegraphDir, safeName)
