@@ -112,4 +112,45 @@ export async function registerTelemetryRoutes(
     const records = await readTelemetry(telemetryFile, 0)
     return summarize(records)
   })
+
+  // Returns the full text of a hook payload by hash.
+  // Hashes are short hex (16 chars) — anything else gets rejected to
+  // prevent path traversal.
+  app.get('/api/hook-payload', async (req, reply) => {
+    const q = req.query as { hash?: string }
+    if (!q.hash || !/^[a-f0-9]{16}$/.test(q.hash)) {
+      return reply.code(400).send({ error: 'invalid hash format' })
+    }
+    const payloadFile = path.join(state.codegraphDir, 'hook-payloads', q.hash + '.txt')
+    try {
+      const text = await fs.readFile(payloadFile, 'utf-8')
+      reply.type('text/plain; charset=utf-8')
+      return text
+    } catch {
+      return reply.code(404).send({ error: 'payload not found' })
+    }
+  })
+
+  // Boot context — what Claude reads at session start.
+  // CLAUDE-CONTEXT.md (auto-generated boot brief) lives at the project root.
+  app.get('/api/boot-context', async (_req, reply) => {
+    const candidates = ['CLAUDE-CONTEXT.md', 'CLAUDE.md']
+    for (const name of candidates) {
+      try {
+        const file = path.join(state.rootDir, name)
+        const text = await fs.readFile(file, 'utf-8')
+        const stat = await fs.stat(file)
+        return {
+          file: name,
+          mtime: stat.mtimeMs,
+          bytes: stat.size,
+          tokensApprox: Math.max(1, Math.floor(stat.size / 4)),
+          content: text,
+        }
+      } catch {
+        // try next candidate
+      }
+    }
+    return reply.code(404).send({ error: 'no boot context found' })
+  })
 }

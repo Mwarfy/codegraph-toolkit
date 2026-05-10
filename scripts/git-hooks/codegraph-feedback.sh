@@ -129,11 +129,22 @@ if [ -n "$AGE" ] && [ "$AGE" -lt "$DEDUP_TTL" ]; then
   DEDUP_AGE="$AGE"
 fi
 TELEMETRY_FILE="$REPO_ROOT/.codegraph/hook-telemetry.jsonl"
+PAYLOADS_DIR="$REPO_ROOT/.codegraph/hook-payloads"
+mkdir -p "$PAYLOADS_DIR" 2>/dev/null || true
 TS="$NOW" HOOK="codegraph-feedback" EVENT="PostToolUse" REL="$RELATIVE" \
-  DH="$DEDUP_HIT" DA="$DEDUP_AGE" TF="$TELEMETRY_FILE" \
+  DH="$DEDUP_HIT" DA="$DEDUP_AGE" TF="$TELEMETRY_FILE" PD="$PAYLOADS_DIR" \
 python3 -c '
-import json, os, sys
+import json, os, sys, hashlib
 ctx = sys.stdin.read()
+payload_hash = hashlib.sha1(ctx.encode("utf-8")).hexdigest()[:16]
+# Store the full payload so the dashboard can show what was actually
+# injected into Claudes context. Best-effort write — never blocks the
+# hook output.
+try:
+    with open(os.path.join(os.environ["PD"], payload_hash + ".txt"), "w") as f:
+        f.write(ctx)
+except Exception:
+    pass
 rec = {
   "ts": int(os.environ["TS"]),
   "hook": os.environ["HOOK"],
@@ -143,6 +154,7 @@ rec = {
   "tokensApprox": max(1, len(ctx.encode("utf-8")) // 4),
   "dedupHit": os.environ["DH"] == "1",
   "dedupAgeSec": (int(os.environ["DA"]) if os.environ["DA"] != "-1" else None),
+  "payloadHash": payload_hash,
 }
 try:
     with open(os.environ["TF"], "a") as f:
