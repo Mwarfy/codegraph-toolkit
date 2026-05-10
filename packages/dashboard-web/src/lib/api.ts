@@ -34,6 +34,15 @@ export interface TelemetryRecord {
   tokensApprox: number
   dedupHit: boolean
   dedupAgeSec: number | null
+  payloadHash?: string
+}
+
+export interface BootContext {
+  file: string
+  mtime: number
+  bytes: number
+  tokensApprox: number
+  content: string
 }
 
 export interface TelemetrySummary {
@@ -117,6 +126,12 @@ export const api = {
   diff: (from: string, to: string) =>
     getJson<DiffResult>(`/api/diff?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
   node: (id: string) => getJson<NodeDetails>(`/api/node?id=${encodeURIComponent(id)}`),
+  hookPayload: async (hash: string): Promise<string> => {
+    const r = await fetch(`/api/hook-payload?hash=${encodeURIComponent(hash)}`)
+    if (!r.ok) throw new Error(`payload ${hash} not found`)
+    return r.text()
+  },
+  bootContext: () => getJson<BootContext>('/api/boot-context'),
   tensions: () => getJson<{ count: number; tensions: Tension[] }>('/api/tensions'),
   telemetry: (limit = 200) => getJson<{ count: number; records: TelemetryRecord[] }>(`/api/telemetry?limit=${limit}`),
   telemetrySummary: () => getJson<TelemetrySummary>('/api/telemetry/summary'),

@@ -4,3 +4,5 @@ dist/
 .DS_Store
 *.log
 .codegraph/
+.claude/worktrees/
+docs/.*-audit.md
