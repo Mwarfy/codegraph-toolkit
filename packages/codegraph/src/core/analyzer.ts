@@ -27,24 +27,8 @@ import type {
 } from './types.js'
 import { createDetectors } from '../detectors/index.js'
 import { createSharedProject } from '../extractors/unused-exports.js'
-import { DetectorRegistry, type DetectorRunContext } from './detector-registry.js'
-import { OauthScopeLiteralsDetector } from './detectors/oauth-scope-literals-detector.js'
-import { EventEmitSitesDetector } from './detectors/event-emit-sites-detector.js'
-import { EnvUsageDetector } from './detectors/env-usage-detector.js'
-import { PackageDepsDetector } from './detectors/package-deps-detector.js'
-import { BinShebangsDetector } from './detectors/bin-shebangs-detector.js'
-import { BarrelsDetector } from './detectors/barrels-detector.js'
-import { UnusedExportsDetector } from './detectors/unused-exports-detector.js'
-import { ComplexityDetector } from './detectors/complexity-detector.js'
-import { SymbolRefsDetector } from './detectors/symbol-refs-detector.js'
-import { TypedCallsDetector } from './detectors/typed-calls-detector.js'
-import { CyclesDetector } from './detectors/cycles-detector.js'
-import { TruthPointsDetector } from './detectors/truth-points-detector.js'
-import { DataFlowsDetector } from './detectors/data-flows-detector.js'
-import { StateMachinesDetector } from './detectors/state-machines-detector.js'
-import { TaintDetector } from './detectors/taint-detector.js'
-import { SqlSchemaDetector } from './detectors/sql-schema-detector.js'
-import { DrizzleSchemaDetector } from './detectors/drizzle-schema-detector.js'
+import { type DetectorRunContext } from './detector-registry.js'
+import { buildDetectorRegistry } from './analyzer/registry.js'
 import { analyzeTodos, type TodoMarker } from '../extractors/todos.js'
 import { analyzeDriftPatterns, type DriftSignal } from '../extractors/drift-patterns.js'
 import { analyzeEvalCalls, type EvalCall } from '../extractors/eval-calls.js'
@@ -98,15 +82,12 @@ import {
   getCachedMtime as incGetCachedMtime,
   setCachedMtime as incSetCachedMtime,
   setInputIfChanged as incSetInputIfChanged,
-  getMtimeMap as incGetMtimeMap,
-  loadMtimeMap as incLoadMtimeMap,
 } from '../incremental/queries.js'
 import { getOrBuildSharedProject as incGetOrBuildProject } from '../incremental/project-cache.js'
 import {
-  loadPersistedCache as incLoadPersistedCache,
-  savePersistedCache as incSavePersistedCache,
-} from '../incremental/persistence.js'
-import { sharedDb as incSharedDb } from '../incremental/database.js'
+  loadDiskCacheIfIncremental,
+  persistDiskCacheIfIncremental,
+} from './analyzer/cache.js'
 import {
   allStateMachines as incAllStateMachines,
   sqlDefaultsInput as incSqlDefaults,
@@ -162,23 +143,12 @@ import {
   buildSnapshotPatchFromDatalog,
   adaptDriftSignalsFromDatalog,
 } from '../datalog-detectors/runner-adapter.js'
-import { execSync } from 'node:child_process'
-
-/**
- * Récupère le SHA HEAD courant. Utilisé comme clé d'invalidation Salsa
- * pour les détecteurs git-driven (co-change). Retourne `''` si le repo
- * n'est pas git ou si git n'est pas installé — Salsa traitera cette
- * "absence" comme une key stable.
- */
-function getGitHead(rootDir: string): string {
-  try {
-    return execSync('git rev-parse HEAD', {
-      cwd: rootDir, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim()
-  } catch {
-    return ''
-  }
-}
+import {
+  getGitHead,
+  statFilesParallel,
+  filterFilesToRead,
+  readAndCacheFiles,
+} from './analyzer/file-prep.js'
 
 export interface AnalyzeResult {
   snapshot: GraphSnapshot
@@ -453,49 +423,6 @@ export async function analyze(
 }
 
 /**
- * Si on a un .codegraph/salsa-cache.json valide, restaure les cells + mtimes
- * AVANT toute autre étape. Permet le warm cross-process via CLI : 2e
- * `codegraph analyze --incremental` benéficie du cache disque même dans
- * un nouveau process.
- *
- * Sprint 9 : skipPersistenceLoad permet au watcher de ne pas relire le
- * disque entre analyzes (la DB reste en RAM).
- */
-async function loadDiskCacheIfIncremental(
-  config: CodeGraphConfig,
-  incremental: boolean,
-  skipPersistenceLoad: boolean,
-): Promise<void> {
-  if (!incremental || skipPersistenceLoad) return
-  try {
-    const loaded = await incLoadPersistedCache(config.rootDir, incSharedDb)
-    if (loaded) incLoadMtimeMap(loaded.mtimes)
-  } catch {
-    // Cache corrompu — on continue cold, save écrasera au final.
-  }
-}
-
-/**
- * À la fin d'un run incremental, sauve cells + mtimes pour qu'un process
- * ultérieur (CLI) bénéficie du warm.
- *
- * Sprint 9 : skipPersistenceSave permet au watcher de ne pas écrire ~3 MB
- * à chaque change. Le caller du watcher save périodiquement ou au stop.
- */
-async function persistDiskCacheIfIncremental(
-  config: CodeGraphConfig,
-  incremental: boolean,
-  skipPersistenceSave: boolean,
-): Promise<void> {
-  if (!incremental || skipPersistenceSave) return
-  try {
-    await incSavePersistedCache(config.rootDir, incGetMtimeMap(), incSharedDb)
-  } catch {
-    // Échec de save = pas bloquant. Le run a réussi.
-  }
-}
-
-/**
  * Always-run subset en mode factsOnly : test-coverage est cheap (import-based
  * mapping) ET load-bearing pour la rule composite-hub-untested (CI gate
  * datalog). Sans lui, tout fichier hub testé apparaît comme untested → faux
@@ -524,27 +451,6 @@ async function runFactsOnlyTestCoverage(
  * d'exécution : typed-calls doit tourner avant data-flows (qui le lit
  * via ctx.results).
  */
-function buildDetectorRegistry(): DetectorRegistry {
-  return new DetectorRegistry()
-    .register(new UnusedExportsDetector())
-    .register(new ComplexityDetector())
-    .register(new SymbolRefsDetector())
-    .register(new TypedCallsDetector())
-    .register(new CyclesDetector())
-    .register(new TruthPointsDetector())
-    .register(new DataFlowsDetector())
-    .register(new StateMachinesDetector())
-    .register(new EnvUsageDetector())
-    .register(new PackageDepsDetector())
-    .register(new BinShebangsDetector())
-    .register(new BarrelsDetector())
-    .register(new EventEmitSitesDetector())
-    .register(new OauthScopeLiteralsDetector())
-    .register(new TaintDetector())
-    .register(new SqlSchemaDetector())
-    .register(new DrizzleSchemaDetector())
-}
-
 /**
  * Run base detectors (ts-imports, event-bus, http-routes, bullmq-queues,
  * db-tables) + build the file/edge graph + compute orphan status.
@@ -761,54 +667,6 @@ async function prebuildSharedProjectLegacy(
  * boucle pour que `allTsImports.get('all')` puisse remplacer le
  * détecteur legacy ts-imports (warm 109ms → <10ms via cache Salsa).
  */
-interface FileStatEntry { f: string; absPath: string; mtime: number | undefined }
-
-async function statFilesParallel(rootDir: string, files: string[]): Promise<FileStatEntry[]> {
-  return Promise.all(
-    files.map(async (f) => {
-      const absPath = path.join(rootDir, f)
-      try {
-        const stat = await fs.stat(absPath)
-        return { f, absPath, mtime: stat.mtimeMs }
-      } catch { return { f, absPath, mtime: undefined as number | undefined } }
-    }),
-  )
-}
-
-/**
- * Filtre les files pour ne lire que ceux qui ont VRAIMENT change
- * (mtime ≠ cached) ou qui ne sont pas encore dans la cell. Le warm
- * path (rien change) ne fait QUE des stats — pas de readFile gaspille.
- */
-function filterFilesToRead(stats: FileStatEntry[]): FileStatEntry[] {
-  const toRead: FileStatEntry[] = []
-  for (const entry of stats) {
-    const { f, mtime } = entry
-    const cachedMtime = incGetCachedMtime(f)
-    const cellExists = incFileContent.has(f)
-    if (mtime !== undefined && cachedMtime === mtime && cellExists) continue
-    toRead.push(entry)
-  }
-  return toRead
-}
-
-async function readAndCacheFiles(toRead: FileStatEntry[], fileCache: Map<string, string>): Promise<void> {
-  const reads = await Promise.all(
-    toRead.map(async ({ f, absPath, mtime }) => {
-      let content = fileCache.get(f)
-      if (content === undefined) {
-        try { content = await fs.readFile(absPath, 'utf-8') } catch { content = '' }
-      }
-      return { f, mtime, content }
-    }),
-  )
-  for (const { f, mtime, content } of reads) {
-    fileCache.set(f, content)
-    incFileContent.set(f, content)
-    if (mtime !== undefined) incSetCachedMtime(f, mtime)
-  }
-}
-
 async function prebuildSharedProjectIncremental(
   config: CodeGraphConfig,
   files: string[],
