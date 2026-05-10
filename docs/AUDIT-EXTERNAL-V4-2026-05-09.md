@@ -115,29 +115,41 @@ vrai code applicatif.
 
 1. **Etablir baseline complet** : `codegraph datalog-check --update-baseline`
    freezera l'etat courant comme acceptable. Future regressions detectees.
+   verify: `test -f /Users/smurfy/jules/happenin/.codegraph/violations-baseline.json` → expect exit 0
 2. **Fix top 5 cyclomatic-bomb** (4 fonctions clairement identifiees)
+   verify: `cd /Users/smurfy/jules/happenin && codegraph datalog-check --json | jq '.byRule["COMPOSITE-CYCLOMATIC-BOMB"] // 0'` → expect ≤ baseline - 5
 3. **Resolver env-var typed** (26 spread) — pattern ADR-019
+   verify: `cd /Users/smurfy/jules/happenin && codegraph datalog-check --json | jq '.byRule["NO-ENV-SPREAD"] // 0'` → expect 0
 4. **Examiner les near-duplicate-fn intra-workspace** (94) — la plupart
    sont probablement des helpers a factoriser
+   verify: `cd /Users/smurfy/jules/happenin && codegraph datalog-check --json | jq '.byRule["COMPOSITE-NEAR-DUPLICATE-FN"] // 0'` → expect ≤ 30
 
 ### dpl-rag (petit projet propre, 28 violations)
 
 1. Resoudre le cycle `lib/retrieval.ts ↔ lib/stub-data.ts`
+   verify: `cd /Users/smurfy/dpl/dpl-rag && codegraph reach 'lib/retrieval.ts' 'lib/stub-data.ts' --json | jq '.paths | length'` → expect 0
 2. Hoister les hot-allocations (7) si benchmarks le justifient
+   verify: `cd /Users/smurfy/dpl/dpl-rag && codegraph datalog-check --json | jq '.byRule["COMPOSITE-HOT-ALLOC"] // 0'` → expect ≤ 2
 3. Le reste = polish.
+   verify: `cd /Users/smurfy/dpl/dpl-rag && codegraph datalog-check --json | jq '.total'` → expect ≤ 15
 
 ### janus (petit projet, 6 violations)
 
 1. Decider sur les 2 shadcn orphans (separator/sonner) — supprimer si
    non plannifies
+   verify: `cd /Users/smurfy/jules/janus && codegraph orphans --json | jq '.orphans | map(select(.id | contains("separator") or contains("sonner"))) | length'` → expect 0
 2. Examiner les 4 await-in-loop dans `lib/strava/retry.ts` — backoff
    intentionnel ? ajouter `// await-ok: backoff retry`
+   verify: `grep -c '// await-ok' /Users/smurfy/jules/janus/lib/strava/retry.ts` → expect ≥ 4
 
 ### openclaw-mcp (37 violations)
 
 1. Refactor le `god-function` (1) — fonction >100 callers
+   verify: `cd /Users/smurfy/jules/openclaw-control-mcp && codegraph datalog-check --json | jq '.byRule["COMPOSITE-GOD-FUNCTION"] // 0'` → expect 0
 2. Split les `fanout-overload` (2)
+   verify: `cd /Users/smurfy/jules/openclaw-control-mcp && codegraph datalog-check --json | jq '.byRule["COMPOSITE-FANOUT-OVERLOAD"] // 0'` → expect 0
 3. Pose des markers `// await-ok` sur les await-in-loop intentionnels
+   verify: `cd /Users/smurfy/jules/openclaw-control-mcp && codegraph datalog-check --json | jq '.byRule["COMPOSITE-AWAIT-IN-LOOP"] // 0'` → expect ≤ 10
 
 ---
 
