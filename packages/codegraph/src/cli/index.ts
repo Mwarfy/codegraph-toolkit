@@ -47,6 +47,7 @@ import { runRankCommand } from './commands/rank.js'
 import { runSynopsisCommand } from './commands/synopsis.js'
 import { runDetectorsCommand } from './commands/detectors.js'
 import { runWatchCommand } from './commands/watch.js'
+import { runRefreshCommand } from './commands/refresh.js'
 import { runMapCommand } from './commands/map.js'
 import { runOrphansCommand } from './commands/orphans.js'
 import { runTaintCommand } from './commands/taint.js'
@@ -106,6 +107,22 @@ program
     'Captures statique × runtime en une commande. Exemple : ' +
     '--with-runtime "npm test" ou --with-runtime "node app.mjs".')
   .action(runAnalyzeCommand)
+
+// ─── refresh ──────────────────────────────────────────────────────────────
+// ADR-027 — Phase 2 : warm refresh standalone via Salsa incremental.
+
+program
+  .command('refresh')
+  .description(
+    'Refresh .codegraph/snapshot.json via the Salsa warm path. Skips ' +
+    'heavy derivatives (synopsis-level3, facts, MAP). Used by post-checkout ' +
+    'and post-merge hooks to keep the snapshot in sync with HEAD.',
+  )
+  .option('-c, --config <path>', 'Path to codegraph config file')
+  .option('-r, --root <path>', 'Project root directory')
+  .option('--check', 'Only verify freshness — exit 1 if stale, no write')
+  .option('--quiet', 'Suppress non-error output')
+  .action(runRefreshCommand)
 
 // ─── watch ────────────────────────────────────────────────────────────────
 

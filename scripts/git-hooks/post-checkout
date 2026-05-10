@@ -1,0 +1,47 @@
+#!/bin/bash
+# ─── post-checkout hook (générique @liby-tools/adr-toolkit) ───
+#
+# ADR-027 Phase 2 — applique le delta Salsa après changement de HEAD,
+# pour que `.codegraph/snapshot.json` reflète le working tree courant
+# sans relancer `codegraph analyze` complet.
+#
+# Args git (cf. githooks(5)) :
+#   $1 = SHA1 du HEAD précédent
+#   $2 = SHA1 du HEAD nouveau
+#   $3 = "1" si branch checkout, "0" si file checkout
+#
+# Skip les file checkouts ($3 == 0) — pas de changement de HEAD,
+# rien à rafraîchir.
+#
+# Variables d'environnement :
+#   CODEGRAPH_SKIP=1   Skip refresh entirely
+
+if [ "$3" != "1" ]; then
+  exit 0
+fi
+
+if [ -n "$CODEGRAPH_SKIP" ]; then
+  exit 0
+fi
+
+# Source nvm
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+  # shellcheck disable=SC1091
+  . "$NVM_DIR/nvm.sh" >/dev/null 2>&1
+  nvm use --silent >/dev/null 2>&1 || true
+fi
+
+GIT_COMMON_DIR="$(git rev-parse --git-common-dir)"
+REPO_ROOT="$(cd "$GIT_COMMON_DIR/.." && pwd)"
+cd "$REPO_ROOT" || exit 0
+
+# Skip si pas de config codegraph présente
+if [ ! -f "$REPO_ROOT/codegraph.config.json" ] && [ ! -f "$REPO_ROOT/codegraph/codegraph.config.json" ]; then
+  exit 0
+fi
+
+# Best-effort refresh — never fail the checkout
+npx @liby-tools/codegraph refresh --quiet > /dev/null 2>&1 || true
+
+exit 0

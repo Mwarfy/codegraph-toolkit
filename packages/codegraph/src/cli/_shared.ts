@@ -13,6 +13,11 @@ import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
 import type { CodeGraphConfig, GraphSnapshot } from '../core/types.js'
 import { listDetectorNames, defaultDetectorNames } from '../detectors/index.js'
+import {
+  readStoredSnapshot,
+  snapshotPath as v2SnapshotPath,
+  listLegacySnapshots,
+} from '../incremental/snapshot-store.js'
 
 /**
  * Hydrate un config partiel avec les defaults sensibles. Mutates +
@@ -175,9 +180,12 @@ function buildDefaultConfig(root: string, detectorsOpt: string | undefined): Cod
   }
 }
 
+// ADR-027
 /**
  * Charge un snapshot — soit depuis un path explicite, soit depuis le
- * dernier `snapshot-*.json` dans `config.snapshotDir`. Process exit (1)
+ * `snapshot.json` unique dans `config.snapshotDir` (Phase 2). Si le
+ * fichier v2 est absent, fallback sur le dernier `snapshot-*.json`
+ * legacy (Phase 1 / pré-Phase-2) avec un warning. Process exit (1)
  * si rien trouvé — pattern CLI fail-fast.
  */
 export async function loadSnapshot(
@@ -191,28 +199,41 @@ export async function loadSnapshot(
   const config = await loadConfig(opts || {})
   const snapshotDir = config.snapshotDir
 
-  try {
-    const files = await fs.readdir(snapshotDir)
-    // Filtre strict sur `snapshot-*.json` pour ne pas collecter les
-    // dérivés synopsis.json et diff.json qui vivent dans le même dossier.
-    const snapshots = files
-      .filter((f) => f.startsWith('snapshot-') && f.endsWith('.json'))
-      .sort()
-      .reverse()
+  // Phase 2 — chemin canonique : .codegraph/snapshot.json
+  const stored = await readStoredSnapshot(snapshotDir)
+  if (stored) return stored.payload
 
-    if (snapshots.length === 0) {
-      console.error(chalk.red('No snapshots found. Run "codegraph analyze" first.'))
-      process.exit(1)
+  // Fallback legacy : dernier snapshot-<ts>-<sha>.json. Warning sur
+  // stderr pour signaler la migration en cours sans bloquer la commande.
+  const legacy = await listLegacySnapshots(snapshotDir)
+  if (legacy.length > 0) {
+    console.error(chalk.yellow(
+      `  ⚠ Using legacy snapshot format (${path.basename(legacy[0])}). ` +
+      `Run "codegraph analyze" to migrate to snapshot.json.`,
+    ))
+    try {
+      return JSON.parse(await fs.readFile(legacy[0], 'utf-8'))
+    } catch {
+      /* fall through to error */
     }
-
-    return JSON.parse(
-      await fs.readFile(path.join(snapshotDir, snapshots[0]), 'utf-8'),
-    )
-  } catch {
-    console.error(chalk.red(`Snapshot directory not found: ${snapshotDir}`))
-    console.error(chalk.dim('Run "codegraph analyze" first to generate a snapshot.'))
-    process.exit(1)
   }
+
+  // Pas de fichier exploitable — distinguer dir manquant d'absence
+  // d'analyze pour orienter le message.
+  let dirExists = false
+  try {
+    await fs.access(snapshotDir)
+    dirExists = true
+  } catch {
+    /* dir absent */
+  }
+  if (!dirExists) {
+    console.error(chalk.red(`Snapshot directory not found: ${snapshotDir}`))
+  } else {
+    console.error(chalk.red('No snapshot found. Run "codegraph analyze" first.'))
+  }
+  console.error(chalk.dim('Run "codegraph analyze" first to generate a snapshot.'))
+  process.exit(1)
 }
 
 /**
@@ -247,25 +268,47 @@ export async function pruneSnapshots(dir: string, keep: number): Promise<number>
   return results.reduce((a, b) => a + b, 0)
 }
 
+// ADR-027
 /**
- * Construit un path de snapshot avec timestamp + commit hash optionnel.
- * Format : `snapshot-2026-05-03T12-34-56-abc1234.json`.
+ * Retourne le path du snapshot canonique — unifié en `snapshot.json`
+ * dans le `snapshotDir` (Phase 2 d'ADR-027). Le format historique
+ * `snapshot-<ts>-<sha>.json` n'est plus produit ; il reste lu en
+ * fallback par `loadSnapshot()` pour la migration douce.
+ *
+ * `config` reste signature pour back-compat — `rootDir` n'est plus
+ * lu mais l'API publique ne change pas.
  */
 export async function defaultSnapshotPath(config: CodeGraphConfig): Promise<string> {
-  const dir = config.snapshotDir
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+  return v2SnapshotPath(config.snapshotDir)
+}
 
-  let suffix = ''
-  try {
-    const { execSync } = await import('node:child_process')
-    suffix = '-' + execSync('git rev-parse --short HEAD', {
-      cwd: config.rootDir, encoding: 'utf-8',
-    }).trim()
-  } catch {
-    // Not a git repo
-  }
-
-  return path.join(dir, `snapshot-${timestamp}${suffix}.json`)
+// ADR-027
+/**
+ * Migration douce — supprime progressivement les anciens snapshots
+ * cumulatifs `snapshot-<ts>-<sha>.json` après écriture du nouveau
+ * `snapshot.json` v2. Garde les `keep` plus récents (default 2) pour
+ * permettre un rollback manuel.
+ *
+ * Retourne le nombre de fichiers legacy supprimés.
+ */
+export async function pruneLegacySnapshots(
+  snapshotDir: string,
+  keep = 2,
+): Promise<number> {
+  const legacy = await listLegacySnapshots(snapshotDir)
+  if (legacy.length <= keep) return 0
+  const toDelete = legacy.slice(keep)
+  const results = await Promise.all(
+    toDelete.map(async (p): Promise<number> => {
+      try {
+        await fs.unlink(p)
+        return 1
+      } catch {
+        return 0
+      }
+    }),
+  )
+  return results.reduce((a, b) => a + b, 0)
 }
 
 /** Format un score de santé [0,1] en pourcentage coloré. */
