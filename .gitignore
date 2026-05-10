@@ -6,3 +6,7 @@ dist/
 .codegraph/
 .claude/worktrees/
 docs/.*-audit.md
+
+# ADR-027 — vues dérivées hors git (projections paresseuses du snapshot+ADRs)
+CLAUDE-CONTEXT.md
+CHANGELOG-RECENT.md

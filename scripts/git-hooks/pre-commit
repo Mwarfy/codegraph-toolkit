@@ -89,20 +89,15 @@ if ! git diff --quiet -- '*adr/*.md' 2>/dev/null; then
   echo -e "\033[0;33m  pre-commit\033[0m ⓘ ADRs ## Anchored in auto-staged (drift)"
 fi
 
-# 4. Brief sync
-echo -e "\033[0;36m  pre-commit\033[0m brief sync..."
-npx @liby-tools/adr-toolkit brief > /dev/null 2>&1 || {
+# 4. Brief validation (ADR-027 — vue dérivée, jamais auto-stagée).
+#    On régénère pour valider qu'elle compile, mais le fichier est gitignored
+#    (cf. .gitignore "ADR-027" block). L'humain peut consulter le brief local
+#    via `cat CLAUDE-CONTEXT.md` ou via le dashboard endpoint /api/boot-context.
+echo -e "\033[0;36m  pre-commit\033[0m brief validate..."
+if ! npx @liby-tools/adr-toolkit brief > /dev/null 2>&1; then
   echo -e "\033[0;31m  pre-commit\033[0m ✗ brief generation failed"
   exit 1
-}
-# Auto-stage si brief a bougé (path lu depuis config — ici on git-add le
-# pattern par défaut + le path le plus courant).
-for f in CLAUDE-CONTEXT.md; do
-  if [ -f "$f" ] && ! git diff --quiet -- "$f" 2>/dev/null; then
-    git add "$f"
-    echo -e "\033[0;33m  pre-commit\033[0m ⓘ $f auto-staged (drift)"
-  fi
-done
+fi
 
 echo -e "\033[0;32m  pre-commit\033[0m ✓ checks OK"
 exit 0

@@ -32,6 +32,11 @@ if [ -z "$CODEGRAPH_SKIP" ] && [ -f "$REPO_ROOT/codegraph.config.json" ] || [ -f
   npx @liby-tools/codegraph analyze > /dev/null 2>&1 && \
     echo -e "\033[0;32m  codegraph\033[0m ✓ snapshot updated" || \
     echo -e "\033[0;33m  codegraph\033[0m ⚠ analyze skipped (config absent or error)"
+
+  # ADR-027 — prune les snapshots accumulés (keep N most recent, default 3).
+  if [ -x "$REPO_ROOT/scripts/prune-snapshots.sh" ]; then
+    "$REPO_ROOT/scripts/prune-snapshots.sh" || true
+  fi
 fi
 
 # 2. Boot brief regeneration
