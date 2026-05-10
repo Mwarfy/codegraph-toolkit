@@ -58,12 +58,40 @@ export function codegraphChangesSince(args: ChangesSinceArgs): { content: string
   return { content: buildDiffHeader(current, referencePath) + md }
 }
 
-/** Read .codegraph dir → snapshot entries OR return user-friendly error string. */
+// ADR-027
+/**
+ * Read .codegraph dir → snapshot entries OR return user-friendly error string.
+ *
+ * Phase 2 d'ADR-027 — privilégie le format v2 :
+ *   - `snapshot.json`     → entrée "current"
+ *   - `snapshot.json.bak` → entrée "post-commit" (état avant le dernier analyze)
+ *
+ * Fallback sur le format legacy `snapshot-<ts>-<sha>.json` pour les
+ * checkouts pré-migration.
+ */
 function listSnapshotFiles(codegraphDir: string): SnapshotEntry[] | string {
+  // V2 path : snapshot.json + snapshot.json.bak (Phase 2).
+  const v2Entries: SnapshotEntry[] = []
+  try {
+    const v2 = path.join(codegraphDir, 'snapshot.json')
+    const st = fs.statSync(v2)
+    v2Entries.push({ path: v2, name: 'snapshot.json', mtime: st.mtimeMs, isLive: false })
+  } catch { /* v2 absent → try legacy */ }
+
+  if (v2Entries.length > 0) {
+    try {
+      const bak = path.join(codegraphDir, 'snapshot.json.bak')
+      const st = fs.statSync(bak)
+      v2Entries.push({ path: bak, name: 'snapshot.json.bak', mtime: st.mtimeMs, isLive: false })
+    } catch { /* pas encore de .bak (1er analyze) */ }
+    return v2Entries
+  }
+
+  // Legacy path : snapshot-<ts>-<sha>.json
   let names: string[]
   try {
     names = fs.readdirSync(codegraphDir).filter(
-      (f) => f.startsWith('snapshot-') && f.endsWith('.json'),
+      (f) => /^snapshot-\d{4}-\d{2}-\d{2}T.*\.json$/.test(f) || f === 'snapshot-live.json',
     )
   } catch {
     return 'No .codegraph directory. Run `npx codegraph analyze` first.'
@@ -124,21 +152,29 @@ function resolveLiveRef(files: SnapshotEntry[], current: SnapshotEntry): string 
   return live.path
 }
 
+// ADR-027
+/**
+ * Load + unwrap. Le format v2 (Phase 2) wrappe le snapshot dans
+ * `{ version: 2, meta, payload }`. La diff tool consomme l'objet plat
+ * — on extrait `payload` quand on détecte le wrapper.
+ */
 function loadSnapshots(
   referencePath: string,
   currentPath: string,
 ): { before: any; after: any } | string {
-  // Si referencePath n'est pas un path (= un message d'erreur en string), on
-  // l'a déjà court-circuité plus haut. Mais on garde un guard try/catch ici
-  // au cas où le fichier n'existerait plus entre listing + read.
   try {
     return {
-      before: JSON.parse(fs.readFileSync(referencePath, 'utf-8')),
-      after: JSON.parse(fs.readFileSync(currentPath, 'utf-8')),
+      before: unwrapSnapshot(JSON.parse(fs.readFileSync(referencePath, 'utf-8'))),
+      after: unwrapSnapshot(JSON.parse(fs.readFileSync(currentPath, 'utf-8'))),
     }
   } catch (err) {
     return `Failed to load snapshots: ${err instanceof Error ? err.message : err}`
   }
+}
+
+function unwrapSnapshot(parsed: any): any {
+  if (parsed && parsed.version === 2 && parsed.payload) return parsed.payload
+  return parsed
 }
 
 function buildDiffHeader(current: SnapshotEntry, referencePath: string): string {
