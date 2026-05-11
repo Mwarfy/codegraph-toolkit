@@ -14,10 +14,10 @@ import * as path from 'node:path'
 import type { CodeGraphConfig, GraphSnapshot } from '../core/types.js'
 import { listDetectorNames, defaultDetectorNames } from '../detectors/index.js'
 import {
-  readStoredSnapshot,
   snapshotPath as v2SnapshotPath,
   listLegacySnapshots,
 } from '../incremental/snapshot-store.js'
+import { loadStoredSnapshot } from '../incremental/snapshot-loader.js'
 
 /**
  * Hydrate un config partiel avec les defaults sensibles. Mutates +
@@ -182,40 +182,41 @@ function buildDefaultConfig(root: string, detectorsOpt: string | undefined): Cod
 
 // ADR-027
 /**
- * Charge un snapshot — soit depuis un path explicite, soit depuis le
- * `snapshot.json` unique dans `config.snapshotDir` (Phase 2). Si le
- * fichier v2 est absent, fallback sur le dernier `snapshot-*.json`
- * legacy (Phase 1 / pré-Phase-2) avec un warning. Process exit (1)
- * si rien trouvé — pattern CLI fail-fast.
+ * Charge un snapshot — délègue au loader unifié `snapshot-loader.ts`
+ * (v2 canonique + fallback legacy). Process exit (1) si rien trouvé.
+ * Warning sur stderr en mode legacy pour signaler la migration en cours.
+ *
+ * Tous les CLI commands passent par cette fonction ; toute modification
+ * de format (Phase 4, ADR-029, etc.) ne nécessite de toucher que
+ * `incremental/snapshot-loader.ts`.
  */
 export async function loadSnapshot(
   snapshotPath?: string,
   opts?: { config?: string },
 ): Promise<GraphSnapshot> {
   if (snapshotPath) {
-    return JSON.parse(await fs.readFile(snapshotPath, 'utf-8'))
+    const { loadSnapshotFromFile } = await import('../incremental/snapshot-loader.js')
+    const loaded = await loadSnapshotFromFile(snapshotPath)
+    if (loaded) return loaded
+    console.error(chalk.red(`Snapshot file not loadable: ${snapshotPath}`))
+    process.exit(1)
   }
 
   const config = await loadConfig(opts || {})
   const snapshotDir = config.snapshotDir
 
-  // Phase 2 — chemin canonique : .codegraph/snapshot.json
-  const stored = await readStoredSnapshot(snapshotDir)
-  if (stored) return stored.payload
-
-  // Fallback legacy : dernier snapshot-<ts>-<sha>.json. Warning sur
-  // stderr pour signaler la migration en cours sans bloquer la commande.
-  const legacy = await listLegacySnapshots(snapshotDir)
-  if (legacy.length > 0) {
-    console.error(chalk.yellow(
-      `  ⚠ Using legacy snapshot format (${path.basename(legacy[0])}). ` +
-      `Run "codegraph analyze" to migrate to snapshot.json.`,
-    ))
-    try {
-      return JSON.parse(await fs.readFile(legacy[0], 'utf-8'))
-    } catch {
-      /* fall through to error */
+  const loaded = await loadStoredSnapshot(snapshotDir)
+  if (loaded) {
+    // Warning legacy : meta absente = on lit un snapshot-<ts>-<sha>.json
+    // historique. Signaler à l'utilisateur que la prochaine `analyze`
+    // migrera vers le format v2.
+    if (loaded.meta === null) {
+      console.error(chalk.yellow(
+        `  ⚠ Using legacy snapshot format (${path.basename(loaded.source)}). ` +
+        `Run "codegraph analyze" to migrate to snapshot.json.`,
+      ))
     }
+    return loaded.payload
   }
 
   // Pas de fichier exploitable — distinguer dir manquant d'absence
@@ -234,38 +235,6 @@ export async function loadSnapshot(
   }
   console.error(chalk.dim('Run "codegraph analyze" first to generate a snapshot.'))
   process.exit(1)
-}
-
-/**
- * Keeps the most recent `keep` snapshots in `dir`, deletes the rest.
- * Returns the number deleted. Only touches files matching `snapshot-*.json`.
- */
-export async function pruneSnapshots(dir: string, keep: number): Promise<number> {
-  if (!Number.isFinite(keep) || keep <= 0) return 0
-  let files: string[]
-  try {
-    files = await fs.readdir(dir)
-  } catch {
-    return 0
-  }
-  const snapshots = files
-    .filter((f) => f.startsWith('snapshot-') && f.endsWith('.json'))
-    .sort()                                                              // timestamp lex-sortable
-    .reverse()                                                           // newest first
-  if (snapshots.length <= keep) return 0
-  const toDelete = snapshots.slice(keep)
-  // Delete N stale snapshots en parallèle (fichiers indépendants).
-  const results = await Promise.all(
-    toDelete.map(async (f): Promise<number> => {
-      try {
-        await fs.unlink(path.join(dir, f))
-        return 1
-      } catch {
-        return 0  // skip silently — one stale file shouldn't break the analyze
-      }
-    }),
-  )
-  return results.reduce((a, b) => a + b, 0)
 }
 
 // ADR-027

@@ -37,6 +37,11 @@ import {
   computeDelta,
   type FactsHead,
 } from '../../incremental/fact-store.js'
+import {
+  shouldCompact,
+  compactFactStore,
+  DEFAULT_COMPACTION_CONFIG,
+} from '../../incremental/fact-store-compaction.js'
 
 export interface AnalyzeOpts {
   config?: string
@@ -410,6 +415,31 @@ async function persistAnalyzeOutputs(
       console.log(chalk.green(
         `  ✓ Fact store: ${added} added / ${existing} dedup (factSet=${factSetHash.slice(0, 12)}…, ${ms}ms)\n`,
       ))
+
+      // ADR-028 — auto-trigger compaction si seuils dépassés. Lit la
+      // config user `factStore.{maxOrphanRatio,maxSizeBytes,keepBases}`
+      // si présente. Best-effort : un échec ne casse pas l'analyze.
+      try {
+        const userCfg = (config as unknown as {
+          factStore?: { maxOrphanRatio?: number; maxSizeBytes?: number; keepBases?: number }
+        }).factStore
+        const compactCfg = {
+          maxOrphanRatio: userCfg?.maxOrphanRatio ?? DEFAULT_COMPACTION_CONFIG.maxOrphanRatio,
+          maxSizeBytes: userCfg?.maxSizeBytes ?? DEFAULT_COMPACTION_CONFIG.maxSizeBytes,
+          keepBases: userCfg?.keepBases ?? DEFAULT_COMPACTION_CONFIG.keepBases,
+        }
+        const stats = await shouldCompact(config.snapshotDir, compactCfg)
+        if (stats?.shouldCompact) {
+          const cResult = await compactFactStore(config.snapshotDir, compactCfg)
+          const freedMb = (cResult.freedBytes / 1024 / 1024).toFixed(1)
+          console.log(chalk.dim(
+            `  ✓ Auto-compacted store (${stats.reason}): -${cResult.removed} facts, ` +
+            `freed ${freedMb} MB (${cResult.durationMs.toFixed(0)}ms)\n`,
+          ))
+        }
+      } catch (err) {
+        console.error(chalk.yellow(`  ⚠ Compaction skipped: ${err instanceof Error ? err.message : String(err)}`))
+      }
     }
 
     const meta: SnapshotMeta = {

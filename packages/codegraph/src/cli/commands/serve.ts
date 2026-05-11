@@ -20,6 +20,7 @@ import { analyze } from '../../core/analyzer.js'
 import { CodeGraph } from '../../core/graph.js'
 import type { GraphSnapshot } from '../../core/types.js'
 import { loadConfig, loadSnapshot as _loadSnapshot, defaultSnapshotPath, analyzeAtRef } from '../_shared.js'
+import { listAllSnapshotPaths } from '../../incremental/snapshot-loader.js'
 
 void _loadSnapshot // keep for future routes
 
@@ -89,23 +90,14 @@ export async function runServeCommand(opts: ServeOpts): Promise<void> {
 
     try {
       // ── GET /api/snapshots — list available snapshots
-      // ADR-027 Phase 2 : inclut le snapshot.json v2 canonique + ses
-      // backups, en plus des snapshot-<ts>-<sha>.json legacy résiduels.
+      // ADR-027 : délégué au loader unifié (`incremental/snapshot-loader.ts`)
+      // qui retourne le v2 canonique + backups + legacy historiques.
       if (pathname === '/api/snapshots') {
-        const snapshotDir = config.snapshotDir
         try {
-          const files = await fs.readdir(snapshotDir)
-          const v2Names = files.filter((f) => f === 'snapshot.json' || f === 'snapshot.json.bak')
-          const legacyNames = files
-            .filter((f) => /^snapshot-\d{4}-\d{2}-\d{2}T.*\.json$/.test(f))
-            .sort()
-            .reverse()
-          const allNames = [...v2Names, ...legacyNames]
-
-          const items = await Promise.all(allNames.map(async (f) => {
-            const filePath = path.join(snapshotDir, f)
+          const { all } = await listAllSnapshotPaths(config.snapshotDir)
+          const items = await Promise.all(all.map(async (filePath) => {
             const stat = await fs.stat(filePath)
-            // Format legacy : snapshot-YYYY-MM-DDTHH-MM-SS-abcdef1.json
+            const f = path.basename(filePath)
             const match = f.match(/^snapshot-(.+?)(?:-([a-f0-9]{7,}))?\.json$/)
             return {
               file: f,
@@ -116,7 +108,6 @@ export async function runServeCommand(opts: ServeOpts): Promise<void> {
               mtime: stat.mtime.toISOString(),
             }
           }))
-
           jsonResponse(res, { snapshots: items })
         } catch {
           jsonResponse(res, { snapshots: [] })

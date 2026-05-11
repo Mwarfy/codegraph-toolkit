@@ -9,6 +9,7 @@
 
 import * as fs from 'node:fs'
 import * as path from 'node:path'
+import { unwrapSnapshot, isSafeSnapshotFilename } from '@liby-tools/codegraph/snapshot-loader'
 
 let cachedSnapshot: any = null
 let cachedMtime = 0
@@ -16,15 +17,18 @@ let cachedPath = ''
 
 // ADR-027
 /**
- * Charge le snapshot le plus frais. Phase 2 d'ADR-027 — privilégie
- * `.codegraph/snapshot.json` (wrapper v2 { version, meta, payload }),
- * fallback sur les `snapshot-*.json` legacy par mtime pour les
- * checkouts pré-migration.
+ * Charge le snapshot le plus frais avec mtime cache. Phase 2 d'ADR-027
+ * — privilégie `.codegraph/snapshot.json` v2 (wrappé { version, meta,
+ * payload }), fallback sur les `snapshot-*.json` legacy par mtime.
+ *
+ * Format détection + unwrap : délégué à `@liby-tools/codegraph/snapshot-loader`
+ * (single source of truth). Le wrapper sync ici préserve l'API MCP
+ * existante et le cache RAM cross-tool-call.
  */
 export function loadSnapshot(repoRoot: string): any {
   const codegraphDir = path.join(repoRoot, '.codegraph')
 
-  // V2 path : .codegraph/snapshot.json
+  // V2 path : .codegraph/snapshot.json prioritaire
   const v2Path = path.join(codegraphDir, 'snapshot.json')
   let v2Stat: fs.Stats | null = null
   try {
@@ -35,9 +39,7 @@ export function loadSnapshot(repoRoot: string): any {
     if (cachedPath === v2Path && cachedMtime === v2Stat.mtimeMs && cachedSnapshot) {
       return cachedSnapshot
     }
-    const parsed = JSON.parse(fs.readFileSync(v2Path, 'utf-8'))
-    const payload = (parsed && parsed.version === 2 && parsed.payload) ? parsed.payload : parsed
-    cachedSnapshot = payload
+    cachedSnapshot = unwrapSnapshot(JSON.parse(fs.readFileSync(v2Path, 'utf-8')))
     cachedMtime = v2Stat.mtimeMs
     cachedPath = v2Path
     return cachedSnapshot
@@ -46,8 +48,7 @@ export function loadSnapshot(repoRoot: string): any {
   // Legacy path : snapshot-<ts>-<sha>.json le plus frais par mtime.
   let files: string[]
   try {
-    files = fs.readdirSync(codegraphDir)
-      .filter(f => /^snapshot-\d{4}-\d{2}-\d{2}T.*\.json$/.test(f))
+    files = fs.readdirSync(codegraphDir).filter((f) => isSafeSnapshotFilename(f) && f !== 'snapshot.json' && f !== 'snapshot.json.bak')
   } catch {
     throw new Error(`No .codegraph directory at ${repoRoot}. Run \`npx codegraph analyze\` first.`)
   }
@@ -64,7 +65,7 @@ export function loadSnapshot(repoRoot: string): any {
   if (cachedPath === latestPath && cachedMtime === stat.mtimeMs && cachedSnapshot) {
     return cachedSnapshot
   }
-  cachedSnapshot = JSON.parse(fs.readFileSync(latestPath, 'utf-8'))
+  cachedSnapshot = unwrapSnapshot(JSON.parse(fs.readFileSync(latestPath, 'utf-8')))
   cachedMtime = stat.mtimeMs
   cachedPath = latestPath
   return cachedSnapshot

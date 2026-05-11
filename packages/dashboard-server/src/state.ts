@@ -1,5 +1,6 @@
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
+import { loadStoredSnapshot } from '@liby-tools/codegraph/snapshot-loader'
 
 export interface DashboardState {
   rootDir: string
@@ -19,54 +20,36 @@ export function createState(rootDir: string): DashboardState {
   }
 }
 
-/**
- * Pick the most recent snapshot to consume. Prefer snapshot-live.json
- * (written by the watcher) when present — that's the one updating in
- * real-time as the agent edits. Fall back to the latest commit-pinned
- * snapshot-<ts>-<sha>.json when no watcher is running.
- */
-export async function resolveSnapshotFile(codegraphDir: string): Promise<string | null> {
-  const live = path.join(codegraphDir, 'snapshot-live.json')
-  try {
-    await fs.access(live)
-    return live
-  } catch {
-    // No snapshot-live.json — watcher isn't running. Falls through to
-    // the historical snapshot resolution below; this is the expected
-    // path on a cold-start.
-  }
-
-  let entries: string[]
-  try {
-    entries = await fs.readdir(codegraphDir)
-  } catch {
-    return null
-  }
-  // ADR-027 Phase 2 — snapshot.json est le canonique unifié. Fallback
-  // legacy : snapshot-<ts>-<sha>.json, lex-last (timestamp).
-  if (entries.includes('snapshot.json')) {
-    return path.join(codegraphDir, 'snapshot.json')
-  }
-  const snapshots = entries
-    .filter((f) => /^snapshot-\d{4}-\d{2}-\d{2}T.*\.json$/.test(f))
-    .sort()
-  if (snapshots.length === 0) return null
-  return path.join(codegraphDir, snapshots[snapshots.length - 1])
-}
-
+// ADR-027 — délégué au loader unifié (`@liby-tools/codegraph/snapshot-loader`).
+// `snapshot-live.json` (watcher artifact pré-Phase-2) reste géré en priorité
+// pour les checkouts qui tournent encore avec une ancienne version du
+// watcher ; sinon le loader retourne v2 ou legacy.
 export async function loadSnapshot(state: DashboardState): Promise<boolean> {
-  const file = await resolveSnapshotFile(state.codegraphDir)
-  if (!file) return false
-  const stat = await fs.stat(file)
-  if (file === state.snapshotPath && stat.mtimeMs === state.snapshotMtime) {
+  // Priority : snapshot-live.json si présent (live watcher)
+  const live = path.join(state.codegraphDir, 'snapshot-live.json')
+  try {
+    const stat = await fs.stat(live)
+    if (live === state.snapshotPath && stat.mtimeMs === state.snapshotMtime) {
+      return false
+    }
+    const raw = await fs.readFile(live, 'utf-8')
+    const parsed = JSON.parse(raw)
+    state.snapshotPath = live
+    state.snapshotMtime = stat.mtimeMs
+    state.snapshotData = (parsed && parsed.version === 2 && parsed.payload) ? parsed.payload : parsed
+    return true
+  } catch {
+    /* live absent → loader unifié */
+  }
+
+  const loaded = await loadStoredSnapshot(state.codegraphDir)
+  if (!loaded) return false
+  const stat = await fs.stat(loaded.source)
+  if (loaded.source === state.snapshotPath && stat.mtimeMs === state.snapshotMtime) {
     return false
   }
-  const text = await fs.readFile(file, 'utf-8')
-  // ADR-027 — le v2 wrappe { version, meta, payload }. On unwrap pour
-  // exposer le payload "flat" aux consumers downstream.
-  const parsed = JSON.parse(text)
-  state.snapshotPath = file
+  state.snapshotPath = loaded.source
   state.snapshotMtime = stat.mtimeMs
-  state.snapshotData = (parsed && parsed.version === 2 && parsed.payload) ? parsed.payload : parsed
+  state.snapshotData = loaded.payload
   return true
 }

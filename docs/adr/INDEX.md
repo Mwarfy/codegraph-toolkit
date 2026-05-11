@@ -25,7 +25,8 @@
 | [024](024-bsp-monoid-parallelism.md) | Tout détecteur per-file (cf. ADR-005) DOIT exposer un `extractFileBundle` pure et son orchestrateur passe p... | `packages/codegraph/src/detectors/ts-imports.ts`, `packages/codegraph/src/extractors/todos.ts` +4 |
 | [025](025-detectors-must-use-bsp-pattern.md) | Tout NOUVEAU détecteur ajouté à `extractors/` (readFile-based) DOIT partir du template `_template.monoid.ts... | _(pas de marker)_ |
 | [026](026-detectors-as-datalog-rules.md) | Tout nouveau détecteur per-file CPU-bound DOIT s'écrire comme : 1. Émission de tuples primitifs depuis `ast... | `packages/codegraph/src/extractors/dead-code.ts`, `packages/codegraph/src/extractors/drift-patterns.ts` |
-| [027](027-derived-views-out-of-git.md) | Toute donnée dérivable du code source par une fonction pure (snapshot, brief, changelog, vues structurelles... | `packages/codegraph-mcp/src/snapshot-loader.ts`, `packages/codegraph-mcp/src/tools/changes-since.ts` +10 |
+| [027](027-derived-views-out-of-git.md) | Toute donnée dérivable du code source par une fonction pure (snapshot, brief, changelog, vues structurelles... | `packages/codegraph-mcp/src/snapshot-loader.ts`, `packages/codegraph-mcp/src/tools/changes-since.ts` +9 |
+| [028](028-fact-store-compaction.md) | Le fichier `.codegraph/facts.store.ndjson` (ADR-027 Phase 3) est append-only par construction (immuabilité ... | `packages/codegraph/src/cli/commands/compact.ts`, `packages/codegraph/src/incremental/fact-store-compaction.ts` |
 
 
 ## Comment ajouter un ADR

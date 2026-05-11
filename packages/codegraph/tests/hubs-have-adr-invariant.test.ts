@@ -38,38 +38,14 @@ const REPO_ROOT = path.resolve(__dirname, '../../..')
 
 const FAN_IN_THRESHOLD = 3
 
-// ADR-027
-/**
- * Charge le snapshot codegraph. Privilégie le format v2
- * (`.codegraph/snapshot.json`, ADR-027 Phase 2). Fallback sur le
- * format legacy `snapshot-*.json` pour les checkouts pré-migration.
- */
+// ADR-027 — délégué au loader unifié.
 async function loadLatestSnapshot(): Promise<{ nodes: any[]; edges: any[] }> {
-  const codegraphDir = path.join(REPO_ROOT, '.codegraph')
-
-  // V2 : single snapshot.json avec wrapper { version, meta, payload }
-  const v2Path = path.join(codegraphDir, 'snapshot.json')
-  try {
-    const raw = await fs.readFile(v2Path, 'utf-8')
-    const parsed = JSON.parse(raw)
-    if (parsed?.version === 2 && parsed?.payload) {
-      return parsed.payload
-    }
-  } catch {
-    /* fall through to legacy */
-  }
-
-  // Legacy : snapshot-<ts>-<sha>.json — lex-last (timestamp).
-  const entries = await fs.readdir(codegraphDir).catch(() => [])
-  const snapshots = entries
-    .filter((f) => /^snapshot-\d{4}-\d{2}-\d{2}T.*\.json$/.test(f))
-    .sort()
-  if (snapshots.length === 0) {
+  const { loadSnapshotPayload } = await import('../src/incremental/snapshot-loader.js')
+  const payload = await loadSnapshotPayload(path.join(REPO_ROOT, '.codegraph'))
+  if (!payload) {
     throw new Error('No codegraph snapshot found — run `npx codegraph analyze` first')
   }
-  const latest = snapshots[snapshots.length - 1]
-  const content = await fs.readFile(path.join(codegraphDir, latest), 'utf-8')
-  return JSON.parse(content)
+  return payload
 }
 
 /** Compte les importeurs (fan-in) de chaque fichier. */
