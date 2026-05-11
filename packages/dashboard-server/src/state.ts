@@ -1,3 +1,5 @@
+// ADR-027 — loader unifié snapshot codegraph (loadStoredSnapshot)
+// ADR-032 — cross-package contract avec @liby-tools/codegraph
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
 import { loadStoredSnapshot, unwrapSnapshot } from '@liby-tools/codegraph/snapshot-loader'

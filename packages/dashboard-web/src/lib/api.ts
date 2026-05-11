@@ -1,3 +1,6 @@
+// ADR-032 — frontière HTTP cross-package : interfaces de réponse REST
+// du dashboard-server. Tout drift de shape côté server casse silencieusement
+// les consumers downstream (store.ts, cosmos.ts). Cf. audit dette §T2.1.
 // Thin typed wrappers around the dashboard-server REST API.
 
 export interface SnapshotMeta {
