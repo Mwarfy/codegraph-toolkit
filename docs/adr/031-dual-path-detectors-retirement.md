@@ -1,7 +1,7 @@
 # ADR-031: Retrait du dual-path detectors (Datalog devient le seul chemin)
 
 **Date:** 2026-05-11 (révisé après audit code post-merge)
-**Status:** Accepted — Phase 1 in progress (PR #51), Phases 2-3 planned
+**Status:** Accepted — Phases 1+2 complete (PRs #51, #53-#59), Phase 3 planned
 
 ## Erratum (révision post-audit)
 
@@ -26,8 +26,8 @@ branchement cascade dans les phases.
   15 shadow") = déjà faite par ADR-026 A.3/A.4/E. Il restait un trou
   de **garde-fou CI** (test parité bit-identical limité à 3/20 fields)
   → PR #51 ferme ce trou.
-- Phase 2 (retrait du code legacy) inchangée — peut maintenant démarrer
-  protégée par garde-fou bit-identical 20 fields.
+- Phase 2 (retrait du code legacy) inchangée — exécutée en 7 batches
+  (PRs #53-#59) protégée par garde-fou bit-identical 20 fields.
 - Phase 3 inchangée.
 
 ## Rule
@@ -102,7 +102,7 @@ L'audit révisé (post-merge) identifie :
 Le retrait du code legacy sera fait par **batch de 3-5 détecteurs**
 à la fois pour limiter le blast radius par PR. Pas de big-bang.
 
-### Phase 1 (in progress via PR #51) — Verrouiller le garde-fou bit-identical
+### Phase 1 (done via PR #51) — Verrouiller le garde-fou bit-identical
 
 Audit révisé : les overrides actifs (= "extension du patch") sont
 déjà faits par ADR-026 phases A.3, A.4, E. Le vrai travail Phase 1
@@ -119,7 +119,7 @@ Cette PR ne change PAS le runtime — uniquement le garde-fou test.
 Aucune régression possible côté snapshot.json (test invariant
 ADR-030 protège).
 
-### Phase 2 (planned) — Retirer le code legacy des détecteurs portés
+### Phase 2 (done via PRs #53-#59) — Retirer le code legacy des détecteurs portés
 
 - Pour chaque détecteur porté, supprimer le fichier
   `packages/codegraph/src/extractors/<name>.ts` + wrapper Salsa
@@ -249,9 +249,10 @@ Considéré. Rejeté parce que :
 ### Statut migration au 2026-05-11
 
 - Phase 0 (audit) : ✓ fait (cette ADR)
-- Phase 1 (verrouillage garde-fou bit-identical) : in progress via PR #51
-- Phase 2 (retrait code legacy) : prêt à démarrer une fois PR #51 mergée.
-  À splitter en 4-5 PRs par batch de 3-4 détecteurs.
+- Phase 1 (verrouillage garde-fou bit-identical) : ✓ fait via PR #51
+- Phase 2 (retrait code legacy) : ✓ fait via 7 batches (PRs #53, #54, #55,
+  #56, #57, #58, #59) — 18 détecteurs portés legacy retirés + 3 overrides
+  directs.
 - Phase 3 (retrait shadow comparator) : différé à N releases après
   Phase 2 stable.
 
