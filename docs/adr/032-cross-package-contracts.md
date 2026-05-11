@@ -136,6 +136,8 @@ ancienne, le test échoue parce que les nouveaux exports manquent.
 
 <!-- AUTO-GÉNÉRÉ depuis les marqueurs ADR-NNN du code source. Voir @liby-tools/adr-toolkit. NE PAS éditer à la main. -->
 
+- `packages/codegraph/src/index.ts`
+
 
 ## Tested by
 
