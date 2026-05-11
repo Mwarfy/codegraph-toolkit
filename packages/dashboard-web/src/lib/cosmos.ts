@@ -263,6 +263,343 @@ function layoutNodes(nodes: CosmosNode[], edges: CosmosEdge[]): void {
   }
 }
 
+// ─── Camera + viewport types ───────────────────────────────────────────────
+
+interface Camera {
+  x: number
+  y: number
+  zoom: number
+  targetZoom: number
+}
+
+interface Viewport {
+  wx0: number
+  wx1: number
+  wy0: number
+  wy1: number
+}
+
+/** Pure : pas de side-effect. Convertit coordonnée monde → pixel écran. */
+function worldToScreen(
+  wx: number,
+  wy: number,
+  cam: Camera,
+  w: number,
+  h: number,
+): { x: number; y: number } {
+  return {
+    x: (wx - cam.x) * cam.zoom + w / 2,
+    y: (wy - cam.y) * cam.zoom + h / 2,
+  }
+}
+
+/** Pure : calcule les bornes monde du viewport avec un padding pour le culling. */
+function computeViewport(cam: Camera, w: number, h: number): Viewport {
+  const padding = 200 / cam.zoom
+  return {
+    wx0: cam.x - w / (2 * cam.zoom) - padding,
+    wx1: cam.x + w / (2 * cam.zoom) + padding,
+    wy0: cam.y - h / (2 * cam.zoom) - padding,
+    wy1: cam.y + h / (2 * cam.zoom) + padding,
+  }
+}
+
+// ─── RenderContext partagé par les helpers de rendering ────────────────────
+// Refactor 2026-05-11 (cyclo bomb cleanup) : `mountCosmos` faisait
+// cyclo=106 cog=158, l'écrasante majorité venant de `tick()` qui
+// dessinait 10 sections in-place. Extraction en helpers top-level (le
+// visitor ts-morph les voit alors comme fonctions séparées, chacune
+// comptée individuellement) — `mountCosmos` retrouve une complexité
+// approchable et chaque helper est testable / lisible indépendamment.
+
+interface RenderContext {
+  ctx: CanvasRenderingContext2D
+  dataset: CosmosDataset
+  cam: Camera
+  adj: Map<number, Set<number>>
+  opts: CosmosMountOptions
+  viewport: Viewport
+  w: number
+  h: number
+  t: number
+  z: number
+}
+
+// ─── Drawing helpers (un par responsabilité, ordre = pipeline tick) ─────────
+
+function drawEdges(rc: RenderContext): void {
+  const { ctx, dataset, viewport: vp, w, h, z, cam } = rc
+  ctx.lineWidth = 0.4
+  const edgeAlpha = z < 0.4 ? 0.04 : z < 0.8 ? 0.08 : 0.13
+  ctx.strokeStyle = `rgba(180,210,235,${edgeAlpha})`
+  ctx.beginPath()
+  // LOD : skip 1/N edges en zoom-out pour préserver fps
+  const drawEdge = z > 0.55 ? 1 : z > 0.3 ? 2 : 4
+  for (let i = 0; i < dataset.edges.length; i += drawEdge) {
+    const e = dataset.edges[i]
+    const s = dataset.byId.get(e.s)
+    const tt = dataset.byId.get(e.t)
+    if (!s || !tt) continue
+    if ((s.x < vp.wx0 && tt.x < vp.wx0) || (s.x > vp.wx1 && tt.x > vp.wx1)) continue
+    if ((s.y < vp.wy0 && tt.y < vp.wy0) || (s.y > vp.wy1 && tt.y > vp.wy1)) continue
+    const sp = worldToScreen(s.x, s.y, cam, w, h)
+    const tp = worldToScreen(tt.x, tt.y, cam, w, h)
+    ctx.moveTo(sp.x, sp.y)
+    ctx.lineTo(tp.x, tp.y)
+  }
+  ctx.stroke()
+}
+
+function drawActiveFlow(rc: RenderContext): void {
+  const { ctx, dataset, adj, cam, w, h, t } = rc
+  const active = dataset.nodes.find((n) => n.active)
+  if (!active) return
+  const activeP = worldToScreen(active.x, active.y, cam, w, h)
+  ctx.lineWidth = 1.2
+  const dash = (t * 30) % 12
+  ctx.setLineDash([4, 4])
+  ctx.lineDashOffset = -dash
+  ctx.strokeStyle = 'rgba(255,210,90,0.65)'
+  const neighbours = adj.get(active.id)
+  if (neighbours) {
+    for (const id of neighbours) {
+      const n = dataset.byId.get(id)
+      if (!n) continue
+      const np = worldToScreen(n.x, n.y, cam, w, h)
+      ctx.beginPath()
+      ctx.moveTo(activeP.x, activeP.y)
+      ctx.lineTo(np.x, np.y)
+      ctx.stroke()
+    }
+  }
+  ctx.setLineDash([])
+}
+
+/** Retourne les ids dim-by-stage (pour le rendering des nodes). null si pas de hook hover. */
+function drawHookStageArcs(rc: RenderContext): Set<number> | null {
+  const { ctx, dataset, opts, cam, w, h, t } = rc
+  const hoveredStage = opts.getHoveredStage?.() ?? null
+  if (!hoveredStage) return null
+  const pins = opts.getHookPins?.() ?? {}
+  const pin = pins[hoveredStage]
+  const impacts = opts.getStageImpacts?.()?.[hoveredStage] ?? []
+  if (!pin || impacts.length === 0) return null
+
+  const dimByStage = new Set<number>()
+  ctx.strokeStyle = 'rgba(120,220,240,0.55)'
+  ctx.lineWidth = 1.1
+  ctx.setLineDash([3, 3])
+  ctx.lineDashOffset = -((t * 18) % 6)
+  for (const apiId of impacts) {
+    const target = dataset.byApiId.get(apiId) ?? dataset.byPath.get(apiId)
+    if (!target) continue
+    dimByStage.add(target.id)
+    const tp = worldToScreen(target.x, target.y, cam, w, h)
+    const cx = (pin.x + tp.x) / 2 - 80
+    ctx.beginPath()
+    ctx.moveTo(pin.x, pin.y)
+    ctx.bezierCurveTo(cx, pin.y, cx, tp.y, tp.x, tp.y)
+    ctx.stroke()
+  }
+  ctx.setLineDash([])
+  ctx.strokeStyle = 'rgba(120,220,240,0.85)'
+  ctx.lineWidth = 1.5
+  for (const id of dimByStage) {
+    const target = dataset.byId.get(id)
+    if (!target) continue
+    const tp = worldToScreen(target.x, target.y, cam, w, h)
+    ctx.beginPath()
+    ctx.arc(tp.x, tp.y, 6, 0, Math.PI * 2)
+    ctx.stroke()
+  }
+  return dimByStage
+}
+
+function drawTreeHoverHalo(rc: RenderContext): void {
+  const { ctx, dataset, opts, cam, w, h, t } = rc
+  const treeHoverId = opts.getTreeHoverId?.() ?? null
+  if (treeHoverId == null) return
+  const target = dataset.byId.get(treeHoverId)
+  if (!target) return
+  const tp = worldToScreen(target.x, target.y, cam, w, h)
+  const pulse = (Math.sin(t * 4) + 1) / 2
+  ctx.strokeStyle = `rgba(255,255,255,${0.5 + pulse * 0.4})`
+  ctx.lineWidth = 1.5
+  ctx.beginPath()
+  ctx.arc(tp.x, tp.y, 12 + pulse * 4, 0, Math.PI * 2)
+  ctx.stroke()
+  ctx.strokeStyle = `rgba(255,255,255,${0.2 + pulse * 0.2})`
+  ctx.beginPath()
+  ctx.arc(tp.x, tp.y, 24 + pulse * 6, 0, Math.PI * 2)
+  ctx.stroke()
+}
+
+function drawNodes(
+  rc: RenderContext,
+  dimByStage: Set<number> | null,
+  hoverNode: CosmosNode | null,
+): void {
+  const { ctx, dataset, viewport: vp, cam, w, h, z, t } = rc
+  const baseR = z < 0.35 ? 1.4 : z < 0.7 ? 1.9 : 2.4
+  const showLabels = z > 0.85
+  const showAllLabels = z > 1.6
+  for (const n of dataset.nodes) {
+    if (n.x < vp.wx0 || n.x > vp.wx1 || n.y < vp.wy0 || n.y > vp.wy1) continue
+    const p = worldToScreen(n.x, n.y, cam, w, h)
+    let r = baseR + (n.hub ? 1.6 : 0) + (n.hot ? 0.6 : 0)
+    if (n.active) r = Math.max(r, 5)
+    if (n.kind === 'barrel') r = Math.max(r * 0.65, 1.2)
+
+    const dimmed = dimByStage && !dimByStage.has(n.id) && !n.active
+    ctx.globalAlpha = dimmed ? 0.18 : 1
+    ctx.fillStyle = n.color
+    drawNodeShape(ctx, n, p, r)
+    drawNodeOverlays(ctx, n, p, r, t)
+    ctx.globalAlpha = 1
+    drawNodeLabel(ctx, n, p, r, hoverNode, showLabels, showAllLabels)
+  }
+}
+
+function drawNodeShape(
+  ctx: CanvasRenderingContext2D,
+  n: CosmosNode,
+  p: { x: number; y: number },
+  r: number,
+): void {
+  if (n.kind === 'barrel') {
+    ctx.beginPath()
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2)
+    ctx.strokeStyle = n.color
+    ctx.lineWidth = 1
+    ctx.stroke()
+  } else {
+    ctx.beginPath()
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2)
+    ctx.fill()
+  }
+}
+
+function drawNodeOverlays(
+  ctx: CanvasRenderingContext2D,
+  n: CosmosNode,
+  p: { x: number; y: number },
+  r: number,
+  t: number,
+): void {
+  if (n.hub) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.45)'
+    ctx.lineWidth = 0.7
+    ctx.beginPath()
+    ctx.arc(p.x, p.y, r + 1.2, 0, Math.PI * 2)
+    ctx.stroke()
+  }
+  if (n.hot && !n.active) {
+    const pulse = (Math.sin(t * 2 + n.id) + 1) / 2
+    ctx.strokeStyle = `rgba(255,210,90,${0.15 + pulse * 0.2})`
+    ctx.lineWidth = 0.8
+    ctx.beginPath()
+    ctx.arc(p.x, p.y, r + 2.5 + pulse * 1.5, 0, Math.PI * 2)
+    ctx.stroke()
+  }
+  if (n.impacted) {
+    ctx.strokeStyle = 'rgba(255,210,90,0.7)'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.arc(p.x, p.y, r + 2.5, 0, Math.PI * 2)
+    ctx.stroke()
+  }
+  if (n.active) {
+    ctx.fillStyle = '#ffffff'
+    ctx.beginPath()
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2)
+    ctx.fill()
+    for (let i = 0; i < 3; i++) {
+      const tt = ((t + i * 0.4) % 1.2) / 1.2
+      ctx.strokeStyle = `rgba(255,255,255,${(1 - tt) * 0.5})`
+      ctx.lineWidth = 1.2
+      ctx.beginPath()
+      ctx.arc(p.x, p.y, r + tt * 24, 0, Math.PI * 2)
+      ctx.stroke()
+    }
+  }
+}
+
+function drawNodeLabel(
+  ctx: CanvasRenderingContext2D,
+  n: CosmosNode,
+  p: { x: number; y: number },
+  r: number,
+  hoverNode: CosmosNode | null,
+  showLabels: boolean,
+  showAllLabels: boolean,
+): void {
+  const showLabel = showAllLabels
+    || (showLabels && (n.hub || n.active || n.impacted || n.hot))
+    || (hoverNode != null && hoverNode.id === n.id)
+  if (!showLabel) return
+  ctx.fillStyle = n.active
+    ? '#ffffff'
+    : n.impacted ? 'rgba(255,210,90,0.95)' : 'rgba(220,235,245,0.85)'
+  ctx.font = `${n.active ? 600 : 500} ${n.active ? 11 : 10}px JetBrains Mono, ui-monospace, monospace`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'top'
+  ctx.fillText(n.name, p.x, p.y + r + 2)
+}
+
+function drawHoverTooltip(rc: RenderContext, hoverNode: CosmosNode | null): void {
+  if (!hoverNode) return
+  const { ctx, cam, w, h } = rc
+  const n = hoverNode
+  const p = worldToScreen(n.x, n.y, cam, w, h)
+  const lines = [
+    n.name,
+    `${n.pkg} · ${n.dir}`,
+    `${n.loc} LOC${n.hub ? ' · hub' : ''}${n.hot ? ' · hot' : ''}`,
+  ]
+  const W = 200
+  const H = 52
+  const tx = Math.min(p.x + 12, w - W - 8)
+  const ty = Math.min(p.y + 12, h - H - 8)
+  ctx.fillStyle = 'rgba(15,15,20,0.92)'
+  ctx.strokeStyle = 'rgba(120,200,220,0.45)'
+  ctx.lineWidth = 1
+  ctx.fillRect(tx, ty, W, H)
+  ctx.strokeRect(tx + 0.5, ty + 0.5, W - 1, H - 1)
+  ctx.fillStyle = '#e2e8f0'
+  ctx.font = '600 11px JetBrains Mono, monospace'
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'top'
+  ctx.fillText(lines[0], tx + 8, ty + 7)
+  ctx.fillStyle = 'rgba(180,200,220,0.75)'
+  ctx.font = '10px JetBrains Mono, monospace'
+  ctx.fillText(lines[1], tx + 8, ty + 22)
+  ctx.fillStyle = 'rgba(140,180,200,0.7)'
+  ctx.fillText(lines[2], tx + 8, ty + 36)
+}
+
+/**
+ * Resize le canvas pour le DPR courant + retourne le 2D context prêt à
+ * dessiner. Retourne null si le ctx n'est pas dispo (= retry frame).
+ */
+function prepareCanvasContext(
+  canvas: HTMLCanvasElement,
+  w: number,
+  h: number,
+): CanvasRenderingContext2D | null {
+  const dpr = window.devicePixelRatio || 1
+  if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
+    canvas.width = Math.floor(w * dpr)
+    canvas.height = Math.floor(h * dpr)
+  }
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  ctx.clearRect(0, 0, w, h)
+  return ctx
+}
+
+// ─── mountCosmos ────────────────────────────────────────────────────────────
+
 export function mountCosmos(opts: CosmosMountOptions): CosmosInstance {
   const { canvas, dataset } = opts
 
@@ -294,13 +631,9 @@ export function mountCosmos(opts: CosmosMountOptions): CosmosInstance {
   }
   applyActive()
 
-  const cam = { x: 0, y: 0, zoom: 0.5, targetZoom: 0.5 }
+  const cam: Camera = { x: 0, y: 0, zoom: 0.5, targetZoom: 0.5 }
   const drag = { active: false, lastX: 0, lastY: 0 }
   let hoverNode: CosmosNode | null = null
-
-  function worldToScreen(wx: number, wy: number, w: number, h: number): { x: number; y: number } {
-    return { x: (wx - cam.x) * cam.zoom + w / 2, y: (wy - cam.y) * cam.zoom + h / 2 }
-  }
 
   function frameAll(): void {
     if (dataset.nodes.length === 0) return
@@ -394,6 +727,10 @@ export function mountCosmos(opts: CosmosMountOptions): CosmosInstance {
   canvas.addEventListener('click', onClick)
 
   let raf = 0
+
+  // ADR-029 — refactor cyclo bomb : `tick()` était cyclo=106 cog=158
+  // (10 sections de rendering in-place). Maintenant orchestrateur court
+  // qui délègue aux helpers top-level (drawEdges, drawNodes, etc.).
   function tick(): void {
     const w = canvas.clientWidth
     const h = canvas.clientHeight
@@ -401,233 +738,32 @@ export function mountCosmos(opts: CosmosMountOptions): CosmosInstance {
       raf = requestAnimationFrame(tick)
       return
     }
-    const dpr = window.devicePixelRatio || 1
-    if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
-      canvas.width = Math.floor(w * dpr)
-      canvas.height = Math.floor(h * dpr)
-    }
-    const ctx = canvas.getContext('2d')
+    const ctx = prepareCanvasContext(canvas, w, h)
     if (!ctx) {
       raf = requestAnimationFrame(tick)
       return
     }
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-    ctx.clearRect(0, 0, w, h)
     cam.zoom += (cam.targetZoom - cam.zoom) * 0.15
 
-    const z = cam.zoom
-    const showLabels = z > 0.85
-    const showAllLabels = z > 1.6
-    const t = performance.now() / 1000
-
-    const padding = 200 / z
-    const wx0 = cam.x - w / (2 * z) - padding
-    const wx1 = cam.x + w / (2 * z) + padding
-    const wy0 = cam.y - h / (2 * z) - padding
-    const wy1 = cam.y + h / (2 * z) + padding
-
-    // Edges
-    ctx.lineWidth = 0.4
-    const edgeAlpha = z < 0.4 ? 0.04 : z < 0.8 ? 0.08 : 0.13
-    ctx.strokeStyle = `rgba(180,210,235,${edgeAlpha})`
-    ctx.beginPath()
-    const drawEdge = z > 0.55 ? 1 : z > 0.3 ? 2 : 4
-    for (let i = 0; i < dataset.edges.length; i += drawEdge) {
-      const e = dataset.edges[i]
-      const s = dataset.byId.get(e.s)
-      const tt = dataset.byId.get(e.t)
-      if (!s || !tt) continue
-      if ((s.x < wx0 && tt.x < wx0) || (s.x > wx1 && tt.x > wx1)) continue
-      if ((s.y < wy0 && tt.y < wy0) || (s.y > wy1 && tt.y > wy1)) continue
-      const sp = worldToScreen(s.x, s.y, w, h)
-      const tp = worldToScreen(tt.x, tt.y, w, h)
-      ctx.moveTo(sp.x, sp.y)
-      ctx.lineTo(tp.x, tp.y)
-    }
-    ctx.stroke()
-
-    // Active → impacted dashed flow
-    const active = dataset.nodes.find((n) => n.active)
-    if (active) {
-      const activeP = worldToScreen(active.x, active.y, w, h)
-      ctx.lineWidth = 1.2
-      const dash = (t * 30) % 12
-      ctx.setLineDash([4, 4])
-      ctx.lineDashOffset = -dash
-      ctx.strokeStyle = 'rgba(255,210,90,0.65)'
-      const neighbours = adj.get(active.id)
-      if (neighbours) {
-        for (const id of neighbours) {
-          const n = dataset.byId.get(id)
-          if (!n) continue
-          const np = worldToScreen(n.x, n.y, w, h)
-          ctx.beginPath()
-          ctx.moveTo(activeP.x, activeP.y)
-          ctx.lineTo(np.x, np.y)
-          ctx.stroke()
-        }
-      }
-      ctx.setLineDash([])
+    const rc: RenderContext = {
+      ctx,
+      dataset,
+      cam,
+      adj,
+      opts,
+      viewport: computeViewport(cam, w, h),
+      w,
+      h,
+      t: performance.now() / 1000,
+      z: cam.zoom,
     }
 
-    // Hovered hook stage → bezier arcs to impacted files
-    const hoveredStage = opts.getHoveredStage?.() ?? null
-    let dimByStage: Set<number> | null = null
-    if (hoveredStage) {
-      const pins = opts.getHookPins?.() ?? {}
-      const pin = pins[hoveredStage]
-      const impacts = opts.getStageImpacts?.()?.[hoveredStage] ?? []
-      if (pin && impacts.length > 0) {
-        dimByStage = new Set()
-        ctx.strokeStyle = 'rgba(120,220,240,0.55)'
-        ctx.lineWidth = 1.1
-        ctx.setLineDash([3, 3])
-        ctx.lineDashOffset = -((t * 18) % 6)
-        for (const apiId of impacts) {
-          const target = dataset.byApiId.get(apiId) ?? dataset.byPath.get(apiId)
-          if (!target) continue
-          dimByStage.add(target.id)
-          const tp = worldToScreen(target.x, target.y, w, h)
-          const cx = (pin.x + tp.x) / 2 - 80
-          ctx.beginPath()
-          ctx.moveTo(pin.x, pin.y)
-          ctx.bezierCurveTo(cx, pin.y, cx, tp.y, tp.x, tp.y)
-          ctx.stroke()
-        }
-        ctx.setLineDash([])
-        ctx.strokeStyle = 'rgba(120,220,240,0.85)'
-        ctx.lineWidth = 1.5
-        for (const id of dimByStage) {
-          const target = dataset.byId.get(id)
-          if (!target) continue
-          const tp = worldToScreen(target.x, target.y, w, h)
-          ctx.beginPath()
-          ctx.arc(tp.x, tp.y, 6, 0, Math.PI * 2)
-          ctx.stroke()
-        }
-      }
-    }
-
-    // Tree-hover halo
-    const treeHoverId = opts.getTreeHoverId?.() ?? null
-    if (treeHoverId != null) {
-      const target = dataset.byId.get(treeHoverId)
-      if (target) {
-        const tp = worldToScreen(target.x, target.y, w, h)
-        const pulse = (Math.sin(t * 4) + 1) / 2
-        ctx.strokeStyle = `rgba(255,255,255,${0.5 + pulse * 0.4})`
-        ctx.lineWidth = 1.5
-        ctx.beginPath()
-        ctx.arc(tp.x, tp.y, 12 + pulse * 4, 0, Math.PI * 2)
-        ctx.stroke()
-        ctx.strokeStyle = `rgba(255,255,255,${0.2 + pulse * 0.2})`
-        ctx.beginPath()
-        ctx.arc(tp.x, tp.y, 24 + pulse * 6, 0, Math.PI * 2)
-        ctx.stroke()
-      }
-    }
-
-    // Nodes
-    const baseR = z < 0.35 ? 1.4 : z < 0.7 ? 1.9 : 2.4
-    for (const n of dataset.nodes) {
-      if (n.x < wx0 || n.x > wx1 || n.y < wy0 || n.y > wy1) continue
-      const p = worldToScreen(n.x, n.y, w, h)
-      let r = baseR + (n.hub ? 1.6 : 0) + (n.hot ? 0.6 : 0)
-      if (n.active) r = Math.max(r, 5)
-      if (n.kind === 'barrel') r = Math.max(r * 0.65, 1.2)
-
-      const dimmed = dimByStage && !dimByStage.has(n.id) && !n.active
-      ctx.globalAlpha = dimmed ? 0.18 : 1
-      ctx.fillStyle = n.color
-
-      if (n.kind === 'barrel') {
-        ctx.beginPath()
-        ctx.arc(p.x, p.y, r, 0, Math.PI * 2)
-        ctx.strokeStyle = n.color
-        ctx.lineWidth = 1
-        ctx.stroke()
-      } else {
-        ctx.beginPath()
-        ctx.arc(p.x, p.y, r, 0, Math.PI * 2)
-        ctx.fill()
-      }
-
-      if (n.hub) {
-        ctx.strokeStyle = 'rgba(255,255,255,0.45)'
-        ctx.lineWidth = 0.7
-        ctx.beginPath()
-        ctx.arc(p.x, p.y, r + 1.2, 0, Math.PI * 2)
-        ctx.stroke()
-      }
-
-      if (n.hot && !n.active) {
-        const pulse = (Math.sin(t * 2 + n.id) + 1) / 2
-        ctx.strokeStyle = `rgba(255,210,90,${0.15 + pulse * 0.2})`
-        ctx.lineWidth = 0.8
-        ctx.beginPath()
-        ctx.arc(p.x, p.y, r + 2.5 + pulse * 1.5, 0, Math.PI * 2)
-        ctx.stroke()
-      }
-
-      if (n.impacted) {
-        ctx.strokeStyle = 'rgba(255,210,90,0.7)'
-        ctx.lineWidth = 1
-        ctx.beginPath()
-        ctx.arc(p.x, p.y, r + 2.5, 0, Math.PI * 2)
-        ctx.stroke()
-      }
-
-      if (n.active) {
-        ctx.fillStyle = '#ffffff'
-        ctx.beginPath()
-        ctx.arc(p.x, p.y, r, 0, Math.PI * 2)
-        ctx.fill()
-        for (let i = 0; i < 3; i++) {
-          const tt = ((t + i * 0.4) % 1.2) / 1.2
-          ctx.strokeStyle = `rgba(255,255,255,${(1 - tt) * 0.5})`
-          ctx.lineWidth = 1.2
-          ctx.beginPath()
-          ctx.arc(p.x, p.y, r + tt * 24, 0, Math.PI * 2)
-          ctx.stroke()
-        }
-      }
-
-      ctx.globalAlpha = 1
-
-      if (showAllLabels || (showLabels && (n.hub || n.active || n.impacted || n.hot)) || (hoverNode && hoverNode.id === n.id)) {
-        ctx.fillStyle = n.active ? '#ffffff' : n.impacted ? 'rgba(255,210,90,0.95)' : 'rgba(220,235,245,0.85)'
-        ctx.font = `${n.active ? 600 : 500} ${n.active ? 11 : 10}px JetBrains Mono, ui-monospace, monospace`
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'top'
-        ctx.fillText(n.name, p.x, p.y + r + 2)
-      }
-    }
-
-    // Hover tooltip
-    if (hoverNode) {
-      const n = hoverNode
-      const p = worldToScreen(n.x, n.y, w, h)
-      const lines = [n.name, `${n.pkg} · ${n.dir}`, `${n.loc} LOC${n.hub ? ' · hub' : ''}${n.hot ? ' · hot' : ''}`]
-      const W = 200
-      const H = 52
-      const tx = Math.min(p.x + 12, w - W - 8)
-      const ty = Math.min(p.y + 12, h - H - 8)
-      ctx.fillStyle = 'rgba(15,15,20,0.92)'
-      ctx.strokeStyle = 'rgba(120,200,220,0.45)'
-      ctx.lineWidth = 1
-      ctx.fillRect(tx, ty, W, H)
-      ctx.strokeRect(tx + 0.5, ty + 0.5, W - 1, H - 1)
-      ctx.fillStyle = '#e2e8f0'
-      ctx.font = '600 11px JetBrains Mono, monospace'
-      ctx.textAlign = 'left'
-      ctx.textBaseline = 'top'
-      ctx.fillText(lines[0], tx + 8, ty + 7)
-      ctx.fillStyle = 'rgba(180,200,220,0.75)'
-      ctx.font = '10px JetBrains Mono, monospace'
-      ctx.fillText(lines[1], tx + 8, ty + 22)
-      ctx.fillStyle = 'rgba(140,180,200,0.7)'
-      ctx.fillText(lines[2], tx + 8, ty + 36)
-    }
+    drawEdges(rc)
+    drawActiveFlow(rc)
+    const dimByStage = drawHookStageArcs(rc)
+    drawTreeHoverHalo(rc)
+    drawNodes(rc, dimByStage, hoverNode)
+    drawHoverTooltip(rc, hoverNode)
 
     raf = requestAnimationFrame(tick)
   }
