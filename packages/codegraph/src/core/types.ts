@@ -1,14 +1,14 @@
-// ADR-006
+// ADR-030
 /**
- * CodeGraph Core Types — CANONICAL CONTRACT
+ * CodeGraph Core Types — INTERNAL TYPES (= TS shape, libre d'évoluer)
  *
- * ⚠ Top hub (in:57+). Modifications conservatives uniquement.
+ * ⚠ Top hub (in:57+). La frontière publique est le JSON sérialisé via
+ * `snapshot.json`, PAS ce fichier TS. Cf. ADR-030 (supersedes ADR-006) +
+ * test `snapshot-schema-invariant.test.ts` qui verrouille la shape JSON.
  *
- * Cf. ADR-006 : pas de breaking change sans deprecation cycle. On
- * ajoute des champs optionnels, on ne supprime ni ne renomme. Tous les
- * types ici servent de ground-truth schema pour producers (extractors/)
- * + consumers (synopsis/, facts/, diff/, check/, incremental/) +
- * snapshot.json sérialisé (Sentinel, codegraph-mcp, hooks externes).
+ * Le code interne est libre d'évoluer — découpages, renommages,
+ * réorganisations — tant que la shape sérialisée reste stable (sinon
+ * bumper `meta.version` côté snapshot-store).
  *
  * Three consumers in mind :
  * 1. The CLI (analyze, diff, orphans)
@@ -148,7 +148,19 @@ export interface GraphEdge {
 
 // ─── Snapshot ────────────────────────────────────────────────────────────────
 
-export interface GraphSnapshot {
+/**
+ * ADR-033 sub-domain — **Graph core**.
+ *
+ * Structure de base : nodes, edges, stats + meta-header (version,
+ * generatedAt, commitHash, rootDir) + fondations structurelles
+ * consommées par les détecteurs en aval (symbolRefs, typedCalls).
+ *
+ * Phase 1 ADR-033 (à venir) matérialisera ce sous-domaine dans
+ * `snapshot.json` (= graph core seul, parse léger). Phase 2 exposera
+ * `loadGraphCore(dir): Promise<GraphCore>` pour les consumers qui ne
+ * touchent qu'au graph structurel.
+ */
+export interface GraphCore {
   /** Schema version for forward compatibility */
   version: '1'
 
@@ -188,7 +200,21 @@ export interface GraphSnapshot {
    * Optionnel : snapshots antérieurs ou détecteur désactivé n'en ont pas.
    */
   typedCalls?: TypedCalls
+}
 
+/**
+ * ADR-033 sub-domain — **Detector outputs**.
+ *
+ * Facts per-instance produits par les détecteurs spécialisés (sécurité,
+ * complexité, dette, hygiène SQL/package, taint, etc.). Chaque champ est
+ * un Array<{file, line, ...}> ou un bundle d'arrays similaire.
+ *
+ * Phase 1 ADR-033 (à venir) matérialisera chaque champ dans
+ * `.codegraph/snapshot.detectors/<name>.ndjson` — un fact par ligne,
+ * streamable, parse partiel possible. Phase 2 exposera
+ * `loadDetectorOutput(dir, name)`.
+ */
+export interface DetectorOutputs {
   /**
    * Structural Map — cycles détectés (phase 1.3 du PLAN.md).
    * Tarjan SCC sur graphe combiné (import + event + queue + dynamic-load).
@@ -235,38 +261,12 @@ export interface GraphSnapshot {
   envUsage?: EnvVarUsage[]
 
   /**
-   * Structural Map — module-level metrics (phase 3.7 #5 + #6).
-   * Pour chaque fichier : PageRank (import subgraph), fan-in / fan-out,
-   * complexité Henry-Kafura `(fanIn × fanOut)² × loc`. Signale les hubs
-   * critiques (haut PageRank) et les god-modules (haut Henry-Kafura). Optionnel.
-   */
-  moduleMetrics?: ModuleMetrics[]
-
-  /**
-   * Structural Map — component (folder-level) metrics (phase 3.7 #2).
-   * Instability / Abstractness / Distance (Robert Martin, 1994). Une ligne
-   * par dossier à la granularité configurée. Permet de voir d'un coup d'œil
-   * les « zones of pain » (stable + concrete) et « zones of uselessness »
-   * (instable + abstrait). Optionnel.
-   */
-  componentMetrics?: ComponentMetrics[]
-
-  /**
    * Structural Map — Taint analysis (phase 3.8 #3).
    * Flux source non-trusté → sink dangereux sans passage par un sanitizer
    * déclaré. Analyse intra-fonction v1. Optionnel — désactivé par default
    * si aucun `taint-rules.json` n'est présent.
    */
   taintViolations?: TaintViolation[]
-
-  /**
-   * Structural Map — Dependency Structure Matrix (phase 3.8 #4).
-   * DSM précalculé à la granularité `container` (premiers N segments du chemin),
-   * edges `import` uniquement. Signal architectural de haut niveau : SCCs
-   * visibles sous forme de blocs + back-edges matérialisant les cycles.
-   * Un DSM file-level est calculable via la CLI `codegraph dsm`. Optionnel.
-   */
-  dsm?: DsmResult
 
   /**
    * Structural Map — package.json deps hygiene (phase 3.8 #7).
@@ -390,6 +390,7 @@ export interface GraphSnapshot {
     uncoveredFiles: number
     coverageRatio: number
   }
+
   /**
    * Paires de fichiers fréquemment co-modifiés sur les N derniers
    * jours (default 90j). Source: `git log --name-only`. Filtre :
@@ -405,6 +406,7 @@ export interface GraphSnapshot {
     totalCommitsTo: number
     jaccard: number
   }>
+
   /**
    * Schema SQL Postgres détecté à partir des migrations (`*.sql`).
    * Tables + colonnes + indexes + foreignKeys + dérivé fkWithoutIndex
@@ -524,171 +526,6 @@ export interface GraphSnapshot {
       file: string; line: number; allocKind: string; containingSymbol: string
     }>
   }
-
-  /**
-   * Per-function cyclomatic + cognitive complexity (Top-5 graph theory uplift).
-   * Calcule pour TOUTES les fonctions/methodes/arrows (pas juste longues).
-   * Cf. extractors/function-complexity.ts.
-   */
-  functionComplexity?: Array<{
-    file: string
-    name: string
-    line: number
-    cyclomatic: number
-    cognitive: number
-    containingClass: string
-  }>
-
-  /**
-   * Spectral graph metrics — Fiedler eigenvalue λ₂ (Cycle 2bis cross-discipline).
-   * Cf. extractors/spectral-graph.ts. Calcule la connectivité algébrique
-   * par sous-graphe (scope = 3 path segments).
-   */
-  spectralMetrics?: Array<{
-    scope: string
-    nodeCount: number
-    edgeCount: number
-    fiedlerX1000: number
-    cheegerBound: number
-  }>
-
-  /**
-   * Symbol callee Shannon entropy (Cycle 2bis cross-discipline). Cf.
-   * extractors/symbol-entropy.ts.
-   */
-  symbolEntropy?: Array<{
-    fromSymbol: string
-    callCount: number
-    distinctCallees: number
-    entropyX1000: number
-  }>
-
-  /**
-   * Signature near-duplicates via Hamming distance (Cycle 2bis). Cf.
-   * extractors/signature-duplication.ts.
-   */
-  signatureDuplicates?: Array<{
-    symbolA: string
-    symbolB: string
-    hamming: number
-    signatureA: string
-    signatureB: string
-  }>
-
-  /**
-   * Persistent cycles — TDA approximation (Edelsbrunner-Letscher-Zomorodian).
-   * Cycles d'imports persistant à travers l'historique git = structurels.
-   * Cf. extractors/persistent-cycles.ts.
-   */
-  persistentCycles?: Array<{
-    cycleId: string
-    sampleNodes: string[]
-    snapshotCount: number
-    totalSnapshots: number
-    persistenceX1000: number
-    firstSeenIso: string
-    lastSeenIso: string
-    gated: boolean
-  }>
-
-  /**
-   * Lyapunov exponent approximation sur co-change history (chaos detection).
-   * Cf. extractors/lyapunov-cochange.ts.
-   */
-  lyapunovMetrics?: Array<{
-    file: string
-    totalCoChanges: number
-    partnerCount: number
-    lyapunovX1000: number
-  }>
-
-  /**
-   * Min-cut entre paires de packages — théorie des flots (Ford-Fulkerson).
-   * Mesure objective du coût de séparation entre 2 packages.
-   * Cf. extractors/package-mincut.ts.
-   */
-  packageMinCuts?: Array<{
-    fromPackage: string
-    toPackage: string
-    edgeCount: number
-    minCut: number
-    sampleEdges: string[]
-  }>
-
-  /**
-   * Information Bottleneck approximation (Tishby/Pereira/Bialek 1999).
-   * Cf. extractors/information-bottleneck.ts.
-   */
-  informationBottlenecks?: Array<{
-    symbol: string
-    callerCount: number
-    calleeCount: number
-    bottleneckScoreX1000: number
-  }>
-
-  /**
-   * Newman-Girvan community detection via Louvain (Blondel 2008).
-   * 8e discipline mathematique. Cf. extractors/community-detection.ts.
-   */
-  importCommunities?: Array<{
-    file: string
-    communityId: number
-    physicalPackage: string
-    misplaced: 0 | 1
-  }>
-
-  /**
-   * Modularity Q score global (Newman-Girvan 2004) + stats globaux.
-   */
-  modularityScore?: {
-    globalModularityX1000: number
-    communityCount: number
-    misplacedCount: number
-  }
-
-  /**
-   * Markov chain stationary distribution sur stabilité des facts.
-   * Cf. extractors/fact-stability.ts.
-   */
-  factStabilities?: Array<{
-    relationName: string
-    snapshotsTotal: number
-    stableTransitions: number
-    stationaryStableX1000: number
-    avgTupleCount: number
-  }>
-
-  /**
-   * Bayesian co-change conditional P(B|A) — 9e discipline.
-   * Calculé depuis CoChangePair.totalCommitsFrom/To. Asymétrique
-   * (P(B|A) ≠ P(A|B)). Émis dans les facts uniquement.
-   */
-  bayesianCoChanges?: Array<{
-    driver: string
-    follower: string
-    conditionalProbX1000: number
-  }>
-
-  /**
-   * Normalized Compression Distance (NCD Kolmogorov-approximé).
-   * Cf. extractors/compression-similarity.ts.
-   */
-  compressionDistances?: Array<{
-    symbolA: string
-    symbolB: string
-    ncdX1000: number
-  }>
-
-  /**
-   * Granger causality sur séquences git (lag-1).
-   * Cf. extractors/granger-causality.ts.
-   */
-  grangerCausalities?: Array<{
-    driverFile: string
-    followerFile: string
-    observations: number
-    excessConditionalX1000: number
-  }>
 
   /**
    * Security patterns (Phase 5 Tier 16) — 4 facts complementaires
@@ -1008,6 +845,232 @@ export interface GraphSnapshot {
     issue: string
   }>
 }
+
+/**
+ * ADR-033 sub-domain — **Snapshot metrics**.
+ *
+ * Métriques cross-discipline calculées sur le graph : PageRank (Brin/Page),
+ * Henry-Kafura, Martin I/A/D, DSM (Steward 1981), Fiedler eigenvalue λ₂,
+ * Shannon entropy, Hamming distance, TDA persistent homology, Lyapunov
+ * exponent, Ford-Fulkerson min-cut, Tishby Information Bottleneck, Louvain
+ * community detection, Newman-Girvan modularity, Markov stationary, Bayesian
+ * conditional probability, Kolmogorov NCD, Granger causality.
+ *
+ * Format hétérogène : Arrays<{file, ...}> per-file/per-symbol pour la
+ * plupart, objets imbriqués pour les agrégats globaux (modularityScore, dsm).
+ *
+ * Phase 1 ADR-033 (à venir) matérialisera ce sous-domaine dans
+ * `.codegraph/snapshot.metrics.json` (objet unique ~10-20 KB). Phase 2
+ * exposera `loadMetrics(dir): Promise<SnapshotMetrics>`.
+ */
+export interface SnapshotMetrics {
+  /**
+   * Structural Map — module-level metrics (phase 3.7 #5 + #6).
+   * Pour chaque fichier : PageRank (import subgraph), fan-in / fan-out,
+   * complexité Henry-Kafura `(fanIn × fanOut)² × loc`. Signale les hubs
+   * critiques (haut PageRank) et les god-modules (haut Henry-Kafura). Optionnel.
+   */
+  moduleMetrics?: ModuleMetrics[]
+
+  /**
+   * Structural Map — component (folder-level) metrics (phase 3.7 #2).
+   * Instability / Abstractness / Distance (Robert Martin, 1994). Une ligne
+   * par dossier à la granularité configurée. Permet de voir d'un coup d'œil
+   * les « zones of pain » (stable + concrete) et « zones of uselessness »
+   * (instable + abstrait). Optionnel.
+   */
+  componentMetrics?: ComponentMetrics[]
+
+  /**
+   * Structural Map — Dependency Structure Matrix (phase 3.8 #4).
+   * DSM précalculé à la granularité `container` (premiers N segments du chemin),
+   * edges `import` uniquement. Signal architectural de haut niveau : SCCs
+   * visibles sous forme de blocs + back-edges matérialisant les cycles.
+   * Un DSM file-level est calculable via la CLI `codegraph dsm`. Optionnel.
+   */
+  dsm?: DsmResult
+
+  /**
+   * Per-function cyclomatic + cognitive complexity (Top-5 graph theory uplift).
+   * Calcule pour TOUTES les fonctions/methodes/arrows (pas juste longues).
+   * Cf. extractors/function-complexity.ts.
+   */
+  functionComplexity?: Array<{
+    file: string
+    name: string
+    line: number
+    cyclomatic: number
+    cognitive: number
+    containingClass: string
+  }>
+
+  /**
+   * Spectral graph metrics — Fiedler eigenvalue λ₂ (Cycle 2bis cross-discipline).
+   * Cf. extractors/spectral-graph.ts. Calcule la connectivité algébrique
+   * par sous-graphe (scope = 3 path segments).
+   */
+  spectralMetrics?: Array<{
+    scope: string
+    nodeCount: number
+    edgeCount: number
+    fiedlerX1000: number
+    cheegerBound: number
+  }>
+
+  /**
+   * Symbol callee Shannon entropy (Cycle 2bis cross-discipline). Cf.
+   * extractors/symbol-entropy.ts.
+   */
+  symbolEntropy?: Array<{
+    fromSymbol: string
+    callCount: number
+    distinctCallees: number
+    entropyX1000: number
+  }>
+
+  /**
+   * Signature near-duplicates via Hamming distance (Cycle 2bis). Cf.
+   * extractors/signature-duplication.ts.
+   */
+  signatureDuplicates?: Array<{
+    symbolA: string
+    symbolB: string
+    hamming: number
+    signatureA: string
+    signatureB: string
+  }>
+
+  /**
+   * Persistent cycles — TDA approximation (Edelsbrunner-Letscher-Zomorodian).
+   * Cycles d'imports persistant à travers l'historique git = structurels.
+   * Cf. extractors/persistent-cycles.ts.
+   */
+  persistentCycles?: Array<{
+    cycleId: string
+    sampleNodes: string[]
+    snapshotCount: number
+    totalSnapshots: number
+    persistenceX1000: number
+    firstSeenIso: string
+    lastSeenIso: string
+    gated: boolean
+  }>
+
+  /**
+   * Lyapunov exponent approximation sur co-change history (chaos detection).
+   * Cf. extractors/lyapunov-cochange.ts.
+   */
+  lyapunovMetrics?: Array<{
+    file: string
+    totalCoChanges: number
+    partnerCount: number
+    lyapunovX1000: number
+  }>
+
+  /**
+   * Min-cut entre paires de packages — théorie des flots (Ford-Fulkerson).
+   * Mesure objective du coût de séparation entre 2 packages.
+   * Cf. extractors/package-mincut.ts.
+   */
+  packageMinCuts?: Array<{
+    fromPackage: string
+    toPackage: string
+    edgeCount: number
+    minCut: number
+    sampleEdges: string[]
+  }>
+
+  /**
+   * Information Bottleneck approximation (Tishby/Pereira/Bialek 1999).
+   * Cf. extractors/information-bottleneck.ts.
+   */
+  informationBottlenecks?: Array<{
+    symbol: string
+    callerCount: number
+    calleeCount: number
+    bottleneckScoreX1000: number
+  }>
+
+  /**
+   * Newman-Girvan community detection via Louvain (Blondel 2008).
+   * 8e discipline mathematique. Cf. extractors/community-detection.ts.
+   */
+  importCommunities?: Array<{
+    file: string
+    communityId: number
+    physicalPackage: string
+    misplaced: 0 | 1
+  }>
+
+  /**
+   * Modularity Q score global (Newman-Girvan 2004) + stats globaux.
+   */
+  modularityScore?: {
+    globalModularityX1000: number
+    communityCount: number
+    misplacedCount: number
+  }
+
+  /**
+   * Markov chain stationary distribution sur stabilité des facts.
+   * Cf. extractors/fact-stability.ts.
+   */
+  factStabilities?: Array<{
+    relationName: string
+    snapshotsTotal: number
+    stableTransitions: number
+    stationaryStableX1000: number
+    avgTupleCount: number
+  }>
+
+  /**
+   * Bayesian co-change conditional P(B|A) — 9e discipline.
+   * Calculé depuis CoChangePair.totalCommitsFrom/To. Asymétrique
+   * (P(B|A) ≠ P(A|B)). Émis dans les facts uniquement.
+   */
+  bayesianCoChanges?: Array<{
+    driver: string
+    follower: string
+    conditionalProbX1000: number
+  }>
+
+  /**
+   * Normalized Compression Distance (NCD Kolmogorov-approximé).
+   * Cf. extractors/compression-similarity.ts.
+   */
+  compressionDistances?: Array<{
+    symbolA: string
+    symbolB: string
+    ncdX1000: number
+  }>
+
+  /**
+   * Granger causality sur séquences git (lag-1).
+   * Cf. extractors/granger-causality.ts.
+   */
+  grangerCausalities?: Array<{
+    driverFile: string
+    followerFile: string
+    observations: number
+    excessConditionalX1000: number
+  }>
+}
+
+/**
+ * Snapshot complet — intersection des trois sous-domaines ADR-033
+ * ([GraphCore], [DetectorOutputs], [SnapshotMetrics]).
+ *
+ * Préserve l'accès plat (`snapshot.magicNumbers`, `snapshot.nodes`,
+ * `snapshot.moduleMetrics`) pour back-compat absolue avec les call-sites
+ * existants. La structure sérialisée JSON (`snapshot.json`) reste
+ * stable (cf. test `snapshot-schema-invariant.test.ts`).
+ *
+ * Le découpage en sous-interfaces est purement type-level — ADR-033 Phase 1
+ * matérialisera physiquement chaque sous-domaine (graph core dans
+ * `snapshot.json`, detectors en NDJSON, metrics en JSON). Phase 2 exposera
+ * `loadGraphCore`, `loadDetectorOutput`, `loadMetrics` typés sur ces sub-types.
+ */
+export interface GraphSnapshot extends GraphCore, DetectorOutputs, SnapshotMetrics {}
 
 /** Re-export du type produit par `extractors/oauth-scope-literals`. */
 export interface OauthScopeLiteralRef {

@@ -102,6 +102,8 @@ dette à refondre.
 
 <!-- AUTO-GÉNÉRÉ depuis les marqueurs ADR-NNN du code source. Voir @liby-tools/adr-toolkit. NE PAS éditer à la main. -->
 
+- `packages/codegraph/src/core/types.ts`
+
 
 ## Tested by
 

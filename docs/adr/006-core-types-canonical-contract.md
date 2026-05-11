@@ -79,7 +79,6 @@ incrémental en bug de prod silencieux. Pas reproduisible.
 
 - `packages/codegraph/src/check/types.ts`
 - `packages/codegraph/src/core/framework-conventions.ts`
-- `packages/codegraph/src/core/types.ts`
 - `packages/codegraph/src/diff/types.ts`
 - `packages/salsa/src/types.ts`
 
