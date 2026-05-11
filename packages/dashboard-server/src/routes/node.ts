@@ -1,7 +1,10 @@
 import type { FastifyInstance } from 'fastify'
 import type { DashboardState } from '../state.js'
-import { loadSnapshot } from '../state.js'
 import type { GraphSnapshot } from '@liby-tools/codegraph'
+import {
+  loadGraphCore,
+  loadDetectorOutput,
+} from '@liby-tools/codegraph/snapshot-loader'
 
 /**
  * Sub-shapes minimalistes — sous-ensemble strict des champs `GraphSnapshot`
@@ -240,20 +243,50 @@ export async function registerNodeRoutes(
     if (!q.id) {
       return reply.code(400).send({ error: 'id query param required' })
     }
-    await loadSnapshot(state)
-    if (!state.snapshotData) {
+
+    // ADR-033 Phase 3 — migration loader. Préalablement
+    // `await loadSnapshot(state)` chargeait le fat blob complet
+    // (~50+ champs en RAM). On charge maintenant uniquement les
+    // sous-domaines consommés : graph core (pour nodes + edges) +
+    // 6 detector outputs.
+    //
+    // Sur snapshot v3 (= sub-files Phase 1 présents), chaque
+    // loadDetectorOutput lit son `.codegraph/snapshot.detectors/<name>.ndjson`
+    // dédié. Sur snapshot v2 legacy, fallback transparent au fat blob
+    // (7 lectures redondantes, cas rare post-2026).
+    //
+    // Trade-off : perte du support `snapshot-live.json` (artefact watcher
+    // pré-Phase-2 ADR-027 conservé pour /api/snapshot). Cohérent avec
+    // PR #64 (/api/snapshot/meta) et PR #67 (/api/tensions).
+    const [
+      core,
+      longFunctions,
+      todos,
+      envUsage,
+      driftSignals,
+      coChangePairs,
+      truthPoints,
+    ] = await Promise.all([
+      loadGraphCore(state.codegraphDir),
+      loadDetectorOutput(state.codegraphDir, 'longFunctions'),
+      loadDetectorOutput(state.codegraphDir, 'todos'),
+      loadDetectorOutput(state.codegraphDir, 'envUsage'),
+      loadDetectorOutput(state.codegraphDir, 'driftSignals'),
+      loadDetectorOutput(state.codegraphDir, 'coChangePairs'),
+      loadDetectorOutput(state.codegraphDir, 'truthPoints'),
+    ])
+    if (!core) {
       return reply.code(404).send({ error: 'no snapshot' })
     }
-    const snapshot = state.snapshotData as GraphSnapshot
     const inputs: NodeRouteInputs = {
-      nodes: snapshot.nodes,
-      edges: snapshot.edges,
-      longFunctions: snapshot.longFunctions,
-      todos: snapshot.todos,
-      envUsage: snapshot.envUsage,
-      driftSignals: snapshot.driftSignals,
-      coChangePairs: snapshot.coChangePairs,
-      truthPoints: snapshot.truthPoints,
+      nodes: core.nodes,
+      edges: core.edges,
+      longFunctions,
+      todos,
+      envUsage,
+      driftSignals,
+      coChangePairs,
+      truthPoints,
     }
     const details = nodeFromSnap(inputs, q.id)
     if (!details) {
