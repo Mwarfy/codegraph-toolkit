@@ -58,7 +58,6 @@ DB via `new SalsaDatabase()` LOCAL au test, jamais exporté.
 - `packages/codegraph/src/incremental/data-flows.ts`
 - `packages/codegraph/src/incremental/database.ts`
 - `packages/codegraph/src/incremental/deprecated-usage.ts`
-- `packages/codegraph/src/incremental/drift-patterns.ts`
 - `packages/codegraph/src/incremental/env-usage.ts`
 - `packages/codegraph/src/incremental/event-emit-sites.ts`
 - `packages/codegraph/src/incremental/metrics.ts`

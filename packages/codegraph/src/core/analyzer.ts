@@ -46,7 +46,9 @@ import { TaintDetector } from './detectors/taint-detector.js'
 import { SqlSchemaDetector } from './detectors/sql-schema-detector.js'
 import { DrizzleSchemaDetector } from './detectors/drizzle-schema-detector.js'
 import { analyzeTodos, type TodoMarker } from '../extractors/todos.js'
-import { analyzeDriftPatterns, type DriftSignal } from '../extractors/drift-patterns.js'
+// ADR-031 Phase 2 batch 6 — drift-patterns : extractor ts-morph supprimé.
+// Helpers todoToDriftSignal + types migrés vers datalog-detectors/drift-helpers.ts.
+import type { DriftSignal } from '../datalog-detectors/drift-helpers.js'
 // ADR-031 Phase 2 — eval-calls / crypto-algo / event-listener-sites :
 // extractors ts-morph supprimés, Datalog est l'unique source.
 // ADR-031 Phase 2 batch 4 — security-patterns / code-quality-patterns :
@@ -128,13 +130,16 @@ import { allDeprecatedUsage as incAllDeprecatedUsage } from '../incremental/depr
 // ADR-031 Phase 2 — wrapper Salsa crypto-algo retiré (cf. Datalog runner)
 // ADR-031 Phase 2 batch 2 — wrappers Salsa boolean-params / function-complexity retirés (cf. Datalog runner)
 // ADR-031 Phase 2 — wrapper Salsa eval-calls retiré (cf. Datalog runner)
-import { allDriftPatternsAst as incAllDriftPatternsAst } from '../incremental/drift-patterns.js'
+// ADR-031 Phase 2 batch 6 — wrapper Salsa drift-patterns retiré (Datalog seul chemin).
 import {
   allCoChangePairs as incAllCoChangePairs,
   coChangeGitHeadInput as incCoChangeGitHead,
   coChangeKnownFilesInput as incCoChangeKnownFiles,
 } from '../incremental/co-change.js'
-import { todoToDriftSignal } from '../extractors/drift-patterns.js'
+// ADR-031 Phase 2 batch 6 — `todoToDriftSignal` n'est plus appelé depuis
+// analyzer.ts (le path incremental qui l'utilisait a été retiré). L'adapter
+// Datalog `adaptDriftSignalsFromDatalog` (runner-adapter.ts) le consomme
+// désormais directement via datalog-detectors/drift-helpers.ts.
 import { setTsImportPrebuiltProject } from '../detectors/ts-imports.js'
 import {
   allModuleMetrics as incAllModuleMetrics,
@@ -1038,33 +1043,13 @@ async function runPhase2Phase1Dependent(
 ) {
   const { config, files, sharedProject, timing, incremental, datalogPatch, datalogResults } = ctx
 
+  // ADR-026 A.3 : Datalog runner = 4 AST sub-arrays plats. Adapter
+  // reconstruit DriftSignal[] et merge le 5e kind todo-no-owner.
+  // ADR-031 Phase 2 batch 6 — Datalog seul chemin. useDatalog=false → undefined.
   const driftSignals = await runDetectorTimed(timing, 'drift-patterns',
-    () => {
-      if (incremental) {
-        // Salsa cache UNIQUEMENT les patterns 1+2+4+5 (per-file AST).
-        // Pattern 3 (todo-no-owner) dépend de snapshot.todos — on l'ajoute
-        // hors-cache puis on re-trie globalement.
-        const astSignals = incAllDriftPatternsAst.get('all')
-        const todoSignals = (todos ?? [])
-          .map(todoToDriftSignal)
-          .filter((s): s is NonNullable<typeof s> => s !== null)
-        const merged = [...astSignals, ...todoSignals]
-        merged.sort((a, b) => {
-          if (a.file !== b.file) return a.file < b.file ? -1 : 1
-          if (a.line !== b.line) return a.line - b.line
-          return a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0
-        })
-        return Promise.resolve(merged)
-      }
-      // ADR-026 A.3 : Datalog runner = 4 AST sub-arrays plats. Adapter
-      // reconstruit DriftSignal[] et merge le 5e kind todo-no-owner.
-      if (datalogResults) {
-        return Promise.resolve(adaptDriftSignalsFromDatalog(
-          datalogResults.driftPatterns, todos, config.rootDir,
-        ))
-      }
-      return analyzeDriftPatterns(config.rootDir, files, sharedProject, todos)
-    })
+    () => Promise.resolve(datalogResults
+      ? adaptDriftSignalsFromDatalog(datalogResults.driftPatterns, todos, config.rootDir)
+      : undefined))
   // ADR-031 Phase 2 — Datalog seul chemin. useDatalog=false → field undefined.
   const evalCalls = await runDetectorTimed(timing, 'eval-calls',
     () => Promise.resolve(datalogPatch?.evalCalls))

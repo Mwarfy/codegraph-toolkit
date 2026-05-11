@@ -23,7 +23,8 @@
 
 import type { DatalogDetectorResults } from './runner.js'
 import type { GraphSnapshot } from '../core/types.js'
-import { todoToDriftSignal, isTodoExempt } from '../extractors/drift-patterns.js'
+// ADR-031 Phase 2 batch 6 — helpers migrés vers ./drift-helpers.
+import { todoToDriftSignal, isTodoExempt } from './drift-helpers.js'
 
 /**
  * Defaults pour les seuils des messages drift — mirror de
