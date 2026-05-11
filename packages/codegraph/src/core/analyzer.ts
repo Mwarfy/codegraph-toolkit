@@ -49,8 +49,8 @@ import { analyzeTodos, type TodoMarker } from '../extractors/todos.js'
 import { analyzeDriftPatterns, type DriftSignal } from '../extractors/drift-patterns.js'
 // ADR-031 Phase 2 — eval-calls / crypto-algo / event-listener-sites :
 // extractors ts-morph supprimés, Datalog est l'unique source.
-import { analyzeSecurityPatterns, type SecurityPatternsAggregated } from '../extractors/security-patterns.js'
-import { analyzeCodeQualityPatterns, type CodeQualityPatternsAggregated } from '../extractors/code-quality-patterns.js'
+// ADR-031 Phase 2 batch 4 — security-patterns / code-quality-patterns :
+// extractors ts-morph supprimés, Datalog est l'unique source.
 // ADR-031 Phase 2 batch 2 — function-complexity : extractor ts-morph supprimé, Datalog est l'unique source.
 import { computeSpectralMetrics, type SpectralMetric } from '../extractors/spectral-graph.js'
 import { computeSymbolEntropy, type SymbolEntropyMetric } from '../extractors/symbol-entropy.js'
@@ -65,7 +65,7 @@ import { analyzeCompressionSimilarity, type NormalizedCompressionDistance } from
 import { computeGrangerCausality, type GrangerCausality } from '../extractors/granger-causality.js'
 import { runCrossDisciplineDetectors } from '../extractors/_shared/cross-discipline-orchestrator.js'
 import { CrossDisciplineDetector } from './detectors/cross-discipline-detector.js'
-import { analyzeHardcodedSecrets, type HardcodedSecret } from '../extractors/hardcoded-secrets.js'
+// ADR-031 Phase 2 batch 4 — hardcoded-secrets : extractor ts-morph supprimé, Datalog est l'unique source.
 // ADR-031 Phase 2 batch 2 — boolean-params : extractor ts-morph supprimé, Datalog est l'unique source.
 import { analyzeDeadCode, type DeadCodeFinding } from '../extractors/dead-code.js'
 import { analyzeFloatingPromises, type FloatingPromiseSite } from '../extractors/floating-promises.js'
@@ -75,7 +75,7 @@ import { analyzeArticulationPoints, type ArticulationPoint } from '../extractors
 import { importEslintViolations, type EslintViolation } from '../extractors/eslint-import.js'
 import { findSqlNamingViolations, type SqlNamingViolation } from '../extractors/sql-naming.js'
 import { findMigrationOrderViolations, type MigrationOrderViolation } from '../extractors/sql-migration-order.js'
-import { analyzeResourceBalance, type ResourceImbalance } from '../extractors/resource-balance.js'
+// ADR-031 Phase 2 batch 4 — resource-balance : extractor ts-morph supprimé, Datalog est l'unique source.
 // ADR-031 Phase 2 batch 3 — chaîne taint (taint-sinks / sanitizers /
 // tainted-vars / arguments) : extractors ts-morph supprimés, Datalog est
 // l'unique source. NB: `taint.ts` (cross-file analyzeTaint) reste actif.
@@ -115,14 +115,13 @@ import {
   type WriteSignal as StateMachineWriteSignal,
 } from '../extractors/state-machines.js'
 import { allTsImports as incAllTsImports } from '../incremental/ts-imports.js'
-import { allCodeQualityPatterns as incAllCodeQualityPatterns } from '../incremental/code-quality-patterns.js'
-import { allSecurityPatterns as incAllSecurityPatterns } from '../incremental/security-patterns.js'
+// ADR-031 Phase 2 batch 4 — wrappers Salsa code-quality-patterns / security-patterns retirés (cf. Datalog runner)
 import { allDeadCode as incAllDeadCode } from '../incremental/dead-code.js'
 import { allDeprecatedUsage as incAllDeprecatedUsage } from '../incremental/deprecated-usage.js'
 // ADR-031 Phase 2 batch 2 — wrapper Salsa constant-expressions retiré (cf. Datalog runner)
-import { allHardcodedSecrets as incAllHardcodedSecrets } from '../incremental/hardcoded-secrets.js'
+// ADR-031 Phase 2 batch 4 — wrapper Salsa hardcoded-secrets retiré (cf. Datalog runner)
 // ADR-031 Phase 2 — wrapper Salsa magic-numbers retiré (cf. Datalog runner)
-import { allResourceBalances as incAllResourceBalances } from '../incremental/resource-balance.js'
+// ADR-031 Phase 2 batch 4 — wrapper Salsa resource-balance retiré (cf. Datalog runner)
 // ADR-031 Phase 2 batch 3 — wrappers Salsa chaîne taint retirés (cf. Datalog runner)
 // ADR-031 Phase 2 — wrapper Salsa crypto-algo retiré (cf. Datalog runner)
 // ADR-031 Phase 2 batch 2 — wrappers Salsa boolean-params / function-complexity retirés (cf. Datalog runner)
@@ -1069,23 +1068,15 @@ async function runPhase2Phase1Dependent(
     () => Promise.resolve(datalogPatch?.evalCalls))
   const cryptoCalls = await runDetectorTimed(timing, 'crypto-algo',
     () => Promise.resolve(datalogPatch?.cryptoCalls))
-  // Self-optim discovery : Salsa-isolation post-λ_lyap analysis.
-  // Cold path identique au legacy ; warm path = cache hit ~99%.
+  // ADR-031 Phase 2 batch 4 — Datalog seul chemin. useDatalog=false → undefined.
   const securityPatterns = await runDetectorTimed(timing, 'security-patterns',
-    () => incremental
-      ? Promise.resolve(incAllSecurityPatterns.get('all'))
-      : datalogPatch
-        ? Promise.resolve(datalogPatch.securityPatterns)
-        : analyzeSecurityPatterns(config.rootDir, files, sharedProject))
+    () => Promise.resolve(datalogPatch?.securityPatterns))
   // ADR-031 Phase 2 — Datalog seul chemin. useDatalog=false → field undefined.
   const eventListenerSites = await runDetectorTimed(timing, 'event-listener-sites',
     () => Promise.resolve(datalogPatch?.eventListenerSites))
+  // ADR-031 Phase 2 batch 4 — Datalog seul chemin. useDatalog=false → undefined.
   const codeQualityPatterns = await runDetectorTimed(timing, 'code-quality-patterns',
-    () => incremental
-      ? Promise.resolve(incAllCodeQualityPatterns.get('all'))
-      : datalogPatch
-        ? Promise.resolve(datalogPatch.codeQualityPatterns)
-        : analyzeCodeQualityPatterns(config.rootDir, files, sharedProject))
+    () => Promise.resolve(datalogPatch?.codeQualityPatterns))
   // ADR-031 Phase 2 batch 2 — Datalog seul chemin. useDatalog=false → undefined.
   const functionComplexity = await runDetectorTimed(timing, 'function-complexity',
     () => Promise.resolve(datalogPatch?.functionComplexity))
@@ -1104,14 +1095,9 @@ async function runPhase2Phase1Dependent(
 async function runPhase4SecurityAndQuality(ctx: DetectorPhaseContext) {
   const { config, files, sharedProject, snapshot, timing, incremental, datalogPatch } = ctx
 
-  // hardcoded-secrets : Phase A.4.1 ajoute `trigger` au runner (visitor +
-  // rule + adapter) — désormais full swap quand useDatalog actif.
+  // ADR-031 Phase 2 batch 4 — Datalog seul chemin. useDatalog=false → undefined.
   const hardcodedSecrets = await runDetectorTimed(timing, 'hardcoded-secrets',
-    () => incremental
-      ? Promise.resolve(incAllHardcodedSecrets.get('all'))
-      : datalogPatch
-        ? Promise.resolve(datalogPatch.hardcodedSecrets)
-        : analyzeHardcodedSecrets(config.rootDir, files, sharedProject))
+    () => Promise.resolve(datalogPatch?.hardcodedSecrets))
   // ADR-031 Phase 2 batch 2 — Datalog seul chemin. useDatalog=false → undefined.
   const booleanParams = await runDetectorTimed(timing, 'boolean-params',
     () => Promise.resolve(datalogPatch?.booleanParams))
@@ -1158,12 +1144,9 @@ async function runPhase5SqlAndResource(ctx: DetectorPhaseContext) {
     async () => snapshot.sqlSchema ? findSqlNamingViolations(snapshot.sqlSchema) : undefined)
   const sqlMigrationOrderViolations = await runDetectorTimed(timing, 'sql-migration-order',
     async () => snapshot.sqlSchema ? findMigrationOrderViolations(snapshot.sqlSchema) : undefined)
+  // ADR-031 Phase 2 batch 4 — Datalog seul chemin. useDatalog=false → undefined.
   const resourceImbalances = await runDetectorTimed(timing, 'resource-balance',
-    () => incremental
-      ? Promise.resolve(incAllResourceBalances.get('all'))
-      : datalogPatch
-        ? Promise.resolve(datalogPatch.resourceImbalances)
-        : analyzeResourceBalance(config.rootDir, files, sharedProject))
+    () => Promise.resolve(datalogPatch?.resourceImbalances))
 
   return { sqlNamingViolations, sqlMigrationOrderViolations, resourceImbalances }
 }
