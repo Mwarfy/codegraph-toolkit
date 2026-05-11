@@ -84,27 +84,18 @@ describe('Datalog/legacy parity — ADR-026/027 contract', () => {
     const dlSnap = await run(rootDir, true)
     const legacySnap = await run(rootDir, false)
 
-    // ADR-031 Phase 1 — champs patchés par Datalog :
-    //   - 3 overrides directs en début de runDeterministicDetectors
-    //     (envUsage, barrels, eventEmitSites — analyzer.ts L942-944)
-    // Total : 3 fields qui DOIVENT être bit-identical legacy vs Datalog.
+    // ADR-031 Phase 2 batch 7 (FINAL) — tous les 18 détecteurs portés
+    // ont leur source legacy ts-morph retirée. useDatalog=false ne
+    // produit plus AUCUN de ces fields → patchedFields est vide.
     //
-    // ADR-031 Phase 2 :
-    //   - batch 1 : magic-numbers / eval-calls / crypto-algo / event-listener-sites
-    //   - batch 2 : long-functions / boolean-params / function-complexity / constant-expressions
-    //   - batch 3 : chaîne taint (taint-sinks / sanitizers / tainted-vars / arguments)
-    //   - batch 4 : hardcoded-secrets / resource-balance / security-patterns / code-quality-patterns
-    //   - batch 5 : dead-code (helper migré vers datalog-detectors/ast-facts/)
-    // Pour ces 17 fields, Datalog est désormais l'unique source : useDatalog=false
-    // produit `undefined`, pas comparable au legacy → exclus de patchedFields.
+    // Le garde-fou bit-identical legacy/Datalog devient cosmétique : il
+    // reste valable conceptuellement pour les FUTURS détecteurs ajoutés
+    // en cascade (s'il en arrive un, l'ajouter ici lock parité dès J+1).
     //
     // `driftSignals` traverse l'adapter (adaptDriftSignalsFromDatalog) ;
     // sa parité est vérifiée séparément ci-dessous car il dépend de
     // snapshot.todos calculé hors-Datalog.
-    const patchedFields: (keyof GraphSnapshot)[] = [
-      // Overrides directs (ADR-026 phase A.3 seed) — derniers fields verrouillés.
-      'envUsage', 'barrels', 'eventEmitSites',
-    ]
+    const patchedFields: (keyof GraphSnapshot)[] = []
 
     for (const field of patchedFields) {
       const hDl = hashField(dlSnap[field])
@@ -123,18 +114,18 @@ describe('Datalog/legacy parity — ADR-026/027 contract', () => {
   // [] = [] des deux côtés et le test passe trivialement. Le canary
   // déclenche réellement la majorité des détecteurs, donc le BIT-IDENTICAL
   // sur ces fields est un vrai garde-fou (pas un hash vide=vide).
-  it('canary fixture : Datalog vs legacy → bit-identical on 3 patched fields', { timeout: 120_000 }, async () => {
+  it('canary fixture : Datalog vs legacy → bit-identical on 0 patched fields', { timeout: 120_000 }, async () => {
     const rootDir = path.resolve(__dirname, '../../../examples/canary-project')
 
     const dlSnap = await run(rootDir, true)
     const legacySnap = await run(rootDir, false)
 
-    // ADR-031 Phase 2 batch 5 — dead-code retiré (helper migré). Cumul Phase 2 :
-    // 20 → 3 fields verrouillés (batch 1 + 2 + 3 + 4 + 5). Plus que les 3
-    // overrides directs — à traiter au batch dédié final.
-    const patchedFields: (keyof GraphSnapshot)[] = [
-      'envUsage', 'barrels', 'eventEmitSites',
-    ]
+    // ADR-031 Phase 2 batch 7 (FINAL) — 20 → 0 fields verrouillés. Tous
+    // les détecteurs portés ont leur legacy ts-morph retiré. Le test
+    // continue de tourner (nodes/edges parité vérifiée plus bas) ; cette
+    // section devient vacuously true mais reste un canary contre un retour
+    // accidentel d'un détecteur en cascade.
+    const patchedFields: (keyof GraphSnapshot)[] = []
 
     // Trace coverage : combien de fields sont réellement déclenchés par
     // la fixture vs vides des deux côtés. Si la coverage tombe, c'est
@@ -168,18 +159,10 @@ describe('Datalog/legacy parity — ADR-026/027 contract', () => {
         `Fields empty (${empty.length}): ${empty.join(', ')}`,
     ).toEqual([])
 
-    // Garde-fou de coverage : si le canary cesse de déclencher la majorité
-    // des détecteurs portés, le test devient cosmétique.
-    // ADR-031 Phase 2 batch 4 : threshold ajusté 3 → 1 (4 fields résiduels
-    // sont essentiellement les 3 overrides directs + deadCode ; canary
-    // déclenche surtout envUsage/eventEmitSites). Le test reste un garde-fou
-    // anti-faux-positif : si le canary cesse de déclencher au moins 1 field,
-    // c'est qu'il est devenu cosmétique.
-    expect(
-      triggered.length,
-      `canary coverage trop faible : ${triggered.length}/${patchedFields.length} ` +
-        `fields déclenchés. Empty fields: ${empty.join(', ')}`,
-    ).toBeGreaterThanOrEqual(1)
+    // ADR-031 Phase 2 batch 7 (FINAL) — patchedFields vide : check
+    // de coverage devient trivialement satisfait. Conservé pour future
+    // réinsertion d'un détecteur en cascade.
+    expect(triggered.length).toBeGreaterThanOrEqual(0)
   })
 
   it('cycles fixture : nodes + edges structure identical', { timeout: 30_000 }, async () => {

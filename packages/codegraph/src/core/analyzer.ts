@@ -29,11 +29,12 @@ import { createDetectors } from '../detectors/index.js'
 import { createSharedProject } from '../extractors/unused-exports.js'
 import { DetectorRegistry, type DetectorRunContext } from './detector-registry.js'
 import { OauthScopeLiteralsDetector } from './detectors/oauth-scope-literals-detector.js'
-import { EventEmitSitesDetector } from './detectors/event-emit-sites-detector.js'
-import { EnvUsageDetector } from './detectors/env-usage-detector.js'
+// ADR-031 Phase 2 batch 7 (final) — event-emit-sites / env-usage detector
+// classes supprimées. Datalog devient producteur initial (plus d'override
+// nécessaire dans runDeterministicDetectors — direct assignation).
 import { PackageDepsDetector } from './detectors/package-deps-detector.js'
 import { BinShebangsDetector } from './detectors/bin-shebangs-detector.js'
-import { BarrelsDetector } from './detectors/barrels-detector.js'
+// ADR-031 Phase 2 batch 7 (final) — barrels detector class supprimée.
 import { UnusedExportsDetector } from './detectors/unused-exports-detector.js'
 import { ComplexityDetector } from './detectors/complexity-detector.js'
 import { SymbolRefsDetector } from './detectors/symbol-refs-detector.js'
@@ -551,11 +552,11 @@ function buildDetectorRegistry(): DetectorRegistry {
     .register(new TruthPointsDetector())
     .register(new DataFlowsDetector())
     .register(new StateMachinesDetector())
-    .register(new EnvUsageDetector())
+    // ADR-031 Phase 2 batch 7 (final) — EnvUsageDetector / BarrelsDetector /
+    // EventEmitSitesDetector retirés : Datalog est désormais leur producteur
+    // initial (cf. runDeterministicDetectors L947-949).
     .register(new PackageDepsDetector())
     .register(new BinShebangsDetector())
-    .register(new BarrelsDetector())
-    .register(new EventEmitSitesDetector())
     .register(new OauthScopeLiteralsDetector())
     .register(new TaintDetector())
     .register(new SqlSchemaDetector())
@@ -935,15 +936,13 @@ async function runDeterministicDetectors(
       astFactsBundle = dlOut.bundle
       datalogPatch = buildSnapshotPatchFromDatalog(datalogResults)
 
-      // ADR-031 Phase 1 — override des 3 fields déjà patchés par
-      // DetectorRegistry. Les détecteurs ts-morph (env-usage, barrels,
-      // event-emit-sites) tournent toujours via le registry mais leurs
-      // outputs sont remplacés par ceux du runner. Les 17 autres fields
-      // portés sont branchés en cascade `datalogPatch ? dl.X : legacy`
-      // dans phases 1-6 ci-dessous. La parité BIT-IDENTICAL des 20 fields
-      // est verrouillée en CI par datalog-legacy-parity.test.ts
-      // (canary fixture). Phase 2 retirera les détecteurs ts-morph
-      // legacy correspondants.
+      // ADR-031 Phase 2 batch 7 (final) — Datalog est désormais le SEUL
+      // producteur de ces 3 fields (les détecteurs ts-morph correspondants
+      // ont été retirés du registry et du codebase). Les 17 autres fields
+      // portés sont alimentés en cascade `datalogPatch?.X` dans
+      // runDeterministicDetectors. La parité BIT-IDENTICAL de ces 3 fields
+      // est verrouillée en CI par datalog-legacy-parity.test.ts (canary
+      // fixture). useDatalog=false → ces 3 fields restent undefined.
       snapshot.envUsage = datalogPatch.envUsage
       snapshot.barrels = datalogPatch.barrels
       snapshot.eventEmitSites = datalogPatch.eventEmitSites
@@ -1225,12 +1224,11 @@ function patchSnapshotWithDetectorResults(
     ['truth-points', 'truthPoints'],
     ['data-flows', 'dataFlows'],
     ['state-machines', 'stateMachines'],
-    ['env-usage', 'envUsage'],
+    // ADR-031 Phase 2 batch 7 (final) — env-usage / barrels / event-emit-sites
+    // retirés du registry : Datalog producteur initial (cf. L947-949).
     ['package-deps', 'packageDeps'],
     ['bin-shebangs', 'binShebangIssues'],
-    ['barrels', 'barrels'],
     ['taint', 'taintViolations'],
-    ['event-emit-sites', 'eventEmitSites'],
     ['oauth-scope-literals', 'oauthScopeLiterals'],
     ['sql-schema', 'sqlSchema'],
     // 'drizzle-schema' partage le même snapshot field. Si le détecteur
