@@ -25,9 +25,11 @@ describe('diffSets', () => {
 
 describe('countTensionDelta', () => {
   it('counts net cycles added/removed', () => {
+    // `cycles` est seulement compté par .length — la shape interne du
+    // cycle n'est pas inspectée par countTensionDelta. Stubs `{}` suffisent.
     const r = countTensionDelta(
-      { cycles: [{ files: ['a', 'b'] }] },
-      { cycles: [{ files: ['a', 'b'] }, { files: ['c', 'd'] }] },
+      { cycles: [{}] },
+      { cycles: [{}, {}] },
     )
     expect(r.cyclesAdded).toBe(1)
     expect(r.cyclesRemoved).toBe(0)
@@ -37,27 +39,27 @@ describe('countTensionDelta', () => {
     const r = countTensionDelta(
       {
         barrels: [
-          { file: 'a', reExportCount: 1, consumerCount: 0, lowValue: true },
-          { file: 'b', reExportCount: 2, consumerCount: 0, lowValue: true },
+          { file: 'a', lowValue: true },
+          { file: 'b', lowValue: true },
         ],
       },
-      { barrels: [{ file: 'a', reExportCount: 1, consumerCount: 0, lowValue: true }] },
+      { barrels: [{ file: 'a', lowValue: true }] },
     )
     expect(r.barrelsLowAdded).toBe(0)
     expect(r.barrelsLowRemoved).toBe(1)
   })
 
-  it('counts long fns (≥80 lines)', () => {
+  it('counts long fns (≥80 loc) — uses real GraphSnapshot field `loc`', () => {
     const r = countTensionDelta(
-      { longFunctions: [{ file: 'a', lines: 50 }] }, // < 80, ignored
-      { longFunctions: [{ file: 'a', lines: 50 }, { file: 'b', lines: 100 }] },
+      { longFunctions: [{ file: 'a', loc: 50 }] }, // < 80, ignored
+      { longFunctions: [{ file: 'a', loc: 50 }, { file: 'b', loc: 100 }] },
     )
     expect(r.longFunctionsAdded).toBe(1)
     expect(r.longFunctionsRemoved).toBe(0)
   })
 
   it('clamps negative deltas to zero (added/removed are non-negative)', () => {
-    const r = countTensionDelta({ cycles: [{ files: ['a'] }, { files: ['b'] }] }, { cycles: [{ files: ['a'] }] })
+    const r = countTensionDelta({ cycles: [{}, {}] }, { cycles: [{}] })
     expect(r.cyclesAdded).toBe(0)
     expect(r.cyclesRemoved).toBe(1)
   })
