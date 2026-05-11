@@ -95,21 +95,18 @@ describe('analyze({ useDatalog: true })', () => {
     expect(result.timing.detectors['datalog-runner']).toBeUndefined()
   })
 
-  it('produces snapshot with sémantic parity on 11 swapped fields', async () => {
+  it('produces snapshot with sémantic parity on 7 swapped fields', async () => {
     const { rootDir } = setupFixture()
     const cfg = { rootDir, include: ['src/**/*.ts'], exclude: [], entryPoints: [] }
     const legacy = await analyze(cfg)
     const datalog = await analyze(cfg, { useDatalog: true })
 
-    // ADR-031 Phase 2 batch 1+2 — 8 détecteurs retirés du legacy ts-morph
-    // (magicNumbers / evalCalls / cryptoCalls / eventListenerSites en batch 1 ;
-    // longFunctions / booleanParams / functionComplexity / constantExpressions
-    // en batch 2). Plus de parité possible (legacy=undefined vs Datalog=valeur).
-    // Garde-fou conservé via datalog-legacy-parity.test.ts pour les 12 fields restants.
-    expectSetEqual(legacy.snapshot.sanitizerCalls, datalog.snapshot.sanitizerCalls,
-      (s) => `${s.file}|${s.line}|${s.callee}|${s.containingSymbol}`, 'sanitizerCalls')
-    expectSetEqual(legacy.snapshot.taintSinks, datalog.snapshot.taintSinks,
-      (s) => `${s.file}|${s.line}|${s.kind}|${s.callee}|${s.containingSymbol}`, 'taintSinks')
+    // ADR-031 Phase 2 batch 1+2+3 — 12 détecteurs retirés du legacy ts-morph.
+    // (batch 1 : magicNumbers / evalCalls / cryptoCalls / eventListenerSites ;
+    //  batch 2 : longFunctions / booleanParams / functionComplexity / constantExpressions ;
+    //  batch 3 : taintSinks / sanitizerCalls / taintedVars / argumentsFacts).
+    // Plus de parité possible (legacy=undefined vs Datalog=valeur).
+    // Garde-fou conservé via datalog-legacy-parity.test.ts pour les 8 fields restants.
     // (longFunctions / functionComplexity / eventListenerSites retirés du legacy
     //  — cf. ADR-031 Phase 2 batch 1+2)
     expectSetEqual(legacy.snapshot.barrels, datalog.snapshot.barrels,
@@ -117,16 +114,10 @@ describe('analyze({ useDatalog: true })', () => {
     expectSetEqual(legacy.snapshot.envUsage, datalog.snapshot.envUsage,
       (u) => `${u.name}|${u.isSecret}|${u.readers.length}`, 'envUsage')
     // (constantExpressions retiré du legacy — cf. ADR-031 Phase 2 batch 2)
-    expectSetEqual(legacy.snapshot.argumentsFacts?.taintedArgs, datalog.snapshot.argumentsFacts?.taintedArgs,
-      (a) => `${a.callerFile}|${a.callerSymbol}|${a.callee}|${a.paramIndex}|${a.source}`, 'argumentsFacts.taintedArgs')
-    expectSetEqual(legacy.snapshot.argumentsFacts?.params, datalog.snapshot.argumentsFacts?.params,
-      (p) => `${p.file}|${p.symbol}|${p.paramName}|${p.paramIndex}`, 'argumentsFacts.params')
+    // (argumentsFacts retiré du legacy — cf. ADR-031 Phase 2 batch 3)
     expectSetEqual(legacy.snapshot.eventEmitSites, datalog.snapshot.eventEmitSites,
       (e) => `${e.file}|${e.line}|${e.symbol}|${e.callee}|${e.kind}`, 'eventEmitSites')
-    expectSetEqual(legacy.snapshot.taintedVars?.decls, datalog.snapshot.taintedVars?.decls,
-      (d) => `${d.file}|${d.containingSymbol}|${d.varName}|${d.line}|${d.source}`, 'taintedVars.decls')
-    expectSetEqual(legacy.snapshot.taintedVars?.argCalls, datalog.snapshot.taintedVars?.argCalls,
-      (a) => `${a.file}|${a.line}|${a.callee}|${a.argVarName}|${a.argIndex}|${a.source}`, 'taintedVars.argCalls')
+    // (taintedVars retiré du legacy — cf. ADR-031 Phase 2 batch 3)
     expectSetEqual(legacy.snapshot.resourceImbalances, datalog.snapshot.resourceImbalances,
       (r) => `${r.file}|${r.containingSymbol}|${r.line}|${r.pair}|${r.acquireCount}|${r.releaseCount}`, 'resourceImbalances')
     // securityPatterns sub-arrays
