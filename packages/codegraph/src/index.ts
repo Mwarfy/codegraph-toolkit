@@ -1,8 +1,19 @@
-// @liby-tools/codegraph — public API surface
+// ADR-032
+// @liby-tools/codegraph — public API surface (cross-package barrel)
+//
+// Barrel exposé via `"exports": { ".": "./dist/index.js" }` dans
+// package.json. Consommé par `codegraph-mcp`, `dashboard-server`, et
+// potentiellement des intégrations externes (Sentinel, hooks bash).
 //
 // Re-exports the analyzer + synopsis builder + ADR markers helper.
 // Internal modules (detectors/, extractors/, graph/, metrics/, etc.) restent
 // non-exposés ici — accessibles via paths relatifs si vraiment nécessaire.
+//
+// ADR-032 (cross-package contracts) : tout ajout/retrait d'export ici a
+// un blast radius cross-package. Les tests `tests/cross-package-codegraph.test.ts`
+// (codegraph-mcp + dashboard-server + adr-toolkit) verrouillent les exports
+// effectivement consommés — modifier doit faire péter ces tests en CI
+// AVANT le merge, pas en cascade post-merge.
 
 export * from './core/types.js'
 export { analyze } from './core/analyzer.js'

@@ -30,7 +30,7 @@
 | [029](029-clean-signals-before-refactor.md) | Avant toute refonte motivée par un signal codegraph (co-change, complexity, dead-code, hub, doc-stale, etc.... | _(pas de marker)_ |
 | [030](030-serialized-schema-vs-internal-types.md) | Le seul contrat public du toolkit est le **schéma JSON sérialisé** (`snapshot.json`, `facts.head.json`, etc... | `packages/codegraph/src/core/types.ts` |
 | [031](031-dual-path-detectors-retirement.md) | Pour les détecteurs qui ont une version Datalog (cf. ADR-026 — 18/21 détecteurs portés), la version **legac... | _(pas de marker)_ |
-| [032](032-cross-package-contracts.md) | Tout package du workspace qui dépend d'un autre (e.g. `dashboard-server` consomme `@liby-tools/codegraph/sn... | _(pas de marker)_ |
+| [032](032-cross-package-contracts.md) | Tout package du workspace qui dépend d'un autre (e.g. `dashboard-server` consomme `@liby-tools/codegraph/sn... | `packages/codegraph/src/index.ts` |
 | [033](033-sub-snapshots-fat-blob-fix.md) | Le `snapshot.json` cesse d'être un blob unique. Le graph core (`nodes`, `edges`, `stats`) reste dans `snaps... | `packages/codegraph/src/incremental/snapshot-fields.ts` |
 
 
