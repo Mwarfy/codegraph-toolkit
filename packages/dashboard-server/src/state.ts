@@ -1,6 +1,6 @@
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
-import { loadStoredSnapshot } from '@liby-tools/codegraph/snapshot-loader'
+import { loadStoredSnapshot, unwrapSnapshot } from '@liby-tools/codegraph/snapshot-loader'
 
 export interface DashboardState {
   rootDir: string
@@ -36,11 +36,10 @@ export async function loadSnapshot(state: DashboardState): Promise<boolean> {
     const parsed = JSON.parse(raw)
     state.snapshotPath = live
     state.snapshotMtime = stat.mtimeMs
-    // ADR-027 Phase 2 (v2) + ADR-033 Phase 1 (v3) : wrapper structurellement
-    // identique. On accepte les deux ; fallback couvre les snapshots
-    // pré-v2 non-wrappés (historiques).
-    const isWrapped = parsed && (parsed.version === 2 || parsed.version === 3) && parsed.payload
-    state.snapshotData = isWrapped ? parsed.payload : parsed
+    // Délègue à `unwrapSnapshot` (helper canonique snapshot-loader) :
+    // accepte tout wrapper listé dans `WRAPPER_VERSIONS` + fallback plat
+    // pré-v2. Bumper le format demande de toucher snapshot-loader.ts seul.
+    state.snapshotData = unwrapSnapshot(parsed)
     return true
   } catch {
     /* live absent → loader unifié */

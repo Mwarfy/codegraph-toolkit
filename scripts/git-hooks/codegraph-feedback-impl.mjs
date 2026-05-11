@@ -5,6 +5,7 @@
 
 import { createRequire } from 'node:module'
 import { getFixHint } from './codegraph-feedback-hints.mjs'
+import { unwrapSnapshot } from '@liby-tools/codegraph/snapshot-loader'
 const require = createRequire(import.meta.url)
 
 const fs = require('node:fs')
@@ -57,17 +58,21 @@ session.editCount += 1
 const fileState = session.seenFiles[relPath]
 const isFirstTimeOnFile = !fileState
 
-// ADR-027 Phase 2 — privilégie `snapshot.json` v2 (wrapper { version,
-// meta, payload }). Fallback sur le format legacy `snapshot-*.json` par
-// mtime pour les checkouts pré-migration.
+// Lecture du snapshot canonique. `unwrapSnapshot` accepte tout wrapper
+// listé dans WRAPPER_VERSIONS (v2 ADR-027 Phase 2 + v3 ADR-033 Phase 1
+// + bumps futurs). Le bump v3 cassait silencieusement ce hook quand le
+// check était hardcodé `=== 2` (cf. audit dette 2026-05-12 §T1.1).
+// Fallback legacy `snapshot-*.json` par mtime conservé pour les
+// checkouts pré-migration ADR-027 Phase 2.
 let snapshotPath
 let snapshot
 try {
   const v2 = path.join(codegraphDir, 'snapshot.json')
   const raw = fs.readFileSync(v2, 'utf-8')
   const parsed = JSON.parse(raw)
-  if (parsed && parsed.version === 2 && parsed.payload) {
-    snapshot = parsed.payload
+  const payload = unwrapSnapshot(parsed)
+  if (payload && Array.isArray(payload.nodes)) {
+    snapshot = payload
     snapshotPath = v2
   }
 } catch { /* try legacy */ }
