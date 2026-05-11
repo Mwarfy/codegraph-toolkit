@@ -3,7 +3,11 @@ import * as path from 'node:path'
 import type { FastifyInstance } from 'fastify'
 import type { DashboardState } from '../state.js'
 import { loadSnapshot } from '../state.js'
-import { loadSnapshotFromFile, isSafeSnapshotFilename } from '@liby-tools/codegraph/snapshot-loader'
+import {
+  loadSnapshotFromFile,
+  isSafeSnapshotFilename,
+  loadGraphCore,
+} from '@liby-tools/codegraph/snapshot-loader'
 
 interface SnapshotEntry {
   file: string
@@ -28,6 +32,45 @@ export function parseSnapshotName(filename: string): { ts: string; sha: string; 
 
 // ADR-027 — `loadSnapshotFromFile` + `isSafeSnapshotFilename` viennent
 // du loader unifié `@liby-tools/codegraph/snapshot-loader`.
+
+export interface SnapshotMetaResult {
+  source: string
+  mtime: number
+  nodeCount: number
+  edgeCount: number
+  commit: string | null
+}
+
+/**
+ * ADR-033 Phase 3 — première migration consumer. Ne consomme que les
+ * champs `GraphCore` (nodes, edges, commitHash) — pas besoin de charger
+ * les detector outputs ni les metrics en RAM.
+ *
+ * Fonction pure exportée pour tests unitaires (= pas de setup Fastify).
+ * Retourne `null` si aucun snapshot n'est trouvé.
+ *
+ * Trade-off : `loadGraphCore` lit `snapshot.json` directement, donc ne
+ * voit PAS le `snapshot-live.json` legacy (artefact watcher pré-Phase-2
+ * ADR-027 conservé pour /api/snapshot). Aligné avec la direction
+ * ADR-033 où snapshot.json est authoritative.
+ */
+export async function getSnapshotMeta(
+  codegraphDir: string,
+): Promise<SnapshotMetaResult | null> {
+  const core = await loadGraphCore(codegraphDir)
+  if (!core) return null
+  const snapshotFile = path.join(codegraphDir, 'snapshot.json')
+  const stat = await fs.stat(snapshotFile).catch(() => null)
+  return {
+    source: snapshotFile,
+    mtime: stat?.mtimeMs ?? 0,
+    nodeCount: core.nodes.length,
+    edgeCount: core.edges.length,
+    // Fix collatéral : était `data.commit` qui retournait toujours `null`
+    // — le champ s'appelle `commitHash` dans GraphCore.
+    commit: core.commitHash ?? null,
+  }
+}
 
 export async function registerSnapshotRoutes(
   app: FastifyInstance,
@@ -66,18 +109,11 @@ export async function registerSnapshotRoutes(
   })
 
   app.get('/api/snapshot/meta', async (_req, reply) => {
-    await loadSnapshot(state)
-    if (!state.snapshotData) {
+    const meta = await getSnapshotMeta(state.codegraphDir)
+    if (!meta) {
       return reply.code(404).send({ error: 'no snapshot' })
     }
-    const data = state.snapshotData as { nodes?: unknown[]; edges?: unknown[]; commit?: string }
-    return {
-      source: state.snapshotPath,
-      mtime: state.snapshotMtime,
-      nodeCount: Array.isArray(data.nodes) ? data.nodes.length : 0,
-      edgeCount: Array.isArray(data.edges) ? data.edges.length : 0,
-      commit: data.commit ?? null,
-    }
+    return meta
   })
 
   app.get('/api/snapshots', async () => {
