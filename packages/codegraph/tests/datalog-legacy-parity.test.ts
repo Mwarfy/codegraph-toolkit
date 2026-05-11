@@ -87,26 +87,23 @@ describe('Datalog/legacy parity — ADR-026/027 contract', () => {
     // ADR-031 Phase 1 — champs patchés par Datalog :
     //   - 3 overrides directs en début de runDeterministicDetectors
     //     (envUsage, barrels, eventEmitSites — analyzer.ts L942-944)
-    //   - 1 field branché en cascade `datalogPatch ? dl.X : legacy`
-    //     dans phases 1-6 (deadCode — le seul restant).
-    // Total : 4 fields qui DOIVENT être bit-identical legacy vs Datalog.
+    // Total : 3 fields qui DOIVENT être bit-identical legacy vs Datalog.
     //
     // ADR-031 Phase 2 :
     //   - batch 1 : magic-numbers / eval-calls / crypto-algo / event-listener-sites
     //   - batch 2 : long-functions / boolean-params / function-complexity / constant-expressions
     //   - batch 3 : chaîne taint (taint-sinks / sanitizers / tainted-vars / arguments)
     //   - batch 4 : hardcoded-secrets / resource-balance / security-patterns / code-quality-patterns
-    // Pour ces 16 fields, Datalog est désormais l'unique source : useDatalog=false
+    //   - batch 5 : dead-code (helper migré vers datalog-detectors/ast-facts/)
+    // Pour ces 17 fields, Datalog est désormais l'unique source : useDatalog=false
     // produit `undefined`, pas comparable au legacy → exclus de patchedFields.
     //
     // `driftSignals` traverse l'adapter (adaptDriftSignalsFromDatalog) ;
     // sa parité est vérifiée séparément ci-dessous car il dépend de
     // snapshot.todos calculé hors-Datalog.
     const patchedFields: (keyof GraphSnapshot)[] = [
-      // Overrides directs (ADR-026 phase A.3 seed)
+      // Overrides directs (ADR-026 phase A.3 seed) — derniers fields verrouillés.
       'envUsage', 'barrels', 'eventEmitSites',
-      // Branchement cascade restant (deadCode — Phase 2 batch 5 ou +)
-      'deadCode',
     ]
 
     for (const field of patchedFields) {
@@ -126,18 +123,17 @@ describe('Datalog/legacy parity — ADR-026/027 contract', () => {
   // [] = [] des deux côtés et le test passe trivialement. Le canary
   // déclenche réellement la majorité des détecteurs, donc le BIT-IDENTICAL
   // sur ces fields est un vrai garde-fou (pas un hash vide=vide).
-  it('canary fixture : Datalog vs legacy → bit-identical on 4 patched fields', { timeout: 120_000 }, async () => {
+  it('canary fixture : Datalog vs legacy → bit-identical on 3 patched fields', { timeout: 120_000 }, async () => {
     const rootDir = path.resolve(__dirname, '../../../examples/canary-project')
 
     const dlSnap = await run(rootDir, true)
     const legacySnap = await run(rootDir, false)
 
-    // ADR-031 Phase 2 batch 4 — hardcoded-secrets / resource-balance /
-    // security-patterns / code-quality-patterns retirés. Cumul Phase 2 :
-    // 20 → 4 fields verrouillés (batch 1 + 2 + 3 + 4).
+    // ADR-031 Phase 2 batch 5 — dead-code retiré (helper migré). Cumul Phase 2 :
+    // 20 → 3 fields verrouillés (batch 1 + 2 + 3 + 4 + 5). Plus que les 3
+    // overrides directs — à traiter au batch dédié final.
     const patchedFields: (keyof GraphSnapshot)[] = [
       'envUsage', 'barrels', 'eventEmitSites',
-      'deadCode',
     ]
 
     // Trace coverage : combien de fields sont réellement déclenchés par

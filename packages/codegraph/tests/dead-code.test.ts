@@ -4,7 +4,8 @@
 
 import { describe, it, expect } from 'vitest'
 import { Project } from 'ts-morph'
-import { extractDeadCodeFileBundle } from '../src/extractors/dead-code.js'
+// ADR-031 Phase 2 batch 5 — helper migré vers datalog-detectors/ast-facts/.
+import { extractDeadCodeFileBundle } from '../src/datalog-detectors/ast-facts/dead-code.js'
 
 function fileFromText(text: string, name = 'src/test.ts') {
   const project = new Project({ useInMemoryFileSystem: true })
