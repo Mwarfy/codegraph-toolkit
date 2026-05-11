@@ -18,6 +18,7 @@ import {
   buildStructuralDiff,
   renderStructuralDiffMarkdown,
 } from '@liby-tools/codegraph/diff'
+import { unwrapSnapshot } from '@liby-tools/codegraph/snapshot-loader'
 
 export interface ChangesSinceArgs {
   /**
@@ -172,10 +173,6 @@ function loadSnapshots(
   }
 }
 
-function unwrapSnapshot(parsed: any): any {
-  if (parsed && parsed.version === 2 && parsed.payload) return parsed.payload
-  return parsed
-}
 
 function buildDiffHeader(current: SnapshotEntry, referencePath: string): string {
   const refLabel = current.isLive

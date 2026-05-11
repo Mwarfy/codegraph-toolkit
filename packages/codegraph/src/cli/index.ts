@@ -48,6 +48,7 @@ import { runSynopsisCommand } from './commands/synopsis.js'
 import { runDetectorsCommand } from './commands/detectors.js'
 import { runWatchCommand } from './commands/watch.js'
 import { runRefreshCommand } from './commands/refresh.js'
+import { runCompactCommand } from './commands/compact.js'
 import { runMapCommand } from './commands/map.js'
 import { runOrphansCommand } from './commands/orphans.js'
 import { runTaintCommand } from './commands/taint.js'
@@ -129,6 +130,22 @@ program
   .option('--check', 'Only verify freshness — exit 1 if stale, no write')
   .option('--quiet', 'Suppress non-error output')
   .action(runRefreshCommand)
+
+// ─── compact ──────────────────────────────────────────────────────────────
+// ADR-028 — compaction du content-addressed fact store.
+
+program
+  .command('compact')
+  .description(
+    'Compact .codegraph/facts.store.ndjson by removing orphan fact_ids ' +
+    '(facts not referenced by HEAD or any cached PR base). Manual ' +
+    'trigger ; analyze runs this automatically when orphan ratio or ' +
+    'store size exceed thresholds (ADR-028).',
+  )
+  .option('-c, --config <path>', 'Path to codegraph config file')
+  .option('-r, --root <path>', 'Project root directory')
+  .option('--dry-run', 'Count orphans without modifying the store')
+  .action(runCompactCommand)
 
 // ─── watch ────────────────────────────────────────────────────────────────
 

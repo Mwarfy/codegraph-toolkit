@@ -4,6 +4,7 @@ import * as path from 'node:path'
 import type { DashboardState } from '../state.js'
 import { loadSnapshot } from '../state.js'
 import type { WsHub } from '../ws-hub.js'
+import { isSafeSnapshotFilename } from '@liby-tools/codegraph/snapshot-loader'
 
 /**
  * Watch .codegraph/ for two signal types:
@@ -31,9 +32,9 @@ export function startWatcher(state: DashboardState, hub: WsHub): () => void {
   const watcher = watch(state.codegraphDir, { persistent: true }, (_event, filename) => {
     if (!filename) return
 
-    // ADR-027 — trigger reload sur snapshot.json (Phase 2) OR les
-    // snapshot-<ts>-<sha>.json legacy.
-    if (filename === 'snapshot.json' || /^snapshot-\d{4}-\d{2}-\d{2}T.*\.json$/.test(filename)) {
+    // ADR-027 — trigger reload sur tout fichier snapshot canonique
+    // (v2 ou legacy) ainsi que sur le snapshot-live.json watcher-mode.
+    if (filename === 'snapshot-live.json' || isSafeSnapshotFilename(filename)) {
       if (snapshotDebounce) clearTimeout(snapshotDebounce)
       snapshotDebounce = setTimeout(() => {
         void loadSnapshot(state).then((changed) => {
