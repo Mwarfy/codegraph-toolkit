@@ -28,6 +28,7 @@
 | [027](027-derived-views-out-of-git.md) | Toute donnée dérivable du code source par une fonction pure (snapshot, brief, changelog, vues structurelles... | `packages/codegraph-mcp/src/snapshot-loader.ts`, `packages/codegraph-mcp/src/tools/changes-since.ts` +9 |
 | [028](028-fact-store-compaction.md) | Le fichier `.codegraph/facts.store.ndjson` (ADR-027 Phase 3) est append-only par construction (immuabilité ... | `packages/codegraph/src/cli/commands/compact.ts`, `packages/codegraph/src/incremental/fact-store-compaction.ts` |
 | [029](029-clean-signals-before-refactor.md) | Avant toute refonte motivée par un signal codegraph (co-change, complexity, dead-code, hub, doc-stale, etc.... | _(pas de marker)_ |
+| [030](030-serialized-schema-vs-internal-types.md) | Le seul contrat public du toolkit est le **schéma JSON sérialisé** (`snapshot.json`, `facts.head.json`, etc... | _(pas de marker)_ |
 
 
 ## Comment ajouter un ADR

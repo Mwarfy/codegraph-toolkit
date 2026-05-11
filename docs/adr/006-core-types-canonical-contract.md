@@ -1,7 +1,15 @@
 # ADR-006: `core/types.ts` est le contract canonique — modifications conservatrices uniquement
 
 **Date:** 2026-04-30
-**Status:** Accepted
+**Status:** Superseded by ADR-030
+
+> **Note 2026-05-11 :** Cette ADR mélangeait deux frontières distinctes —
+> le contrat externe (JSON sérialisé) et le couplage interne TypeScript
+> (`core/types.ts`). La règle "modifications conservatrices uniquement"
+> gelait les DEUX, bloquant l'évolution interne légitime (e.g. découpage
+> du fat-blob `GraphSnapshot`). ADR-030 reformule en séparant : le JSON
+> est versionné + protégé par test d'invariant, le code interne est
+> libre. Lire ADR-030 pour la règle applicable.
 
 ## Rule
 
