@@ -103,8 +103,10 @@ export async function loadSnapshotFromFile(
 }
 
 /**
- * Unwrap pure du wrapper v2 `{ version, meta, payload }`. Si l'argument
- * est déjà un `GraphSnapshot` plat (legacy), il est retourné tel quel.
+ * Unwrap pure du wrapper `{ version, meta, payload }`. Accepte v2 (Phase 2
+ * ADR-027 — fat blob seul) ET v3 (Phase 1 ADR-033 — fat blob + sub-files,
+ * wrapper structurellement identique). Si l'argument est déjà un
+ * `GraphSnapshot` plat (legacy pré-v2), il est retourné tel quel.
  *
  * Utility partagé pour les consumers qui ont déjà chargé le JSON
  * (e.g. via une lib externe ou un test inline).
@@ -113,12 +115,16 @@ export function unwrapSnapshot(parsed: unknown): GraphSnapshot {
   if (
     parsed &&
     typeof parsed === 'object' &&
-    (parsed as { version?: number }).version === 2 &&
+    isWrappedVersion((parsed as { version?: unknown }).version) &&
     (parsed as { payload?: unknown }).payload
   ) {
     return (parsed as { payload: GraphSnapshot }).payload
   }
   return parsed as GraphSnapshot
+}
+
+function isWrappedVersion(v: unknown): boolean {
+  return v === 2 || v === 3
 }
 
 /**

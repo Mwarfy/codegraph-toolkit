@@ -45,7 +45,11 @@ assert() {
   local result
   result=$(node -e "
     const raw = JSON.parse(require('fs').readFileSync('$snap', 'utf-8'))
-    const data = (raw && raw.version === 2 && raw.payload) ? raw.payload : raw
+    // ADR-027 Phase 2 (v2) + ADR-033 Phase 1 (v3) : wrapper structurellement
+    // identique { version, meta, payload }. On accepte les deux ; le fallback
+    // 'raw' couvre les très anciens snapshots non-wrappés.
+    const isWrapped = raw && (raw.version === 2 || raw.version === 3) && raw.payload
+    const data = isWrapped ? raw.payload : raw
     const inDeg = {}
     for (const e of (data.edges ?? [])) inDeg[e.to] = (inDeg[e.to] ?? 0) + 1
     process.stdout.write(String($expr))

@@ -142,6 +142,8 @@ profondément (objets imbriqués), pas streamable utilement.
 
 <!-- AUTO-GÉNÉRÉ depuis les marqueurs ADR-NNN du code source. Voir @liby-tools/adr-toolkit. NE PAS éditer à la main. -->
 
+- `packages/codegraph/src/incremental/snapshot-fields.ts`
+
 
 ## Tested by
 
