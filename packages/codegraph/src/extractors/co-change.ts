@@ -63,6 +63,14 @@ export interface CoChangeOptions {
    * est skip (les paires seraient majoritairement du bruit). Défaut: 50.
    */
   maxFilesPerCommit?: number
+  // ADR-029 — Set explicite de paths à exclure des paires (et du
+  // fileCommitCount). Si `undefined`, l'extractor consulte `git
+  // check-ignore` au moment du run pour déterminer la liste des
+  // fichiers présents dans l'historique mais désormais gitignored
+  // (vues dérivées régénérées par hook : CLAUDE-CONTEXT.md, etc.).
+  // Override possible pour tests ou pour des projets qui veulent une
+  // liste explicite indépendante de `.gitignore`.
+  derivedPaths?: Set<string>
 }
 
 // Signature async maintenue pour le contrat des détecteurs (cf. analyzer.ts:805
@@ -98,13 +106,69 @@ export function analyzeCoChangeSync(
   if (raw === null) return []
 
   const commits = parseCoChangeCommits(raw)
+
+  // ADR-029 — exclude derived/gitignored paths from co-change.
+  // CLAUDE-CONTEXT.md & co. ont été tracked avant ADR-027 Phase 1 et
+  // restent dans `git log --name-only` historique. Sans ce filtre, ils
+  // co-changent mécaniquement avec chaque commit (vue régénérée par
+  // hook) → top pairs faux, refactos motivés par bruit.
+  const derivedPaths = options.derivedPaths ?? collectGitignoredFromCommits(
+    rootDir,
+    commits,
+  )
+
   const { fileCommitCount, pairCount } = computeCoChangeCounts(
     commits,
     knownFiles,
     maxFilesPerCommit,
+    derivedPaths,
   )
 
   return emitCoChangePairs(pairCount, fileCommitCount, minCount, minJaccard)
+}
+
+// ─── Phase 0 (ADR-029): identify gitignored files from history ─────────────
+
+/**
+ * Collecte les fichiers présents dans l'historique git mais désormais
+ * gitignored. Ces fichiers (typiquement des vues dérivées :
+ * `CLAUDE-CONTEXT.md`, `CHANGELOG-RECENT.md`, etc.) co-changent
+ * mécaniquement avec tout commit qui touche du source — leur inclusion
+ * pollue le top-N des pairs.
+ *
+ * Implémentation : un seul appel `git check-ignore --stdin` sur les
+ * paths uniques vus dans le log. Sub-100ms typique sur 1k fichiers.
+ * Retourne un Set vide si le repo n'est pas git ou si check-ignore
+ * échoue — l'extractor reste fonctionnel sans le filtre.
+ */
+function collectGitignoredFromCommits(
+  rootDir: string,
+  commits: string[][],
+): Set<string> {
+  const candidates = new Set<string>()
+  for (const files of commits) {
+    for (const f of files) candidates.add(f)
+  }
+  if (candidates.size === 0) return new Set()
+  try {
+    const result = execSync('git check-ignore --stdin', {
+      cwd: rootDir,
+      encoding: 'utf-8',
+      input: [...candidates].join('\n'),
+      maxBuffer: 10 * 1024 * 1024,
+    })
+    return new Set(result.split('\n').filter((l) => l.length > 0))
+  } catch (err) {
+    // git check-ignore exit code 1 = aucun fichier matche (= cas
+    // normal : tous les fichiers tracked actuellement). Autres codes
+    // = pas de repo git / git absent → silent fallback.
+    const e = err as { status?: number; stdout?: string }
+    if (e.status === 1 && typeof e.stdout === 'string') {
+      // Stdout contient quand même les matches partiels parfois.
+      return new Set(e.stdout.split('\n').filter((l) => l.length > 0))
+    }
+    return new Set()
+  }
 }
 
 // ─── Phase 1: fetch raw git log ─────────────────────────────────────────────
@@ -171,10 +235,15 @@ interface CoChangeCounts {
 // que si AU MOINS UN des 2 côtés est dans knownFiles. Permet de capturer
 // les paires test↔source légitimes sans flooder avec des paires
 // README↔CHANGELOG entièrement hors projet.
+//
+// ADR-029 — `derivedPaths` EXCLUT inconditionnellement les fichiers
+// listés (vues dérivées gitignored). Override knownFiles : même si
+// un côté est tracké, la paire est rejetée si l'autre est dérivé.
 function computeCoChangeCounts(
   commits: string[][],
   knownFiles: Set<string> | undefined,
   maxFilesPerCommit: number,
+  derivedPaths: Set<string>,
 ): CoChangeCounts {
   const fileCommitCount = new Map<string, number>()
   const pairCount = new Map<string, number>()
@@ -182,9 +251,9 @@ function computeCoChangeCounts(
   for (const files of commits) {
     if (files.length > maxFilesPerCommit) continue // skip lint/rename massifs
     const sorted = [...new Set(files)].sort()
-    bumpFileCommitCounts(sorted, knownFiles, fileCommitCount)
+    bumpFileCommitCounts(sorted, knownFiles, derivedPaths, fileCommitCount)
     if (sorted.length < 2) continue
-    bumpPairCounts(sorted, knownFiles, pairCount)
+    bumpPairCounts(sorted, knownFiles, derivedPaths, pairCount)
   }
   return { fileCommitCount, pairCount }
 }
@@ -192,9 +261,11 @@ function computeCoChangeCounts(
 function bumpFileCommitCounts(
   sorted: string[],
   knownFiles: Set<string> | undefined,
+  derivedPaths: Set<string>,
   fileCommitCount: Map<string, number>,
 ): void {
   for (const f of sorted) {
+    if (derivedPaths.has(f)) continue
     if (!knownFiles || knownFiles.has(f)) {
       fileCommitCount.set(f, (fileCommitCount.get(f) ?? 0) + 1)
     }
@@ -204,10 +275,13 @@ function bumpFileCommitCounts(
 function bumpPairCounts(
   sorted: string[],
   knownFiles: Set<string> | undefined,
+  derivedPaths: Set<string>,
   pairCount: Map<string, number>,
 ): void {
   for (let i = 0; i < sorted.length; i++) {
+    if (derivedPaths.has(sorted[i])) continue
     for (let j = i + 1; j < sorted.length; j++) {
+      if (derivedPaths.has(sorted[j])) continue
       // Pair acceptée si knownFiles est absent OU si au moins UN côté est tracké.
       if (knownFiles && !knownFiles.has(sorted[i]) && !knownFiles.has(sorted[j])) continue
       const key = sorted[i] + '\x00' + sorted[j]
