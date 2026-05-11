@@ -1,37 +1,58 @@
-// ADR-027
+// ADR-027 + ADR-033
 /**
- * Storage du snapshot HEAD — fichier unique `.codegraph/snapshot.json`
- * + sidecar `.codegraph/snapshot.meta.json`. Remplace les
- * `snapshot-<ts>-<sha>.json` cumulatifs (Phase 1 puis Phase 2 d'ADR-027).
+ * Storage du snapshot HEAD — fichier principal `.codegraph/snapshot.json`
+ * + sidecar `.codegraph/snapshot.meta.json` + sub-snapshots ADR-033.
  *
- * Deux fichiers :
+ * Phase 2 ADR-027 a posé le fat blob unique :
  *   - `snapshot.json`        : payload `GraphSnapshot` + meta inline
  *   - `snapshot.meta.json`   : meta seul, sidecar pour staleness check
  *                              rapide (~1ms) sans parser le blob 3 MB
  *
- * `snapshot.json` reste la source de vérité — le meta y est dupliqué.
- * Le sidecar est un cache dérivable, écrit en même temps via la même
- * opération atomique (tmp → rename).
+ * Phase 1 ADR-033 ajoute, en parallèle du fat blob (back-compat absolue) :
+ *   - `snapshot.detectors/<field>.ndjson` : un fichier par champ de
+ *                              `DetectorOutputs`. Array → 1 fact par ligne
+ *                              (NDJSON canonique). Bundle objet (e.g.
+ *                              `codeQualityPatterns`) → 1 ligne JSON unique.
+ *   - `snapshot.metrics.json` : tous les champs de `SnapshotMetrics` agrégés
+ *                              dans un objet unique.
+ *
+ * Le fat blob reste écrit (consumer externe Sentinel / codegraph-mcp /
+ * hooks bash le lisent encore tel quel). Phase 2 ADR-033 ajoutera des
+ * loaders lazy (`loadGraphCore`, `loadDetectorOutput`, `loadMetrics`)
+ * par-dessus les sub-files. Phase 4 (lointaine) pourra retirer du fat blob
+ * ce qui est dans les sub-files.
+ *
+ * Bump version : v2 = fat blob seul. v3 = fat blob + sub-files. La lecture
+ * accepte les deux (migration douce, pas de breaking pour les consumers
+ * externes qui peuvent encore lire des snapshots v2).
  *
  * N=2 backup : à chaque écriture, l'ancien `snapshot.json` est conservé
  * en `snapshot.json.bak` pour rollback manuel si une régression
  * structurelle est détectée. Pas de log historique au-delà.
- *
- * Phase 2 d'ADR-027.
  */
 
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
 import type { GraphSnapshot } from '../core/types.js'
+import { DETECTOR_FIELDS, METRIC_FIELDS } from './snapshot-fields.js'
 
-export const SNAPSHOT_VERSION = 2
+export const SNAPSHOT_VERSION = 3
+/**
+ * Versions du wrapper `snapshot.json` qui restent lisibles. v2 = fat blob
+ * seul (Phase 2 ADR-027). v3 = fat blob + sub-files (Phase 1 ADR-033).
+ * La lecture est tolérante aux deux pour ne pas casser les consumers
+ * externes qui ont un snapshot v2 en cache.
+ */
+export const SUPPORTED_SNAPSHOT_VERSIONS = [2, 3] as const
 
 const SNAPSHOT_FILE = 'snapshot.json'
 const SNAPSHOT_BACKUP = 'snapshot.json.bak'
 const META_FILE = 'snapshot.meta.json'
+const DETECTORS_SUBDIR = 'snapshot.detectors'
+const METRICS_FILE = 'snapshot.metrics.json'
 
 export interface SnapshotMeta {
-  /** Version du schéma du fichier snapshot (= 2 pour Phase 2). */
+  /** Version du schéma du fichier snapshot (v3 = Phase 1 ADR-033). */
   version: number
   /** Content-addressed hash des inputs (cf. input-hash.ts). */
   inputHash: string
@@ -68,6 +89,33 @@ export function snapshotBackupPath(snapshotDir: string): string {
 }
 
 /**
+ * Dossier des sub-snapshots detector (ADR-033 Phase 1). Un fichier
+ * `<field>.ndjson` par champ de `DetectorOutputs`.
+ */
+export function snapshotDetectorsDir(snapshotDir: string): string {
+  return path.join(snapshotDir, DETECTORS_SUBDIR)
+}
+
+/**
+ * Path d'un sub-snapshot detector spécifique (ADR-033 Phase 1).
+ * Format NDJSON pour les Arrays, JSON ligne unique pour les bundles objet.
+ */
+export function snapshotDetectorPath(
+  snapshotDir: string,
+  detectorField: string,
+): string {
+  return path.join(snapshotDir, DETECTORS_SUBDIR, `${detectorField}.ndjson`)
+}
+
+/**
+ * Path du sub-snapshot metrics agrégé (ADR-033 Phase 1). Objet JSON
+ * imbriqué unique contenant tous les champs `SnapshotMetrics` non-undefined.
+ */
+export function snapshotMetricsPath(snapshotDir: string): string {
+  return path.join(snapshotDir, METRICS_FILE)
+}
+
+/**
  * Lit uniquement la meta — fast path pour staleness check. Si le
  * sidecar manque mais que `snapshot.json` existe, on extrait la meta
  * depuis le payload (fallback dégradé, plus lent).
@@ -98,6 +146,11 @@ export async function readSnapshotMeta(
  * fichier est absent, corrompu, ou d'une version incompatible. Cas
  * d'erreur silencieux : le caller décide d'un fallback (legacy ou
  * cold analyze).
+ *
+ * Migration douce ADR-033 : accepte v2 (fat blob seul) ET v3 (fat blob
+ * + sub-files). Les sub-files ne sont pas re-lus ici — `payload` provient
+ * du fat blob, qui contient tout par construction (cohabite jusqu'à
+ * Phase 4 ADR-033).
  */
 export async function readStoredSnapshot(
   snapshotDir: string,
@@ -119,7 +172,8 @@ export async function readStoredSnapshot(
 
   if (
     !parsed ||
-    parsed.version !== SNAPSHOT_VERSION ||
+    typeof parsed.version !== 'number' ||
+    !(SUPPORTED_SNAPSHOT_VERSIONS as readonly number[]).includes(parsed.version) ||
     !parsed.meta ||
     typeof parsed.meta.inputHash !== 'string' ||
     !parsed.payload
@@ -136,6 +190,10 @@ export async function readStoredSnapshot(
  * renames ne sont pas globalement atomiques, mais une window inférieure
  * à 1ms reste acceptable (au pire, le sidecar pointe vers l'ancien
  * meta jusqu'au rename suivant, le full read tombe sur le nouveau).
+ *
+ * ADR-033 Phase 1 : après le fat blob, écrit les sub-files en parallèle
+ * (un fichier par detector + un fichier metrics agrégé). Le fat blob
+ * reste authoritative — les sub-files sont une projection.
  *
  * Le caller est responsable de calculer `meta.inputHash` via
  * `computeInputHash()`.
@@ -166,6 +224,71 @@ export async function writeStoredSnapshot(
   }
   await writeAtomic(file, JSON.stringify(fullPayload))
   await writeAtomic(sidecar, JSON.stringify(meta, null, 2))
+
+  // ADR-033 Phase 1 — sub-snapshots écrits en parallèle du fat blob.
+  await writeSubSnapshots(snapshotDir, payload)
+}
+
+/**
+ * ADR-033 Phase 1 — écrit les sub-snapshots à côté du fat blob.
+ *
+ * - `snapshot.detectors/<field>.ndjson` : un fichier par champ
+ *   `DetectorOutputs` présent dans le payload. Array → un fact par ligne.
+ *   Bundle objet (ex: `codeQualityPatterns`) → 1 ligne JSON unique.
+ *   Champs absents → fichier non écrit (= signal "detector pas tourné").
+ *
+ * - `snapshot.metrics.json` : tous les champs `SnapshotMetrics` non-undefined
+ *   agrégés dans un objet imbriqué unique (pretty-printed pour lisibilité).
+ *
+ * Aucune écriture n'est conditionnelle à la valeur — si `cycles: []` (array
+ * vide), on écrit un fichier vide (signal "detector a tourné, zéro résultat",
+ * sémantiquement distinct de "pas tourné").
+ *
+ * Pas de rotate `.bak` sur les sub-files — ils sont projection du fat blob
+ * qui a déjà son backup. En cas de corruption d'un sub-file, relire le fat
+ * blob redonne la vérité.
+ */
+export async function writeSubSnapshots(
+  snapshotDir: string,
+  payload: GraphSnapshot,
+): Promise<void> {
+  // 1. Detector outputs — un fichier par detector field.
+  const detectorsDir = snapshotDetectorsDir(snapshotDir)
+  await fs.mkdir(detectorsDir, { recursive: true })
+
+  for (const field of DETECTOR_FIELDS) {
+    const value = payload[field]
+    if (value === undefined) continue
+
+    const target = snapshotDetectorPath(snapshotDir, field)
+    let content: string
+    if (Array.isArray(value)) {
+      // NDJSON canonique : un fact JSON par ligne. Array vide → fichier
+      // vide (sémantiquement : detector a tourné, zéro résultat).
+      content = value.length === 0
+        ? ''
+        : value.map((item) => JSON.stringify(item)).join('\n') + '\n'
+    } else {
+      // Bundle objet (e.g. codeQualityPatterns, securityPatterns,
+      // testCoverage, sqlSchema, ...). Écrit en 1 ligne JSON — un futur
+      // consumer Phase 2 pourra le lire d'un coup.
+      content = JSON.stringify(value) + '\n'
+    }
+    await writeAtomic(target, content)
+  }
+
+  // 2. Metrics — un seul fichier JSON imbriqué.
+  const metricsBundle: Record<string, unknown> = {}
+  for (const field of METRIC_FIELDS) {
+    const value = payload[field]
+    if (value !== undefined) {
+      metricsBundle[field] = value
+    }
+  }
+  await writeAtomic(
+    snapshotMetricsPath(snapshotDir),
+    JSON.stringify(metricsBundle, null, 2) + '\n',
+  )
 }
 
 async function writeAtomic(target: string, content: string): Promise<void> {

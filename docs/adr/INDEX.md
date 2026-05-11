@@ -25,13 +25,13 @@
 | [024](024-bsp-monoid-parallelism.md) | Tout détecteur per-file (cf. ADR-005) DOIT exposer un `extractFileBundle` pure et son orchestrateur passe p... | `packages/codegraph/src/detectors/ts-imports.ts`, `packages/codegraph/src/extractors/todos.ts` +4 |
 | [025](025-detectors-must-use-bsp-pattern.md) | Tout NOUVEAU détecteur ajouté à `extractors/` (readFile-based) DOIT partir du template `_template.monoid.ts... | _(pas de marker)_ |
 | [026](026-detectors-as-datalog-rules.md) | Tout nouveau détecteur per-file CPU-bound DOIT s'écrire comme : 1. Émission de tuples primitifs depuis `ast... | _(pas de marker)_ |
-| [027](027-derived-views-out-of-git.md) | Toute donnée dérivable du code source par une fonction pure (snapshot, brief, changelog, vues structurelles... | `packages/codegraph-mcp/src/snapshot-loader.ts`, `packages/codegraph-mcp/src/tools/changes-since.ts` +9 |
+| [027](027-derived-views-out-of-git.md) | Toute donnée dérivable du code source par une fonction pure (snapshot, brief, changelog, vues structurelles... | `packages/codegraph-mcp/src/snapshot-loader.ts`, `packages/codegraph-mcp/src/tools/changes-since.ts` +8 |
 | [028](028-fact-store-compaction.md) | Le fichier `.codegraph/facts.store.ndjson` (ADR-027 Phase 3) est append-only par construction (immuabilité ... | `packages/codegraph/src/cli/commands/compact.ts`, `packages/codegraph/src/incremental/fact-store-compaction.ts` |
 | [029](029-clean-signals-before-refactor.md) | Avant toute refonte motivée par un signal codegraph (co-change, complexity, dead-code, hub, doc-stale, etc.... | _(pas de marker)_ |
 | [030](030-serialized-schema-vs-internal-types.md) | Le seul contrat public du toolkit est le **schéma JSON sérialisé** (`snapshot.json`, `facts.head.json`, etc... | `packages/codegraph/src/core/types.ts` |
 | [031](031-dual-path-detectors-retirement.md) | Pour les détecteurs qui ont une version Datalog (cf. ADR-026 — 18/21 détecteurs portés), la version **legac... | _(pas de marker)_ |
 | [032](032-cross-package-contracts.md) | Tout package du workspace qui dépend d'un autre (e.g. `dashboard-server` consomme `@liby-tools/codegraph/sn... | _(pas de marker)_ |
-| [033](033-sub-snapshots-fat-blob-fix.md) | Le `snapshot.json` cesse d'être un blob unique. Le graph core (`nodes`, `edges`, `stats`) reste dans `snaps... | _(pas de marker)_ |
+| [033](033-sub-snapshots-fat-blob-fix.md) | Le `snapshot.json` cesse d'être un blob unique. Le graph core (`nodes`, `edges`, `stats`) reste dans `snaps... | `packages/codegraph/src/incremental/snapshot-fields.ts` |
 
 
 ## Comment ajouter un ADR

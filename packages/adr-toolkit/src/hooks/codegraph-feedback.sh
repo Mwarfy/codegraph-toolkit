@@ -70,14 +70,16 @@ const path = require('node:path')
 const [, , repoRoot, relPath] = process.argv
 const codegraphDir = path.join(repoRoot, '.codegraph')
 
-// ADR-027 Phase 2 — privilégie `snapshot.json` v2 (wrapper { version,
-// meta, payload }). Fallback sur les `snapshot-*.json` legacy par mtime
-// pour les checkouts pré-migration.
+// ADR-027 Phase 2 (v2) + ADR-033 Phase 1 (v3) — privilégie
+// `snapshot.json` wrappé { version, meta, payload }. Wrapper
+// structurellement identique entre v2 et v3 (v3 ajoute des sub-files
+// à côté, fat blob inchangé). Fallback sur `snapshot-*.json` legacy
+// par mtime pour les checkouts pré-migration.
 let snapshot
 try {
   const v2Raw = fs.readFileSync(path.join(codegraphDir, 'snapshot.json'), 'utf-8')
   const parsed = JSON.parse(v2Raw)
-  if (parsed && parsed.version === 2 && parsed.payload) {
+  if (parsed && (parsed.version === 2 || parsed.version === 3) && parsed.payload) {
     snapshot = parsed.payload
   }
 } catch { /* try legacy */ }
