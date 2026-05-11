@@ -1,7 +1,10 @@
 import type { FastifyInstance } from 'fastify'
 import type { DashboardState } from '../state.js'
-import { loadSnapshot } from '../state.js'
 import type { GraphSnapshot } from '@liby-tools/codegraph'
+import {
+  loadGraphCore,
+  loadDetectorOutput,
+} from '@liby-tools/codegraph/snapshot-loader'
 
 export interface Tension {
   kind: string
@@ -152,21 +155,38 @@ export async function registerTensionRoutes(
   state: DashboardState,
 ): Promise<void> {
   app.get('/api/tensions', async (_req, reply) => {
-    await loadSnapshot(state)
-    if (!state.snapshotData) {
+    // ADR-033 Phase 3 — migration loader. Préalablement
+    // `await loadSnapshot(state)` chargeait le fat blob complet
+    // (~50+ champs en RAM). On charge maintenant uniquement les
+    // sous-domaines consommés : graph core (pour nodes) + 4 detector
+    // outputs.
+    //
+    // Sur snapshot v3 (= sub-files Phase 1 présents), chaque
+    // loadDetectorOutput lit son `.codegraph/snapshot.detectors/<name>.ndjson`
+    // dédié — pas de fat blob parsé. Sur snapshot v2 legacy, fallback
+    // transparent au fat blob (5 lectures redondantes, mais cas rare
+    // post-2026).
+    //
+    // Trade-off : perte du support `snapshot-live.json` (artefact watcher
+    // pré-Phase-2 ADR-027 conservé pour /api/snapshot). Aligné avec la
+    // direction ADR-033 où `snapshot.json` est authoritative. Cohérent
+    // avec PR #64 sur /api/snapshot/meta.
+    const [core, cycles, barrels, longFunctions, driftSignals] = await Promise.all([
+      loadGraphCore(state.codegraphDir),
+      loadDetectorOutput(state.codegraphDir, 'cycles'),
+      loadDetectorOutput(state.codegraphDir, 'barrels'),
+      loadDetectorOutput(state.codegraphDir, 'longFunctions'),
+      loadDetectorOutput(state.codegraphDir, 'driftSignals'),
+    ])
+    if (!core) {
       return reply.code(404).send({ error: 'no snapshot' })
     }
-    // state.snapshotData est typé `unknown` côté state.ts — il vient
-    // pourtant d'un `GraphSnapshot`. On le typecaste localement (la
-    // migration vers loadGraphCore + loadDetectorOutput viendra en
-    // PR Phase 3 séparée, sur cette base type-clean).
-    const snapshot = state.snapshotData as GraphSnapshot
     const inputs: TensionInputs = {
-      nodes: snapshot.nodes,
-      cycles: snapshot.cycles,
-      barrels: snapshot.barrels,
-      longFunctions: snapshot.longFunctions,
-      driftSignals: snapshot.driftSignals,
+      nodes: core.nodes,
+      cycles,
+      barrels,
+      longFunctions,
+      driftSignals,
     }
     const tensions = TENSION_BUILDERS.flatMap((build) => build(inputs))
     return { count: tensions.length, tensions }
