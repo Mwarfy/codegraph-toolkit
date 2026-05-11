@@ -1,12 +1,17 @@
 /**
  * Invariant : GraphSnapshot field set is monotonically additive.
  *
- * ADR-006 protège core/types.ts comme canonical contract — pas de
- * breaking change sans deprecation cycle. Ce test vérifie qu'un set
- * de champs documentés (la baseline figée à v0.2.0) reste TOUJOURS
- * présent dans le type GraphSnapshot. Si quelqu'un retire un champ,
- * le test pète et l'ADR-006 doit être revisitée (ou un cycle de
- * deprecation explicite engagé).
+ * ADR-006 (superseded par ADR-030) protégeait core/types.ts comme
+ * canonical contract — pas de breaking change sans deprecation cycle.
+ * ADR-030 reformule : le contrat externe est le JSON sérialisé, pas
+ * la shape TS. Mais le set de champs documentés (la baseline figée
+ * à v0.2.0) reste un invariant : un consumer externe qui lit
+ * `snapshot.X` doit toujours trouver X.
+ *
+ * Depuis ADR-033 (split GraphCore + DetectorOutputs + SnapshotMetrics),
+ * les champs sont répartis entre les 3 sous-interfaces. `GraphSnapshot`
+ * = intersection. Ce test concatène les 3 bodies pour valider la
+ * présence de chaque champ baseline.
  *
  * On ajoute des champs (optionnels) au fur et à mesure — c'est OK et
  * pas testé ici. On ne RETIRE rien — c'est ce qui est testé.
@@ -75,17 +80,16 @@ const REQUIRED_GRAPHSNAPSHOT_FIELDS = [
   'testCoverage',
 ] as const
 
-describe('GraphSnapshot canonical contract (ADR-006)', () => {
-  const source = readFileSync(TYPES_FILE, 'utf-8')
-
-  // Extract the GraphSnapshot interface body (everything between
-  // "export interface GraphSnapshot {" and the matching closing brace).
-  const ifaceStart = source.indexOf('export interface GraphSnapshot {')
-  expect(ifaceStart, 'GraphSnapshot interface declaration must exist').toBeGreaterThan(-1)
-
-  // Naive brace matcher : find the closing brace that balances.
+/**
+ * Extrait le body d'une interface depuis le source (entre `{` et le `}`
+ * équilibré). Retourne `''` si l'interface est absente.
+ */
+function extractInterfaceBody(source: string, interfaceName: string): string {
+  const marker = `export interface ${interfaceName} {`
+  const start = source.indexOf(marker)
+  if (start === -1) return ''
   let depth = 0
-  let pos = ifaceStart + 'export interface GraphSnapshot {'.length - 1
+  let pos = start + marker.length - 1
   while (pos < source.length) {
     const c = source[pos]
     if (c === '{') depth++
@@ -95,30 +99,55 @@ describe('GraphSnapshot canonical contract (ADR-006)', () => {
     }
     pos++
   }
-  expect(pos, 'GraphSnapshot closing brace must be found').toBeGreaterThan(ifaceStart)
+  return source.slice(start, pos + 1)
+}
 
-  const ifaceBody = source.slice(ifaceStart, pos + 1)
+describe('GraphSnapshot canonical contract (ADR-030, supersedes ADR-006)', () => {
+  const source = readFileSync(TYPES_FILE, 'utf-8')
+
+  // Depuis ADR-033, les champs sont répartis entre 3 sous-interfaces.
+  // GraphSnapshot lui-même est `extends GraphCore, DetectorOutputs,
+  // SnapshotMetrics {}` (body vide). On concatène les 3 bodies pour
+  // valider la présence de chaque champ baseline.
+  const coreBody = extractInterfaceBody(source, 'GraphCore')
+  const detectorBody = extractInterfaceBody(source, 'DetectorOutputs')
+  const metricsBody = extractInterfaceBody(source, 'SnapshotMetrics')
+  expect(coreBody.length, 'GraphCore interface must exist').toBeGreaterThan(0)
+  expect(detectorBody.length, 'DetectorOutputs interface must exist').toBeGreaterThan(0)
+  expect(metricsBody.length, 'SnapshotMetrics interface must exist').toBeGreaterThan(0)
+
+  // Verifie aussi que GraphSnapshot existe comme intersection des trois.
+  // Match tolerant : `extends GraphCore, DetectorOutputs, SnapshotMetrics`
+  // (ordre libre, espaces libres).
+  const graphSnapshotDecl = /export interface GraphSnapshot\s+extends\s+([\w\s,]+)\s*\{/.exec(source)
+  expect(graphSnapshotDecl, 'GraphSnapshot must extend the three sub-interfaces').not.toBeNull()
+  const extendedNames = (graphSnapshotDecl?.[1] ?? '').split(',').map((s) => s.trim()).sort()
+  expect(extendedNames).toEqual(['DetectorOutputs', 'GraphCore', 'SnapshotMetrics'])
+
+  const concatenatedBody = coreBody + '\n' + detectorBody + '\n' + metricsBody
 
   it.each(REQUIRED_GRAPHSNAPSHOT_FIELDS)(
-    'field %s exists in GraphSnapshot interface',
+    'field %s exists in one of GraphCore | DetectorOutputs | SnapshotMetrics',
     (field) => {
       // Match `<field>?:` or `<field>:` at start of line (whitespace-tolerant)
       const re = new RegExp(`^\\s+${field}\\??\\s*:`, 'm')
-      const found = re.test(ifaceBody)
+      const found = re.test(concatenatedBody)
       if (!found) {
         throw new Error(
-          `Field "${field}" is missing from GraphSnapshot.\n` +
-          `Per ADR-006, removing or renaming a documented field requires a deprecation cycle.\n` +
-          `If this removal is intentional, update REQUIRED_GRAPHSNAPSHOT_FIELDS in this test\n` +
-          `with justification in the commit message.`,
+          `Field "${field}" is missing from GraphCore | DetectorOutputs | SnapshotMetrics.\n` +
+          `Per ADR-030 (supersedes ADR-006), removing or renaming a documented field\n` +
+          `requires a deprecation cycle. If this removal is intentional, update\n` +
+          `REQUIRED_GRAPHSNAPSHOT_FIELDS in this test with justification in the commit message.`,
         )
       }
       expect(found).toBe(true)
     },
   )
 
-  it('ADR-006 marker is present at top of types.ts', () => {
+  it('ADR-030 marker is present at top of types.ts (supersedes ADR-006)', () => {
     const head = source.split('\n').slice(0, 5).join('\n')
-    expect(head).toMatch(/\/\/\s*ADR-006/)
+    // ADR-006 reste accepté pour back-compat avec les anciens snapshots ;
+    // ADR-030 est la valeur attendue post-refactor.
+    expect(head).toMatch(/\/\/\s*ADR-(006|030)/)
   })
 })
