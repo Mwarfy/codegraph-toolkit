@@ -10,7 +10,9 @@
     "./synopsis": "./dist/synopsis/builder.js",
     "./synopsis/adr-markers": "./dist/synopsis/adr-markers.js",
     "./diff": "./dist/diff/index.js",
-    "./snapshot-loader": "./dist/incremental/snapshot-loader.js"
+    "./snapshot-loader": "./dist/incremental/snapshot-loader.js",
+    "./scripts/datalog-check-fast.mjs": "./scripts/datalog-check-fast.mjs",
+    "./package.json": "./package.json"
   },
   "bin": {
     "codegraph": "dist/cli/index.js",
