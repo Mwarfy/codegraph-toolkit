@@ -51,7 +51,7 @@ import { analyzeDriftPatterns, type DriftSignal } from '../extractors/drift-patt
 // extractors ts-morph supprimés, Datalog est l'unique source.
 import { analyzeSecurityPatterns, type SecurityPatternsAggregated } from '../extractors/security-patterns.js'
 import { analyzeCodeQualityPatterns, type CodeQualityPatternsAggregated } from '../extractors/code-quality-patterns.js'
-import { analyzeFunctionComplexity, type FunctionComplexity } from '../extractors/function-complexity.js'
+// ADR-031 Phase 2 batch 2 — function-complexity : extractor ts-morph supprimé, Datalog est l'unique source.
 import { computeSpectralMetrics, type SpectralMetric } from '../extractors/spectral-graph.js'
 import { computeSymbolEntropy, type SymbolEntropyMetric } from '../extractors/symbol-entropy.js'
 import { detectSignatureDuplicates, type SignatureDuplicate } from '../extractors/signature-duplication.js'
@@ -66,12 +66,12 @@ import { computeGrangerCausality, type GrangerCausality } from '../extractors/gr
 import { runCrossDisciplineDetectors } from '../extractors/_shared/cross-discipline-orchestrator.js'
 import { CrossDisciplineDetector } from './detectors/cross-discipline-detector.js'
 import { analyzeHardcodedSecrets, type HardcodedSecret } from '../extractors/hardcoded-secrets.js'
-import { analyzeBooleanParams, type BooleanParamSite } from '../extractors/boolean-params.js'
+// ADR-031 Phase 2 batch 2 — boolean-params : extractor ts-morph supprimé, Datalog est l'unique source.
 import { analyzeDeadCode, type DeadCodeFinding } from '../extractors/dead-code.js'
 import { analyzeFloatingPromises, type FloatingPromiseSite } from '../extractors/floating-promises.js'
 import { analyzeDeprecatedUsage, type DeprecatedDeclaration, type DeprecatedUsageSite } from '../extractors/deprecated-usage.js'
 import { analyzeArticulationPoints, type ArticulationPoint } from '../extractors/articulation-points.js'
-import { extractConstantExpressionsFileBundle, type ConstantExpressionFinding } from '../extractors/constant-expressions.js'
+// ADR-031 Phase 2 batch 2 — constant-expressions : extractor ts-morph supprimé, Datalog est l'unique source.
 import { importEslintViolations, type EslintViolation } from '../extractors/eslint-import.js'
 import { findSqlNamingViolations, type SqlNamingViolation } from '../extractors/sql-naming.js'
 import { findMigrationOrderViolations, type MigrationOrderViolation } from '../extractors/sql-migration-order.js'
@@ -80,7 +80,7 @@ import { analyzeTaintSinks, type TaintSink } from '../extractors/taint-sinks.js'
 import { analyzeSanitizers, type Sanitizer } from '../extractors/sanitizers.js'
 import { analyzeTaintedVars, type TaintedVarDecl, type TaintedArgCall } from '../extractors/tainted-vars.js'
 import { analyzeArguments, type TaintedArgumentToCall, type FunctionParam } from '../extractors/arguments.js'
-import { analyzeLongFunctions, type LongFunction } from '../extractors/long-functions.js'
+// ADR-031 Phase 2 batch 2 — long-functions : extractor ts-morph supprimé, Datalog est l'unique source.
 // ADR-031 Phase 2 — magic-numbers : extractor ts-morph supprimé, Datalog est l'unique source.
 import { analyzeTestCoverage, type TestCoverageReport } from '../extractors/test-coverage.js'
 import { analyzeCoChange, type CoChangePair } from '../extractors/co-change.js'
@@ -120,7 +120,7 @@ import { allCodeQualityPatterns as incAllCodeQualityPatterns } from '../incremen
 import { allSecurityPatterns as incAllSecurityPatterns } from '../incremental/security-patterns.js'
 import { allDeadCode as incAllDeadCode } from '../incremental/dead-code.js'
 import { allDeprecatedUsage as incAllDeprecatedUsage } from '../incremental/deprecated-usage.js'
-import { allConstantExpressions as incAllConstantExpressions } from '../incremental/constant-expressions.js'
+// ADR-031 Phase 2 batch 2 — wrapper Salsa constant-expressions retiré (cf. Datalog runner)
 import { allHardcodedSecrets as incAllHardcodedSecrets } from '../incremental/hardcoded-secrets.js'
 // ADR-031 Phase 2 — wrapper Salsa magic-numbers retiré (cf. Datalog runner)
 import { allResourceBalances as incAllResourceBalances } from '../incremental/resource-balance.js'
@@ -129,8 +129,7 @@ import { allSanitizers as incAllSanitizers } from '../incremental/sanitizers.js'
 import { allTaintedVars as incAllTaintedVars } from '../incremental/tainted-vars.js'
 import { allArguments as incAllArguments } from '../incremental/arguments.js'
 // ADR-031 Phase 2 — wrapper Salsa crypto-algo retiré (cf. Datalog runner)
-import { allBooleanParams as incAllBooleanParams } from '../incremental/boolean-params.js'
-import { allFunctionComplexity as incAllFunctionComplexity } from '../incremental/function-complexity.js'
+// ADR-031 Phase 2 batch 2 — wrappers Salsa boolean-params / function-complexity retirés (cf. Datalog runner)
 // ADR-031 Phase 2 — wrapper Salsa eval-calls retiré (cf. Datalog runner)
 import { allDriftPatternsAst as incAllDriftPatternsAst } from '../incremental/drift-patterns.js'
 import {
@@ -1007,10 +1006,9 @@ async function runPhase1IndependentDetectors(ctx: DetectorPhaseContext) {
     () => analyzeTodos(config.rootDir, files, readFile))
   // ADR-026 A.3 : long-functions Datalog filtre déjà loc≥100 (cf. rules/
   // index.ts) — comportement identique au consumer-side qui lit ce field.
+  // ADR-031 Phase 2 batch 2 — Datalog seul chemin. useDatalog=false → undefined.
   const longFunctions = await runDetectorTimed(timing, 'long-functions',
-    () => datalogPatch
-      ? Promise.resolve(datalogPatch.longFunctions)
-      : analyzeLongFunctions(config.rootDir, files, sharedProject))
+    () => Promise.resolve(datalogPatch?.longFunctions))
   // ADR-031 Phase 2 — Datalog seul chemin. useDatalog=false → field undefined.
   const magicNumbers = await runDetectorTimed(timing, 'magic-numbers',
     () => Promise.resolve(datalogPatch?.magicNumbers))
@@ -1092,12 +1090,9 @@ async function runPhase2Phase1Dependent(
       : datalogPatch
         ? Promise.resolve(datalogPatch.codeQualityPatterns)
         : analyzeCodeQualityPatterns(config.rootDir, files, sharedProject))
+  // ADR-031 Phase 2 batch 2 — Datalog seul chemin. useDatalog=false → undefined.
   const functionComplexity = await runDetectorTimed(timing, 'function-complexity',
-    () => incremental
-      ? Promise.resolve(incAllFunctionComplexity.get('all'))
-      : datalogPatch
-        ? Promise.resolve(datalogPatch.functionComplexity)
-        : analyzeFunctionComplexity(config.rootDir, files, sharedProject))
+    () => Promise.resolve(datalogPatch?.functionComplexity))
 
   return {
     driftSignals, evalCalls, cryptoCalls, securityPatterns, eventListenerSites,
@@ -1121,12 +1116,9 @@ async function runPhase4SecurityAndQuality(ctx: DetectorPhaseContext) {
       : datalogPatch
         ? Promise.resolve(datalogPatch.hardcodedSecrets)
         : analyzeHardcodedSecrets(config.rootDir, files, sharedProject))
+  // ADR-031 Phase 2 batch 2 — Datalog seul chemin. useDatalog=false → undefined.
   const booleanParams = await runDetectorTimed(timing, 'boolean-params',
-    () => incremental
-      ? Promise.resolve(incAllBooleanParams.get('all'))
-      : datalogPatch
-        ? Promise.resolve(datalogPatch.booleanParams)
-        : analyzeBooleanParams(config.rootDir, files, sharedProject))
+    () => Promise.resolve(datalogPatch?.booleanParams))
   // dead-code : Phase A.4.2 — runner couvre désormais les 6 kinds via
   // délégation `extractDeadCodeFileBundle` dans le visitor (parité 100%).
   const deadCode = await runDetectorTimed(timing, 'dead-code',
@@ -1145,12 +1137,9 @@ async function runPhase4SecurityAndQuality(ctx: DetectorPhaseContext) {
   const articulationPoints = await runDetectorTimed(timing, 'articulation-points',
     () => analyzeArticulationPoints(snapshot))
   // Constant expressions — patterns simplification symbolique.
+  // ADR-031 Phase 2 batch 2 — Datalog seul chemin. useDatalog=false → undefined.
   const constantExpressions = await runDetectorTimed(timing, 'constant-expressions',
-    () => incremental
-      ? Promise.resolve(incAllConstantExpressions.get('all'))
-      : datalogPatch
-        ? Promise.resolve(datalogPatch.constantExpressions)
-        : analyzeConstantExpressionsBatch(config.rootDir, files, sharedProject))
+    () => Promise.resolve(datalogPatch?.constantExpressions))
   // ESLint ingester — read .codegraph/eslint.json if user provided it.
   const eslintViolations = await runDetectorTimed(timing, 'eslint-import',
     () => importEslintViolations(config.rootDir))
@@ -1219,32 +1208,8 @@ async function runPhase6TaintChain(ctx: DetectorPhaseContext) {
   return { taintSinks, sanitizerCalls, taintedVars, argumentsFacts }
 }
 
-/**
- * Wrapper batch pour `extractConstantExpressionsFileBundle` per-file.
- * Pattern ADR-005 : per-file extractor + batch aggregator.
- */
-async function analyzeConstantExpressionsBatch(
-  rootDir: string,
-  files: string[],
-  project: ReturnType<typeof createSharedProject>,
-): Promise<ConstantExpressionFinding[]> {
-  const fileSet = new Set(files)
-  const out: ConstantExpressionFinding[] = []
-  for (const sf of project.getSourceFiles()) {
-    const absPath = sf.getFilePath() as string
-    const relPath = path.relative(rootDir, absPath).replace(/\\/g, '/')
-    if (!fileSet.has(relPath)) continue
-    const bundle = extractConstantExpressionsFileBundle(sf, relPath)
-    out.push(...bundle.findings)
-  }
-  // Determinism (already sorted per-file, but resort globally)
-  out.sort((a, b) =>
-    a.file !== b.file ? (a.file < b.file ? -1 : 1) :
-    a.line !== b.line ? a.line - b.line :
-    a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0,
-  )
-  return out
-}
+// ADR-031 Phase 2 batch 2 — `analyzeConstantExpressionsBatch` retiré
+// (Datalog runner remplace l'agrégat per-file ts-morph).
 
 /**
  * Helper : run un détecteur avec wrapping timing + try/catch standard.
