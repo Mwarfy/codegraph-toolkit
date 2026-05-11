@@ -127,28 +127,52 @@ export async function loadSnapshotFromFile(
 }
 
 /**
- * Unwrap pure du wrapper `{ version, meta, payload }`. Accepte v2 (Phase 2
- * ADR-027 — fat blob seul) ET v3 (Phase 1 ADR-033 — fat blob + sub-files,
- * wrapper structurellement identique). Si l'argument est déjà un
- * `GraphSnapshot` plat (legacy pré-v2), il est retourné tel quel.
+ * Versions du wrapper `{ version, meta, payload }` que ce loader sait lire.
+ *
+ * Source de vérité unique pour la détection « ce blob est-il un wrapper
+ * versionné connu ? ». Tout consumer qui aurait été tenté de hardcoder
+ * `parsed.version === 2` (ou `=== 3`) doit utiliser `isWrappedSnapshot`
+ * ou `unwrapSnapshot` à la place, faute de quoi le bump suivant
+ * (ADR-033 Phase 4 → v4) casse silencieusement en cascade — pattern
+ * identifié dans l'audit dette architecturale 2026-05-12.
+ */
+export const WRAPPER_VERSIONS = [2, 3] as const
+export type WrapperVersion = (typeof WRAPPER_VERSIONS)[number]
+
+/**
+ * True si `parsed` est un wrapper versionné connu (= `{ version, meta,
+ * payload }` avec une `version` listée dans `WRAPPER_VERSIONS` et un
+ * `payload` non vide). API publique — préfère ce helper à un check inline
+ * pour que le bump v4 reste un changement à 1 fichier (snapshot-loader.ts).
+ */
+export function isWrappedSnapshot(parsed: unknown): parsed is {
+  version: WrapperVersion
+  payload: GraphSnapshot
+  meta?: SnapshotMeta
+} {
+  if (!parsed || typeof parsed !== 'object') return false
+  const v = (parsed as { version?: unknown }).version
+  const payload = (parsed as { payload?: unknown }).payload
+  return (
+    typeof v === 'number' &&
+    (WRAPPER_VERSIONS as readonly number[]).includes(v) &&
+    payload != null
+  )
+}
+
+/**
+ * Unwrap pure du wrapper `{ version, meta, payload }`. Accepte les
+ * versions listées dans `WRAPPER_VERSIONS` (v2 ADR-027 Phase 2 + v3
+ * ADR-033 Phase 1 — wrapper structurellement identique). Si l'argument
+ * est déjà un `GraphSnapshot` plat (legacy pré-v2), il est retourné tel
+ * quel.
  *
  * Utility partagé pour les consumers qui ont déjà chargé le JSON
  * (e.g. via une lib externe ou un test inline).
  */
 export function unwrapSnapshot(parsed: unknown): GraphSnapshot {
-  if (
-    parsed &&
-    typeof parsed === 'object' &&
-    isWrappedVersion((parsed as { version?: unknown }).version) &&
-    (parsed as { payload?: unknown }).payload
-  ) {
-    return (parsed as { payload: GraphSnapshot }).payload
-  }
+  if (isWrappedSnapshot(parsed)) return parsed.payload
   return parsed as GraphSnapshot
-}
-
-function isWrappedVersion(v: unknown): boolean {
-  return v === 2 || v === 3
 }
 
 /**
