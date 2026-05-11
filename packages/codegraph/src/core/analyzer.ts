@@ -67,7 +67,9 @@ import { runCrossDisciplineDetectors } from '../extractors/_shared/cross-discipl
 import { CrossDisciplineDetector } from './detectors/cross-discipline-detector.js'
 // ADR-031 Phase 2 batch 4 — hardcoded-secrets : extractor ts-morph supprimé, Datalog est l'unique source.
 // ADR-031 Phase 2 batch 2 — boolean-params : extractor ts-morph supprimé, Datalog est l'unique source.
-import { analyzeDeadCode, type DeadCodeFinding } from '../extractors/dead-code.js'
+// ADR-031 Phase 2 batch 5 — dead-code : extractor batch ts-morph retiré, Datalog est l'unique source.
+// extractDeadCodeFileBundle migré vers datalog-detectors/ast-facts/dead-code.ts
+// (consommé directement par ast-facts-visitor pour produire les 6 sub-kinds).
 import { analyzeFloatingPromises, type FloatingPromiseSite } from '../extractors/floating-promises.js'
 import { analyzeDeprecatedUsage, type DeprecatedDeclaration, type DeprecatedUsageSite } from '../extractors/deprecated-usage.js'
 import { analyzeArticulationPoints, type ArticulationPoint } from '../extractors/articulation-points.js'
@@ -116,7 +118,7 @@ import {
 } from '../extractors/state-machines.js'
 import { allTsImports as incAllTsImports } from '../incremental/ts-imports.js'
 // ADR-031 Phase 2 batch 4 — wrappers Salsa code-quality-patterns / security-patterns retirés (cf. Datalog runner)
-import { allDeadCode as incAllDeadCode } from '../incremental/dead-code.js'
+// ADR-031 Phase 2 batch 5 — wrapper Salsa dead-code retiré (cf. Datalog runner)
 import { allDeprecatedUsage as incAllDeprecatedUsage } from '../incremental/deprecated-usage.js'
 // ADR-031 Phase 2 batch 2 — wrapper Salsa constant-expressions retiré (cf. Datalog runner)
 // ADR-031 Phase 2 batch 4 — wrapper Salsa hardcoded-secrets retiré (cf. Datalog runner)
@@ -1101,14 +1103,11 @@ async function runPhase4SecurityAndQuality(ctx: DetectorPhaseContext) {
   // ADR-031 Phase 2 batch 2 — Datalog seul chemin. useDatalog=false → undefined.
   const booleanParams = await runDetectorTimed(timing, 'boolean-params',
     () => Promise.resolve(datalogPatch?.booleanParams))
-  // dead-code : Phase A.4.2 — runner couvre désormais les 6 kinds via
-  // délégation `extractDeadCodeFileBundle` dans le visitor (parité 100%).
+  // dead-code : Phase A.4.2 — runner couvre les 6 kinds via délégation
+  // `extractDeadCodeFileBundle` dans le visitor (parité 100%). Cf. ADR-026.
+  // ADR-031 Phase 2 batch 5 — Datalog seul chemin. useDatalog=false → undefined.
   const deadCode = await runDetectorTimed(timing, 'dead-code',
-    () => incremental
-      ? Promise.resolve(incAllDeadCode.get('all'))
-      : datalogPatch
-        ? Promise.resolve(datalogPatch.deadCode)
-        : analyzeDeadCode(config.rootDir, files, sharedProject))
+    () => Promise.resolve(datalogPatch?.deadCode))
   // floating-promises : dep sur snapshot.typedCalls (Phase 5 graph build).
   const floatingPromises = await runDetectorTimed(timing, 'floating-promises',
     () => analyzeFloatingPromises(config.rootDir, files, sharedProject, snapshot.typedCalls))

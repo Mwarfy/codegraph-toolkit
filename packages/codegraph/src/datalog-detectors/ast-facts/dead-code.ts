@@ -1,6 +1,11 @@
-// ADR-026
+// ADR-026 // ADR-031 Phase 2 batch 5
 /**
- * Dead code patterns — détecteur déterministe AST (Phase 4 Tier 3).
+ * Dead code patterns — per-file AST extractor.
+ *
+ * Historiquement vivait dans `extractors/dead-code.ts` (legacy ts-morph).
+ * Déplacé ici ADR-031 Phase 2 batch 5 : la fonction `extractDeadCodeFileBundle`
+ * est consommée directement par le runner Datalog (ast-facts-visitor) pour
+ * produire les 6 sub-kinds de DeadCodeFinding (parité 100% ADR-026 A.4.2).
  *
  * Deux patterns proches conceptuellement (du code redundant/inatteignable) :
  *
@@ -21,9 +26,8 @@
  * Skip les fichiers de test (pattern souvent intentionnel en setup/mock).
  */
 
-import { type Project, type SourceFile, Node, SyntaxKind } from 'ts-morph'
-import { makeIsExemptForMarker } from './_shared/ast-helpers.js'
-import { runPerSourceFileExtractor } from '../parallel/per-source-file-extractor.js'
+import { type SourceFile, Node, SyntaxKind } from 'ts-morph'
+import { makeIsExemptForMarker } from '../../extractors/_shared/ast-helpers.js'
 
 export type DeadCodeKind =
   | 'identical-subexpressions'
@@ -276,28 +280,4 @@ function thenAlwaysExits(then: Node): boolean {
 
 function truncate(s: string, max: number): string {
   return s.length <= max ? s : s.slice(0, max - 1) + '…'
-}
-
-
-export async function analyzeDeadCode(
-  rootDir: string,
-  files: string[],
-  project: Project,
-): Promise<DeadCodeFinding[]> {
-  const r = await runPerSourceFileExtractor<{ findings: DeadCodeFinding[] }, DeadCodeFinding>({
-    project,
-    files,
-    rootDir,
-    extractor: extractDeadCodeFileBundle,
-    selectItems: (b) => b.findings,
-    sortKey: (f) => `${f.file}:${String(f.line).padStart(8, '0')}:${f.kind}`,
-  })
-  return r.items
-}
-
-function relativize(absPath: string, rootDir: string): string | null {
-  const normalized = absPath.replace(/\\/g, '/')
-  const rootNormalized = rootDir.replace(/\\/g, '/')
-  if (!normalized.startsWith(rootNormalized)) return null
-  return normalized.slice(rootNormalized.length + 1)
 }

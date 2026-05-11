@@ -13,7 +13,8 @@ import { Project } from 'ts-morph'
 import { extractAstFactsBundle } from '../src/datalog-detectors/ast-facts-visitor.js'
 import { runDatalogDetectors } from '../src/datalog-detectors/runner.js'
 // ADR-031 Phase 2 — extractMagicNumbersFileBundle supprimé (extractor legacy retiré).
-import { extractDeadCodeFileBundle } from '../src/extractors/dead-code.js'
+// ADR-031 Phase 2 batch 5 — helper migré vers datalog-detectors/ast-facts/.
+import { extractDeadCodeFileBundle } from '../src/datalog-detectors/ast-facts/dead-code.js'
 
 function makeProject(files: Array<{ name: string; content: string }>): {
   project: Project

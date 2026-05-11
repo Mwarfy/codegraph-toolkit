@@ -130,7 +130,6 @@ reste correct.
 
 <!-- AUTO-GÉNÉRÉ depuis les marqueurs ADR-NNN du code source. Voir @liby-tools/adr-toolkit. NE PAS éditer à la main. -->
 
-- `packages/codegraph/src/extractors/dead-code.ts`
 - `packages/codegraph/src/extractors/drift-patterns.ts`
 
 

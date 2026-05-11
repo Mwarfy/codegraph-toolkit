@@ -11,7 +11,8 @@
  */
 
 import type { SourceFile } from 'ts-morph'
-import { extractDeadCodeFileBundle } from '../extractors/dead-code.js'
+// ADR-031 Phase 2 batch 5 — helper migré depuis extractors/dead-code.ts.
+import { extractDeadCodeFileBundle } from './ast-facts/dead-code.js'
 import { isFrameworkEntryPoint } from '../core/framework-conventions.js'
 import type {
   AstFactsBundle,

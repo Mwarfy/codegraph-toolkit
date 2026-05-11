@@ -95,19 +95,20 @@ describe('analyze({ useDatalog: true })', () => {
     expect(result.timing.detectors['datalog-runner']).toBeUndefined()
   })
 
-  it('produces snapshot with sémantic parity on 3 swapped fields', async () => {
+  it('produces snapshot with sémantic parity on 2 swapped fields', async () => {
     const { rootDir } = setupFixture()
     const cfg = { rootDir, include: ['src/**/*.ts'], exclude: [], entryPoints: [] }
     const legacy = await analyze(cfg)
     const datalog = await analyze(cfg, { useDatalog: true })
 
-    // ADR-031 Phase 2 batch 1+2+3+4 — 16 détecteurs retirés du legacy ts-morph.
+    // ADR-031 Phase 2 batch 1+2+3+4+5 — 17 détecteurs retirés du legacy ts-morph.
     // (batch 1 : magicNumbers / evalCalls / cryptoCalls / eventListenerSites ;
     //  batch 2 : longFunctions / booleanParams / functionComplexity / constantExpressions ;
     //  batch 3 : taintSinks / sanitizerCalls / taintedVars / argumentsFacts ;
-    //  batch 4 : hardcodedSecrets / resourceImbalances / securityPatterns / codeQualityPatterns).
+    //  batch 4 : hardcodedSecrets / resourceImbalances / securityPatterns / codeQualityPatterns ;
+    //  batch 5 : deadCode).
     // Plus de parité possible (legacy=undefined vs Datalog=valeur).
-    // Garde-fou conservé via datalog-legacy-parity.test.ts pour les 4 fields restants.
+    // Garde-fou conservé via datalog-legacy-parity.test.ts pour les 3 fields restants.
     // (longFunctions / functionComplexity / eventListenerSites retirés du legacy
     //  — cf. ADR-031 Phase 2 batch 1+2)
     expectSetEqual(legacy.snapshot.barrels, datalog.snapshot.barrels,
@@ -124,9 +125,6 @@ describe('analyze({ useDatalog: true })', () => {
     // driftSignals : 4 AST kinds direct + todo-no-owner via isTodoExempt
     expectSetEqual(legacy.snapshot.driftSignals, datalog.snapshot.driftSignals,
       (s) => `${s.kind}|${s.file}|${s.line}`, 'driftSignals')
-    // A.4.2 — deadCode : 6 kinds full coverage via délégation visitor → legacy
-    expectSetEqual(legacy.snapshot.deadCode, datalog.snapshot.deadCode,
-      (d) => `${d.kind}|${d.file}|${d.line}|${d.message}|${JSON.stringify(d.details ?? {})}`,
-      'deadCode')
+    // (deadCode retiré du legacy — cf. ADR-031 Phase 2 batch 5)
   })
 })
