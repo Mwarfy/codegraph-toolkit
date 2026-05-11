@@ -87,14 +87,15 @@ describe('Datalog/legacy parity — ADR-026/027 contract', () => {
     // ADR-031 Phase 1 — champs patchés par Datalog :
     //   - 3 overrides directs en début de runDeterministicDetectors
     //     (envUsage, barrels, eventEmitSites — analyzer.ts L942-944)
-    //   - 9 fields branchés en cascade `datalogPatch ? dl.X : legacy`
+    //   - 5 fields branchés en cascade `datalogPatch ? dl.X : legacy`
     //     dans phases 1-6 (analyzer.ts).
-    // Total : 12 fields qui DOIVENT être bit-identical legacy vs Datalog.
+    // Total : 8 fields qui DOIVENT être bit-identical legacy vs Datalog.
     //
     // ADR-031 Phase 2 :
     //   - batch 1 : magic-numbers / eval-calls / crypto-algo / event-listener-sites
     //   - batch 2 : long-functions / boolean-params / function-complexity / constant-expressions
-    // Pour ces 8 fields, Datalog est désormais l'unique source : useDatalog=false
+    //   - batch 3 : chaîne taint (taint-sinks / sanitizers / tainted-vars / arguments)
+    // Pour ces 12 fields, Datalog est désormais l'unique source : useDatalog=false
     // produit `undefined`, pas comparable au legacy → exclus de patchedFields.
     //
     // `driftSignals` traverse l'adapter (adaptDriftSignalsFromDatalog) ;
@@ -106,7 +107,6 @@ describe('Datalog/legacy parity — ADR-026/027 contract', () => {
       // Branchements cascade restants (ADR-026 phases A.3/A.4/E)
       'securityPatterns', 'codeQualityPatterns',
       'hardcodedSecrets', 'deadCode', 'resourceImbalances',
-      'taintSinks', 'sanitizerCalls', 'taintedVars', 'argumentsFacts',
     ]
 
     for (const field of patchedFields) {
@@ -126,20 +126,19 @@ describe('Datalog/legacy parity — ADR-026/027 contract', () => {
   // [] = [] des deux côtés et le test passe trivialement. Le canary
   // déclenche réellement la majorité des détecteurs, donc le BIT-IDENTICAL
   // sur ces fields est un vrai garde-fou (pas un hash vide=vide).
-  it('canary fixture : Datalog vs legacy → bit-identical on 12 patched fields', { timeout: 120_000 }, async () => {
+  it('canary fixture : Datalog vs legacy → bit-identical on 8 patched fields', { timeout: 120_000 }, async () => {
     const rootDir = path.resolve(__dirname, '../../../examples/canary-project')
 
     const dlSnap = await run(rootDir, true)
     const legacySnap = await run(rootDir, false)
 
-    // ADR-031 Phase 2 batch 2 — long-functions / boolean-params /
-    // function-complexity / constant-expressions retirés du legacy.
-    // Cumul Phase 2 : 20 → 12 fields verrouillés (batch 1 + batch 2).
+    // ADR-031 Phase 2 batch 3 — chaîne taint retirée (taint-sinks /
+    // sanitizers / tainted-vars / arguments). Cumul Phase 2 :
+    // 20 → 8 fields verrouillés (batch 1 + 2 + 3).
     const patchedFields: (keyof GraphSnapshot)[] = [
       'envUsage', 'barrels', 'eventEmitSites',
       'securityPatterns', 'codeQualityPatterns',
       'hardcodedSecrets', 'deadCode', 'resourceImbalances',
-      'taintSinks', 'sanitizerCalls', 'taintedVars', 'argumentsFacts',
     ]
 
     // Trace coverage : combien de fields sont réellement déclenchés par
@@ -176,15 +175,15 @@ describe('Datalog/legacy parity — ADR-026/027 contract', () => {
 
     // Garde-fou de coverage : si le canary cesse de déclencher la majorité
     // des détecteurs portés, le test devient cosmétique.
-    // ADR-031 Phase 2 batch 2 : threshold ajusté 8 → 5 (3 fields parmi les
-    // 4 retirés en batch 2 étaient triggered par le canary). Reste un vrai
-    // garde-fou : si triggered tombe sous 5/12, c'est qu'un autre détecteur
-    // a cessé de déclencher.
+    // ADR-031 Phase 2 batch 3 : threshold ajusté 5 → 3 (la chaîne taint
+    // contribuait 2 fields triggered, retirés). Reste un vrai garde-fou :
+    // si triggered tombe sous 3/8, c'est qu'un autre détecteur a cessé
+    // de déclencher.
     expect(
       triggered.length,
       `canary coverage trop faible : ${triggered.length}/${patchedFields.length} ` +
         `fields déclenchés. Empty fields: ${empty.join(', ')}`,
-    ).toBeGreaterThanOrEqual(5)
+    ).toBeGreaterThanOrEqual(3)
   })
 
   it('cycles fixture : nodes + edges structure identical', { timeout: 30_000 }, async () => {

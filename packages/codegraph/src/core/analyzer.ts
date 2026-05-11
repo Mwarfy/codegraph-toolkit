@@ -76,10 +76,9 @@ import { importEslintViolations, type EslintViolation } from '../extractors/esli
 import { findSqlNamingViolations, type SqlNamingViolation } from '../extractors/sql-naming.js'
 import { findMigrationOrderViolations, type MigrationOrderViolation } from '../extractors/sql-migration-order.js'
 import { analyzeResourceBalance, type ResourceImbalance } from '../extractors/resource-balance.js'
-import { analyzeTaintSinks, type TaintSink } from '../extractors/taint-sinks.js'
-import { analyzeSanitizers, type Sanitizer } from '../extractors/sanitizers.js'
-import { analyzeTaintedVars, type TaintedVarDecl, type TaintedArgCall } from '../extractors/tainted-vars.js'
-import { analyzeArguments, type TaintedArgumentToCall, type FunctionParam } from '../extractors/arguments.js'
+// ADR-031 Phase 2 batch 3 — chaîne taint (taint-sinks / sanitizers /
+// tainted-vars / arguments) : extractors ts-morph supprimés, Datalog est
+// l'unique source. NB: `taint.ts` (cross-file analyzeTaint) reste actif.
 // ADR-031 Phase 2 batch 2 — long-functions : extractor ts-morph supprimé, Datalog est l'unique source.
 // ADR-031 Phase 2 — magic-numbers : extractor ts-morph supprimé, Datalog est l'unique source.
 import { analyzeTestCoverage, type TestCoverageReport } from '../extractors/test-coverage.js'
@@ -124,10 +123,7 @@ import { allDeprecatedUsage as incAllDeprecatedUsage } from '../incremental/depr
 import { allHardcodedSecrets as incAllHardcodedSecrets } from '../incremental/hardcoded-secrets.js'
 // ADR-031 Phase 2 — wrapper Salsa magic-numbers retiré (cf. Datalog runner)
 import { allResourceBalances as incAllResourceBalances } from '../incremental/resource-balance.js'
-import { allTaintSinks as incAllTaintSinks } from '../incremental/taint-sinks.js'
-import { allSanitizers as incAllSanitizers } from '../incremental/sanitizers.js'
-import { allTaintedVars as incAllTaintedVars } from '../incremental/tainted-vars.js'
-import { allArguments as incAllArguments } from '../incremental/arguments.js'
+// ADR-031 Phase 2 batch 3 — wrappers Salsa chaîne taint retirés (cf. Datalog runner)
 // ADR-031 Phase 2 — wrapper Salsa crypto-algo retiré (cf. Datalog runner)
 // ADR-031 Phase 2 batch 2 — wrappers Salsa boolean-params / function-complexity retirés (cf. Datalog runner)
 // ADR-031 Phase 2 — wrapper Salsa eval-calls retiré (cf. Datalog runner)
@@ -1178,32 +1174,18 @@ async function runPhase5SqlAndResource(ctx: DetectorPhaseContext) {
  * runtime), mais les rules Datalog en aval consomment les 4 facts.
  */
 async function runPhase6TaintChain(ctx: DetectorPhaseContext) {
-  const { config, files, sharedProject, timing, incremental, datalogPatch } = ctx
+  const { timing, datalogPatch } = ctx
 
+  // ADR-031 Phase 2 batch 3 — Datalog seul chemin pour la chaîne taint.
+  // useDatalog=false → 4 fields undefined.
   const taintSinks = await runDetectorTimed(timing, 'taint-sinks',
-    () => incremental
-      ? Promise.resolve(incAllTaintSinks.get('all'))
-      : datalogPatch
-        ? Promise.resolve(datalogPatch.taintSinks)
-        : analyzeTaintSinks(config.rootDir, files, sharedProject))
+    () => Promise.resolve(datalogPatch?.taintSinks))
   const sanitizerCalls = await runDetectorTimed(timing, 'sanitizers',
-    () => incremental
-      ? Promise.resolve(incAllSanitizers.get('all'))
-      : datalogPatch
-        ? Promise.resolve(datalogPatch.sanitizerCalls)
-        : analyzeSanitizers(config.rootDir, files, sharedProject))
+    () => Promise.resolve(datalogPatch?.sanitizerCalls))
   const taintedVars = await runDetectorTimed(timing, 'tainted-vars',
-    () => incremental
-      ? Promise.resolve(incAllTaintedVars.get('all'))
-      : datalogPatch
-        ? Promise.resolve(datalogPatch.taintedVars)
-        : analyzeTaintedVars(config.rootDir, files, sharedProject))
+    () => Promise.resolve(datalogPatch?.taintedVars))
   const argumentsFacts = await runDetectorTimed(timing, 'arguments',
-    () => incremental
-      ? Promise.resolve(incAllArguments.get('all'))
-      : datalogPatch
-        ? Promise.resolve(datalogPatch.argumentsFacts)
-        : analyzeArguments(config.rootDir, files, sharedProject))
+    () => Promise.resolve(datalogPatch?.argumentsFacts))
 
   return { taintSinks, sanitizerCalls, taintedVars, argumentsFacts }
 }
