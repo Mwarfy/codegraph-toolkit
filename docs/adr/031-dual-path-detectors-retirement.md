@@ -1,7 +1,34 @@
 # ADR-031: Retrait du dual-path detectors (Datalog devient le seul chemin)
 
-**Date:** 2026-05-11
-**Status:** Accepted (Phase 0 audit) — Phases 1-3 planned
+**Date:** 2026-05-11 (révisé après audit code post-merge)
+**Status:** Accepted — Phase 1 in progress (PR #51), Phases 2-3 planned
+
+## Erratum (révision post-audit)
+
+L'audit Phase 0 décrivait un état du code **dépassé d'une release**.
+Diagnostic original : *"override actif sur 3 fields seulement, 15 en
+shadow only"*. Audit code post-merge (PR #51) révèle que :
+
+- **20 fields snapshot consomment déjà Datalog en prod** quand
+  `useDatalog=true` (= default depuis ADR-026 phase E / commit `608d725`).
+- 3 fields via overrides directs au début de `runDeterministicDetectors`
+  (`analyzer.ts` L942-944).
+- 17 fields via cascade `incremental ? salsa : datalogPatch ? dl.X : legacy`
+  dans phases 1-6 d'`analyzer.ts` (L1000-1227) — branchements posés
+  par ADR-026 phases A.3, A.4 et E.
+
+Le diagnostic Phase 0 a été écrit en regardant uniquement
+`runner-adapter.ts` + les 3 overrides directs, sans constater le
+branchement cascade dans les phases.
+
+**Conséquence sur les phases :**
+- Phase 1 telle qu'initialement décrite ("étendre les overrides aux
+  15 shadow") = déjà faite par ADR-026 A.3/A.4/E. Il restait un trou
+  de **garde-fou CI** (test parité bit-identical limité à 3/20 fields)
+  → PR #51 ferme ce trou.
+- Phase 2 (retrait du code legacy) inchangée — peut maintenant démarrer
+  protégée par garde-fou bit-identical 20 fields.
+- Phase 3 inchangée.
 
 ## Rule
 
@@ -21,25 +48,31 @@ BIT-IDENTICAL. Cette ADR annonçait :
 
 > *"Legacy-mode sera deprecated en v0.6 et retiré en v1.0."*
 
-État au 2026-05-11 (audit) — **on est en v0.6.2 et le retrait n'est
-jamais fait** :
+État au 2026-05-11 (audit révisé) — **on est en v0.6.2 et le retrait
+du code legacy n'est pas fait** :
 
 1. Tous les détecteurs portés ont **2 implémentations** :
-   - `extractors/<name>.ts` (legacy batch, encore utilisé par défaut)
+   - `extractors/<name>.ts` (legacy batch, **encore présent**, mais
+     ses outputs sont écrasés par Datalog en cascade quand
+     `useDatalog=true`)
    - `datalog-detectors/rules/<name>.dl` + visitor dans
      `datalog-detectors/ast-facts/`
-2. Le code legacy reste **le chemin principal** dans `analyzer.ts` —
-   le runner Datalog ne fait qu'un **override de 3 fields seulement**
-   (`envUsage`, `barrels`, `eventEmitSites`) via `buildSnapshotPatchFromDatalog`.
-3. Les **15 autres rules Datalog** sont calculées mais leurs outputs
-   ne sont **jamais consommés** en prod — ils servent uniquement au
-   shadow comparator (= test de parité).
+2. Le **runtime consomme déjà Datalog** pour 20/21 fields portés
+   quand `useDatalog=true` (default depuis ADR-026 phase E). Le legacy
+   continue de tourner mais ses outputs ne sont jamais utilisés —
+   gaspillage de cycles CPU.
+3. **driftSignals** transite par `adaptDriftSignalsFromDatalog`
+   (assemblage de 4 sub-arrays Datalog + Pattern 3 todo-no-owner
+   cross-file).
+4. **Le garde-fou CI bit-identical (`datalog-legacy-parity.test.ts`)
+   ne verrouillait que 3 fields** jusqu'à PR #51 (Phase 1) — laissait
+   17 fields à la dérive silencieuse potentielle.
 
 Conséquence pratique : chaque modification d'un détecteur porté
 demande de toucher les 2 implémentations (ou accepter la divergence
-silencieuse). Le test de parité (`datalog-legacy-parity.test.ts`
-ajouté en PR #39) protège contre la dérive mais ne supprime pas
-le coût de maintenance.
+silencieuse). Le shadow comparator (`datalog-shadow.test.ts`)
+protège la couverture sémantique sur 32 checks, mais avant PR #51
+le bit-identical CI ne couvrait que 3 fields.
 
 À chaque nouveau détecteur ajouté, on hérite du pattern → 2× le
 code. À 30 détecteurs → 60 sources de vérité. La dette est
@@ -56,29 +89,35 @@ code. À 30 détecteurs → 60 sources de vérité. La dette est
 
 ### Phase 0 (cette ADR — Accepted) — Audit + plan
 
-L'audit a déjà identifié :
+L'audit révisé (post-merge) identifie :
 - **18 détecteurs portés** : version Datalog existe, BIT-IDENTICAL prouvé
-- **3 détecteurs override actifs** : `envUsage`, `barrels`, `eventEmitSites`
-- **15 détecteurs shadow seulement** : Datalog calculé mais output non utilisé
+- **20 fields snapshot** consomment déjà Datalog en prod via cascade
+  (`useDatalog=true` default) — 3 overrides directs + 17 branchements
+  cascade dans phases 1-6 d'`analyzer.ts`
 - **3 détecteurs non portables** : `bin-shebangs`, `drizzle-schema`,
   `state-machines` (cross-file / IO-heavy aggregators — cf. ADR-026 § Detail)
+- **Trou Phase 1 originel** : garde-fou CI bit-identical limité à 3/20
+  fields (cf. §Why)
 
-Le retrait sera fait par **batch de 3-5 détecteurs** à la fois pour
-limiter le blast radius par PR. Pas de big-bang.
+Le retrait du code legacy sera fait par **batch de 3-5 détecteurs**
+à la fois pour limiter le blast radius par PR. Pas de big-bang.
 
-### Phase 1 (planned) — Étendre les overrides actifs aux 15 détecteurs shadow
+### Phase 1 (in progress via PR #51) — Verrouiller le garde-fou bit-identical
 
-- Pour chaque détecteur porté actuellement en shadow seulement, faire
-  passer son output Datalog en override actif (= ajouter au
-  `buildSnapshotPatchFromDatalog`).
-- Le test parité (PR #39) garantit BIT-IDENTICAL pour les fields
-  patchés.
-- À la fin de Phase 1 : 18 détecteurs en override actif, 3 en shadow
-  legacy (non portables).
-- Tous les outputs viennent de Datalog. Le code legacy continue de
-  s'exécuter mais ses outputs sont **systématiquement overrides**.
-- **Aucune régression observable** côté snapshot.json (= contrat
-  externe), test invariant ADR-030 protège.
+Audit révisé : les overrides actifs (= "extension du patch") sont
+déjà faits par ADR-026 phases A.3, A.4, E. Le vrai travail Phase 1
+qui restait = **élargir le garde-fou CI** pour ne pas retirer le
+code legacy à l'aveugle :
+
+- `datalog-legacy-parity.test.ts` voit sa liste `patchedFields`
+  passer de 3 → 20.
+- Nouveau test sur la fixture `canary-project` (la fixture `cycles`
+  était trop creuse) — déclenche réellement 11+/20 détecteurs.
+- Échoue si parité diverge OU si la coverage canary tombe sous 10/20.
+
+Cette PR ne change PAS le runtime — uniquement le garde-fou test.
+Aucune régression possible côté snapshot.json (test invariant
+ADR-030 protège).
 
 ### Phase 2 (planned) — Retirer le code legacy des détecteurs portés
 
@@ -112,8 +151,10 @@ limiter le blast radius par PR. Pas de big-bang.
 
 - **Retirer tous les détecteurs en une PR** : blast radius non gérable.
   Pattern ADR-027 = batch progressif.
-- **Retirer le legacy avant l'override actif** : pète l'output snapshot.
-  Faire Phase 1 (override) AVANT Phase 2 (retrait).
+- **Retirer le legacy avant le verrouillage du garde-fou** : pète
+  potentiellement l'output snapshot en silence. Faire Phase 1 (garde-fou
+  CI étendu à 20 fields) AVANT Phase 2 (retrait du code legacy). PR #51
+  remplit ce pré-requis.
 - **Retirer le test parité avant la fin de Phase 2** : on perd le
   garde-fou pendant qu'on retire le code. Test parité retiré seulement
   quand le code legacy l'est aussi.
@@ -128,28 +169,48 @@ limiter le blast radius par PR. Pas de big-bang.
 
 ## Tested by
 
-- Existant : `packages/codegraph/tests/datalog-legacy-parity.test.ts` —
-  preuve BIT-IDENTICAL des fields patchés. Reste pertinent pendant
-  Phase 1 (= override des 15 shadow), devient obsolète en Phase 2.
-- Existant : `packages/codegraph/tests/datalog-shadow.test.ts` — test
-  du shadow comparator. Reste pertinent jusqu'à Phase 3.
+- `packages/codegraph/tests/datalog-legacy-parity.test.ts` —
+  preuve BIT-IDENTICAL des fields patchés. Élargi à 20 fields + fixture
+  canary par PR #51 (Phase 1). Reste pertinent jusqu'à la fin de Phase 2
+  (= moment où plus aucun legacy à comparer pour les 18 portés).
+- `packages/codegraph/tests/datalog-shadow.test.ts` — test du shadow
+  comparator. Reste pertinent jusqu'à Phase 3.
 
 ## Detail
 
-### Détecteurs concernés (recensement Phase 0)
+### Détecteurs concernés (recensement révisé)
 
-**Portés actifs (3 — déjà en override)** :
-- `env-usage` → `EnvVarReadOut` rule
-- `barrels` → `BarrelFileOut` rule
-- `event-emit-sites` → `EventEmitSiteOut` rule
+**Fields snapshot servis par Datalog en prod (20 — déjà branchés)** :
 
-**Portés shadow (15 — à passer en override actif en Phase 1)** :
-magic-numbers, dead-code (identical-subexpr), eval-calls, crypto-algo,
-boolean-params, sanitizers, taint-sinks, long-functions,
-function-complexity, hardcoded-secrets, event-listener-sites,
-constant-expressions, arguments (tainted-args + params), tainted-vars
-(decls + arg-calls), resource-balance, security-patterns (4 sub),
-drift-patterns (4 sub), code-quality-patterns (4 sub).
+1. Overrides directs en début de `runDeterministicDetectors`
+   (`analyzer.ts` L942-944) :
+   - `envUsage` → `EnvVarReadOut` rule
+   - `barrels` → `BarrelFileOut` rule
+   - `eventEmitSites` → `EventEmitSiteOut` rule
+
+2. Cascade `datalogPatch ? dl.X : legacy` dans phases 1-6
+   (`analyzer.ts` L1000-1227) :
+   - **phase 1** : `longFunctions`, `magicNumbers`
+   - **phase 2** : `evalCalls`, `cryptoCalls`, `securityPatterns`,
+     `eventListenerSites`, `codeQualityPatterns`, `functionComplexity`
+   - **phase 4** : `hardcodedSecrets`, `booleanParams`, `deadCode`,
+     `constantExpressions`
+   - **phase 5** : `resourceImbalances`
+   - **phase 6** : `taintSinks`, `sanitizerCalls`, `taintedVars`,
+     `argumentsFacts`
+
+3. `driftSignals` via `adaptDriftSignalsFromDatalog`
+   (`analyzer.ts` L1065) — assemblage 4 sub-arrays + Pattern 3 todo
+   cross-file.
+
+**Code legacy à retirer en Phase 2** : `packages/codegraph/src/extractors/<name>.ts`
++ wrapper Salsa `incremental/<name>.ts` pour chacun des 18 détecteurs
+portés (env-usage, barrels, event-emit-sites, magic-numbers,
+long-functions, eval-calls, crypto-algo, security-patterns,
+event-listener-sites, code-quality-patterns, function-complexity,
+hardcoded-secrets, boolean-params, dead-code, constant-expressions,
+resource-balance, taint-sinks, sanitizers, tainted-vars, arguments,
+drift-patterns).
 
 **Non portables (3 — restent legacy permanent)** :
 - `bin-shebangs` — filesystem walk + JSON parse, pas d'AST
@@ -157,15 +218,17 @@ drift-patterns (4 sub), code-quality-patterns (4 sub).
 - `state-machines` — cross-file aggregation (concept ↔ writes via
   state values), async SQL file scan
 
-### Estimation effort
+### Estimation effort (révisée)
 
 | Phase | Scope | Effort | PRs |
 |---|---|---|---|
-| Phase 1 | Étendre 15 overrides | 1-2 semaines | 4-5 PRs (3-4 détecteurs par PR) |
-| Phase 2 | Retirer 18 fichiers legacy + wrappers Salsa | 1 semaine | 4-5 PRs |
+| Phase 1 | Verrouiller garde-fou bit-identical 20 fields | 1 session | 1 PR (#51) |
+| Phase 2 | Retirer 18 fichiers legacy + wrappers Salsa | 1 semaine | 4-5 PRs (3-4 détecteurs par PR) |
 | Phase 3 | Retirer shadow infra | 2-3 jours | 1 PR |
 
-**Total : 3-4 semaines sur 10-11 PRs.** Pattern ADR-027 = progression
+**Total révisé : 1-2 semaines sur 6-7 PRs.** Le gros de Phase 1
+(branchement runtime) ayant été pris en charge par ADR-026, le
+budget se rééquilibre vers Phase 2. Pattern ADR-027 = progression
 sur plusieurs sprints, pas un blocage.
 
 ### Pourquoi pas garder le dual-path indéfiniment ?
@@ -174,34 +237,32 @@ Considéré. Rejeté parce que :
 1. **Cost compound** : chaque nouveau détecteur ajouté hérite. À 30
    détecteurs, 60 sources de vérité.
 2. **Code legacy ralentit l'analyse** : pour le toolkit, le pipeline
-   legacy + Datalog = ~2× le travail (Datalog calcule mais sa sortie
-   est ignorée pour 15 détecteurs).
+   legacy + Datalog = ~2× le travail (le legacy tourne et écrit dans
+   snapshot, ses outputs sont ensuite écrasés par Datalog en cascade —
+   cycles CPU gaspillés sur 18 détecteurs).
 3. **ADR-026 a déjà annoncé le retrait** : 8 mois de gestation, time
    to deliver.
-4. **Risque maîtrisé** : test parité prouve BIT-IDENTICAL, donc
-   l'override Phase 1 est mécanique. Phase 2 retire du code dont la
-   non-régression est testée.
+4. **Risque maîtrisé** : test parité élargi (PR #51) prouve
+   BIT-IDENTICAL sur 20 fields. Phase 2 retire du code dont la
+   non-régression est testée en CI.
 
-### Pourquoi pas pas commencer immédiatement ?
+### Statut migration au 2026-05-11
 
-Considéré. Différé parce que :
-1. **Sprint dette architecturale en cours** : ADR-030, test invariant,
-   ADR-032, ADR-033 P1 — chaque pré-requis est encore frais. Faire
-   ADR-031 maintenant ajouterait du bruit aux gardes-fous mis en place.
-2. **ADR-033 P1 (sub-snapshots écriture parallèle) débloque le pipeline
-   pour des refontes futures** — y compris cette migration. Faisons
-   ADR-033 P1 d'abord.
-3. **Phase 1 de ADR-031 est mécanique mais répétitive** : 4-5 PRs.
-   Demande session(s) dédiée(s) pour ne pas casser le flow.
-
-L'audit Phase 0 est fait (= cette ADR). Phase 1 démarrera dans
-une session dédiée quand le sprint actuel sera clos.
+- Phase 0 (audit) : ✓ fait (cette ADR)
+- Phase 1 (verrouillage garde-fou bit-identical) : in progress via PR #51
+- Phase 2 (retrait code legacy) : prêt à démarrer une fois PR #51 mergée.
+  À splitter en 4-5 PRs par batch de 3-4 détecteurs.
+- Phase 3 (retrait shadow comparator) : différé à N releases après
+  Phase 2 stable.
 
 ## References
 
-- ADR-026 — pattern Datalog déclaratif (= source du plan)
+- ADR-026 — pattern Datalog déclaratif (= source du plan ; phases A.3/A.4/E
+  ont posé les branchements runtime)
 - ADR-029 — signaux propres avant refonte (= preuve via test parité)
 - ADR-030 — JSON public vs TS interne (= refonte interne légitime)
 - ADR-032 — cross-package contracts (= cascade impossible)
 - ADR-033 — sub-snapshots (= pré-requis pour les phases suivantes)
-- PR #39 — test parité Datalog/legacy bit-identical
+- PR #39 — test parité Datalog/legacy bit-identical (initial 3 fields)
+- PR #51 — Phase 1 verrouille parité bit-identical (3→20 fields, fixture
+  canary)
