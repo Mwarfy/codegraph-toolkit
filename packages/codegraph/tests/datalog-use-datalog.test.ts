@@ -95,18 +95,19 @@ describe('analyze({ useDatalog: true })', () => {
     expect(result.timing.detectors['datalog-runner']).toBeUndefined()
   })
 
-  it('produces snapshot with sémantic parity on 7 swapped fields', async () => {
+  it('produces snapshot with sémantic parity on 3 swapped fields', async () => {
     const { rootDir } = setupFixture()
     const cfg = { rootDir, include: ['src/**/*.ts'], exclude: [], entryPoints: [] }
     const legacy = await analyze(cfg)
     const datalog = await analyze(cfg, { useDatalog: true })
 
-    // ADR-031 Phase 2 batch 1+2+3 — 12 détecteurs retirés du legacy ts-morph.
+    // ADR-031 Phase 2 batch 1+2+3+4 — 16 détecteurs retirés du legacy ts-morph.
     // (batch 1 : magicNumbers / evalCalls / cryptoCalls / eventListenerSites ;
     //  batch 2 : longFunctions / booleanParams / functionComplexity / constantExpressions ;
-    //  batch 3 : taintSinks / sanitizerCalls / taintedVars / argumentsFacts).
+    //  batch 3 : taintSinks / sanitizerCalls / taintedVars / argumentsFacts ;
+    //  batch 4 : hardcodedSecrets / resourceImbalances / securityPatterns / codeQualityPatterns).
     // Plus de parité possible (legacy=undefined vs Datalog=valeur).
-    // Garde-fou conservé via datalog-legacy-parity.test.ts pour les 8 fields restants.
+    // Garde-fou conservé via datalog-legacy-parity.test.ts pour les 4 fields restants.
     // (longFunctions / functionComplexity / eventListenerSites retirés du legacy
     //  — cf. ADR-031 Phase 2 batch 1+2)
     expectSetEqual(legacy.snapshot.barrels, datalog.snapshot.barrels,
@@ -118,31 +119,11 @@ describe('analyze({ useDatalog: true })', () => {
     expectSetEqual(legacy.snapshot.eventEmitSites, datalog.snapshot.eventEmitSites,
       (e) => `${e.file}|${e.line}|${e.symbol}|${e.callee}|${e.kind}`, 'eventEmitSites')
     // (taintedVars retiré du legacy — cf. ADR-031 Phase 2 batch 3)
-    expectSetEqual(legacy.snapshot.resourceImbalances, datalog.snapshot.resourceImbalances,
-      (r) => `${r.file}|${r.containingSymbol}|${r.line}|${r.pair}|${r.acquireCount}|${r.releaseCount}`, 'resourceImbalances')
-    // securityPatterns sub-arrays
-    expectSetEqual(legacy.snapshot.securityPatterns?.secretRefs, datalog.snapshot.securityPatterns?.secretRefs,
-      (s) => `${s.file}|${s.line}|${s.varName}|${s.kind}`, 'securityPatterns.secretRefs')
-    expectSetEqual(legacy.snapshot.securityPatterns?.corsConfigs, datalog.snapshot.securityPatterns?.corsConfigs,
-      (c) => `${c.file}|${c.line}|${c.originKind}`, 'securityPatterns.corsConfigs')
-    expectSetEqual(legacy.snapshot.securityPatterns?.tlsUnsafe, datalog.snapshot.securityPatterns?.tlsUnsafe,
-      (t) => `${t.file}|${t.line}|${t.key}`, 'securityPatterns.tlsUnsafe')
-    expectSetEqual(legacy.snapshot.securityPatterns?.weakRandoms, datalog.snapshot.securityPatterns?.weakRandoms,
-      (w) => `${w.file}|${w.line}|${w.varName}|${w.secretKind}`, 'securityPatterns.weakRandoms')
-    // codeQualityPatterns sub-arrays — NB: legacy peut avoir doublons sur
-    // même file:line (regexLiterals, allocationInLoops). Datalog déduplique.
-    // Utilise un set qui les compte distincts pour éviter le faux ✗.
-    expectSetEqual(legacy.snapshot.codeQualityPatterns?.tryCatchSwallows, datalog.snapshot.codeQualityPatterns?.tryCatchSwallows,
-      (t) => `${t.file}|${t.line}|${t.kind}|${t.containingSymbol}`, 'tryCatchSwallows')
-    expectSetEqual(legacy.snapshot.codeQualityPatterns?.awaitInLoops, datalog.snapshot.codeQualityPatterns?.awaitInLoops,
-      (a) => `${a.file}|${a.line}|${a.loopKind}|${a.containingSymbol}`, 'awaitInLoops')
+    // (resourceImbalances / securityPatterns / codeQualityPatterns /
+    //  hardcodedSecrets retirés du legacy — cf. ADR-031 Phase 2 batch 4)
     // driftSignals : 4 AST kinds direct + todo-no-owner via isTodoExempt
     expectSetEqual(legacy.snapshot.driftSignals, datalog.snapshot.driftSignals,
       (s) => `${s.kind}|${s.file}|${s.line}`, 'driftSignals')
-    // A.4.1 — hardcodedSecrets : full shape avec trigger, entropy 2-decimals
-    expectSetEqual(legacy.snapshot.hardcodedSecrets, datalog.snapshot.hardcodedSecrets,
-      (h) => `${h.file}|${h.line}|${h.context}|${h.preview}|${h.entropy}|${h.length}|${h.trigger}`,
-      'hardcodedSecrets')
     // A.4.2 — deadCode : 6 kinds full coverage via délégation visitor → legacy
     expectSetEqual(legacy.snapshot.deadCode, datalog.snapshot.deadCode,
       (d) => `${d.kind}|${d.file}|${d.line}|${d.message}|${JSON.stringify(d.details ?? {})}`,

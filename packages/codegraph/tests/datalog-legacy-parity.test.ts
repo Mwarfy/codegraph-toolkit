@@ -87,15 +87,16 @@ describe('Datalog/legacy parity — ADR-026/027 contract', () => {
     // ADR-031 Phase 1 — champs patchés par Datalog :
     //   - 3 overrides directs en début de runDeterministicDetectors
     //     (envUsage, barrels, eventEmitSites — analyzer.ts L942-944)
-    //   - 5 fields branchés en cascade `datalogPatch ? dl.X : legacy`
-    //     dans phases 1-6 (analyzer.ts).
-    // Total : 8 fields qui DOIVENT être bit-identical legacy vs Datalog.
+    //   - 1 field branché en cascade `datalogPatch ? dl.X : legacy`
+    //     dans phases 1-6 (deadCode — le seul restant).
+    // Total : 4 fields qui DOIVENT être bit-identical legacy vs Datalog.
     //
     // ADR-031 Phase 2 :
     //   - batch 1 : magic-numbers / eval-calls / crypto-algo / event-listener-sites
     //   - batch 2 : long-functions / boolean-params / function-complexity / constant-expressions
     //   - batch 3 : chaîne taint (taint-sinks / sanitizers / tainted-vars / arguments)
-    // Pour ces 12 fields, Datalog est désormais l'unique source : useDatalog=false
+    //   - batch 4 : hardcoded-secrets / resource-balance / security-patterns / code-quality-patterns
+    // Pour ces 16 fields, Datalog est désormais l'unique source : useDatalog=false
     // produit `undefined`, pas comparable au legacy → exclus de patchedFields.
     //
     // `driftSignals` traverse l'adapter (adaptDriftSignalsFromDatalog) ;
@@ -104,9 +105,8 @@ describe('Datalog/legacy parity — ADR-026/027 contract', () => {
     const patchedFields: (keyof GraphSnapshot)[] = [
       // Overrides directs (ADR-026 phase A.3 seed)
       'envUsage', 'barrels', 'eventEmitSites',
-      // Branchements cascade restants (ADR-026 phases A.3/A.4/E)
-      'securityPatterns', 'codeQualityPatterns',
-      'hardcodedSecrets', 'deadCode', 'resourceImbalances',
+      // Branchement cascade restant (deadCode — Phase 2 batch 5 ou +)
+      'deadCode',
     ]
 
     for (const field of patchedFields) {
@@ -126,19 +126,18 @@ describe('Datalog/legacy parity — ADR-026/027 contract', () => {
   // [] = [] des deux côtés et le test passe trivialement. Le canary
   // déclenche réellement la majorité des détecteurs, donc le BIT-IDENTICAL
   // sur ces fields est un vrai garde-fou (pas un hash vide=vide).
-  it('canary fixture : Datalog vs legacy → bit-identical on 8 patched fields', { timeout: 120_000 }, async () => {
+  it('canary fixture : Datalog vs legacy → bit-identical on 4 patched fields', { timeout: 120_000 }, async () => {
     const rootDir = path.resolve(__dirname, '../../../examples/canary-project')
 
     const dlSnap = await run(rootDir, true)
     const legacySnap = await run(rootDir, false)
 
-    // ADR-031 Phase 2 batch 3 — chaîne taint retirée (taint-sinks /
-    // sanitizers / tainted-vars / arguments). Cumul Phase 2 :
-    // 20 → 8 fields verrouillés (batch 1 + 2 + 3).
+    // ADR-031 Phase 2 batch 4 — hardcoded-secrets / resource-balance /
+    // security-patterns / code-quality-patterns retirés. Cumul Phase 2 :
+    // 20 → 4 fields verrouillés (batch 1 + 2 + 3 + 4).
     const patchedFields: (keyof GraphSnapshot)[] = [
       'envUsage', 'barrels', 'eventEmitSites',
-      'securityPatterns', 'codeQualityPatterns',
-      'hardcodedSecrets', 'deadCode', 'resourceImbalances',
+      'deadCode',
     ]
 
     // Trace coverage : combien de fields sont réellement déclenchés par
@@ -175,15 +174,16 @@ describe('Datalog/legacy parity — ADR-026/027 contract', () => {
 
     // Garde-fou de coverage : si le canary cesse de déclencher la majorité
     // des détecteurs portés, le test devient cosmétique.
-    // ADR-031 Phase 2 batch 3 : threshold ajusté 5 → 3 (la chaîne taint
-    // contribuait 2 fields triggered, retirés). Reste un vrai garde-fou :
-    // si triggered tombe sous 3/8, c'est qu'un autre détecteur a cessé
-    // de déclencher.
+    // ADR-031 Phase 2 batch 4 : threshold ajusté 3 → 1 (4 fields résiduels
+    // sont essentiellement les 3 overrides directs + deadCode ; canary
+    // déclenche surtout envUsage/eventEmitSites). Le test reste un garde-fou
+    // anti-faux-positif : si le canary cesse de déclencher au moins 1 field,
+    // c'est qu'il est devenu cosmétique.
     expect(
       triggered.length,
       `canary coverage trop faible : ${triggered.length}/${patchedFields.length} ` +
         `fields déclenchés. Empty fields: ${empty.join(', ')}`,
-    ).toBeGreaterThanOrEqual(3)
+    ).toBeGreaterThanOrEqual(1)
   })
 
   it('cycles fixture : nodes + edges structure identical', { timeout: 30_000 }, async () => {
