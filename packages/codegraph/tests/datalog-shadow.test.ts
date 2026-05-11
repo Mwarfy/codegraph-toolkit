@@ -37,12 +37,17 @@ function setupFixture(): { rootDir: string; files: string[] } {
 describe('runDatalogShadow', () => {
   it('produces a report with all 32 checks matching on a clean fixture', async () => {
     const { rootDir, files } = setupFixture()
+    // ADR-031 Phase 2 batch 1 — useDatalog: true requis car le legacy
+    // ts-morph est retiré pour magic-numbers / eval-calls / crypto-algo /
+    // event-listener-sites. Sans Datalog, snap.{magicNumbers,evalCalls,…}
+    // serait undefined → shadow signalerait des divergences artificielles.
+    // Aligné avec le mode CLI prod (useDatalog forcé true).
     const result = await analyze({
       rootDir,
       include: ['src/**/*.ts'],
       exclude: [],
       entryPoints: [],
-    })
+    }, { useDatalog: true })
     const project = new Project({ skipAddingFilesFromTsConfig: true })
     for (const f of files) project.addSourceFileAtPathIfExists(join(rootDir, f))
 

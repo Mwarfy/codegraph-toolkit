@@ -59,7 +59,6 @@ DB via `new SalsaDatabase()` LOCAL au test, jamais exporté.
 - `packages/codegraph/src/incremental/complexity.ts`
 - `packages/codegraph/src/incremental/compression-similarity.ts`
 - `packages/codegraph/src/incremental/constant-expressions.ts`
-- `packages/codegraph/src/incremental/crypto-algo.ts`
 - `packages/codegraph/src/incremental/cycles.ts`
 - `packages/codegraph/src/incremental/data-flows.ts`
 - `packages/codegraph/src/incremental/database.ts`
@@ -67,11 +66,9 @@ DB via `new SalsaDatabase()` LOCAL au test, jamais exporté.
 - `packages/codegraph/src/incremental/deprecated-usage.ts`
 - `packages/codegraph/src/incremental/drift-patterns.ts`
 - `packages/codegraph/src/incremental/env-usage.ts`
-- `packages/codegraph/src/incremental/eval-calls.ts`
 - `packages/codegraph/src/incremental/event-emit-sites.ts`
 - `packages/codegraph/src/incremental/function-complexity.ts`
 - `packages/codegraph/src/incremental/hardcoded-secrets.ts`
-- `packages/codegraph/src/incremental/magic-numbers.ts`
 - `packages/codegraph/src/incremental/metrics.ts`
 - `packages/codegraph/src/incremental/oauth-scope-literals.ts`
 - `packages/codegraph/src/incremental/package-deps.ts`

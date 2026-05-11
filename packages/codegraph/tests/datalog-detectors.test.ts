@@ -12,7 +12,7 @@ import { describe, it, expect } from 'vitest'
 import { Project } from 'ts-morph'
 import { extractAstFactsBundle } from '../src/datalog-detectors/ast-facts-visitor.js'
 import { runDatalogDetectors } from '../src/datalog-detectors/runner.js'
-import { extractMagicNumbersFileBundle } from '../src/extractors/magic-numbers.js'
+// ADR-031 Phase 2 — extractMagicNumbersFileBundle supprimé (extractor legacy retiré).
 import { extractDeadCodeFileBundle } from '../src/extractors/dead-code.js'
 
 function makeProject(files: Array<{ name: string; content: string }>): {
@@ -120,29 +120,10 @@ describe('ast-facts-visitor', () => {
 })
 
 describe('runDatalogDetectors — BIT-IDENTICAL vs legacy', () => {
-  it('magic-numbers : same output on synthetic fixture', async () => {
-    const fixture = [{
-      name: 'app.ts',
-      content: `
-        const TIMEOUT = 5000
-        setInterval(fn, 30000)
-        const cfg = { timeoutMs: 60000, threshold: 95, ratio: 0.5 }
-        function f(x: number) { return x > 1500 }
-      `,
-    }]
-    const { project, fileNames } = makeProject(fixture)
-    const dl = await runDatalogDetectors({ project, files: fileNames, rootDir: '/virtual' })
-
-    // Legacy extractor (TEST_FILE_RE doesn't match 'app.ts' — runs)
-    const legacy = extractMagicNumbersFileBundle(project.getSourceFiles()[0], 'app.ts')
-
-    const norm = (m: { file: string; line: number; value: string; context: string; category: string }) =>
-      `${m.file}:${m.line}:${m.value}:${m.context}:${m.category}`
-    const dlSet = dl.magicNumbers.map((m) => norm({ ...m, value: m.value }))
-    const legacySet = legacy.numbers.map(norm)
-
-    expect([...dlSet].sort()).toEqual([...legacySet].sort())
-  })
+  // ADR-031 Phase 2 — `magic-numbers : same output on synthetic fixture`
+  // retiré : extracteur legacy supprimé. Parité Datalog/legacy end-to-end
+  // restait verrouillée par datalog-legacy-parity.test.ts jusqu'au retrait
+  // du field correspondant dans patchedFields (cf. Phase 2 batch 1).
 
   it('dead-code/identical-subexpressions : same output on synthetic fixture', async () => {
     const fixture = [{
