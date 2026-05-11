@@ -123,6 +123,34 @@ profondément (objets imbriqués), pas streamable utilement.
 - Migration douce comme P2 ADR-027 : v3 (= fat blob + sub-files)
   reste lisible pendant N releases avant suppression.
 
+### Triggers
+
+> **Audit dette 2026-05-12 §T3.2.** Formalise les déclencheurs des
+> phases planned pour éviter l'inertie indéfinie.
+
+- **Phase 2 trigger** : ✓ déclenchée — APIs `loadGraphCore` /
+  `loadDetectorOutput` / `loadMetrics` ajoutées à `snapshot-loader.ts`
+  (cf. structure actuelle du fichier). Phase 2 considérée **done**.
+- **Phase 3 trigger** : en cours — démarre dès qu'un consumer
+  cross-package (cf. ADR-032) ou une CLI command a un coût parse mesuré
+  > 50 ms pour 1 champ utilisé. Migration progressive 1 consumer / PR.
+  Avancement constaté : PRs #65, #66, #67, #68 ont migré 4 routes
+  dashboard vers les loaders lazy.
+- **Phase 3 critère "complete"** : ≥ 80% des points d'appel à
+  `loadSnapshotPayload` (= grep récursif depuis `packages/*/src/` +
+  `scripts/`) ont migré vers `loadGraphCore` / `loadDetectorOutput` /
+  `loadMetrics`. Mesurable via grep — pose un test invariant CI quand
+  on s'approche du seuil pour le verrouiller.
+- **Phase 4 trigger** : démarrer au PLUS TÔT des deux :
+  - Phase 3 atteint le critère "complete" (≥ 80% migrés) ET au moins
+    1 release publiée stable depuis (= 1 minor release sans rollback)
+  - OU mesure perf prod montre que le fat blob est un bottleneck
+    confirmé (e.g. parse > 500 ms sur repos cibles connus comme
+    Sentinel à ~250 files)
+- **Phase 4 critère "complete"** : `snapshot.json` ne contient plus que
+  le graph core (`nodes`, `edges`, `stats`, `meta`) — pas les outputs
+  détecteurs. La taille passe de 2.4 MB à ~250 KB sur le toolkit.
+
 ## Anti-patterns
 
 - **Bump `meta.version` sans migration douce** : casse les consumers

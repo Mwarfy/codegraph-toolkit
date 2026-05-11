@@ -21,6 +21,21 @@ Pas de "pour la cohérence" / "pour la maintenabilité" — du factuel reproduct
 - Ce qu'on NE FAIT PLUS (anti-pattern)
 - Cas limite + résolution
 
+## Triggers
+
+> **Obligatoire** si l'ADR a un status "Accepted (Phase 1)" / "Phases X-Y planned"
+> ou mentionne "(planned)", "(différé)", "(optionnel)" pour une phase future.
+> Sans triggers, les phases planned deviennent du backlog dormant indéfini
+> (cf. audit dette 2026-05-12 §T3.2). Verrouillé par `tests/adr-triggers-invariant.test.ts`.
+
+Pour chaque phase planned/différée, lister au moins UN trigger observable parmi :
+- **Version cible** : "v0.8.0", "v1.0" (= seuil temporel concret)
+- **Durée** : "4 mois consécutifs sans X" (= condition mesurable)
+- **Métrique** : "≥ 80% des consumers migrés" (= seuil observable)
+- **Événement** : "Phase Y complete depuis 1 release stable" (= dépendance acyclique)
+
+ET un critère "fait" mesurable (= ce qu'on grep / mesure pour clore la phase).
+
 ## Anchored in
 
 > **AUTO-GÉNÉRÉ depuis les marqueurs du code.** Ne pas remplir cette section
