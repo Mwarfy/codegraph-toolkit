@@ -98,7 +98,6 @@ est seul à le faire, et c'est ce qui crée les conflits structurels.
 - `packages/codegraph/src/datalog-detectors/runner.ts`
 - `packages/codegraph/src/incremental/fact-store.ts`
 - `packages/codegraph/src/incremental/input-hash.ts`
-- `packages/codegraph/src/incremental/snapshot-loader.ts`
 
 
 ## Detail
