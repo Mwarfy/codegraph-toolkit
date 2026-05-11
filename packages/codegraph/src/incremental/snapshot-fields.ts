@@ -98,6 +98,65 @@ export const METRIC_FIELDS = [
 
 export type MetricFieldName = (typeof METRIC_FIELDS)[number]
 
+// ─── Detector field kinds (array vs bundle) ────────────────────────────────
+//
+// La majorité des champs `DetectorOutputs` sont `Array<{...}>` — écrits en
+// NDJSON canonique (1 fact / ligne). Sept champs sont des bundles objet
+// (testCoverage, sqlSchema, codeQualityPatterns, securityPatterns,
+// deprecatedUsage, argumentsFacts, taintedVars) — écrits en 1 ligne JSON
+// unique.
+//
+// Phase 2 ADR-033 (loaders lazy) doit savoir comment parser chaque sub-file
+// sans avoir lu le fat blob — d'où ce mapping runtime. Exhaustivité
+// garantie via `satisfies Record<DetectorFieldName, ...>` (TypeScript
+// vérifie que toutes les clés sont présentes ET valides).
+
+export type DetectorFieldKind = 'array' | 'bundle'
+
+export const DETECTOR_FIELD_KINDS = {
+  cycles: 'array',
+  truthPoints: 'array',
+  dataFlows: 'array',
+  stateMachines: 'array',
+  envUsage: 'array',
+  taintViolations: 'array',
+  packageDeps: 'array',
+  binShebangIssues: 'array',
+  barrels: 'array',
+  eventEmitSites: 'array',
+  oauthScopeLiterals: 'array',
+  todos: 'array',
+  driftSignals: 'array',
+  longFunctions: 'array',
+  magicNumbers: 'array',
+  testCoverage: 'bundle',
+  coChangePairs: 'array',
+  sqlSchema: 'bundle',
+  evalCalls: 'array',
+  cryptoCalls: 'array',
+  eventListenerSites: 'array',
+  codeQualityPatterns: 'bundle',
+  securityPatterns: 'bundle',
+  hardcodedSecrets: 'array',
+  booleanParams: 'array',
+  deadCode: 'array',
+  floatingPromises: 'array',
+  deprecatedUsage: 'bundle',
+  articulationPoints: 'array',
+  articulationGrandfathered: 'array',
+  constantExpressions: 'array',
+  eslintViolations: 'array',
+  sqlNamingViolations: 'array',
+  sqlMigrationOrderViolations: 'array',
+  resourceImbalances: 'array',
+  taintSinks: 'array',
+  sanitizerCalls: 'array',
+  argumentsFacts: 'bundle',
+  taintedVars: 'bundle',
+  docClaims: 'array',
+  docStaleClaims: 'array',
+} as const satisfies Record<DetectorFieldName, DetectorFieldKind>
+
 // ─── Type-level exhaustiveness checks ──────────────────────────────────────
 //
 // Si un champ existe dans `DetectorOutputs` mais n'est PAS dans
