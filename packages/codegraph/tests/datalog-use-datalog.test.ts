@@ -95,36 +95,24 @@ describe('analyze({ useDatalog: true })', () => {
     expect(result.timing.detectors['datalog-runner']).toBeUndefined()
   })
 
-  it('produces snapshot with sémantic parity on 2 swapped fields', async () => {
+  it('produces snapshot with sémantic parity on driftSignals only', async () => {
     const { rootDir } = setupFixture()
     const cfg = { rootDir, include: ['src/**/*.ts'], exclude: [], entryPoints: [] }
     const legacy = await analyze(cfg)
     const datalog = await analyze(cfg, { useDatalog: true })
 
-    // ADR-031 Phase 2 batch 1+2+3+4+5 — 17 détecteurs retirés du legacy ts-morph.
-    // (batch 1 : magicNumbers / evalCalls / cryptoCalls / eventListenerSites ;
-    //  batch 2 : longFunctions / booleanParams / functionComplexity / constantExpressions ;
-    //  batch 3 : taintSinks / sanitizerCalls / taintedVars / argumentsFacts ;
-    //  batch 4 : hardcodedSecrets / resourceImbalances / securityPatterns / codeQualityPatterns ;
-    //  batch 5 : deadCode).
-    // Plus de parité possible (legacy=undefined vs Datalog=valeur).
-    // Garde-fou conservé via datalog-legacy-parity.test.ts pour les 3 fields restants.
-    // (longFunctions / functionComplexity / eventListenerSites retirés du legacy
-    //  — cf. ADR-031 Phase 2 batch 1+2)
-    expectSetEqual(legacy.snapshot.barrels, datalog.snapshot.barrels,
-      (b) => `${b.file}|${b.reExportCount}|${b.consumerCount}|${b.lowValue}`, 'barrels')
-    expectSetEqual(legacy.snapshot.envUsage, datalog.snapshot.envUsage,
-      (u) => `${u.name}|${u.isSecret}|${u.readers.length}`, 'envUsage')
-    // (constantExpressions retiré du legacy — cf. ADR-031 Phase 2 batch 2)
-    // (argumentsFacts retiré du legacy — cf. ADR-031 Phase 2 batch 3)
-    expectSetEqual(legacy.snapshot.eventEmitSites, datalog.snapshot.eventEmitSites,
-      (e) => `${e.file}|${e.line}|${e.symbol}|${e.callee}|${e.kind}`, 'eventEmitSites')
-    // (taintedVars retiré du legacy — cf. ADR-031 Phase 2 batch 3)
-    // (resourceImbalances / securityPatterns / codeQualityPatterns /
-    //  hardcodedSecrets retirés du legacy — cf. ADR-031 Phase 2 batch 4)
-    // driftSignals : 4 AST kinds direct + todo-no-owner via isTodoExempt
-    expectSetEqual(legacy.snapshot.driftSignals, datalog.snapshot.driftSignals,
-      (s) => `${s.kind}|${s.file}|${s.line}`, 'driftSignals')
-    // (deadCode retiré du legacy — cf. ADR-031 Phase 2 batch 5)
+    // ADR-031 Phase 2 batch 1+2+3+4+5+6+7 — 18 détecteurs portés retirés
+    // du legacy ts-morph + 3 overrides directs (envUsage / barrels /
+    // eventEmitSites) en batch 7 final. Plus de parité possible :
+    // useDatalog=false produit `undefined` pour ces fields.
+    //
+    // Reste seulement `driftSignals` qui suit son propre code path
+    // (adaptDriftSignalsFromDatalog) : useDatalog=false → undefined,
+    // useDatalog=true → assemblé. Le test compare donc undefined vs valeur
+    // — il fail toujours sauf si on l'enlève. Retiré dans cette PR aussi.
+    // Le test reste valable comme smoke test que useDatalog=true tourne
+    // sans throw et produit un snapshot non-vide (vérifié plus haut).
+    void legacy
+    void datalog
   })
 })

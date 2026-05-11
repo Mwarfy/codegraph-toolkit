@@ -8,7 +8,7 @@ import * as fs from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { createSharedProject } from '../src/extractors/unused-exports.js'
 import { analyzePackageDeps } from '../src/extractors/package-deps.js'
-import { analyzeBarrels } from '../src/extractors/barrels.js'
+// ADR-031 Phase 2 batch 7 (final) — analyzeBarrels supprimé (Datalog seul chemin).
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -36,7 +36,6 @@ async function run(): Promise<void> {
   const project = createSharedProject(fixtureDir, files, path.join(fixtureDir, 'tsconfig.json'))
 
   const issues = await analyzePackageDeps(fixtureDir, files, project)
-  const barrels = await analyzeBarrels(fixtureDir, files, project)
 
   // ─── 1. Root manifest — declared-unused ────────────────────────────
   const unused = issues.filter((i) => i.kind === 'declared-unused' && i.packageJson === 'package.json')
@@ -93,29 +92,16 @@ async function run(): Promise<void> {
   console.log('✓ package-deps: per-manifest scope resolution (chalk → workspace-pkg only)')
 
   // ─── 7. Barrels ────────────────────────────────────────────────────
-  const barrelFiles = barrels.map((b) => b.file).sort()
-  assert.deepEqual(barrelFiles, ['src/barrel.ts'], `expected only src/barrel.ts as barrel, got: ${barrelFiles.join(',')}`)
-
-  const barrel = barrels[0]!
-  assert.equal(barrel.reExportCount, 2, 'barrel.ts has 2 re-exports')
-  assert.equal(barrel.consumerCount, 1, 'barrel has 1 consumer (barrel-consumer.ts)')
-  assert.deepEqual(barrel.consumers, ['src/barrel-consumer.ts'])
-  assert.equal(barrel.lowValue, true, 'consumerCount=1 < threshold=2 → lowValue')
-
-  // `not-a-barrel.ts` ne doit PAS être détecté comme barrel.
-  assert.ok(!barrels.some((b) => b.file === 'src/not-a-barrel.ts'), 'not-a-barrel.ts has a non-re-export statement → not a barrel')
-
-  console.log('✓ barrels: src/barrel.ts detected, not-a-barrel.ts excluded, lowValue=true')
+  // ADR-031 Phase 2 batch 7 (final) — section barrels retirée : Datalog
+  // est désormais l'unique producteur (couverture via datalog-rule-cases).
 
   // ─── 8. Déterminisme ───────────────────────────────────────────────
   const project2 = createSharedProject(fixtureDir, files, path.join(fixtureDir, 'tsconfig.json'))
   const issues2 = await analyzePackageDeps(fixtureDir, files, project2)
-  const barrels2 = await analyzeBarrels(fixtureDir, files, project2)
   assert.equal(JSON.stringify(issues), JSON.stringify(issues2), 'package-deps output not byte-equivalent between runs')
-  assert.equal(JSON.stringify(barrels), JSON.stringify(barrels2), 'barrels output not byte-equivalent between runs')
 
-  console.log('✓ package-deps + barrels: deterministic across runs')
-  console.log(`\n  Summary: ${issues.length} issues / ${barrels.length} barrels detected\n  all assertions passed`)
+  console.log('✓ package-deps: deterministic across runs')
+  console.log(`\n  Summary: ${issues.length} issues detected\n  all assertions passed`)
 }
 
 run().catch((err) => {
