@@ -112,4 +112,85 @@ describe('co-change extractor', () => {
       await fs.rm(tmp, { recursive: true, force: true })
     }
   })
+
+  // ADR-029 — vues dérivées tracked dans l'historique mais désormais
+  // gitignored (CLAUDE-CONTEXT.md, etc.) doivent être EXCLUES des
+  // co-change pairs, sinon elles polluent le top-N (régénérées par
+  // hook = co-changent mécaniquement avec tout commit).
+  it('excludes gitignored derived files from pairs (ADR-029)', async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'co-change-derived-'))
+    try {
+      execSync('git init -q', { cwd: tmp })
+      execSync('git config user.email test@test', { cwd: tmp })
+      execSync('git config user.name Test', { cwd: tmp })
+      execSync('git config commit.gpgsign false', { cwd: tmp })
+
+      // 3 commits : src.ts co-modifié avec DERIVED.md à chaque fois.
+      // DERIVED.md sera gitignored après-coup (= simulation d'un fichier
+      // historiquement tracked puis sorti du tracking).
+      for (let i = 0; i < 3; i++) {
+        await fs.writeFile(path.join(tmp, 'src.ts'), `export const x = ${i}\n`)
+        await fs.writeFile(path.join(tmp, 'DERIVED.md'), `regen ${i}\n`)
+        execSync(`git add . && git commit -q -m c${i}`, { cwd: tmp })
+      }
+
+      // Avant gitignore : la pair (DERIVED.md, src.ts) est présente
+      const before = await analyzeCoChange(tmp, { minCount: 2 })
+      const pairBefore = before.find((p) => p.from === 'DERIVED.md' && p.to === 'src.ts')
+      expect(pairBefore, 'pair présente avant gitignore').toBeDefined()
+
+      // On gitignore DERIVED.md + le retire du tracking (= état post-ADR-027 P1)
+      await fs.writeFile(path.join(tmp, '.gitignore'), 'DERIVED.md\n')
+      execSync('git rm --cached DERIVED.md', { cwd: tmp })
+      execSync('git add . && git commit -q -m gitignore-derived', { cwd: tmp })
+
+      // Après : la pair doit avoir disparu (DERIVED.md filtré via git check-ignore)
+      const after = await analyzeCoChange(tmp, { minCount: 2 })
+      const pairAfter = after.find((p) => p.from === 'DERIVED.md' || p.to === 'DERIVED.md')
+      expect(pairAfter, 'pair impliquant DERIVED.md doit être filtrée post-gitignore').toBeUndefined()
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true })
+    }
+  })
+
+  it('preserves legitimate non-tracked pairs (ex: test.tsx ↔ source.ts) when not gitignored', async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'co-change-tsx-'))
+    try {
+      execSync('git init -q', { cwd: tmp })
+      execSync('git config user.email test@test', { cwd: tmp })
+      execSync('git config user.name Test', { cwd: tmp })
+      execSync('git config commit.gpgsign false', { cwd: tmp })
+
+      for (let i = 0; i < 3; i++) {
+        await fs.writeFile(path.join(tmp, 'source.ts'), `export const x = ${i}\n`)
+        await fs.writeFile(path.join(tmp, 'source.test.tsx'), `// test ${i}\n`)
+        execSync(`git add . && git commit -q -m c${i}`, { cwd: tmp })
+      }
+
+      // .tsx pas dans knownFiles (glob `.ts` seulement) mais PAS gitignored.
+      // L'ADR-029 ne doit pas le filtrer — il est légitimement consommé via
+      // la sémantique "au moins UN côté known".
+      const knownFiles = new Set(['source.ts'])
+      const pairs = await analyzeCoChange(tmp, { minCount: 2, knownFiles })
+      const pair = pairs.find((p) => p.from === 'source.test.tsx' && p.to === 'source.ts')
+      expect(pair, 'pair test↔source légitime préservée').toBeDefined()
+      expect(pair!.count).toBe(3)
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true })
+    }
+  })
+
+  it('derivedPaths override : caller peut forcer une liste explicite (sans appel git)', async () => {
+    // Override la détection auto en passant un Set explicite. Permet aux
+    // tests et aux projets qui veulent une liste indépendante du
+    // .gitignore courant.
+    const pairs = await analyzeCoChange(repo, {
+      minCount: 2,
+      derivedPaths: new Set(['a.ts']),  // force a.ts comme dérivé
+    })
+    for (const p of pairs) {
+      expect(p.from).not.toBe('a.ts')
+      expect(p.to).not.toBe('a.ts')
+    }
+  })
 })
