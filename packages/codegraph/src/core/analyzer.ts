@@ -157,7 +157,7 @@ import { computeComponentMetrics } from '../metrics/component-metrics.js'
 import { computeDsm } from '../graph/dsm.js'
 import { aggregateByContainer } from '../map/dsm-renderer.js'
 import { runDatalogShadow, logShadowReport } from '../datalog-detectors/shadow.js'
-import { runDatalogDetectors, type DatalogDetectorResults } from '../datalog-detectors/runner.js'
+import { runDatalogDetectors, runDatalogDetectorsWithBundle, type DatalogDetectorResults } from '../datalog-detectors/runner.js'
 import {
   buildSnapshotPatchFromDatalog,
   adaptDriftSignalsFromDatalog,
@@ -192,6 +192,11 @@ export interface AnalyzeResult {
   // exposés pour permettre au CLI de calculer le `inputHash` Phase 2
   // sans re-walker le filesystem.
   files: readonly string[]
+  // ADR-027 Phase 3 — bundle AST agrégé, exposé pour matérialiser le
+  // content-addressed fact store. Présent quand `useDatalog` est on
+  // (default pour incremental ; opt-in en cold via env / option).
+  // `undefined` quand le pipeline Datalog n'a pas tourné (mode legacy).
+  astFactsBundle?: import('../datalog-detectors/ast-facts/types.js').AstFactsBundle
 }
 
 export interface AnalyzeOptions {
@@ -302,6 +307,11 @@ export async function analyze(
     process.env['LIBY_DATALOG_DETECTORS_LIVE'] === '1' ||
     (incremental && process.env['LIBY_DATALOG_LEGACY'] !== '1')
   )
+  // ADR-027 Phase 3 — capturé par runDeterministicDetectors quand
+  // useDatalog est on (= bundle disponible). Reste undefined en mode
+  // legacy / factsOnly — le CLI matérialise le fact store seulement
+  // si le bundle est présent.
+  let astFactsBundle: import('../datalog-detectors/ast-facts/types.js').AstFactsBundle | undefined
   const t0 = performance.now()
   const timing: AnalyzeResult['timing'] = {
     total: 0,
@@ -402,10 +412,13 @@ export async function analyze(
 
   // ─── 6b. New deterministic detectors (Sprint 12) ───────────────────
   if (!factsOnly) {
-    await runDeterministicDetectors({
+    // ADR-027 Phase 3 — capture l'AstFactsBundle pour matérialiser le
+    // fact store (consommé par persistAnalyzeOutputs côté CLI).
+    const detOut = await runDeterministicDetectors({
       config, files, readFile, sharedProject, snapshot, timing, incremental,
       useDatalog,
     })
+    astFactsBundle = detOut.astFactsBundle
   } else {
     await runFactsOnlyTestCoverage(config, files, snapshot, timing)
   }
@@ -453,7 +466,7 @@ export async function analyze(
 
   timing.total = performance.now() - t0
 
-  return { snapshot, timing, files }
+  return { snapshot, timing, files, astFactsBundle }
 }
 
 /**
@@ -893,7 +906,9 @@ interface RunDetectorsArgs {
   useDatalog?: boolean
 }
 
-async function runDeterministicDetectors(args: RunDetectorsArgs): Promise<void> {
+async function runDeterministicDetectors(
+  args: RunDetectorsArgs,
+): Promise<{ astFactsBundle?: import('../datalog-detectors/ast-facts/types.js').AstFactsBundle }> {
   const { config, files, readFile, sharedProject, snapshot, timing } = args
   const incremental = args.incremental ?? false
   const useDatalog = args.useDatalog ?? false
@@ -904,13 +919,20 @@ async function runDeterministicDetectors(args: RunDetectorsArgs): Promise<void> 
   // path < 200ms au lieu de ~3s sur Sentinel.
   let datalogPatch: ReturnType<typeof buildSnapshotPatchFromDatalog> | null = null
   let datalogResults: DatalogDetectorResults | null = null
+  // ADR-027 Phase 3 — capture l'AstFactsBundle pour matérialiser le
+  // content-addressed fact store. Le bundle existe seulement quand le
+  // runner Datalog tourne. En legacy mode, le fact store reste vide
+  // (le CLI logue un warning si l'utilisateur attendait le store).
+  let astFactsBundle: import('../datalog-detectors/ast-facts/types.js').AstFactsBundle | undefined
   if (useDatalog) {
     const tDl = performance.now()
     try {
-      datalogResults = await runDatalogDetectors({
+      const dlOut = await runDatalogDetectorsWithBundle({
         project: sharedProject, files, rootDir: config.rootDir,
         incremental,  // active le cache Salsa per-file (Phase C.1)
       })
+      datalogResults = dlOut.results
+      astFactsBundle = dlOut.bundle
       datalogPatch = buildSnapshotPatchFromDatalog(datalogResults)
 
       // Override des 3 fields déjà patchés par DetectorRegistry. Les
@@ -966,6 +988,7 @@ async function runDeterministicDetectors(args: RunDetectorsArgs): Promise<void> 
     compressionDistances: cross.compressionDistances,
     grangerCausalities: cross.grangerCausalities,
   })
+  return { astFactsBundle }
 }
 
 /**

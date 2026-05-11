@@ -358,6 +358,20 @@ export interface RunDatalogDetectorsOptions {
 export async function runDatalogDetectors(
   opts: RunDatalogDetectorsOptions,
 ): Promise<DatalogDetectorResults> {
+  const { results } = await runDatalogDetectorsWithBundle(opts)
+  return results
+}
+
+// ADR-027
+/**
+ * Variante qui retourne ALSO le `AstFactsBundle` agrégé, nécessaire
+ * pour matérialiser le content-addressed fact store (Phase 3).
+ * `runDatalogDetectors` reste l'API d'origine ; les callers qui n'ont
+ * pas besoin du bundle continuent de l'utiliser inchangée.
+ */
+export async function runDatalogDetectorsWithBundle(
+  opts: RunDatalogDetectorsOptions,
+): Promise<{ results: DatalogDetectorResults; bundle: AstFactsBundle }> {
   // 1. AST visitor — 1 passe, tous les facts primitifs.
   const t0 = performance.now()
   let merged: AstFactsBundle
@@ -370,7 +384,8 @@ export async function runDatalogDetectors(
     merged = collectAstFactsCold(opts.project, new Set(opts.files), opts.rootDir)
   }
   const extractMs = performance.now() - t0
-  return finalizeDatalogResults(merged, extractMs)
+  const results = finalizeDatalogResults(merged, extractMs)
+  return { results, bundle: merged }
 }
 
 /**

@@ -29,6 +29,14 @@ import {
   type SnapshotMeta,
   SNAPSHOT_VERSION,
 } from '../../incremental/snapshot-store.js'
+import {
+  buildFactsHead,
+  writeFactStore,
+  saveBase,
+  loadBase,
+  computeDelta,
+  type FactsHead,
+} from '../../incremental/fact-store.js'
 
 export interface AnalyzeOpts {
   config?: string
@@ -39,12 +47,28 @@ export interface AnalyzeOpts {
   map?: boolean
   incremental?: boolean
   withRuntime?: string
+  // ADR-027 Phase 3 — mode review : analyse à <base> ET <head>, produit
+  // un delta de fact_ids. Format : "<base>..<head>" (deux refs git).
+  pr?: string
 }
 
 export async function runAnalyzeCommand(opts: AnalyzeOpts): Promise<void> {
+  // ADR-027 Phase 3 — mode review (PR) : analyse à <base> et <head>,
+  // sort un delta de fact_ids. Court-circuite le flow `analyze` standard.
+  if (opts.pr) {
+    await runPrCommand(opts)
+    return
+  }
+
   const config = await loadConfig(opts)
 
   const incremental = Boolean(opts.incremental)
+  // ADR-027 Phase 3 — force `useDatalog: true` côté CLI sauf si l'env
+  // legacy override est posé. Le pipeline Datalog est requis pour
+  // produire l'AstFactsBundle qui alimente le content-addressed fact
+  // store. L'opt-out reste possible via `LIBY_DATALOG_LEGACY=1`.
+  const useDatalog = process.env['LIBY_DATALOG_LEGACY'] !== '1'
+
   console.log(chalk.bold('\n🔍 CodeGraph — Analyzing...\n'))
   console.log(`  Root:       ${config.rootDir}`)
   console.log(`  Include:    ${config.include.join(', ')}`)
@@ -52,7 +76,7 @@ export async function runAnalyzeCommand(opts: AnalyzeOpts): Promise<void> {
   if (incremental) console.log(`  Mode:       ${chalk.cyan('incremental (Salsa)')}`)
   console.log()
 
-  const result = await analyze(config, { incremental })
+  const result = await analyze(config, { incremental, useDatalog })
   const { snapshot, timing } = result
 
   printAnalyzeStats(snapshot)
@@ -61,7 +85,7 @@ export async function runAnalyzeCommand(opts: AnalyzeOpts): Promise<void> {
   printDetectorsRunSummary(timing)
 
   if (opts.save !== false) {
-    await persistAnalyzeOutputs(opts, snapshot, config, timing, result.files)
+    await persistAnalyzeOutputs(opts, snapshot, config, timing, result.files, result.astFactsBundle)
   } else {
     process.stdout.write(JSON.stringify(snapshot, null, 2))
   }
@@ -69,6 +93,143 @@ export async function runAnalyzeCommand(opts: AnalyzeOpts): Promise<void> {
   if (opts.withRuntime) {
     await runRuntimeProbeWrapper(opts.withRuntime)
   }
+}
+
+// ADR-027
+/**
+ * Mode review (Phase 3) — analyse à `<base>` (worktree git détaché) +
+ * `<head>` (working tree courant), calcule le delta des fact_ids, sort
+ * un résumé markdown structuré.
+ *
+ * Cache : `<base>.json` dans `.codegraph/facts.bases/` — la 2e PR
+ * partant du même base ne refait pas l'analyze à `<base>`.
+ */
+async function runPrCommand(opts: AnalyzeOpts): Promise<void> {
+  const config = await loadConfig(opts)
+  const prSpec = opts.pr!
+  const match = prSpec.match(/^(.+?)\.\.(.+)$/)
+  if (!match) {
+    console.error(chalk.red(`Invalid --pr format: "${prSpec}". Expected "<base>..<head>" (e.g. "main..HEAD").`))
+    process.exit(1)
+  }
+  const [, baseRef, headRef] = match
+
+  const { execSync } = await import('node:child_process')
+  const baseSha = resolveSha(execSync, config.rootDir, baseRef)
+  const headSha = headRef === 'HEAD' || headRef === '' ? 'WORKING_TREE' : resolveSha(execSync, config.rootDir, headRef)
+
+  console.log(chalk.bold(`\n🔀 CodeGraph PR mode — ${baseRef}..${headRef}\n`))
+  console.log(`  base: ${baseSha}`)
+  console.log(`  head: ${headSha}`)
+
+  // 1. Cache hit ? Sinon, analyze à <base>.
+  let baseHead = await loadBase(config.snapshotDir, baseSha)
+  if (baseHead) {
+    console.log(chalk.dim(`  ✓ base cached (factSet=${baseHead.factSetHash.slice(0, 12)}…)`))
+  } else {
+    console.log(chalk.cyan(`  ⓘ analyzing base ${baseRef} in detached worktree…`))
+    baseHead = await analyzeAtRefForFacts(execSync, config, baseSha)
+    await saveBase(config.snapshotDir, baseSha, baseHead)
+    console.log(chalk.green(`  ✓ base analyzed + cached (factSet=${baseHead.factSetHash.slice(0, 12)}…)`))
+  }
+
+  // 2. Analyze HEAD (= working tree). Réutilise le `analyze --incremental`
+  // standard puis lit le head matérialisé.
+  console.log(chalk.cyan(`  ⓘ analyzing head…`))
+  const result = await analyze(config, { incremental: true, useDatalog: true })
+  if (!result.astFactsBundle) {
+    console.error(chalk.red('  ✗ no AstFactsBundle (legacy mode?) — PR mode requires Datalog pipeline'))
+    process.exit(1)
+  }
+  const headOut = buildFactsHead(result.astFactsBundle, {
+    generatedAt: result.snapshot.generatedAt,
+    baseSha: headSha,
+  })
+
+  // 3. Delta.
+  const delta = computeDelta(baseHead, headOut.head)
+  printPrDelta(delta, baseRef, headRef)
+}
+
+async function analyzeAtRefForFacts(
+  execSync: typeof import('node:child_process').execSync,
+  config: import('../../core/types.js').CodeGraphConfig,
+  sha: string,
+): Promise<FactsHead> {
+  const tmpDir = path.join(config.rootDir, '.codegraph', `_worktree_pr_${Date.now()}`)
+  try {
+    execSync(`git worktree add --detach "${tmpDir}" ${sha}`, {
+      cwd: config.rootDir, encoding: 'utf-8', stdio: 'pipe',
+    })
+    const tmpConfig: import('../../core/types.js').CodeGraphConfig = {
+      ...config,
+      rootDir: tmpDir,
+      snapshotDir: path.join(tmpDir, '.codegraph'),
+    }
+    const result = await analyze(tmpConfig, { incremental: false, useDatalog: true })
+    if (!result.astFactsBundle) {
+      throw new Error('worktree analyze did not produce an AstFactsBundle')
+    }
+    return buildFactsHead(result.astFactsBundle, {
+      generatedAt: result.snapshot.generatedAt,
+      baseSha: sha,
+    }).head
+  } finally {
+    try {
+      execSync(`git worktree remove --force "${tmpDir}"`, {
+        cwd: config.rootDir, encoding: 'utf-8', stdio: 'pipe',
+      })
+    } catch {
+      try { await fs.rm(tmpDir, { recursive: true }) } catch { /* nothing */ }
+      try { execSync(`git worktree prune`, { cwd: config.rootDir, stdio: 'pipe' }) } catch { /* nothing */ }
+    }
+  }
+}
+
+function resolveSha(
+  execSync: typeof import('node:child_process').execSync,
+  rootDir: string,
+  ref: string,
+): string {
+  try {
+    return execSync(`git rev-parse ${ref}`, { cwd: rootDir, encoding: 'utf-8' }).trim()
+  } catch {
+    console.error(chalk.red(`Cannot resolve git ref: ${ref}`))
+    process.exit(1)
+  }
+}
+
+function printPrDelta(
+  delta: import('../../incremental/fact-store.js').FactsDelta,
+  baseRef: string,
+  headRef: string,
+): void {
+  console.log()
+  console.log(chalk.bold(`  Delta ${baseRef}..${headRef}:`))
+  console.log(`    base factSet: ${delta.baseFactSetHash.slice(0, 12)}…`)
+  console.log(`    head factSet: ${delta.headFactSetHash.slice(0, 12)}…`)
+  console.log(`    ${chalk.green('+ added:')}   ${delta.added.length} facts`)
+  console.log(`    ${chalk.red('- removed:')} ${delta.removed.length} facts`)
+
+  const breakdown = new Map<string, { added: number; removed: number }>()
+  for (const a of delta.added) {
+    const e = breakdown.get(a.relation) ?? { added: 0, removed: 0 }
+    e.added++
+    breakdown.set(a.relation, e)
+  }
+  for (const r of delta.removed) {
+    const e = breakdown.get(r.relation) ?? { added: 0, removed: 0 }
+    e.removed++
+    breakdown.set(r.relation, e)
+  }
+  if (breakdown.size === 0) return
+  console.log()
+  console.log(chalk.dim(`  Per relation:`))
+  for (const [rel, c] of [...breakdown.entries()].sort()) {
+    if (c.added === 0 && c.removed === 0) continue
+    console.log(`    ${rel.padEnd(40)} ${chalk.green('+' + c.added)} ${chalk.red('-' + c.removed)}`)
+  }
+  console.log()
 }
 
 /**
@@ -219,10 +380,12 @@ async function persistAnalyzeOutputs(
   config: import('../../core/types.js').CodeGraphConfig,
   timing: import('../../core/analyzer.js').AnalyzeResult['timing'],
   files: readonly string[],
+  astFactsBundle?: import('../../datalog-detectors/ast-facts/types.js').AstFactsBundle,
 ): Promise<void> {
   // ADR-027 — `--output <path>` reste l'override raw-JSON pour les
   // pipelines externes qui s'attendent à un fichier autonome. Sinon
   // on écrit le format v2 unifié (`snapshot.json` + sidecar meta).
+  let factSetHash: string | undefined
   if (opts.output) {
     await fs.mkdir(path.dirname(opts.output), { recursive: true })
     await fs.writeFile(opts.output, JSON.stringify(snapshot, null, 2))
@@ -230,6 +393,25 @@ async function persistAnalyzeOutputs(
   } else {
     const outPath = await defaultSnapshotPath(config)
     const { hash: inputHash, ctx } = await computeInputHash(config, files)
+
+    // ADR-027 Phase 3 — matérialise le content-addressed fact store
+    // depuis l'AstFactsBundle agrégé. Skip silencieusement si pas de
+    // bundle (legacy mode pré-Datalog). Le store est append-only,
+    // le head réécrit complet à chaque analyze.
+    if (astFactsBundle) {
+      const t0 = performance.now()
+      const { head, records } = buildFactsHead(astFactsBundle, {
+        generatedAt: snapshot.generatedAt,
+        baseSha: snapshot.commitHash,
+      })
+      const { added, existing } = await writeFactStore(config.snapshotDir, head, records)
+      factSetHash = head.factSetHash
+      const ms = (performance.now() - t0).toFixed(0)
+      console.log(chalk.green(
+        `  ✓ Fact store: ${added} added / ${existing} dedup (factSet=${factSetHash.slice(0, 12)}…, ${ms}ms)\n`,
+      ))
+    }
+
     const meta: SnapshotMeta = {
       version: SNAPSHOT_VERSION,
       inputHash,
@@ -237,6 +419,7 @@ async function persistAnalyzeOutputs(
       baseSha: snapshot.commitHash,
       fileCount: ctx.fileCount,
       toolingVersion: ctx.toolingVersion,
+      factSetHash,
     }
     await writeStoredSnapshot(config.snapshotDir, meta, snapshot)
     console.log(chalk.green(`  ✓ Snapshot saved: ${outPath} (inputHash: ${inputHash.slice(0, 12)}…)\n`))
