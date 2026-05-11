@@ -1,3 +1,6 @@
+// ADR-032 — consumer du contrat HTTP via ./api.js (type SnapshotPayload).
+// ADR-033 — scaling : ce renderer dépend de la taille de snapshot.json ;
+// pre-Phase-2 chargeait le fat blob, post-Phase-2 lit graph core seul.
 // Obsidian-style large-scale code graph renderer.
 // Pan + zoom + LOD labels + active-edit ripple + bezier hooks→files arcs.
 // Adapted from the Codegraph Cockpit design (cockpit-cosmos.js) for SolidJS,

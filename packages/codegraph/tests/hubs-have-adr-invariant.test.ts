@@ -76,11 +76,13 @@ function shouldGate(filePath: string): boolean {
   if (filePath.includes('/examples/')) return false
   if (filePath.endsWith('.d.ts')) return false
   if (!filePath.endsWith('.ts')) return false
-  // dashboard-* est la couche UX consommatrice du toolkit, pas la
-  // toolkit core. Ses fan-ins reflètent le couplage interne du cockpit
-  // (api → store → composants), pas une décision architecturale qui
-  // mérite un ADR au sens des décisions du moteur (ADR-001..ADR-026).
-  if (filePath.includes('packages/dashboard-')) return false
+  // dashboard-* INCLUS depuis l'audit dette 2026-05-12 §T2.4 : les 10
+  // bugs latents identifiés dans PRs #65/#66/#71 (fake `SnapshotShape`
+  // sur node.ts/tensions.ts/diff.ts) ont prouvé que la couche UX consumer
+  // EST une surface architecturale qui mérite la gouvernance ADR. Les
+  // hubs dashboard-* (state.ts, api.ts, store.ts, cosmos.ts) référencent
+  // les ADRs qui les gouvernent (027 pour loader, 032 pour HTTP contract,
+  // 033 pour scaling).
   return true
 }
 

@@ -1,3 +1,5 @@
+// ADR-032 — consumer du contrat HTTP via ./lib/api.js. Drift de shape
+// côté dashboard-server → undefined silencieux dans les composants Solid.
 import { createSignal, createResource } from 'solid-js'
 import type { SnapshotPayload, TelemetryRecord } from './lib/api.js'
 import { api } from './lib/api.js'
