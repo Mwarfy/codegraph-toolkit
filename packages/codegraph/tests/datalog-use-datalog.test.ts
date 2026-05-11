@@ -95,18 +95,16 @@ describe('analyze({ useDatalog: true })', () => {
     expect(result.timing.detectors['datalog-runner']).toBeUndefined()
   })
 
-  it('produces snapshot with sémantic parity on 19 swapped fields', async () => {
+  it('produces snapshot with sémantic parity on 15 swapped fields', async () => {
     const { rootDir } = setupFixture()
     const cfg = { rootDir, include: ['src/**/*.ts'], exclude: [], entryPoints: [] }
     const legacy = await analyze(cfg)
     const datalog = await analyze(cfg, { useDatalog: true })
 
-    expectSetEqual(legacy.snapshot.magicNumbers, datalog.snapshot.magicNumbers,
-      (m) => `${m.file}|${m.line}|${m.value}|${m.context}|${m.category}`, 'magicNumbers')
-    expectSetEqual(legacy.snapshot.evalCalls, datalog.snapshot.evalCalls,
-      (e) => `${e.file}|${e.line}|${e.kind}|${e.containingSymbol}`, 'evalCalls')
-    expectSetEqual(legacy.snapshot.cryptoCalls, datalog.snapshot.cryptoCalls,
-      (c) => `${c.file}|${c.line}|${c.fn}|${c.algo}|${c.containingSymbol}`, 'cryptoCalls')
+    // ADR-031 Phase 2 batch 1 — magicNumbers / evalCalls / cryptoCalls /
+    // eventListenerSites retirés du legacy ts-morph. Plus de parité possible
+    // (legacy=undefined vs Datalog=valeur). Garde-fou conservé via le test
+    // datalog-legacy-parity.test.ts pour les 16 fields restants.
     expectSetEqual(legacy.snapshot.booleanParams, datalog.snapshot.booleanParams,
       (b) => `${b.file}|${b.name}|${b.line}|${b.paramIndex}|${b.paramName}|${b.totalParams}`, 'booleanParams')
     expectSetEqual(legacy.snapshot.sanitizerCalls, datalog.snapshot.sanitizerCalls,
@@ -119,8 +117,7 @@ describe('analyze({ useDatalog: true })', () => {
       (l) => `${l.file}|${l.line}|${l.name}|${l.loc}|${l.kind}`, 'longFunctions(loc>=100)')
     expectSetEqual(legacy.snapshot.functionComplexity, datalog.snapshot.functionComplexity,
       (c) => `${c.file}|${c.line}|${c.name}|${c.cyclomatic}|${c.cognitive}|${c.containingClass}`, 'functionComplexity')
-    expectSetEqual(legacy.snapshot.eventListenerSites, datalog.snapshot.eventListenerSites,
-      (e) => `${e.file}|${e.line}|${e.symbol}|${e.callee}|${e.kind}|${e.literalValue ?? ''}`, 'eventListenerSites')
+    // (eventListenerSites retiré du legacy — cf. ADR-031 Phase 2 batch 1)
     expectSetEqual(legacy.snapshot.barrels, datalog.snapshot.barrels,
       (b) => `${b.file}|${b.reExportCount}|${b.consumerCount}|${b.lowValue}`, 'barrels')
     expectSetEqual(legacy.snapshot.envUsage, datalog.snapshot.envUsage,

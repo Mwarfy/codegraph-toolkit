@@ -47,10 +47,9 @@ import { SqlSchemaDetector } from './detectors/sql-schema-detector.js'
 import { DrizzleSchemaDetector } from './detectors/drizzle-schema-detector.js'
 import { analyzeTodos, type TodoMarker } from '../extractors/todos.js'
 import { analyzeDriftPatterns, type DriftSignal } from '../extractors/drift-patterns.js'
-import { analyzeEvalCalls, type EvalCall } from '../extractors/eval-calls.js'
-import { analyzeCryptoCalls, type CryptoCall } from '../extractors/crypto-algo.js'
+// ADR-031 Phase 2 — eval-calls / crypto-algo / event-listener-sites :
+// extractors ts-morph supprimés, Datalog est l'unique source.
 import { analyzeSecurityPatterns, type SecurityPatternsAggregated } from '../extractors/security-patterns.js'
-import { analyzeEventListenerSites, type EventListenerSite } from '../extractors/event-listener-sites.js'
 import { analyzeCodeQualityPatterns, type CodeQualityPatternsAggregated } from '../extractors/code-quality-patterns.js'
 import { analyzeFunctionComplexity, type FunctionComplexity } from '../extractors/function-complexity.js'
 import { computeSpectralMetrics, type SpectralMetric } from '../extractors/spectral-graph.js'
@@ -82,7 +81,7 @@ import { analyzeSanitizers, type Sanitizer } from '../extractors/sanitizers.js'
 import { analyzeTaintedVars, type TaintedVarDecl, type TaintedArgCall } from '../extractors/tainted-vars.js'
 import { analyzeArguments, type TaintedArgumentToCall, type FunctionParam } from '../extractors/arguments.js'
 import { analyzeLongFunctions, type LongFunction } from '../extractors/long-functions.js'
-import { analyzeMagicNumbers, type MagicNumber } from '../extractors/magic-numbers.js'
+// ADR-031 Phase 2 — magic-numbers : extractor ts-morph supprimé, Datalog est l'unique source.
 import { analyzeTestCoverage, type TestCoverageReport } from '../extractors/test-coverage.js'
 import { analyzeCoChange, type CoChangePair } from '../extractors/co-change.js'
 import {
@@ -123,16 +122,16 @@ import { allDeadCode as incAllDeadCode } from '../incremental/dead-code.js'
 import { allDeprecatedUsage as incAllDeprecatedUsage } from '../incremental/deprecated-usage.js'
 import { allConstantExpressions as incAllConstantExpressions } from '../incremental/constant-expressions.js'
 import { allHardcodedSecrets as incAllHardcodedSecrets } from '../incremental/hardcoded-secrets.js'
-import { allMagicNumbers as incAllMagicNumbers } from '../incremental/magic-numbers.js'
+// ADR-031 Phase 2 — wrapper Salsa magic-numbers retiré (cf. Datalog runner)
 import { allResourceBalances as incAllResourceBalances } from '../incremental/resource-balance.js'
 import { allTaintSinks as incAllTaintSinks } from '../incremental/taint-sinks.js'
 import { allSanitizers as incAllSanitizers } from '../incremental/sanitizers.js'
 import { allTaintedVars as incAllTaintedVars } from '../incremental/tainted-vars.js'
 import { allArguments as incAllArguments } from '../incremental/arguments.js'
-import { allCryptoCalls as incAllCryptoCalls } from '../incremental/crypto-algo.js'
+// ADR-031 Phase 2 — wrapper Salsa crypto-algo retiré (cf. Datalog runner)
 import { allBooleanParams as incAllBooleanParams } from '../incremental/boolean-params.js'
 import { allFunctionComplexity as incAllFunctionComplexity } from '../incremental/function-complexity.js'
-import { allEvalCalls as incAllEvalCalls } from '../incremental/eval-calls.js'
+// ADR-031 Phase 2 — wrapper Salsa eval-calls retiré (cf. Datalog runner)
 import { allDriftPatternsAst as incAllDriftPatternsAst } from '../incremental/drift-patterns.js'
 import {
   allCoChangePairs as incAllCoChangePairs,
@@ -1012,12 +1011,9 @@ async function runPhase1IndependentDetectors(ctx: DetectorPhaseContext) {
     () => datalogPatch
       ? Promise.resolve(datalogPatch.longFunctions)
       : analyzeLongFunctions(config.rootDir, files, sharedProject))
+  // ADR-031 Phase 2 — Datalog seul chemin. useDatalog=false → field undefined.
   const magicNumbers = await runDetectorTimed(timing, 'magic-numbers',
-    () => incremental
-      ? Promise.resolve(incAllMagicNumbers.get('all'))
-      : datalogPatch
-        ? Promise.resolve(datalogPatch.magicNumbers)
-        : analyzeMagicNumbers(config.rootDir, files, sharedProject))
+    () => Promise.resolve(datalogPatch?.magicNumbers))
   const testCoverage = await runDetectorTimed(timing, 'test-coverage',
     () => analyzeTestCoverage(config.rootDir, files, snapshot.edges))
   const coChangePairs = await runDetectorTimed(timing, 'co-change',
@@ -1074,18 +1070,11 @@ async function runPhase2Phase1Dependent(
       }
       return analyzeDriftPatterns(config.rootDir, files, sharedProject, todos)
     })
+  // ADR-031 Phase 2 — Datalog seul chemin. useDatalog=false → field undefined.
   const evalCalls = await runDetectorTimed(timing, 'eval-calls',
-    () => incremental
-      ? Promise.resolve(incAllEvalCalls.get('all'))
-      : datalogPatch
-        ? Promise.resolve(datalogPatch.evalCalls)
-        : analyzeEvalCalls(config.rootDir, files, sharedProject))
+    () => Promise.resolve(datalogPatch?.evalCalls))
   const cryptoCalls = await runDetectorTimed(timing, 'crypto-algo',
-    () => incremental
-      ? Promise.resolve(incAllCryptoCalls.get('all'))
-      : datalogPatch
-        ? Promise.resolve(datalogPatch.cryptoCalls)
-        : analyzeCryptoCalls(config.rootDir, files, sharedProject))
+    () => Promise.resolve(datalogPatch?.cryptoCalls))
   // Self-optim discovery : Salsa-isolation post-λ_lyap analysis.
   // Cold path identique au legacy ; warm path = cache hit ~99%.
   const securityPatterns = await runDetectorTimed(timing, 'security-patterns',
@@ -1094,10 +1083,9 @@ async function runPhase2Phase1Dependent(
       : datalogPatch
         ? Promise.resolve(datalogPatch.securityPatterns)
         : analyzeSecurityPatterns(config.rootDir, files, sharedProject))
+  // ADR-031 Phase 2 — Datalog seul chemin. useDatalog=false → field undefined.
   const eventListenerSites = await runDetectorTimed(timing, 'event-listener-sites',
-    () => datalogPatch
-      ? Promise.resolve(datalogPatch.eventListenerSites)
-      : analyzeEventListenerSites(config.rootDir, files, sharedProject))
+    () => Promise.resolve(datalogPatch?.eventListenerSites))
   const codeQualityPatterns = await runDetectorTimed(timing, 'code-quality-patterns',
     () => incremental
       ? Promise.resolve(incAllCodeQualityPatterns.get('all'))
