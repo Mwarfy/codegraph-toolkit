@@ -95,35 +95,28 @@ describe('analyze({ useDatalog: true })', () => {
     expect(result.timing.detectors['datalog-runner']).toBeUndefined()
   })
 
-  it('produces snapshot with sémantic parity on 15 swapped fields', async () => {
+  it('produces snapshot with sémantic parity on 11 swapped fields', async () => {
     const { rootDir } = setupFixture()
     const cfg = { rootDir, include: ['src/**/*.ts'], exclude: [], entryPoints: [] }
     const legacy = await analyze(cfg)
     const datalog = await analyze(cfg, { useDatalog: true })
 
-    // ADR-031 Phase 2 batch 1 — magicNumbers / evalCalls / cryptoCalls /
-    // eventListenerSites retirés du legacy ts-morph. Plus de parité possible
-    // (legacy=undefined vs Datalog=valeur). Garde-fou conservé via le test
-    // datalog-legacy-parity.test.ts pour les 16 fields restants.
-    expectSetEqual(legacy.snapshot.booleanParams, datalog.snapshot.booleanParams,
-      (b) => `${b.file}|${b.name}|${b.line}|${b.paramIndex}|${b.paramName}|${b.totalParams}`, 'booleanParams')
+    // ADR-031 Phase 2 batch 1+2 — 8 détecteurs retirés du legacy ts-morph
+    // (magicNumbers / evalCalls / cryptoCalls / eventListenerSites en batch 1 ;
+    // longFunctions / booleanParams / functionComplexity / constantExpressions
+    // en batch 2). Plus de parité possible (legacy=undefined vs Datalog=valeur).
+    // Garde-fou conservé via datalog-legacy-parity.test.ts pour les 12 fields restants.
     expectSetEqual(legacy.snapshot.sanitizerCalls, datalog.snapshot.sanitizerCalls,
       (s) => `${s.file}|${s.line}|${s.callee}|${s.containingSymbol}`, 'sanitizerCalls')
     expectSetEqual(legacy.snapshot.taintSinks, datalog.snapshot.taintSinks,
       (s) => `${s.file}|${s.line}|${s.kind}|${s.callee}|${s.containingSymbol}`, 'taintSinks')
-    expectSetEqual(
-      (legacy.snapshot.longFunctions ?? []).filter((l) => l.loc >= 100),
-      datalog.snapshot.longFunctions,
-      (l) => `${l.file}|${l.line}|${l.name}|${l.loc}|${l.kind}`, 'longFunctions(loc>=100)')
-    expectSetEqual(legacy.snapshot.functionComplexity, datalog.snapshot.functionComplexity,
-      (c) => `${c.file}|${c.line}|${c.name}|${c.cyclomatic}|${c.cognitive}|${c.containingClass}`, 'functionComplexity')
-    // (eventListenerSites retiré du legacy — cf. ADR-031 Phase 2 batch 1)
+    // (longFunctions / functionComplexity / eventListenerSites retirés du legacy
+    //  — cf. ADR-031 Phase 2 batch 1+2)
     expectSetEqual(legacy.snapshot.barrels, datalog.snapshot.barrels,
       (b) => `${b.file}|${b.reExportCount}|${b.consumerCount}|${b.lowValue}`, 'barrels')
     expectSetEqual(legacy.snapshot.envUsage, datalog.snapshot.envUsage,
       (u) => `${u.name}|${u.isSecret}|${u.readers.length}`, 'envUsage')
-    expectSetEqual(legacy.snapshot.constantExpressions, datalog.snapshot.constantExpressions,
-      (c) => `${c.file}|${c.line}|${c.kind}|${c.exprRepr}`, 'constantExpressions')
+    // (constantExpressions retiré du legacy — cf. ADR-031 Phase 2 batch 2)
     expectSetEqual(legacy.snapshot.argumentsFacts?.taintedArgs, datalog.snapshot.argumentsFacts?.taintedArgs,
       (a) => `${a.callerFile}|${a.callerSymbol}|${a.callee}|${a.paramIndex}|${a.source}`, 'argumentsFacts.taintedArgs')
     expectSetEqual(legacy.snapshot.argumentsFacts?.params, datalog.snapshot.argumentsFacts?.params,

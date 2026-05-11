@@ -87,14 +87,15 @@ describe('Datalog/legacy parity — ADR-026/027 contract', () => {
     // ADR-031 Phase 1 — champs patchés par Datalog :
     //   - 3 overrides directs en début de runDeterministicDetectors
     //     (envUsage, barrels, eventEmitSites — analyzer.ts L942-944)
-    //   - 13 fields branchés en cascade `datalogPatch ? dl.X : legacy`
+    //   - 9 fields branchés en cascade `datalogPatch ? dl.X : legacy`
     //     dans phases 1-6 (analyzer.ts).
-    // Total : 16 fields qui DOIVENT être bit-identical legacy vs Datalog.
+    // Total : 12 fields qui DOIVENT être bit-identical legacy vs Datalog.
     //
-    // ADR-031 Phase 2 batch 1 — retrait du legacy pour magic-numbers,
-    // eval-calls, crypto-algo, event-listener-sites. Datalog est désormais
-    // l'unique source pour ces 4 fields : useDatalog=false produit
-    // `undefined`, pas comparable au legacy → exclus de patchedFields.
+    // ADR-031 Phase 2 :
+    //   - batch 1 : magic-numbers / eval-calls / crypto-algo / event-listener-sites
+    //   - batch 2 : long-functions / boolean-params / function-complexity / constant-expressions
+    // Pour ces 8 fields, Datalog est désormais l'unique source : useDatalog=false
+    // produit `undefined`, pas comparable au legacy → exclus de patchedFields.
     //
     // `driftSignals` traverse l'adapter (adaptDriftSignalsFromDatalog) ;
     // sa parité est vérifiée séparément ci-dessous car il dépend de
@@ -103,9 +104,8 @@ describe('Datalog/legacy parity — ADR-026/027 contract', () => {
       // Overrides directs (ADR-026 phase A.3 seed)
       'envUsage', 'barrels', 'eventEmitSites',
       // Branchements cascade restants (ADR-026 phases A.3/A.4/E)
-      'longFunctions', 'securityPatterns', 'codeQualityPatterns',
-      'functionComplexity', 'hardcodedSecrets', 'booleanParams',
-      'deadCode', 'constantExpressions', 'resourceImbalances',
+      'securityPatterns', 'codeQualityPatterns',
+      'hardcodedSecrets', 'deadCode', 'resourceImbalances',
       'taintSinks', 'sanitizerCalls', 'taintedVars', 'argumentsFacts',
     ]
 
@@ -126,19 +126,19 @@ describe('Datalog/legacy parity — ADR-026/027 contract', () => {
   // [] = [] des deux côtés et le test passe trivialement. Le canary
   // déclenche réellement la majorité des détecteurs, donc le BIT-IDENTICAL
   // sur ces fields est un vrai garde-fou (pas un hash vide=vide).
-  it('canary fixture : Datalog vs legacy → bit-identical on 16 patched fields', { timeout: 120_000 }, async () => {
+  it('canary fixture : Datalog vs legacy → bit-identical on 12 patched fields', { timeout: 120_000 }, async () => {
     const rootDir = path.resolve(__dirname, '../../../examples/canary-project')
 
     const dlSnap = await run(rootDir, true)
     const legacySnap = await run(rootDir, false)
 
-    // ADR-031 Phase 2 batch 1 — magic-numbers / eval-calls / crypto-algo /
-    // event-listener-sites retirés du legacy. 20 → 16 fields verrouillés.
+    // ADR-031 Phase 2 batch 2 — long-functions / boolean-params /
+    // function-complexity / constant-expressions retirés du legacy.
+    // Cumul Phase 2 : 20 → 12 fields verrouillés (batch 1 + batch 2).
     const patchedFields: (keyof GraphSnapshot)[] = [
       'envUsage', 'barrels', 'eventEmitSites',
-      'longFunctions', 'securityPatterns', 'codeQualityPatterns',
-      'functionComplexity', 'hardcodedSecrets', 'booleanParams',
-      'deadCode', 'constantExpressions', 'resourceImbalances',
+      'securityPatterns', 'codeQualityPatterns',
+      'hardcodedSecrets', 'deadCode', 'resourceImbalances',
       'taintSinks', 'sanitizerCalls', 'taintedVars', 'argumentsFacts',
     ]
 
@@ -176,14 +176,15 @@ describe('Datalog/legacy parity — ADR-026/027 contract', () => {
 
     // Garde-fou de coverage : si le canary cesse de déclencher la majorité
     // des détecteurs portés, le test devient cosmétique.
-    // ADR-031 Phase 2 batch 1 : threshold ajusté 10 → 8 (cohérent avec
-    // l'effectif observé après retrait des 4 fields). Reste à ≥50% pour
-    // détecter une régression silencieuse côté canary.
+    // ADR-031 Phase 2 batch 2 : threshold ajusté 8 → 5 (3 fields parmi les
+    // 4 retirés en batch 2 étaient triggered par le canary). Reste un vrai
+    // garde-fou : si triggered tombe sous 5/12, c'est qu'un autre détecteur
+    // a cessé de déclencher.
     expect(
       triggered.length,
       `canary coverage trop faible : ${triggered.length}/${patchedFields.length} ` +
         `fields déclenchés. Empty fields: ${empty.join(', ')}`,
-    ).toBeGreaterThanOrEqual(8)
+    ).toBeGreaterThanOrEqual(5)
   })
 
   it('cycles fixture : nodes + edges structure identical', { timeout: 30_000 }, async () => {
