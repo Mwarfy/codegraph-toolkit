@@ -131,11 +131,26 @@ ADR-030 protège).
 
 ### Phase 3 (planned, optionnel) — Retirer le shadow comparator
 
-- Une fois Phase 2 stable (= N releases sans régression), on peut
-  retirer l'infrastructure du shadow comparator
-  (`datalog-detectors/shadow.ts`, `datalog-shadow` flag).
+- Une fois Phase 2 stable, on peut retirer l'infrastructure du shadow
+  comparator (`datalog-detectors/shadow.ts`, `datalog-shadow` flag).
 - Garder uniquement le code Datalog "live" pour les 18 portés +
   le code legacy pour les 3 non portables.
+
+### Triggers
+
+> **Audit dette 2026-05-12 §T3.2.** "N releases sans régression" était
+> vague. Concrétisé ici pour éviter l'inertie indéfinie.
+
+- **Phase 3 trigger** : démarrer au PLUS TÔT des deux conditions :
+  - **v0.8.0** publiée (= 2 minor releases après v0.6.2 où Phase 2 a
+    été complétée — soit ~2026-09 si cadence trimestrielle)
+  - OU `datalog-shadow.test.ts` rapporte 0 divergence sur 4 mois
+    consécutifs ET 0 modification du shadow comparator (= signal que
+    la couverture n'apporte plus de signal nouveau)
+- **Critère "fait"** : `datalog-detectors/shadow.ts` supprimé, le flag
+  `datalogShadow` retiré de `AnalyzeOptions`, et `datalog-shadow.test.ts`
+  supprimé. La parité reste protégée par `datalog-legacy-parity.test.ts`
+  pour les 3 détecteurs non portables (= scope réduit mais conservé).
 
 ### Garde-fous pendant la migration
 
