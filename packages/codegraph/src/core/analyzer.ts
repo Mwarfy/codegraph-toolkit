@@ -935,10 +935,15 @@ async function runDeterministicDetectors(
       astFactsBundle = dlOut.bundle
       datalogPatch = buildSnapshotPatchFromDatalog(datalogResults)
 
-      // Override des 3 fields déjà patchés par DetectorRegistry. Les
-      // détecteurs ts-morph (env-usage, barrels, event-emit-sites)
-      // tournent toujours via le registry mais leurs outputs sont
-      // remplacés par ceux du runner. À optimiser en A.4 (skip register).
+      // ADR-031 Phase 1 — override des 3 fields déjà patchés par
+      // DetectorRegistry. Les détecteurs ts-morph (env-usage, barrels,
+      // event-emit-sites) tournent toujours via le registry mais leurs
+      // outputs sont remplacés par ceux du runner. Les 17 autres fields
+      // portés sont branchés en cascade `datalogPatch ? dl.X : legacy`
+      // dans phases 1-6 ci-dessous. La parité BIT-IDENTICAL des 20 fields
+      // est verrouillée en CI par datalog-legacy-parity.test.ts
+      // (canary fixture). Phase 2 retirera les détecteurs ts-morph
+      // legacy correspondants.
       snapshot.envUsage = datalogPatch.envUsage
       snapshot.barrels = datalogPatch.barrels
       snapshot.eventEmitSites = datalogPatch.eventEmitSites
