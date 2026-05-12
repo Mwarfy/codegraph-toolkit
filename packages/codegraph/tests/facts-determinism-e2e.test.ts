@@ -56,12 +56,10 @@ describe('ADR-027 Phase 3 — fact store determinism (e2e)', () => {
     const r1 = await analyze(cfg, {
       skipPersistenceLoad: true,
       skipPersistenceSave: true,
-      useDatalog: true,
     })
     const r2 = await analyze(cfg, {
       skipPersistenceLoad: true,
       skipPersistenceSave: true,
-      useDatalog: true,
     })
     expect(r1.astFactsBundle).toBeDefined()
     expect(r2.astFactsBundle).toBeDefined()
@@ -76,7 +74,6 @@ describe('ADR-027 Phase 3 — fact store determinism (e2e)', () => {
     const r1 = await analyze(cfg, {
       skipPersistenceLoad: true,
       skipPersistenceSave: true,
-      useDatalog: true,
     })
     const h1 = buildFactsHead(r1.astFactsBundle!, { generatedAt: 'x' }).head
 
@@ -85,7 +82,6 @@ describe('ADR-027 Phase 3 — fact store determinism (e2e)', () => {
     const r2 = await analyze(cfg, {
       skipPersistenceLoad: true,
       skipPersistenceSave: true,
-      useDatalog: true,
     })
     const h2 = buildFactsHead(r2.astFactsBundle!, { generatedAt: 'x' }).head
 
@@ -94,14 +90,14 @@ describe('ADR-027 Phase 3 — fact store determinism (e2e)', () => {
 
   it('computeDelta : added/removed reflètent les vraies modifications', async () => {
     const cfg = configFor(dir)
-    const r1 = await analyze(cfg, { skipPersistenceLoad: true, skipPersistenceSave: true, useDatalog: true })
+    const r1 = await analyze(cfg, { skipPersistenceLoad: true, skipPersistenceSave: true })
     const h1 = buildFactsHead(r1.astFactsBundle!, { generatedAt: 'x' }).head
 
     // Ajoute un eval (= un nouveau callExpressions tuple)
     await fs.writeFile(path.join(dir, 'src/b.ts'),
       "import { a } from './a.js'\nexport const b = a + 1\nconst secret = 'tok-abc1234567890'\neval('1+1')\n")
 
-    const r2 = await analyze(cfg, { skipPersistenceLoad: true, skipPersistenceSave: true, useDatalog: true })
+    const r2 = await analyze(cfg, { skipPersistenceLoad: true, skipPersistenceSave: true })
     const h2 = buildFactsHead(r2.astFactsBundle!, { generatedAt: 'x' }).head
 
     const delta = computeDelta(h1, h2)
@@ -141,7 +137,7 @@ describe('ADR-027 Phase 3 — PR mode delta via worktree', () => {
     // Analyze le base (simule premier --pr)
     const baseResult = await analyze(
       { ...cfg, rootDir: dir },
-      { incremental: false, useDatalog: true },
+      { incremental: false },
     )
     const baseHead = buildFactsHead(baseResult.astFactsBundle!, { generatedAt: 'x', baseSha }).head
     await saveBase(cfg.snapshotDir, baseSha, baseHead)
