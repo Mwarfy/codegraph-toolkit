@@ -59,7 +59,6 @@ beforeAll(async () => {
     maxSnapshots: 50,
   }
   const result = await analyze(config, {
-    useDatalog: true,
     skipPersistenceLoad: true,
     skipPersistenceSave: true,
   })

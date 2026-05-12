@@ -68,11 +68,6 @@ export async function runAnalyzeCommand(opts: AnalyzeOpts): Promise<void> {
   const config = await loadConfig(opts)
 
   const incremental = Boolean(opts.incremental)
-  // ADR-027 Phase 3 — force `useDatalog: true` côté CLI sauf si l'env
-  // legacy override est posé. Le pipeline Datalog est requis pour
-  // produire l'AstFactsBundle qui alimente le content-addressed fact
-  // store. L'opt-out reste possible via `LIBY_DATALOG_LEGACY=1`.
-  const useDatalog = process.env['LIBY_DATALOG_LEGACY'] !== '1'
 
   console.log(chalk.bold('\n🔍 CodeGraph — Analyzing...\n'))
   console.log(`  Root:       ${config.rootDir}`)
@@ -81,7 +76,7 @@ export async function runAnalyzeCommand(opts: AnalyzeOpts): Promise<void> {
   if (incremental) console.log(`  Mode:       ${chalk.cyan('incremental (Salsa)')}`)
   console.log()
 
-  const result = await analyze(config, { incremental, useDatalog })
+  const result = await analyze(config, { incremental })
   const { snapshot, timing } = result
 
   printAnalyzeStats(snapshot)
@@ -141,9 +136,9 @@ async function runPrCommand(opts: AnalyzeOpts): Promise<void> {
   // 2. Analyze HEAD (= working tree). Réutilise le `analyze --incremental`
   // standard puis lit le head matérialisé.
   console.log(chalk.cyan(`  ⓘ analyzing head…`))
-  const result = await analyze(config, { incremental: true, useDatalog: true })
+  const result = await analyze(config, { incremental: true })
   if (!result.astFactsBundle) {
-    console.error(chalk.red('  ✗ no AstFactsBundle (legacy mode?) — PR mode requires Datalog pipeline'))
+    console.error(chalk.red('  ✗ no AstFactsBundle — Datalog runner failed (check logs above)'))
     process.exit(1)
   }
   const headOut = buildFactsHead(result.astFactsBundle, {
@@ -171,7 +166,7 @@ async function analyzeAtRefForFacts(
       rootDir: tmpDir,
       snapshotDir: path.join(tmpDir, '.codegraph'),
     }
-    const result = await analyze(tmpConfig, { incremental: false, useDatalog: true })
+    const result = await analyze(tmpConfig, { incremental: false })
     if (!result.astFactsBundle) {
       throw new Error('worktree analyze did not produce an AstFactsBundle')
     }

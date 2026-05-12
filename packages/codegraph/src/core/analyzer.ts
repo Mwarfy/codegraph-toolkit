@@ -194,9 +194,9 @@ export interface AnalyzeResult {
   // sans re-walker le filesystem.
   files: readonly string[]
   // ADR-027 Phase 3 — bundle AST agrégé, exposé pour matérialiser le
-  // content-addressed fact store. Présent quand `useDatalog` est on
-  // (default pour incremental ; opt-in en cold via env / option).
-  // `undefined` quand le pipeline Datalog n'a pas tourné (mode legacy).
+  // content-addressed fact store. Toujours présent depuis ADR-031 P2 +
+  // audit dette §T1.5 (chemin unique Datalog) ; `undefined` seulement si
+  // le runner a échoué (logué).
   astFactsBundle?: import('../datalog-detectors/ast-facts/types.js').AstFactsBundle
 }
 
@@ -263,24 +263,6 @@ export interface AnalyzeOptions {
    */
   datalogShadow?: boolean
 
-  /**
-   * Mode swap ADR-026 phase A.3+A.4 : remplace 21 détecteurs ts-morph
-   * legacy par leur équivalent Datalog runner (1 AST walk + N rules).
-   *
-   * Phase E (v0.5.0) : par défaut **TRUE**. Pour rollback temporaire,
-   * passer `useDatalog: false` ou env `LIBY_DATALOG_LEGACY=1`. Ce
-   * legacy-mode sera deprecated en v0.6 et retiré en v1.0.
-   *
-   * 3 détecteurs hors-AST restent legacy par design (non portables) :
-   *   - `state-machines` : multi-pass + async SQL scan
-   *   - `drizzle-schema` : cross-file resolution
-   *   - `bin-shebangs` : filesystem walk + JSON parse
-   *
-   * Mutuellement compatible avec `incremental: true` : le mode
-   * incremental a priorité (Salsa cache > Datalog batch). Combiné avec
-   * incremental → warm path < 200ms (cf. Phase C).
-   */
-  useDatalog?: boolean
 }
 
 export async function analyze(
@@ -292,26 +274,9 @@ export async function analyze(
   const skipPersistenceLoad = options.skipPersistenceLoad ?? false
   const skipPersistenceSave = options.skipPersistenceSave ?? false
   const datalogShadow = options.datalogShadow ?? (process.env['LIBY_DATALOG_DETECTORS'] === '1')
-  // Phase E (v0.5+) : useDatalog est ON par défaut quand `incremental:
-  // true` (watcher mode). Le default-on était initialement bloqué par
-  // un bug de hash instable du runner Datalog (chaque run = facts
-  // arrangés différemment → cache miss systématique). Cause root :
-  // `discoverFiles` retournait un array d'ordre non-déterministe à cause
-  // de `Promise.all(subdirs)` parallèle. Fix livré dans
-  // `core/file-discovery.ts` (sort final). Datalog-runner warm passe
-  // de 553ms → 23ms (24×).
-  //
-  // Override : `useDatalog: true` force partout, `useDatalog: false`
-  // ou env `LIBY_DATALOG_LEGACY=1` force legacy. Legacy-mode sera
-  // deprecated en v0.6 et retiré en v1.0.
-  const useDatalog = options.useDatalog ?? (
-    process.env['LIBY_DATALOG_DETECTORS_LIVE'] === '1' ||
-    (incremental && process.env['LIBY_DATALOG_LEGACY'] !== '1')
-  )
-  // ADR-027 Phase 3 — capturé par runDeterministicDetectors quand
-  // useDatalog est on (= bundle disponible). Reste undefined en mode
-  // legacy / factsOnly — le CLI matérialise le fact store seulement
-  // si le bundle est présent.
+  // ADR-027 Phase 3 — capturé par runDeterministicDetectors. Le fact
+  // store est toujours matérialisé côté CLI (= un seul chemin actif
+  // depuis ADR-031 Phase 2, audit dette §T1.5 a retiré le kill switch).
   let astFactsBundle: import('../datalog-detectors/ast-facts/types.js').AstFactsBundle | undefined
   const t0 = performance.now()
   const timing: AnalyzeResult['timing'] = {
@@ -417,7 +382,6 @@ export async function analyze(
     // fact store (consommé par persistAnalyzeOutputs côté CLI).
     const detOut = await runDeterministicDetectors({
       config, files, readFile, sharedProject, snapshot, timing, incremental,
-      useDatalog,
     })
     astFactsBundle = detOut.astFactsBundle
   } else {
@@ -881,11 +845,11 @@ interface DetectorPhaseContext {
   timing: AnalyzeResult['timing']
   incremental: boolean
   /**
-   * ADR-026 phase A.3 : si non-null, contient les outputs des 18 fields
-   * trivial-compat du runner Datalog. Les phases 1-6 branchent dessus
-   * pour skipper le legacy/extracteur ts-morph quand `useDatalog` est
-   * actif. Salsa cache (incremental mode) reste prioritaire — cascade :
-   *   incremental ? salsa : datalogPatch ? datalogPatch.X : legacy
+   * ADR-026 phase A.3 : outputs des 18 fields trivial-compat du runner
+   * Datalog. Les phases 1-6 branchent dessus. Salsa cache (incremental
+   * mode) reste prioritaire — cascade :
+   *   incremental ? salsa : datalogPatch?.X
+   * (legacy chemin retiré — ADR-031 Phase 2 done, audit dette §T1.5).
    */
   datalogPatch: ReturnType<typeof buildSnapshotPatchFromDatalog> | null
   /**
@@ -904,7 +868,6 @@ interface RunDetectorsArgs {
   snapshot: GraphSnapshot
   timing: AnalyzeResult['timing']
   incremental?: boolean
-  useDatalog?: boolean
 }
 
 async function runDeterministicDetectors(
@@ -912,45 +875,39 @@ async function runDeterministicDetectors(
 ): Promise<{ astFactsBundle?: import('../datalog-detectors/ast-facts/types.js').AstFactsBundle }> {
   const { config, files, readFile, sharedProject, snapshot, timing } = args
   const incremental = args.incremental ?? false
-  const useDatalog = args.useDatalog ?? false
 
   // ADR-026 phase A.3 + C : pre-compute Datalog runner UNE FOIS pour les
   // phases 1-6. Si `incremental` est aussi actif, le runner utilise le
   // cache Salsa per-file (`incremental/datalog-ast-facts.ts`) — warm
   // path < 200ms au lieu de ~3s sur Sentinel.
+  // ADR-031 Phase 2 done + audit dette §T1.5 : Datalog est le seul
+  // chemin (kill switch retiré). Le runner tourne toujours.
   let datalogPatch: ReturnType<typeof buildSnapshotPatchFromDatalog> | null = null
   let datalogResults: DatalogDetectorResults | null = null
   // ADR-027 Phase 3 — capture l'AstFactsBundle pour matérialiser le
-  // content-addressed fact store. Le bundle existe seulement quand le
-  // runner Datalog tourne. En legacy mode, le fact store reste vide
-  // (le CLI logue un warning si l'utilisateur attendait le store).
+  // content-addressed fact store.
   let astFactsBundle: import('../datalog-detectors/ast-facts/types.js').AstFactsBundle | undefined
-  if (useDatalog) {
-    const tDl = performance.now()
-    try {
-      const dlOut = await runDatalogDetectorsWithBundle({
-        project: sharedProject, files, rootDir: config.rootDir,
-        incremental,  // active le cache Salsa per-file (Phase C.1)
-      })
-      datalogResults = dlOut.results
-      astFactsBundle = dlOut.bundle
-      datalogPatch = buildSnapshotPatchFromDatalog(datalogResults)
+  const tDl = performance.now()
+  try {
+    const dlOut = await runDatalogDetectorsWithBundle({
+      project: sharedProject, files, rootDir: config.rootDir,
+      incremental,  // active le cache Salsa per-file (Phase C.1)
+    })
+    datalogResults = dlOut.results
+    astFactsBundle = dlOut.bundle
+    datalogPatch = buildSnapshotPatchFromDatalog(datalogResults)
 
-      // ADR-031 Phase 2 batch 7 (final) — Datalog est désormais le SEUL
-      // producteur de ces 3 fields (les détecteurs ts-morph correspondants
-      // ont été retirés du registry et du codebase). Les 17 autres fields
-      // portés sont alimentés en cascade `datalogPatch?.X` dans
-      // runDeterministicDetectors. La parité BIT-IDENTICAL de ces 3 fields
-      // est verrouillée en CI par datalog-legacy-parity.test.ts (canary
-      // fixture). useDatalog=false → ces 3 fields restent undefined.
-      snapshot.envUsage = datalogPatch.envUsage
-      snapshot.barrels = datalogPatch.barrels
-      snapshot.eventEmitSites = datalogPatch.eventEmitSites
-    } catch (err) {
-      console.error(`  ✗ datalog-runner (useDatalog) failed: ${err}`)
-    } finally {
-      timing.detectors['datalog-runner'] = performance.now() - tDl
-    }
+    // ADR-031 Phase 2 batch 7 (final) — Datalog est le SEUL producteur
+    // de ces 3 fields. Les 17 autres sont alimentés en cascade
+    // `datalogPatch?.X` dans les phases 1-6 (parity protégée par
+    // datalog-shadow.test.ts pour les 32 invariants sémantiques).
+    snapshot.envUsage = datalogPatch.envUsage
+    snapshot.barrels = datalogPatch.barrels
+    snapshot.eventEmitSites = datalogPatch.eventEmitSites
+  } catch (err) {
+    console.error(`  ✗ datalog-runner failed: ${err}`)
+  } finally {
+    timing.detectors['datalog-runner'] = performance.now() - tDl
   }
 
   const ctx: DetectorPhaseContext = {
@@ -1007,10 +964,10 @@ async function runPhase1IndependentDetectors(ctx: DetectorPhaseContext) {
     () => analyzeTodos(config.rootDir, files, readFile))
   // ADR-026 A.3 : long-functions Datalog filtre déjà loc≥100 (cf. rules/
   // index.ts) — comportement identique au consumer-side qui lit ce field.
-  // ADR-031 Phase 2 batch 2 — Datalog seul chemin. useDatalog=false → undefined.
+  // ADR-031 Phase 2 batch 2 — Datalog seul chemin (audit dette §T1.5).
   const longFunctions = await runDetectorTimed(timing, 'long-functions',
     () => Promise.resolve(datalogPatch?.longFunctions))
-  // ADR-031 Phase 2 — Datalog seul chemin. useDatalog=false → field undefined.
+  // ADR-031 Phase 2 — Datalog seul chemin (audit dette §T1.5).
   const magicNumbers = await runDetectorTimed(timing, 'magic-numbers',
     () => Promise.resolve(datalogPatch?.magicNumbers))
   const testCoverage = await runDetectorTimed(timing, 'test-coverage',
@@ -1044,26 +1001,26 @@ async function runPhase2Phase1Dependent(
 
   // ADR-026 A.3 : Datalog runner = 4 AST sub-arrays plats. Adapter
   // reconstruit DriftSignal[] et merge le 5e kind todo-no-owner.
-  // ADR-031 Phase 2 batch 6 — Datalog seul chemin. useDatalog=false → undefined.
+  // ADR-031 Phase 2 batch 6 — Datalog seul chemin (audit dette §T1.5).
   const driftSignals = await runDetectorTimed(timing, 'drift-patterns',
     () => Promise.resolve(datalogResults
       ? adaptDriftSignalsFromDatalog(datalogResults.driftPatterns, todos, config.rootDir)
       : undefined))
-  // ADR-031 Phase 2 — Datalog seul chemin. useDatalog=false → field undefined.
+  // ADR-031 Phase 2 — Datalog seul chemin (audit dette §T1.5).
   const evalCalls = await runDetectorTimed(timing, 'eval-calls',
     () => Promise.resolve(datalogPatch?.evalCalls))
   const cryptoCalls = await runDetectorTimed(timing, 'crypto-algo',
     () => Promise.resolve(datalogPatch?.cryptoCalls))
-  // ADR-031 Phase 2 batch 4 — Datalog seul chemin. useDatalog=false → undefined.
+  // ADR-031 Phase 2 batch 4 — Datalog seul chemin (audit dette §T1.5).
   const securityPatterns = await runDetectorTimed(timing, 'security-patterns',
     () => Promise.resolve(datalogPatch?.securityPatterns))
-  // ADR-031 Phase 2 — Datalog seul chemin. useDatalog=false → field undefined.
+  // ADR-031 Phase 2 — Datalog seul chemin (audit dette §T1.5).
   const eventListenerSites = await runDetectorTimed(timing, 'event-listener-sites',
     () => Promise.resolve(datalogPatch?.eventListenerSites))
-  // ADR-031 Phase 2 batch 4 — Datalog seul chemin. useDatalog=false → undefined.
+  // ADR-031 Phase 2 batch 4 — Datalog seul chemin (audit dette §T1.5).
   const codeQualityPatterns = await runDetectorTimed(timing, 'code-quality-patterns',
     () => Promise.resolve(datalogPatch?.codeQualityPatterns))
-  // ADR-031 Phase 2 batch 2 — Datalog seul chemin. useDatalog=false → undefined.
+  // ADR-031 Phase 2 batch 2 — Datalog seul chemin (audit dette §T1.5).
   const functionComplexity = await runDetectorTimed(timing, 'function-complexity',
     () => Promise.resolve(datalogPatch?.functionComplexity))
 
@@ -1081,15 +1038,15 @@ async function runPhase2Phase1Dependent(
 async function runPhase4SecurityAndQuality(ctx: DetectorPhaseContext) {
   const { config, files, sharedProject, snapshot, timing, incremental, datalogPatch } = ctx
 
-  // ADR-031 Phase 2 batch 4 — Datalog seul chemin. useDatalog=false → undefined.
+  // ADR-031 Phase 2 batch 4 — Datalog seul chemin (audit dette §T1.5).
   const hardcodedSecrets = await runDetectorTimed(timing, 'hardcoded-secrets',
     () => Promise.resolve(datalogPatch?.hardcodedSecrets))
-  // ADR-031 Phase 2 batch 2 — Datalog seul chemin. useDatalog=false → undefined.
+  // ADR-031 Phase 2 batch 2 — Datalog seul chemin (audit dette §T1.5).
   const booleanParams = await runDetectorTimed(timing, 'boolean-params',
     () => Promise.resolve(datalogPatch?.booleanParams))
   // dead-code : Phase A.4.2 — runner couvre les 6 kinds via délégation
   // `extractDeadCodeFileBundle` dans le visitor (parité 100%). Cf. ADR-026.
-  // ADR-031 Phase 2 batch 5 — Datalog seul chemin. useDatalog=false → undefined.
+  // ADR-031 Phase 2 batch 5 — Datalog seul chemin (audit dette §T1.5).
   const deadCode = await runDetectorTimed(timing, 'dead-code',
     () => Promise.resolve(datalogPatch?.deadCode))
   // floating-promises : dep sur snapshot.typedCalls (Phase 5 graph build).
@@ -1102,7 +1059,7 @@ async function runPhase4SecurityAndQuality(ctx: DetectorPhaseContext) {
   const articulationPoints = await runDetectorTimed(timing, 'articulation-points',
     () => analyzeArticulationPoints(snapshot))
   // Constant expressions — patterns simplification symbolique.
-  // ADR-031 Phase 2 batch 2 — Datalog seul chemin. useDatalog=false → undefined.
+  // ADR-031 Phase 2 batch 2 — Datalog seul chemin (audit dette §T1.5).
   const constantExpressions = await runDetectorTimed(timing, 'constant-expressions',
     () => Promise.resolve(datalogPatch?.constantExpressions))
   // ESLint ingester — read .codegraph/eslint.json if user provided it.
@@ -1127,7 +1084,7 @@ async function runPhase5SqlAndResource(ctx: DetectorPhaseContext) {
     async () => snapshot.sqlSchema ? findSqlNamingViolations(snapshot.sqlSchema) : undefined)
   const sqlMigrationOrderViolations = await runDetectorTimed(timing, 'sql-migration-order',
     async () => snapshot.sqlSchema ? findMigrationOrderViolations(snapshot.sqlSchema) : undefined)
-  // ADR-031 Phase 2 batch 4 — Datalog seul chemin. useDatalog=false → undefined.
+  // ADR-031 Phase 2 batch 4 — Datalog seul chemin (audit dette §T1.5).
   const resourceImbalances = await runDetectorTimed(timing, 'resource-balance',
     () => Promise.resolve(datalogPatch?.resourceImbalances))
 
@@ -1143,7 +1100,6 @@ async function runPhase6TaintChain(ctx: DetectorPhaseContext) {
   const { timing, datalogPatch } = ctx
 
   // ADR-031 Phase 2 batch 3 — Datalog seul chemin pour la chaîne taint.
-  // useDatalog=false → 4 fields undefined.
   const taintSinks = await runDetectorTimed(timing, 'taint-sinks',
     () => Promise.resolve(datalogPatch?.taintSinks))
   const sanitizerCalls = await runDetectorTimed(timing, 'sanitizers',

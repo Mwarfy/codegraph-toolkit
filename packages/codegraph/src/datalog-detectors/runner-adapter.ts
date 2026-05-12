@@ -1,11 +1,8 @@
 // ADR-026 — Phase A.3 : adapter DatalogDetectorResults → snapshot fields
-// ADR-031 — Phase 1 : la parité BIT-IDENTICAL des 20 fields portés est
-// verrouillée en CI par datalog-legacy-parity.test.ts (canary fixture).
-// Phase 2 retirera les détecteurs ts-morph legacy correspondants.
+// ADR-031 — Phase 2 done + audit dette §T1.5 : Datalog est le seul chemin.
 /**
  * Convertit la sortie typée du runner Datalog en shapes attendus par le
- * snapshot legacy. Permet le swap full-replace dans `analyzer.ts` quand
- * `useDatalog: true` est activé.
+ * snapshot. Tourne systématiquement depuis `analyzer.ts`.
  *
  * Couvre 18/21 fields snapshot avec parité bit-pour-bit (validés par
  * shadow mode A.1 + Sentinel A.2). Trois fields restent en legacy car
