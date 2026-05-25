@@ -14,6 +14,7 @@ import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
 import { findReachablePaths, globToRegex } from '../../graph/reachability.js'
 import { loadConfig, loadSnapshot } from '../_shared.js'
+import type { GraphEdge } from '../../core/types.js'
 
 export interface ArchCheckOpts {
   config?: string
@@ -21,7 +22,7 @@ export interface ArchCheckOpts {
   json?: boolean
 }
 
-interface ArchRule {
+export interface ArchRule {
   name: string
   description?: string
   from: string
@@ -31,7 +32,7 @@ interface ArchRule {
   disallowReachable?: string
 }
 
-interface Violation {
+export interface Violation {
   rule: string
   description?: string
   kind: 'direct' | 'transitive'
@@ -44,18 +45,7 @@ export async function runArchCheckCommand(opts: ArchCheckOpts): Promise<void> {
   const config = await loadConfig(opts)
   const snapshot = await loadSnapshot(undefined, opts)
 
-  // Resolve rules file path.
-  let rulesPath = opts.rules
-  if (!rulesPath) {
-    const candidates = [
-      path.join(config.rootDir, 'arch-rules.json'),
-      path.join(config.rootDir, 'codegraph', 'arch-rules.json'),
-    ]
-    for (const p of candidates) {
-      // await-ok: probe avec break sur première match, séquentiel requis
-      try { await fs.access(p); rulesPath = p; break } catch { /* probe: try next */ }
-    }
-  }
+  const rulesPath = await resolveRulesPath(config.rootDir, opts)
   if (!rulesPath) {
     console.error(chalk.red('  No arch-rules.json found. Pass --rules or place one at the project root.'))
     process.exit(1)
@@ -65,69 +55,51 @@ export async function runArchCheckCommand(opts: ArchCheckOpts): Promise<void> {
   const rules: ArchRule[] = Array.isArray(raw.rules) ? raw.rules : []
 
   const files = snapshot.nodes.filter((n) => n.type === 'file').map((n) => n.id)
-  const fileSet = new Set(files)
-
-  const violations: Violation[] = []
-
-  for (const r of rules) {
-    if (!r.name || !r.from) continue
-    const fromRe = globToRegex(r.from)
-    const sources = new Set(files.filter((f) => fromRe.test(f)))
-    if (sources.size === 0) continue
-
-    // Direct `disallow` — reuse existing single-hop semantics.
-    if (r.disallow) {
-      const toRe = globToRegex(r.disallow)
-      for (const e of snapshot.edges) {
-        if (e.type !== 'import') continue
-        if (!fileSet.has(e.from) || !fileSet.has(e.to)) continue
-        if (fromRe.test(e.from) && toRe.test(e.to)) {
-          violations.push({
-            rule: r.name,
-            ...(r.description ? { description: r.description } : {}),
-            kind: 'direct',
-            from: e.from,
-            to: e.to,
-          })
-        }
-      }
-    }
-
-    // Transitive `disallowReachable` — new.
-    if (r.disallowReachable) {
-      const toRe = globToRegex(r.disallowReachable)
-      const targets = new Set(files.filter((f) => toRe.test(f)))
-      if (targets.size === 0) continue
-      const paths = findReachablePaths(sources, targets, snapshot.edges)
-      for (const p of paths) {
-        violations.push({
-          rule: r.name,
-          ...(r.description ? { description: r.description } : {}),
-          kind: 'transitive',
-          from: p.from,
-          to: p.to,
-          path: p.path,
-        })
-      }
-    }
-  }
+  const violations = evaluateRules(rules, files, new Set(files), snapshot.edges)
 
   if (opts.json) {
     console.log(JSON.stringify({ rulesFile: rulesPath, rulesCount: rules.length, violations }, null, 2))
-    process.exit(violations.length > 0 ? 1 : 0)
+  } else {
+    printArchCheckText(rulesPath, rules.length, violations)
   }
+  process.exit(violations.length > 0 ? 1 : 0)
+}
 
+/**
+ * Résout le chemin du fichier `arch-rules.json` : option explicite, puis
+ * conventions `<root>/arch-rules.json` et `<root>/codegraph/arch-rules.json`.
+ * Retourne `null` si aucun candidat n'existe (l'appelant décide de l'exit).
+ */
+async function resolveRulesPath(rootDir: string, opts: ArchCheckOpts): Promise<string | null> {
+  if (opts.rules) return opts.rules
+  const candidates = [
+    path.join(rootDir, 'arch-rules.json'),
+    path.join(rootDir, 'codegraph', 'arch-rules.json'),
+  ]
+  for (const p of candidates) {
+    try {
+      // await-ok: probe avec return sur première match, séquentiel requis
+      await fs.access(p)
+      return p
+    } catch {
+      /* probe: try next */
+    }
+  }
+  return null
+}
+
+/** Rendu console groupé par rule (cap 10 lignes par catégorie). Pas d'exit. */
+function printArchCheckText(rulesPath: string, rulesCount: number, violations: Violation[]): void {
   console.log(chalk.bold('\n  CodeGraph Arch Check\n'))
   console.log(`  ${chalk.dim('rules file')} ${rulesPath}`)
-  console.log(`  ${chalk.dim('rules')}      ${rules.length}`)
+  console.log(`  ${chalk.dim('rules')}      ${rulesCount}`)
   console.log()
 
   if (violations.length === 0) {
     console.log(chalk.green('  ✓ No violations.\n'))
-    process.exit(0)
+    return
   }
 
-  // Group by rule for readable output.
   const byRule = new Map<string, Violation[]>()
   for (const v of violations) {
     const list = byRule.get(v.rule) ?? []
@@ -135,20 +107,94 @@ export async function runArchCheckCommand(opts: ArchCheckOpts): Promise<void> {
     byRule.set(v.rule, list)
   }
   for (const [name, vs] of byRule) {
-    console.log(chalk.red(`  ✗ ${name}`) + chalk.dim(`  (${vs.length})`))
-    const direct = vs.filter((v) => v.kind === 'direct')
-    const transitive = vs.filter((v) => v.kind === 'transitive')
-    for (const v of direct.slice(0, 10)) {
-      console.log(`      direct     ${v.from} → ${v.to}`)
-    }
-    if (direct.length > 10) console.log(chalk.dim(`      … +${direct.length - 10} more direct`))
-    for (const v of transitive.slice(0, 10)) {
-      console.log(`      transitive ${v.path!.join(' → ')}`)
-    }
-    if (transitive.length > 10) console.log(chalk.dim(`      … +${transitive.length - 10} more transitive`))
-    console.log()
+    printRuleViolations(name, vs)
   }
 
   console.log(chalk.red(`  ${violations.length} violation(s)\n`))
-  process.exit(1)
+}
+
+/** Affiche les violations d'une rule : direct puis transitive, cap 10 chacune. */
+function printRuleViolations(name: string, vs: Violation[]): void {
+  console.log(chalk.red(`  ✗ ${name}`) + chalk.dim(`  (${vs.length})`))
+  const direct = vs.filter((v) => v.kind === 'direct')
+  const transitive = vs.filter((v) => v.kind === 'transitive')
+  for (const v of direct.slice(0, 10)) {
+    console.log(`      direct     ${v.from} → ${v.to}`)
+  }
+  if (direct.length > 10) console.log(chalk.dim(`      … +${direct.length - 10} more direct`))
+  for (const v of transitive.slice(0, 10)) {
+    console.log(`      transitive ${v.path!.join(' → ')}`)
+  }
+  if (transitive.length > 10) console.log(chalk.dim(`      … +${transitive.length - 10} more transitive`))
+  console.log()
+}
+
+/**
+ * Évalue chaque rule contre les imports du graph. Pure : aucun I/O, aucun
+ * accès console — entièrement déterminée par ses arguments. Découplée de
+ * `runArchCheckCommand` pour être testable indépendamment du I/O fichier.
+ */
+export function evaluateRules(
+  rules: ArchRule[],
+  files: string[],
+  fileSet: Set<string>,
+  edges: GraphEdge[],
+): Violation[] {
+  const violations: Violation[] = []
+  for (const r of rules) {
+    if (!r.name || !r.from) continue
+    const fromRe = globToRegex(r.from)
+    const sources = new Set(files.filter((f) => fromRe.test(f)))
+    if (sources.size === 0) continue
+    if (r.disallow) {
+      violations.push(...collectDirectViolations(r, fromRe, fileSet, edges))
+    }
+    if (r.disallowReachable) {
+      violations.push(...collectTransitiveViolations(r, sources, files, edges))
+    }
+  }
+  return violations
+}
+
+/** Métadonnées communes à toute violation d'une rule (nom + description opt). */
+function ruleMeta(r: ArchRule): Pick<Violation, 'rule'> & Partial<Pick<Violation, 'description'>> {
+  return { rule: r.name, ...(r.description ? { description: r.description } : {}) }
+}
+
+/** Imports directs (single-hop) `from → disallow` présents dans le graph. */
+function collectDirectViolations(
+  r: ArchRule,
+  fromRe: RegExp,
+  fileSet: Set<string>,
+  edges: GraphEdge[],
+): Violation[] {
+  const toRe = globToRegex(r.disallow!)
+  const out: Violation[] = []
+  for (const e of edges) {
+    if (e.type !== 'import') continue
+    if (!fileSet.has(e.from) || !fileSet.has(e.to)) continue
+    if (fromRe.test(e.from) && toRe.test(e.to)) {
+      out.push({ ...ruleMeta(r), kind: 'direct', from: e.from, to: e.to })
+    }
+  }
+  return out
+}
+
+/** Chemins transitifs (multi-hop) `from ⇝ disallowReachable` via BFS. */
+function collectTransitiveViolations(
+  r: ArchRule,
+  sources: Set<string>,
+  files: string[],
+  edges: GraphEdge[],
+): Violation[] {
+  const toRe = globToRegex(r.disallowReachable!)
+  const targets = new Set(files.filter((f) => toRe.test(f)))
+  if (targets.size === 0) return []
+  return findReachablePaths(sources, targets, edges).map((p) => ({
+    ...ruleMeta(r),
+    kind: 'transitive',
+    from: p.from,
+    to: p.to,
+    path: p.path,
+  }))
 }
