@@ -19,34 +19,23 @@
  * extracteur introduit du nondéterminisme (ordre Map traversal, Date.now()
  * dans un detector, etc.), ce test pète — pas le legacy.
  *
+ * Note flakiness : une divergence intermittente a été observée dans la suite
+ * complète (pression mémoire/GC, non reproductible en isolation). En cas
+ * d'échec, `captureSnapshotDivergence` dumpe les champs divergents (stderr +
+ * artefact) pour identifier la root cause à la prochaine occurrence.
+ *
  * Coût : ~5s sur les fixtures (3 runs × ~1.5s analyze).
  */
 
 import { describe, it, expect } from 'vitest'
-import { createHash } from 'node:crypto'
 import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { analyze } from '../src/core/analyzer.js'
 import { buildSynopsis } from '../src/synopsis/builder.js'
 import type { GraphSnapshot, CodeGraphConfig } from '../src/core/types.js'
+import { hashCanonical, captureSnapshotDivergence } from './_determinism-capture.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-
-/**
- * Hash a value via canonical JSON serialization with sorted keys.
- * Avoids false negatives from key ordering variance in Object spread.
- */
-function hashValue(value: unknown): string {
-  const json = JSON.stringify(value, (_, v) => {
-    if (v && typeof v === 'object' && !Array.isArray(v)) {
-      const sorted: Record<string, unknown> = {}
-      for (const key of Object.keys(v).sort()) sorted[key] = v[key]
-      return sorted
-    }
-    return v
-  })
-  return createHash('sha256').update(json).digest('hex')
-}
 
 /**
  * Strip metadata fields that are EXPECTED to vary between runs (timing,
@@ -71,20 +60,23 @@ async function runAnalyze(rootDir: string): Promise<GraphSnapshot> {
   return result.snapshot
 }
 
+/**
+ * Vérifie la byte-équivalence des 3 runs. Sur divergence, capture le diff
+ * (champs concernés) avant d'échouer — pour diagnostiquer une flakiness rare.
+ */
+async function assertByteEquivalent(label: string, rootDir: string): Promise<void> {
+  const snaps = [await runAnalyze(rootDir), await runAnalyze(rootDir), await runAnalyze(rootDir)]
+  const stripped = snaps.map(stripVariantFields) as Record<string, unknown>[]
+  const [h1, h2, h3] = stripped.map(hashCanonical)
+  if (h2 !== h1) captureSnapshotDivergence(`${label}-run2-vs-run1`, stripped[0], stripped[1])
+  if (h3 !== h1) captureSnapshotDivergence(`${label}-run3-vs-run1`, stripped[0], stripped[2])
+  expect(h2).toBe(h1)
+  expect(h3).toBe(h1)
+}
+
 describe('analyze determinism E2E (ADR-001 hardening)', () => {
   it('cycles fixture : 3 runs analyze() → byte-équivalent snapshots', { timeout: 30_000 }, async () => {
-    const rootDir = path.resolve(__dirname, 'fixtures/cycles')
-
-    const snap1 = await runAnalyze(rootDir)
-    const snap2 = await runAnalyze(rootDir)
-    const snap3 = await runAnalyze(rootDir)
-
-    const h1 = hashValue(stripVariantFields(snap1))
-    const h2 = hashValue(stripVariantFields(snap2))
-    const h3 = hashValue(stripVariantFields(snap3))
-
-    expect(h2).toBe(h1)
-    expect(h3).toBe(h1)
+    await assertByteEquivalent('cycles', path.resolve(__dirname, 'fixtures/cycles'))
   })
 
   it('cycles fixture : 3 runs synopsis level-1+2+3 → byte-équivalent', async () => {
@@ -101,33 +93,11 @@ describe('analyze determinism E2E (ADR-001 hardening)', () => {
   })
 
   it('state-machines fixture : 3 runs analyze() → byte-équivalent', async () => {
-    const rootDir = path.resolve(__dirname, 'fixtures/state-machines')
-
-    const snap1 = await runAnalyze(rootDir)
-    const snap2 = await runAnalyze(rootDir)
-    const snap3 = await runAnalyze(rootDir)
-
-    const h1 = hashValue(stripVariantFields(snap1))
-    const h2 = hashValue(stripVariantFields(snap2))
-    const h3 = hashValue(stripVariantFields(snap3))
-
-    expect(h2).toBe(h1)
-    expect(h3).toBe(h1)
+    await assertByteEquivalent('state-machines', path.resolve(__dirname, 'fixtures/state-machines'))
   })
 
   it('truth-points fixture : 3 runs analyze() → byte-équivalent', async () => {
-    const rootDir = path.resolve(__dirname, 'fixtures/truth-points')
-
-    const snap1 = await runAnalyze(rootDir)
-    const snap2 = await runAnalyze(rootDir)
-    const snap3 = await runAnalyze(rootDir)
-
-    const h1 = hashValue(stripVariantFields(snap1))
-    const h2 = hashValue(stripVariantFields(snap2))
-    const h3 = hashValue(stripVariantFields(snap3))
-
-    expect(h2).toBe(h1)
-    expect(h3).toBe(h1)
+    await assertByteEquivalent('truth-points', path.resolve(__dirname, 'fixtures/truth-points'))
   })
 
   it('detector array order : sorted lex (no Map insertion order leak)', async () => {

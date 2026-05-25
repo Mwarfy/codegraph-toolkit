@@ -738,11 +738,13 @@ async function hasVitestInstalled(rootDir: string): Promise<boolean> {
     'backend/package.json',
     'apps/backend/package.json',
   ]
-  // await-ok: short-circuit sur premier match, sequentiel acceptable (3 candidates max)
+  // Probe séquentiel volontaire : short-circuit sur premier match (3 candidates max).
   for (const rel of candidates) {
     const p = path.join(rootDir, rel)
+    // await-ok: short-circuit — on s'arrête au premier package.json présent
     if (!(await exists(p))) continue
     try {
+      // await-ok: lecture du premier candidat matché, séquentiel (return on match)
       const pkg = JSON.parse(await readFile(p, 'utf-8'))
       const allDeps = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) }
       if (allDeps.vitest) return true

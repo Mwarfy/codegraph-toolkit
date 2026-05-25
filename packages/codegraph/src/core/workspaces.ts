@@ -45,14 +45,16 @@ export async function detectWorkspaces(rootDir: string): Promise<WorkspaceMap> {
   const patterns = await loadWorkspacePatterns(rootDir)
   if (patterns.length === 0) return EMPTY_WORKSPACES
 
-  const entries: WorkspaceEntry[] = []
-  for (const pattern of patterns) {
-    const dirs = await expandGlob(rootDir, pattern)
-    for (const dir of dirs) {
-      const entry = await readWorkspacePackage(rootDir, dir)
-      if (entry) entries.push(entry)
-    }
-  }
+  // Lectures FS indépendantes par pattern/dir → parallélisées. Promise.all
+  // préserve l'ordre, donc la dédup "premier trouvé gagne" reste déterministe.
+  const perPattern = await Promise.all(
+    patterns.map(async (pattern) => {
+      const dirs = await expandGlob(rootDir, pattern)
+      const pkgs = await Promise.all(dirs.map((dir) => readWorkspacePackage(rootDir, dir)))
+      return pkgs.filter((e): e is WorkspaceEntry => e !== null)
+    }),
+  )
+  const entries: WorkspaceEntry[] = perPattern.flat()
 
   const byName = new Map<string, WorkspaceEntry>()
   const paths: string[] = []
@@ -132,15 +134,19 @@ async function expandGlob(rootDir: string, pattern: string): Promise<string[]> {
   }
   const segments = pattern.split('/')
   let candidates = ['']
+  // Descente segment par segment : candidates(i) dérive de candidates(i-1).
+  // Dépendance de données stricte → la boucle est séquentielle par nature.
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i]
     if (seg === '*') {
+      // await-ok: dépendance de données — consomme candidates(i-1)
       candidates = await expandSingleStar(rootDir, candidates)
     } else if (seg === '**') {
+      // await-ok: dépendance de données — consomme candidates(i-1)
       candidates = await expandDoubleStar(rootDir, candidates)
     } else {
       candidates = candidates.map((c) => (c ? `${c}/${seg}` : seg))
-      // Verifie que le segment litteral existe quand il succede a un glob
+      // await-ok: dépendance de données — filtre candidates(i-1) (segment littéral)
       candidates = await asyncFilter(candidates, (c) => isDir(path.join(rootDir, c)))
     }
   }
@@ -148,18 +154,27 @@ async function expandGlob(rootDir: string, pattern: string): Promise<string[]> {
 }
 
 async function expandSingleStar(rootDir: string, candidates: string[]): Promise<string[]> {
-  const next: string[] = []
-  for (const c of candidates) {
-    const abs = path.join(rootDir, c)
-    const sub = await readdirSafe(abs)
-    for (const name of sub) {
-      if (skipDirName(name)) continue
-      if (await isDir(path.join(abs, name))) {
-        next.push(c ? `${c}/${name}` : name)
-      }
-    }
-  }
-  return next
+  // Lectures FS indépendantes par candidate ; Promise.all préserve l'ordre,
+  // puis flat() reconstruit l'ordre déterministe d'origine.
+  const perCandidate = await Promise.all(candidates.map((c) => listSubDirs(rootDir, c)))
+  return perCandidate.flat()
+}
+
+/**
+ * Sous-dirs directs valides d'un candidate (skip dotdirs/node_modules/dist/build).
+ * Les `isDir` sont parallélisés mais le résultat conserve l'ordre de `readdir`.
+ */
+async function listSubDirs(rootDir: string, c: string): Promise<string[]> {
+  const abs = path.join(rootDir, c)
+  const sub = await readdirSafe(abs)
+  const checked = await Promise.all(
+    sub.map(async (name) => {
+      if (skipDirName(name)) return null
+      if (!(await isDir(path.join(abs, name)))) return null
+      return c ? `${c}/${name}` : name
+    }),
+  )
+  return checked.filter((x): x is string => x !== null)
 }
 
 /**
@@ -168,26 +183,23 @@ async function expandSingleStar(rootDir: string, candidates: string[]): Promise<
  */
 async function expandDoubleStar(rootDir: string, candidates: string[]): Promise<string[]> {
   const all = new Set<string>(candidates)
-  const queue = [...candidates]
+  let queue = [...candidates]
   let depth = 0
   while (queue.length > 0 && depth < 6) {
+    // Lectures FS du niveau parallélisées ; l'ordre d'insertion dans `all` reste
+    // déterministe car on consomme les résultats dans l'ordre de la queue.
+    // await-ok: barrière par niveau BFS — queue(d+1) dérive de queue(d)
+    const perNode = await Promise.all(queue.map((c) => listSubDirs(rootDir, c)))
     const next: string[] = []
-    for (const c of queue) {
-      const abs = path.join(rootDir, c)
-      const sub = await readdirSafe(abs)
-      for (const name of sub) {
-        if (skipDirName(name)) continue
-        if (await isDir(path.join(abs, name))) {
-          const child = c ? `${c}/${name}` : name
-          if (!all.has(child)) {
-            all.add(child)
-            next.push(child)
-          }
+    for (const children of perNode) {
+      for (const child of children) {
+        if (!all.has(child)) {
+          all.add(child)
+          next.push(child)
         }
       }
     }
-    queue.length = 0
-    queue.push(...next)
+    queue = next
     depth++
   }
   return Array.from(all)
@@ -198,11 +210,9 @@ function skipDirName(name: string): boolean {
 }
 
 async function asyncFilter<T>(items: T[], pred: (t: T) => Promise<boolean>): Promise<T[]> {
-  const out: T[] = []
-  for (const item of items) {
-    if (await pred(item)) out.push(item)
-  }
-  return out
+  // Promise.all préserve l'ordre des résultats → filtre déterministe et parallèle.
+  const flags = await Promise.all(items.map(pred))
+  return items.filter((_, i) => flags[i])
 }
 
 async function readWorkspacePackage(rootDir: string, relDir: string): Promise<WorkspaceEntry | null> {

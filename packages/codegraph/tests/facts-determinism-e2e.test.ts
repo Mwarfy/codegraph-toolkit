@@ -18,6 +18,7 @@ import * as path from 'node:path'
 import { analyze } from '../src/core/analyzer.js'
 import { buildFactsHead, computeDelta, saveBase, loadBase } from '../src/incremental/fact-store.js'
 import type { CodeGraphConfig } from '../src/core/types.js'
+import { captureFactsDivergence } from './_determinism-capture.js'
 
 async function makeFixture(): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'p3-e2e-'))
@@ -64,9 +65,12 @@ describe('ADR-027 Phase 3 — fact store determinism (e2e)', () => {
     expect(r1.astFactsBundle).toBeDefined()
     expect(r2.astFactsBundle).toBeDefined()
 
-    const h1 = buildFactsHead(r1.astFactsBundle!, { generatedAt: 'x' }).head
-    const h2 = buildFactsHead(r2.astFactsBundle!, { generatedAt: 'x' }).head
-    expect(h2.factSetHash).toBe(h1.factSetHash)
+    const b1 = buildFactsHead(r1.astFactsBundle!, { generatedAt: 'x' })
+    const b2 = buildFactsHead(r2.astFactsBundle!, { generatedAt: 'x' })
+    if (b2.head.factSetHash !== b1.head.factSetHash) {
+      captureFactsDivergence('facts-2runs', b1.records, b2.records)
+    }
+    expect(b2.head.factSetHash).toBe(b1.head.factSetHash)
   })
 
   it('modification d\'un fichier → factSetHash change', async () => {
