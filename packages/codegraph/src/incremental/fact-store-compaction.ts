@@ -131,65 +131,17 @@ export async function compactFactStore(
   const storeFile = factStorePath(snapshotDir)
 
   // 1. Prune les bases LRU au-delà de `keepBases` (si applicable).
-  const basesPruned = await pruneOldBases(snapshotDir, config.keepBases, opts.dryRun ?? false)
+  const basesPruned = await pruneOldBases(snapshotDir, config.keepBases, { dryRun: opts.dryRun ?? false })
 
   // 2. Recharge le set référencé (après prune des bases).
   const referenced = await collectReferencedIds(snapshotDir, config.keepBases)
 
-  // 3. Stream + filter + écrit tmp.
-  let sizeBefore = 0
-  try { sizeBefore = (await fs.stat(storeFile)).size } catch { /* pas de store */ }
-
-  const tmp = storeFile + '.compacting'
-  let kept = 0
-  let removed = 0
-
-  if (opts.dryRun) {
-    // Stats seules — pas d'écriture.
-    for await (const line of streamLines(storeFile)) {
-      if (!line) continue
-      try {
-        const parsed = JSON.parse(line) as { id?: string }
-        if (typeof parsed.id === 'string' && referenced.has(parsed.id)) kept++
-        else removed++
-      } catch {
-        removed++
-      }
-    }
-  } else {
-    // Réécrit le store en streaming pour éviter de tout charger en RAM.
-    const handle = await fs.open(tmp, 'w')
-    try {
-      for await (const line of streamLines(storeFile)) {
-        if (!line) continue
-        try {
-          const parsed = JSON.parse(line) as { id?: string }
-          if (typeof parsed.id === 'string' && referenced.has(parsed.id)) {
-            await handle.write(line + '\n', null, 'utf-8')
-            kept++
-          } else {
-            removed++
-          }
-        } catch {
-          removed++  // ligne corrompue : dropped
-        }
-      }
-    } finally {
-      await handle.close()
-    }
-    // Rename atomique — si un autre process a déjà compacté, on overwrite
-    // (la lib fs.rename remplace sans warning sur POSIX).
-    try {
-      await fs.rename(tmp, storeFile)
-    } catch {
-      // Race condition rare : on cleanup le tmp et on considère que
-      // l'autre process a fait le boulot.
-      try { await fs.unlink(tmp) } catch { /* nothing */ }
-    }
-  }
-
-  let sizeAfter = 0
-  try { sizeAfter = (await fs.stat(storeFile)).size } catch { /* nothing */ }
+  // 3. Stream + filter : compte seul si dryRun, sinon réécrit le store.
+  const sizeBefore = await fileSize(storeFile)
+  const { kept, removed } = opts.dryRun
+    ? await countFilteredLines(storeFile, referenced)
+    : await rewriteStoreFiltered(storeFile, referenced)
+  const sizeAfter = await fileSize(storeFile)
 
   return {
     kept,
@@ -199,6 +151,76 @@ export async function compactFactStore(
     durationMs: performance.now() - t0,
     dryRun: opts.dryRun ?? false,
   }
+}
+
+/** Une ligne du store est-elle référencée ? Ligne corrompue = non (dropped). */
+function lineIsReferenced(line: string, referenced: Set<string>): boolean {
+  try {
+    const parsed = JSON.parse(line) as { id?: string }
+    return typeof parsed.id === 'string' && referenced.has(parsed.id)
+  } catch {
+    return false
+  }
+}
+
+/** Taille du fichier en bytes, 0 si absent. */
+async function fileSize(file: string): Promise<number> {
+  try {
+    return (await fs.stat(file)).size
+  } catch {
+    return 0
+  }
+}
+
+/** Compte kept/removed sans écrire (dry-run). */
+async function countFilteredLines(
+  storeFile: string,
+  referenced: Set<string>,
+): Promise<{ kept: number; removed: number }> {
+  let kept = 0
+  let removed = 0
+  for await (const line of streamLines(storeFile)) {
+    if (!line) continue
+    if (lineIsReferenced(line, referenced)) kept++
+    else removed++
+  }
+  return { kept, removed }
+}
+
+/**
+ * Réécrit le store en ne gardant que les lignes référencées. Atomique :
+ * tmp + `fs.rename`. Streaming pour éviter de tout charger en RAM.
+ */
+async function rewriteStoreFiltered(
+  storeFile: string,
+  referenced: Set<string>,
+): Promise<{ kept: number; removed: number }> {
+  const tmp = storeFile + '.compacting'
+  let kept = 0
+  let removed = 0
+  const handle = await fs.open(tmp, 'w')
+  try {
+    for await (const line of streamLines(storeFile)) {
+      if (!line) continue
+      if (lineIsReferenced(line, referenced)) {
+        // await-ok: écriture séquentielle ordonnée du store (streaming, pas de Promise.all)
+        await handle.write(line + '\n', null, 'utf-8')
+        kept++
+      } else {
+        removed++
+      }
+    }
+  } finally {
+    await handle.close()
+  }
+  // Rename atomique — si un autre process a déjà compacté, on overwrite
+  // (fs.rename remplace sans warning sur POSIX). Race rare : cleanup le tmp.
+  try {
+    await fs.rename(tmp, storeFile)
+  } catch {
+    try { await fs.unlink(tmp) } catch { /* nothing */ }
+  }
+  return { kept, removed }
 }
 
 /**
@@ -217,16 +239,21 @@ async function collectReferencedIds(
   const head = await readFactsHead(snapshotDir)
   if (head) addIdsFrom(head, referenced)
 
-  // N bases LRU.
+  // N bases LRU — lectures indépendantes, parallélisées (ordre indifférent :
+  // on agrège dans un Set).
   const bases = await listBasesByMtime(snapshotDir)
-  for (const { path: p } of bases.slice(0, keepBases)) {
-    try {
-      const raw = await fs.readFile(p, 'utf-8')
-      const parsed = JSON.parse(raw) as FactsHead
-      if (parsed.version === 1 && parsed.byRelation) addIdsFrom(parsed, referenced)
-    } catch {
-      /* base corrompue : skip */
-    }
+  const baseHeads = await Promise.all(
+    bases.slice(0, keepBases).map(async ({ path: p }): Promise<FactsHead | null> => {
+      try {
+        const parsed = JSON.parse(await fs.readFile(p, 'utf-8')) as FactsHead
+        return parsed.version === 1 && parsed.byRelation ? parsed : null
+      } catch {
+        return null  // base corrompue : skip
+      }
+    }),
+  )
+  for (const h of baseHeads) {
+    if (h) addIdsFrom(h, referenced)
   }
   return referenced
 }
@@ -276,12 +303,12 @@ async function listBasesByMtime(
 async function pruneOldBases(
   snapshotDir: string,
   keepBases: number,
-  dryRun: boolean,
+  opts: { dryRun: boolean },
 ): Promise<number> {
   const bases = await listBasesByMtime(snapshotDir)
   if (bases.length <= keepBases) return 0
   const toDelete = bases.slice(keepBases)
-  if (dryRun) return toDelete.length
+  if (opts.dryRun) return toDelete.length
   const results = await Promise.all(
     toDelete.map(async (b): Promise<number> => {
       try {
