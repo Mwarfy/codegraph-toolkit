@@ -16,9 +16,11 @@
 import chalk from 'chalk'
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
+import { execFileSync } from 'node:child_process'
+import type { ServerResponse } from 'node:http'
 import { analyze } from '../../core/analyzer.js'
 import { CodeGraph } from '../../core/graph.js'
-import type { GraphSnapshot } from '../../core/types.js'
+import type { GraphSnapshot, CodeGraphConfig } from '../../core/types.js'
 import { loadConfig, loadSnapshot as _loadSnapshot, defaultSnapshotPath, analyzeAtRef } from '../_shared.js'
 import { listAllSnapshotPaths } from '../../incremental/snapshot-loader.js'
 
@@ -31,6 +33,167 @@ export interface ServeOpts {
   diff?: string
 }
 
+/** Contexte partagé par les route handlers. */
+interface ServeContext {
+  config: CodeGraphConfig
+  webDir: string
+}
+
+// ── exec git (execFileSync : pas de shell, args en array → pas d'injection) ──
+
+function gitOutput(args: string[], cwd: string, timeoutMs: number): string {
+  return execFileSync('git', args, { cwd, encoding: 'utf-8', timeout: timeoutMs })
+}
+
+// ── API response helpers ──
+
+function jsonResponse(res: ServerResponse, data: unknown, status = 200): void {
+  res.writeHead(status, {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+  })
+  res.end(JSON.stringify(data))
+}
+
+function errorResponse(res: ServerResponse, msg: string, status = 500): void {
+  jsonResponse(res, { error: msg }, status)
+}
+
+// ── Route handlers ──
+
+/** GET /api/snapshots — liste les snapshots disponibles (loader unifié ADR-027). */
+async function handleSnapshots(res: ServerResponse, ctx: ServeContext): Promise<void> {
+  try {
+    const { all } = await listAllSnapshotPaths(ctx.config.snapshotDir)
+    const items = await Promise.all(all.map(async (filePath) => {
+      const stat = await fs.stat(filePath)
+      const f = path.basename(filePath)
+      const match = f.match(/^snapshot-(.+?)(?:-([a-f0-9]{7,}))?\.json$/)
+      return {
+        file: f,
+        path: filePath,
+        timestamp: match?.[1]?.replace(/T/, ' ').replace(/-/g, (m, i) => i > 9 ? ':' : '-') || f,
+        commitHash: match?.[2] || null,
+        size: stat.size,
+        mtime: stat.mtime.toISOString(),
+      }
+    }))
+    jsonResponse(res, { snapshots: items })
+  } catch {
+    jsonResponse(res, { snapshots: [] })
+  }
+}
+
+/** GET /api/branches — liste les branches git + commits récents. */
+async function handleBranches(res: ServerResponse, ctx: ServeContext): Promise<void> {
+  try {
+    const raw = gitOutput(
+      ['branch', '-a', '--format=%(refname:short)|%(objectname:short)|%(committerdate:iso8601)|%(subject)'],
+      ctx.config.rootDir, 10000,
+    )
+    const currentRaw = gitOutput(['branch', '--show-current'], ctx.config.rootDir, 5000).trim()
+
+    const branches = raw.trim().split('\n').filter(Boolean).map((line) => {
+      const [name, hash, date, ...msgParts] = line.split('|')
+      return {
+        name: name.trim(),
+        hash: hash.trim(),
+        date: date.trim(),
+        message: msgParts.join('|').trim(),
+        current: name.trim() === currentRaw,
+      }
+    })
+
+    // Also get recent commits for quick ref picking
+    const logRaw = gitOutput(['log', '--oneline', '-20'], ctx.config.rootDir, 10000)
+    const recentCommits = logRaw.trim().split('\n').filter(Boolean).map((line) => {
+      const [hash, ...msgParts] = line.split(' ')
+      return { hash, message: msgParts.join(' ') }
+    })
+
+    jsonResponse(res, { branches, current: currentRaw, recentCommits })
+  } catch (e) {
+    errorResponse(res, `Git error: ${e instanceof Error ? e.message : String(e)}`, 500)
+  }
+}
+
+/** GET /api/snapshot?file=... — charge un snapshot spécifique. */
+async function handleSnapshot(res: ServerResponse, url: URL, ctx: ServeContext): Promise<void> {
+  const file = url.searchParams.get('file')
+  if (!file) { errorResponse(res, 'Missing ?file= parameter', 400); return }
+  const filePath = path.join(ctx.config.snapshotDir, path.basename(file))
+  try {
+    const data = await fs.readFile(filePath, 'utf-8')
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' })
+    res.end(data)
+  } catch {
+    errorResponse(res, 'Snapshot not found', 404)
+  }
+}
+
+/** Résout un argument (fichier `.json` ou git ref) en snapshot. */
+async function resolveSnapshotArg(arg: string, ctx: ServeContext): Promise<GraphSnapshot> {
+  if (arg.endsWith('.json')) {
+    const p = path.isAbsolute(arg) ? arg : path.join(ctx.config.snapshotDir, path.basename(arg))
+    return JSON.parse(await fs.readFile(p, 'utf-8'))
+  }
+  return analyzeAtRef(arg, ctx.config)
+}
+
+/** GET /api/diff?before=&after= — diff entre deux snapshots/refs. */
+async function handleDiff(res: ServerResponse, url: URL, ctx: ServeContext): Promise<void> {
+  const beforeArg = url.searchParams.get('before')
+  const afterArg = url.searchParams.get('after')
+  if (!beforeArg) { errorResponse(res, 'Missing ?before= parameter', 400); return }
+
+  const before = await resolveSnapshotArg(beforeArg, ctx)
+  const after = (!afterArg || afterArg === 'current')
+    ? (await analyze(ctx.config)).snapshot
+    : await resolveSnapshotArg(afterArg, ctx)
+
+  const diff = CodeGraph.diff(before, after)
+
+  // Also save to web dir so viewer can reload
+  await fs.writeFile(path.join(ctx.webDir, 'snapshot.json'), JSON.stringify(after, null, 2))
+  await fs.writeFile(path.join(ctx.webDir, 'diff.json'), JSON.stringify(diff, null, 2))
+
+  jsonResponse(res, { diff, snapshot: after })
+}
+
+/** GET /api/analyze?ref=... — analyse à un ref (ou current tree). */
+async function handleAnalyze(res: ServerResponse, url: URL, ctx: ServeContext): Promise<void> {
+  const ref = url.searchParams.get('ref')
+  let snapshot: GraphSnapshot
+
+  if (ref && ref !== 'current') {
+    snapshot = await analyzeAtRef(ref, ctx.config)
+  } else {
+    snapshot = (await analyze(ctx.config)).snapshot
+    // Save as new snapshot
+    const outPath = await defaultSnapshotPath(ctx.config)
+    await fs.mkdir(path.dirname(outPath), { recursive: true })
+    await fs.writeFile(outPath, JSON.stringify(snapshot, null, 2))
+  }
+
+  await fs.writeFile(path.join(ctx.webDir, 'snapshot.json'), JSON.stringify(snapshot, null, 2))
+  // Clear diff when loading a fresh snapshot
+  try { await fs.unlink(path.join(ctx.webDir, 'diff.json')) } catch { /* no diff.json to clear — fine */ }
+
+  jsonResponse(res, { snapshot })
+}
+
+/** Dispatch une route /api/*. Retourne false si non gérée (→ static fallback). */
+async function routeApi(url: URL, res: ServerResponse, ctx: ServeContext): Promise<boolean> {
+  switch (url.pathname) {
+    case '/api/snapshots': await handleSnapshots(res, ctx); return true
+    case '/api/branches': await handleBranches(res, ctx); return true
+    case '/api/snapshot': await handleSnapshot(res, url, ctx); return true
+    case '/api/diff': await handleDiff(res, url, ctx); return true
+    case '/api/analyze': await handleAnalyze(res, url, ctx); return true
+    default: return false
+  }
+}
+
 export async function runServeCommand(opts: ServeOpts): Promise<void> {
   const port = parseInt(opts.port ?? '3333', 10)
   const config = await loadConfig(opts)
@@ -38,44 +201,21 @@ export async function runServeCommand(opts: ServeOpts): Promise<void> {
   // est portable sur 20.9+ (contrainte de l'env de dev Sentinel).
   const { fileURLToPath } = await import('node:url')
   const webDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../web')
-  const { execSync } = await import('node:child_process')
+  const ctx: ServeContext = { config, webDir }
 
   // Preload snapshot and/or diff into web dir
   if (opts.snapshot) {
-    await fs.writeFile(
-      path.join(webDir, 'snapshot.json'),
-      await fs.readFile(opts.snapshot, 'utf-8'),
-    )
+    await fs.writeFile(path.join(webDir, 'snapshot.json'), await fs.readFile(opts.snapshot, 'utf-8'))
   }
   if (opts.diff) {
-    await fs.writeFile(
-      path.join(webDir, 'diff.json'),
-      await fs.readFile(opts.diff, 'utf-8'),
-    )
+    await fs.writeFile(path.join(webDir, 'diff.json'), await fs.readFile(opts.diff, 'utf-8'))
   }
-
-  // ── API Helpers ──
-
-  function jsonResponse(res: import('node:http').ServerResponse, data: unknown, status = 200): void {
-    res.writeHead(status, {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-    })
-    res.end(JSON.stringify(data))
-  }
-
-  function errorResponse(res: import('node:http').ServerResponse, msg: string, status = 500): void {
-    jsonResponse(res, { error: msg }, status)
-  }
-
-  // ── HTTP Server with API routes + static fallback ──
 
   const { createServer } = await import('node:http')
   const handler = (await import('serve-handler')).default
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url || '/', `http://localhost:${port}`)
-    const pathname = url.pathname
 
     // CORS preflight
     if (req.method === 'OPTIONS') {
@@ -89,150 +229,11 @@ export async function runServeCommand(opts: ServeOpts): Promise<void> {
     }
 
     try {
-      // ── GET /api/snapshots — list available snapshots
-      // ADR-027 : délégué au loader unifié (`incremental/snapshot-loader.ts`)
-      // qui retourne le v2 canonique + backups + legacy historiques.
-      if (pathname === '/api/snapshots') {
-        try {
-          const { all } = await listAllSnapshotPaths(config.snapshotDir)
-          const items = await Promise.all(all.map(async (filePath) => {
-            const stat = await fs.stat(filePath)
-            const f = path.basename(filePath)
-            const match = f.match(/^snapshot-(.+?)(?:-([a-f0-9]{7,}))?\.json$/)
-            return {
-              file: f,
-              path: filePath,
-              timestamp: match?.[1]?.replace(/T/, ' ').replace(/-/g, (m, i) => i > 9 ? ':' : '-') || f,
-              commitHash: match?.[2] || null,
-              size: stat.size,
-              mtime: stat.mtime.toISOString(),
-            }
-          }))
-          jsonResponse(res, { snapshots: items })
-        } catch {
-          jsonResponse(res, { snapshots: [] })
-        }
-        return
-      }
-
-      // ── GET /api/branches — list git branches
-      if (pathname === '/api/branches') {
-        try {
-          const raw = execSync('git branch -a --format="%(refname:short)|%(objectname:short)|%(committerdate:iso8601)|%(subject)"', {
-            cwd: config.rootDir, encoding: 'utf-8', timeout: 10000,
-          })
-          const currentRaw = execSync('git branch --show-current', {
-            cwd: config.rootDir, encoding: 'utf-8', timeout: 5000,
-          }).trim()
-
-          const branches = raw.trim().split('\n').filter(Boolean).map((line) => {
-            const [name, hash, date, ...msgParts] = line.split('|')
-            return {
-              name: name.trim(),
-              hash: hash.trim(),
-              date: date.trim(),
-              message: msgParts.join('|').trim(),
-              current: name.trim() === currentRaw,
-            }
-          })
-
-          // Also get recent commits for quick ref picking
-          const logRaw = execSync('git log --oneline -20', {
-            cwd: config.rootDir, encoding: 'utf-8', timeout: 10000,
-          })
-          const recentCommits = logRaw.trim().split('\n').filter(Boolean).map((line) => {
-            const [hash, ...msgParts] = line.split(' ')
-            return { hash, message: msgParts.join(' ') }
-          })
-
-          jsonResponse(res, { branches, current: currentRaw, recentCommits })
-        } catch (e: any) {
-          errorResponse(res, `Git error: ${e.message}`, 500)
-        }
-        return
-      }
-
-      // ── GET /api/snapshot?file=...  — load a specific snapshot
-      if (pathname === '/api/snapshot') {
-        const file = url.searchParams.get('file')
-        if (!file) { errorResponse(res, 'Missing ?file= parameter', 400); return }
-        const filePath = path.join(config.snapshotDir, path.basename(file))
-        try {
-          const data = await fs.readFile(filePath, 'utf-8')
-          res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' })
-          res.end(data)
-        } catch {
-          errorResponse(res, 'Snapshot not found', 404)
-        }
-        return
-      }
-
-      // ── GET /api/diff?before=...&after=... — compute diff between two snapshots or refs
-      if (pathname === '/api/diff') {
-        const beforeArg = url.searchParams.get('before')
-        const afterArg = url.searchParams.get('after')
-        if (!beforeArg) { errorResponse(res, 'Missing ?before= parameter', 400); return }
-
-        let before: GraphSnapshot
-        let after: GraphSnapshot
-
-        // Resolve "before" — snapshot file or git ref
-        if (beforeArg.endsWith('.json')) {
-          const p = path.isAbsolute(beforeArg) ? beforeArg : path.join(config.snapshotDir, path.basename(beforeArg))
-          before = JSON.parse(await fs.readFile(p, 'utf-8'))
-        } else {
-          before = await analyzeAtRef(beforeArg, config)
-        }
-
-        // Resolve "after" — snapshot file, git ref, or current tree
-        if (!afterArg || afterArg === 'current') {
-          after = (await analyze(config)).snapshot
-        } else if (afterArg.endsWith('.json')) {
-          const p = path.isAbsolute(afterArg) ? afterArg : path.join(config.snapshotDir, path.basename(afterArg))
-          after = JSON.parse(await fs.readFile(p, 'utf-8'))
-        } else {
-          after = await analyzeAtRef(afterArg, config)
-        }
-
-        const diff = CodeGraph.diff(before, after)
-
-        // Also save to web dir so viewer can reload
-        await fs.writeFile(path.join(webDir, 'snapshot.json'), JSON.stringify(after, null, 2))
-        await fs.writeFile(path.join(webDir, 'diff.json'), JSON.stringify(diff, null, 2))
-
-        jsonResponse(res, { diff, snapshot: after })
-        return
-      }
-
-      // ── GET /api/analyze?ref=...  — run analysis at a ref (or current tree)
-      if (pathname === '/api/analyze') {
-        const ref = url.searchParams.get('ref')
-        let snapshot: GraphSnapshot
-
-        if (ref && ref !== 'current') {
-          snapshot = await analyzeAtRef(ref, config)
-        } else {
-          const result = await analyze(config)
-          snapshot = result.snapshot
-          // Save as new snapshot
-          const outPath = await defaultSnapshotPath(config)
-          await fs.mkdir(path.dirname(outPath), { recursive: true })
-          await fs.writeFile(outPath, JSON.stringify(snapshot, null, 2))
-        }
-
-        await fs.writeFile(path.join(webDir, 'snapshot.json'), JSON.stringify(snapshot, null, 2))
-        // Clear diff when loading a fresh snapshot
-        try { await fs.unlink(path.join(webDir, 'diff.json')) } catch { /* no diff.json to clear — fine */ }
-
-        jsonResponse(res, { snapshot })
-        return
-      }
-
-      // ── Static file fallback ──
+      if (await routeApi(url, res, ctx)) return
+      // Static file fallback
       return handler(req, res, { public: webDir })
-
-    } catch (e: any) {
-      errorResponse(res, e.message || 'Internal error', 500)
+    } catch (e) {
+      errorResponse(res, e instanceof Error ? e.message : 'Internal error', 500)
     }
   })
 
