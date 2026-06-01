@@ -60,62 +60,110 @@ export async function readSessions(opts: {
   sinceDays?: number
   includeWorktrees?: boolean
 }): Promise<SessionsReadResult> {
-  const since = opts.sinceDays ?? 30
-  const cutoff = Date.now() - since * 86_400_000
+  const dirsToScan = await resolveDirsToScan(opts)
+  return readSessionsFromDirs(dirsToScan, { sinceDays: opts.sinceDays })
+}
 
+/**
+ * Résout les répertoires de sessions à scanner : le dir du projet courant
+ * (s'il existe) + les worktrees `<dir>--claude-worktrees-*` si demandé.
+ */
+async function resolveDirsToScan(opts: {
+  cwd: string
+  includeWorktrees?: boolean
+}): Promise<string[]> {
   const baseDir = sessionsDir(opts.cwd)
-  const dirsToScan: string[] = []
-  if (existsSync(baseDir)) dirsToScan.push(baseDir)
+  const dirs: string[] = []
+  if (existsSync(baseDir)) dirs.push(baseDir)
+  if (!opts.includeWorktrees) return dirs
 
-  if (opts.includeWorktrees) {
-    const parent = path.dirname(baseDir)
-    const baseName = path.basename(baseDir)
-    try {
-      const siblings = await readdir(parent)
-      for (const s of siblings) {
-        if (s.startsWith(baseName + '--claude-worktrees-')) {
-          dirsToScan.push(path.join(parent, s))
-        }
+  const parent = path.dirname(baseDir)
+  const baseName = path.basename(baseDir)
+  try {
+    const siblings = await readdir(parent)
+    for (const s of siblings) {
+      if (s.startsWith(baseName + '--claude-worktrees-')) dirs.push(path.join(parent, s))
+    }
+  } catch {
+    /* parent dir missing — no worktrees */
+  }
+  return dirs
+}
+
+/** Résultat partiel d'un fichier — mergé déterministiquement par caller. */
+interface PartialRead {
+  toolUses: ToolUse[]
+  sessionIds: string[]
+  lineCount: number
+  parseErrors: number
+}
+
+/**
+ * Cœur I/O testable : lit tous les `.jsonl` des `dirs` donnés et agrège les
+ * tool_use events. Lectures parallélisées (fichiers indépendants) mais ordre
+ * des `toolUses` préservé via concat dans l'ordre des fichiers (déterminisme).
+ */
+export async function readSessionsFromDirs(
+  dirs: string[],
+  opts: { sinceDays?: number },
+): Promise<SessionsReadResult> {
+  const cutoff = Date.now() - (opts.sinceDays ?? 30) * 86_400_000
+  const files = await collectSessionFiles(dirs)
+  const parts = await Promise.all(files.map((f) => readSessionFile(f, cutoff)))
+  return mergeReads(parts)
+}
+
+/** Liste les chemins `.jsonl` de tous les dirs (parallèle, ordre des dirs). */
+async function collectSessionFiles(dirs: string[]): Promise<string[]> {
+  const perDir = await Promise.all(
+    dirs.map(async (dir): Promise<string[]> => {
+      try {
+        const entries = await readdir(dir)
+        return entries.filter((e) => e.endsWith('.jsonl')).map((e) => path.join(dir, e))
+      } catch {
+        return []  // dir manquant : skip
       }
+    }),
+  )
+  return perDir.flat()
+}
+
+/** Lit + parse un fichier de session en résultat partiel (jamais throw). */
+async function readSessionFile(filePath: string, cutoff: number): Promise<PartialRead> {
+  const part: PartialRead = { toolUses: [], sessionIds: [], lineCount: 0, parseErrors: 0 }
+  let content: string
+  try {
+    content = await readFile(filePath, 'utf-8')
+  } catch {
+    return part  // fichier illisible : skip
+  }
+  const sessionIds = new Set<string>()
+  for (const line of content.split('\n')) {
+    if (!line.trim()) continue
+    part.lineCount++
+    try {
+      const event = JSON.parse(line) as Record<string, unknown>
+      extractToolUses(event, part.toolUses, sessionIds, cutoff)
     } catch {
-      /* parent dir missing — no worktrees */
+      part.parseErrors++
     }
   }
+  part.sessionIds = [...sessionIds]
+  return part
+}
 
+/** Fusionne les résultats partiels — concat ordonné des toolUses. */
+function mergeReads(parts: PartialRead[]): SessionsReadResult {
   const toolUses: ToolUse[] = []
   const sessionIds = new Set<string>()
   let lineCount = 0
   let parseErrors = 0
-
-  for (const dir of dirsToScan) {
-    let entries: string[]
-    try {
-      entries = await readdir(dir)
-    } catch {
-      continue
-    }
-    for (const entry of entries) {
-      if (!entry.endsWith('.jsonl')) continue
-      const filePath = path.join(dir, entry)
-      let content: string
-      try {
-        content = await readFile(filePath, 'utf-8')
-      } catch {
-        continue
-      }
-      for (const line of content.split('\n')) {
-        if (!line.trim()) continue
-        lineCount++
-        try {
-          const event = JSON.parse(line) as Record<string, unknown>
-          extractToolUses(event, toolUses, sessionIds, cutoff)
-        } catch {
-          parseErrors++
-        }
-      }
-    }
+  for (const p of parts) {
+    toolUses.push(...p.toolUses)
+    for (const id of p.sessionIds) sessionIds.add(id)
+    lineCount += p.lineCount
+    parseErrors += p.parseErrors
   }
-
   return { toolUses, sessionCount: sessionIds.size, lineCount, parseErrors }
 }
 
@@ -125,32 +173,47 @@ function extractToolUses(
   sessionIds: Set<string>,
   cutoff: number,
 ): void {
-  if (event.type !== 'assistant') return
-  const ts = typeof event.timestamp === 'string' ? Date.parse(event.timestamp) : NaN
-  if (Number.isFinite(ts) && ts < cutoff) return
+  if (!isRecentAssistant(event, cutoff)) return
 
   const sessionId = typeof event.sessionId === 'string' ? event.sessionId : ''
   if (sessionId) sessionIds.add(sessionId)
 
-  const message = event.message as Record<string, unknown> | undefined
-  if (!message) return
-  const content = message.content
-  if (!Array.isArray(content)) return
-
-  for (const block of content) {
-    if (!block || typeof block !== 'object') continue
-    const b = block as Record<string, unknown>
-    if (b.type !== 'tool_use') continue
-    const tool = typeof b.name === 'string' ? b.name : 'unknown'
-    const input = (b.input && typeof b.input === 'object' ? b.input : {}) as Record<string, unknown>
-
-    acc.push({
-      sessionId,
-      timestamp: typeof event.timestamp === 'string' ? event.timestamp : '',
-      cwd: typeof event.cwd === 'string' ? event.cwd : '',
-      gitBranch: typeof event.gitBranch === 'string' ? event.gitBranch : undefined,
-      tool,
-      input,
-    })
+  const meta = {
+    sessionId,
+    timestamp: typeof event.timestamp === 'string' ? event.timestamp : '',
+    cwd: typeof event.cwd === 'string' ? event.cwd : '',
+    gitBranch: typeof event.gitBranch === 'string' ? event.gitBranch : undefined,
   }
+  for (const block of messageContentBlocks(event)) {
+    const use = toToolUse(block, meta)
+    if (use) acc.push(use)
+  }
+}
+
+/** Event = assistant ET dans la fenêtre de récence ? */
+function isRecentAssistant(event: Record<string, unknown>, cutoff: number): boolean {
+  if (event.type !== 'assistant') return false
+  const ts = typeof event.timestamp === 'string' ? Date.parse(event.timestamp) : NaN
+  return !(Number.isFinite(ts) && ts < cutoff)
+}
+
+/** Blocs de `message.content` (filtre les non-objets), [] si absent. */
+function messageContentBlocks(event: Record<string, unknown>): Record<string, unknown>[] {
+  const message = event.message as Record<string, unknown> | undefined
+  const content = message?.content
+  if (!Array.isArray(content)) return []
+  return content.filter(
+    (b): b is Record<string, unknown> => !!b && typeof b === 'object',
+  )
+}
+
+/** Convertit un bloc en ToolUse, ou null si ce n'est pas un tool_use. */
+function toToolUse(
+  block: Record<string, unknown>,
+  meta: Omit<ToolUse, 'tool' | 'input'>,
+): ToolUse | null {
+  if (block.type !== 'tool_use') return null
+  const tool = typeof block.name === 'string' ? block.name : 'unknown'
+  const input = (block.input && typeof block.input === 'object' ? block.input : {}) as Record<string, unknown>
+  return { ...meta, tool, input }
 }
