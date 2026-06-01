@@ -381,21 +381,38 @@ interface RenderContext {
 
 // ─── Drawing helpers (un par responsabilité, ordre = pipeline tick) ─────────
 
+/** Opacité des edges selon le zoom (pure). */
+export function edgeAlphaForZoom(z: number): number {
+  return z < 0.4 ? 0.04 : z < 0.8 ? 0.08 : 0.13
+}
+
+/** Pas LOD : skip 1/N edges en zoom-out pour préserver les fps (pure). */
+export function edgeLodStep(z: number): number {
+  return z > 0.55 ? 1 : z > 0.3 ? 2 : 4
+}
+
+/** True si l'edge (s→tt) est entièrement hors viewport → cullable (pure). */
+export function edgeIsCulled(
+  s: { x: number; y: number },
+  tt: { x: number; y: number },
+  vp: Viewport,
+): boolean {
+  const offX = (s.x < vp.wx0 && tt.x < vp.wx0) || (s.x > vp.wx1 && tt.x > vp.wx1)
+  const offY = (s.y < vp.wy0 && tt.y < vp.wy0) || (s.y > vp.wy1 && tt.y > vp.wy1)
+  return offX || offY
+}
+
 function drawEdges(rc: RenderContext): void {
   const { ctx, dataset, viewport: vp, w, h, z, cam } = rc
   ctx.lineWidth = 0.4
-  const edgeAlpha = z < 0.4 ? 0.04 : z < 0.8 ? 0.08 : 0.13
-  ctx.strokeStyle = `rgba(180,210,235,${edgeAlpha})`
+  ctx.strokeStyle = `rgba(180,210,235,${edgeAlphaForZoom(z)})`
   ctx.beginPath()
-  // LOD : skip 1/N edges en zoom-out pour préserver fps
-  const drawEdge = z > 0.55 ? 1 : z > 0.3 ? 2 : 4
-  for (let i = 0; i < dataset.edges.length; i += drawEdge) {
+  const step = edgeLodStep(z)
+  for (let i = 0; i < dataset.edges.length; i += step) {
     const e = dataset.edges[i]
     const s = dataset.byId.get(e.s)
     const tt = dataset.byId.get(e.t)
-    if (!s || !tt) continue
-    if ((s.x < vp.wx0 && tt.x < vp.wx0) || (s.x > vp.wx1 && tt.x > vp.wx1)) continue
-    if ((s.y < vp.wy0 && tt.y < vp.wy0) || (s.y > vp.wy1 && tt.y > vp.wy1)) continue
+    if (!s || !tt || edgeIsCulled(s, tt, vp)) continue
     const sp = worldToScreen(s.x, s.y, cam, w, h)
     const tp = worldToScreen(tt.x, tt.y, cam, w, h)
     ctx.moveTo(sp.x, sp.y)
@@ -510,7 +527,7 @@ function drawNodes(
     drawNodeShape(ctx, n, p, r)
     drawNodeOverlays(ctx, n, p, r, t)
     ctx.globalAlpha = 1
-    drawNodeLabel(ctx, n, p, r, hoverNode, showLabels, showAllLabels)
+    drawNodeLabel(ctx, n, p, r, { hoverNode, showLabels, showAllLabels })
   }
 }
 
@@ -583,13 +600,11 @@ function drawNodeLabel(
   n: CosmosNode,
   p: { x: number; y: number },
   r: number,
-  hoverNode: CosmosNode | null,
-  showLabels: boolean,
-  showAllLabels: boolean,
+  opts: { hoverNode: CosmosNode | null; showLabels: boolean; showAllLabels: boolean },
 ): void {
-  const showLabel = showAllLabels
-    || (showLabels && (n.hub || n.active || n.impacted || n.hot))
-    || (hoverNode != null && hoverNode.id === n.id)
+  const showLabel = opts.showAllLabels
+    || (opts.showLabels && (n.hub || n.active || n.impacted || n.hot))
+    || (opts.hoverNode != null && opts.hoverNode.id === n.id)
   if (!showLabel) return
   ctx.fillStyle = n.active
     ? '#ffffff'
@@ -652,96 +667,145 @@ function prepareCanvasContext(
   return ctx
 }
 
-// ─── mountCosmos ────────────────────────────────────────────────────────────
+// ─── Pure interaction helpers (testables) ───────────────────────────────────
 
-export function mountCosmos(opts: CosmosMountOptions): CosmosInstance {
-  const { canvas, dataset } = opts
+/** Bornes + zoom pour cadrer tous les nodes. null si aucun node. */
+export function frameCamera(
+  nodes: CosmosNode[],
+  w: number,
+  h: number,
+): { x: number; y: number; zoom: number } | null {
+  if (nodes.length === 0) return null
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+  for (const n of nodes) {
+    if (n.x < minX) minX = n.x
+    if (n.x > maxX) maxX = n.x
+    if (n.y < minY) minY = n.y
+    if (n.y > maxY) maxY = n.y
+  }
+  const z = Math.min(w / (maxX - minX + 200), h / (maxY - minY + 200))
+  return {
+    x: (minX + maxX) / 2,
+    y: (minY + maxY) / 2,
+    zoom: Number.isFinite(z) ? z : 0.5,
+  }
+}
 
+/** Inverse de worldToScreen : pixel écran → coordonnée monde (pure). */
+export function screenToWorld(
+  mx: number,
+  my: number,
+  cam: Camera,
+  w: number,
+  h: number,
+): { wx: number; wy: number } {
+  return {
+    wx: (mx - w / 2) / cam.zoom + cam.x,
+    wy: (my - h / 2) / cam.zoom + cam.y,
+  }
+}
+
+/** Node le plus proche de (wx,wy) dans le rayon maxDist, sinon null (pure). */
+export function pickNode(
+  nodes: CosmosNode[],
+  wx: number,
+  wy: number,
+  maxDist: number,
+): CosmosNode | null {
+  let hit: CosmosNode | null = null
+  let bestD = maxDist
+  for (const n of nodes) {
+    const d = Math.hypot(n.x - wx, n.y - wy)
+    if (d < bestD) {
+      bestD = d
+      hit = n
+    }
+  }
+  return hit
+}
+
+/** Adjacence non-dirigée node→voisins depuis les edges (pure). */
+export function buildAdjacency(edges: CosmosEdge[]): Map<number, Set<number>> {
   const adj = new Map<number, Set<number>>()
-  for (const e of dataset.edges) {
+  for (const e of edges) {
     if (!adj.has(e.s)) adj.set(e.s, new Set())
     if (!adj.has(e.t)) adj.set(e.t, new Set())
     adj.get(e.s)!.add(e.t)
     adj.get(e.t)!.add(e.s)
   }
+  return adj
+}
 
-  let activeApiId: string | null = opts.getActiveFileApiId?.() ?? null
-
-  function applyActive(): void {
-    for (const n of dataset.nodes) {
-      n.active = false
-      n.impacted = false
-    }
-    if (!activeApiId) return
-    const a = dataset.byApiId.get(activeApiId)
-    if (!a) return
-    a.active = true
-    a.hot = true
-    const neighbours = adj.get(a.id)
-    if (neighbours) for (const id of neighbours) {
-      const n = dataset.byId.get(id)
-      if (n) n.impacted = true
-    }
+/** Met à jour les flags active/impacted/hot selon l'apiId actif (mute nodes). */
+export function applyActiveState(
+  dataset: CosmosDataset,
+  adj: Map<number, Set<number>>,
+  activeApiId: string | null,
+): void {
+  for (const n of dataset.nodes) {
+    n.active = false
+    n.impacted = false
   }
-  applyActive()
+  if (!activeApiId) return
+  const a = dataset.byApiId.get(activeApiId)
+  if (!a) return
+  a.active = true
+  a.hot = true
+  const neighbours = adj.get(a.id)
+  if (neighbours) for (const id of neighbours) {
+    const n = dataset.byId.get(id)
+    if (n) n.impacted = true
+  }
+}
 
-  const cam: Camera = { x: 0, y: 0, zoom: 0.5, targetZoom: 0.5 }
+/** Zoom centré sur (mx,my) écran — mute cam (x/y/zoom/targetZoom). */
+export function applyZoomAt(cam: Camera, mx: number, my: number, deltaY: number, w: number, h: number): void {
+  const oldZ = cam.zoom
+  const factor = Math.exp(-deltaY * 0.001)
+  const newZ = Math.max(0.05, Math.min(5, cam.zoom * factor))
+  const cx = w / 2
+  const cy = h / 2
+  const wxOld = (mx - cx) / oldZ + cam.x
+  const wyOld = (my - cy) / oldZ + cam.y
+  cam.x = wxOld - (mx - cx) / newZ
+  cam.y = wyOld - (my - cy) / newZ
+  cam.zoom = newZ
+  cam.targetZoom = newZ
+}
+
+/** État mutable partagé entre les pointer handlers et le render loop. */
+interface PointerHandlerState {
+  canvas: HTMLCanvasElement
+  cam: Camera
+  nodes: CosmosNode[]
+  opts: CosmosMountOptions
+  hover: { node: CosmosNode | null }
+}
+
+/**
+ * Attache pan/zoom/hover/click au canvas. Retourne une fonction de détache.
+ * L'état `hover.node` est partagé par référence avec le render loop.
+ */
+function attachPointerHandlers(st: PointerHandlerState): () => void {
+  const { canvas, cam, nodes, opts, hover } = st
   const drag = { active: false, lastX: 0, lastY: 0 }
-  let hoverNode: CosmosNode | null = null
 
-  function frameAll(): void {
-    if (dataset.nodes.length === 0) return
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
-    for (const n of dataset.nodes) {
-      if (n.x < minX) minX = n.x
-      if (n.x > maxX) maxX = n.x
-      if (n.y < minY) minY = n.y
-      if (n.y > maxY) maxY = n.y
-    }
-    const cx = (minX + maxX) / 2
-    const cy = (minY + maxY) / 2
-    const dw = maxX - minX
-    const dh = maxY - minY
-    const w = canvas.clientWidth || 800
-    const h = canvas.clientHeight || 600
-    const z = Math.min(w / (dw + 200), h / (dh + 200))
-    cam.x = cx
-    cam.y = cy
-    cam.zoom = Number.isFinite(z) ? z : 0.5
-    cam.targetZoom = cam.zoom
-  }
-
-  function onWheel(e: WheelEvent): void {
+  const onWheel = (e: WheelEvent): void => {
     e.preventDefault()
     const rect = canvas.getBoundingClientRect()
-    const mx = e.clientX - rect.left
-    const my = e.clientY - rect.top
-    const oldZ = cam.zoom
-    const factor = Math.exp(-e.deltaY * 0.001)
-    const newZ = Math.max(0.05, Math.min(5, cam.zoom * factor))
-    const cx = canvas.clientWidth / 2
-    const cy = canvas.clientHeight / 2
-    const wxOld = (mx - cx) / oldZ + cam.x
-    const wyOld = (my - cy) / oldZ + cam.y
-    cam.x = wxOld - (mx - cx) / newZ
-    cam.y = wyOld - (my - cy) / newZ
-    cam.zoom = newZ
-    cam.targetZoom = newZ
+    applyZoomAt(cam, e.clientX - rect.left, e.clientY - rect.top, e.deltaY, canvas.clientWidth, canvas.clientHeight)
   }
-
-  function onMouseDown(e: MouseEvent): void {
+  const onMouseDown = (e: MouseEvent): void => {
     drag.active = true
     drag.lastX = e.clientX
     drag.lastY = e.clientY
     canvas.style.cursor = 'grabbing'
   }
-
-  function onMouseUp(): void {
+  const onMouseUp = (): void => {
     drag.active = false
     canvas.style.cursor = 'grab'
   }
-
-  function onMouseMove(e: MouseEvent): void {
+  const onMouseMove = (e: MouseEvent): void => {
     if (drag.active) {
       cam.x -= (e.clientX - drag.lastX) / cam.zoom
       cam.y -= (e.clientY - drag.lastY) / cam.zoom
@@ -753,25 +817,15 @@ export function mountCosmos(opts: CosmosMountOptions): CosmosInstance {
     const mx = e.clientX - rect.left
     const my = e.clientY - rect.top
     if (mx < 0 || my < 0 || mx >= rect.width || my >= rect.height) return
-    const wx = (mx - rect.width / 2) / cam.zoom + cam.x
-    const wy = (my - rect.height / 2) / cam.zoom + cam.y
-    let hit: CosmosNode | null = null
-    let bestD = 14 / cam.zoom
-    for (const n of dataset.nodes) {
-      const d = Math.hypot(n.x - wx, n.y - wy)
-      if (d < bestD) {
-        bestD = d
-        hit = n
-      }
-    }
-    if (hit !== hoverNode) {
-      hoverNode = hit
+    const { wx, wy } = screenToWorld(mx, my, cam, rect.width, rect.height)
+    const hit = pickNode(nodes, wx, wy, 14 / cam.zoom)
+    if (hit !== hover.node) {
+      hover.node = hit
       opts.onHoverNode?.(hit)
     }
   }
-
-  function onClick(): void {
-    if (hoverNode && opts.onClickNode) opts.onClickNode(hoverNode)
+  const onClick = (): void => {
+    if (hover.node && opts.onClickNode) opts.onClickNode(hover.node)
   }
 
   canvas.addEventListener('wheel', onWheel, { passive: false })
@@ -779,6 +833,40 @@ export function mountCosmos(opts: CosmosMountOptions): CosmosInstance {
   window.addEventListener('mouseup', onMouseUp)
   window.addEventListener('mousemove', onMouseMove)
   canvas.addEventListener('click', onClick)
+
+  return () => {
+    canvas.removeEventListener('wheel', onWheel)
+    canvas.removeEventListener('mousedown', onMouseDown)
+    window.removeEventListener('mouseup', onMouseUp)
+    window.removeEventListener('mousemove', onMouseMove)
+    canvas.removeEventListener('click', onClick)
+  }
+}
+
+// ─── mountCosmos ────────────────────────────────────────────────────────────
+
+export function mountCosmos(opts: CosmosMountOptions): CosmosInstance {
+  const { canvas, dataset } = opts
+
+  const adj = buildAdjacency(dataset.edges)
+
+  let activeApiId: string | null = opts.getActiveFileApiId?.() ?? null
+  const applyActive = (): void => applyActiveState(dataset, adj, activeApiId)
+  applyActive()
+
+  const cam: Camera = { x: 0, y: 0, zoom: 0.5, targetZoom: 0.5 }
+  const hover: { node: CosmosNode | null } = { node: null }
+
+  function frameAll(): void {
+    const f = frameCamera(dataset.nodes, canvas.clientWidth || 800, canvas.clientHeight || 600)
+    if (!f) return
+    cam.x = f.x
+    cam.y = f.y
+    cam.zoom = f.zoom
+    cam.targetZoom = f.zoom
+  }
+
+  const detachPointer = attachPointerHandlers({ canvas, cam, nodes: dataset.nodes, opts, hover })
 
   let raf = 0
 
@@ -816,8 +904,8 @@ export function mountCosmos(opts: CosmosMountOptions): CosmosInstance {
     drawActiveFlow(rc)
     const dimByStage = drawHookStageArcs(rc)
     drawTreeHoverHalo(rc)
-    drawNodes(rc, dimByStage, hoverNode)
-    drawHoverTooltip(rc, hoverNode)
+    drawNodes(rc, dimByStage, hover.node)
+    drawHoverTooltip(rc, hover.node)
 
     raf = requestAnimationFrame(tick)
   }
@@ -837,11 +925,7 @@ export function mountCosmos(opts: CosmosMountOptions): CosmosInstance {
   return {
     destroy() {
       cancelAnimationFrame(raf)
-      canvas.removeEventListener('wheel', onWheel)
-      canvas.removeEventListener('mousedown', onMouseDown)
-      window.removeEventListener('mouseup', onMouseUp)
-      window.removeEventListener('mousemove', onMouseMove)
-      canvas.removeEventListener('click', onClick)
+      detachPointer()
     },
     frameAll,
     zoomIn() {
