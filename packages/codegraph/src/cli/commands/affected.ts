@@ -31,61 +31,71 @@ export interface AffectedOpts {
 export async function runAffectedCommand(files: string[], opts: AffectedOpts): Promise<void> {
   const snapshot = await loadSnapshot(undefined, opts)
 
-  // Si aucun fichier passé, fallback git diff --name-only HEAD
-  let inputs = files
-  if (inputs.length === 0) {
-    try {
-      const { execSync } = await import('node:child_process')
-      const out = execSync('git diff --name-only HEAD', { encoding: 'utf-8' }).trim()
-      inputs = out.length > 0 ? out.split('\n') : []
-    } catch {
-      console.error(chalk.yellow('  No files passed and `git diff --name-only HEAD` failed.'))
-      process.exitCode = 1
-      return
-    }
+  const inputs = await resolveInputs(files)
+  if (inputs === null) {
+    process.exitCode = 1
+    return
   }
   if (inputs.length === 0) {
     console.error(chalk.dim('  No modified files. Nothing affected.'))
     return
   }
 
-  const maxDepth = parseInt(opts.maxDepth ?? '0', 10) || Infinity
-  const includeIndirect = !!opts.includeIndirect
-  const result = computeAffectedFromCli(snapshot, inputs, { includeIndirect, maxDepth })
+  const result = computeAffected(snapshot, inputs, {
+    includeIndirect: !!opts.includeIndirect,
+    maxDepth: parseInt(opts.maxDepth ?? '0', 10) || Infinity,
+  })
 
   // Optionnel : scan des tests à la volée si --tests-glob fourni (utile
   // quand la config codegraph exclut les tests du snapshot, ex Sentinel).
   if (opts.testsGlob) {
-    const extraTests = await scanTestsImportingAffected(
-      opts.testsGlob,
-      new Set(result.affectedFiles),
-    )
-    // Add extra tests to affectedTests + affectedFiles (déduplication via Set)
-    const allTests = new Set([...result.affectedTests, ...extraTests])
-    result.affectedTests = [...allTests].sort()
-    const allFiles = new Set([...result.affectedFiles, ...extraTests])
-    result.affectedFiles = [...allFiles].sort()
+    await applyGlobTests(result, opts.testsGlob)
   }
-
-  const out = opts.testsOnly ? result.affectedTests : result.affectedFiles
 
   if (opts.json) {
-    console.log(JSON.stringify({
-      inputs,
-      affectedFiles: result.affectedFiles,
-      affectedTests: result.affectedTests,
-      unknownInputs: result.unknownInputs,
-      maxDepthReached: result.maxDepthReached,
-    }, null, 2))
-    return
+    printAffectedJson(inputs, result)
+  } else if (opts.testsOnly) {
+    // Mode pipe-friendly : un fichier par ligne, sans cosmétique.
+    for (const t of result.affectedTests) console.log(t)
+  } else {
+    printAffectedReport(inputs, result)
   }
+}
 
-  if (opts.testsOnly) {
-    // Mode pipe-friendly : un fichier par ligne, sans cosmétique
-    for (const f of out) console.log(f)
-    return
+/**
+ * Résout les fichiers d'entrée : ceux passés, sinon fallback `git diff
+ * --name-only HEAD`. Retourne `null` si le fallback git échoue (erreur).
+ */
+async function resolveInputs(files: string[]): Promise<string[] | null> {
+  if (files.length > 0) return files
+  try {
+    const { execSync } = await import('node:child_process')
+    const out = execSync('git diff --name-only HEAD', { encoding: 'utf-8' }).trim()
+    return out.length > 0 ? out.split('\n') : []
+  } catch {
+    console.error(chalk.yellow('  No files passed and `git diff --name-only HEAD` failed.'))
+    return null
   }
+}
 
+/** Fusionne les tests découverts par glob dans le result (dédup + tri). */
+async function applyGlobTests(result: AffectedResult, testsGlob: string): Promise<void> {
+  const extraTests = await scanTestsImportingAffected(testsGlob, new Set(result.affectedFiles))
+  result.affectedTests = [...new Set([...result.affectedTests, ...extraTests])].sort()
+  result.affectedFiles = [...new Set([...result.affectedFiles, ...extraTests])].sort()
+}
+
+function printAffectedJson(inputs: string[], result: AffectedResult): void {
+  console.log(JSON.stringify({
+    inputs,
+    affectedFiles: result.affectedFiles,
+    affectedTests: result.affectedTests,
+    unknownInputs: result.unknownInputs,
+    maxDepthReached: result.maxDepthReached,
+  }, null, 2))
+}
+
+function printAffectedReport(inputs: string[], result: AffectedResult): void {
   console.log(chalk.bold(`\n  Affected from ${inputs.length} input(s)\n`))
   console.log(`  ${result.affectedFiles.length} file(s) impacted (${result.affectedTests.length} test(s))`)
   if (result.unknownInputs.length > 0) {
@@ -213,11 +223,14 @@ type CliEdge = { from: string; to: string; type: string }
 
 const CLI_TEST_FILE_RE = /(\.test\.tsx?|\.spec\.tsx?|^tests?\/|\/tests?\/)/
 
-function buildCliImporterIndex(edges: CliEdge[], includeIndirect: boolean): Map<string, Set<string>> {
+function buildCliImporterIndex(
+  edges: CliEdge[],
+  opts: { includeIndirect: boolean },
+): Map<string, Set<string>> {
   const importerOf = new Map<string, Set<string>>()
   for (const e of edges) {
     const isPrimary = e.type === 'import'
-    const isIndirect = includeIndirect && (e.type === 'event' || e.type === 'queue' || e.type === 'db-table')
+    const isIndirect = opts.includeIndirect && (e.type === 'event' || e.type === 'queue' || e.type === 'db-table')
     if (!isPrimary && !isIndirect) continue
     if (!importerOf.has(e.to)) importerOf.set(e.to, new Set())
     importerOf.get(e.to)!.add(e.from)
@@ -256,17 +269,33 @@ function bfsCliAffected(
   return { affected, unknownInputs, maxDepthReached }
 }
 
-function computeAffectedFromCli(
-  snapshot: any,
+export interface AffectedSnapshot {
+  nodes?: Array<{ id: string }>
+  edges?: CliEdge[]
+}
+
+export interface AffectedResult {
+  affectedFiles: string[]
+  affectedTests: string[]
+  maxDepthReached: number
+  unknownInputs: string[]
+}
+
+/**
+ * Cœur pur : BFS reverse depuis `files` vers tous leurs importers
+ * transitifs. `includeIndirect` ajoute les edges event/queue/db-table.
+ */
+export function computeAffected(
+  snapshot: AffectedSnapshot,
   files: string[],
   options: { includeIndirect?: boolean; maxDepth?: number },
-): { affectedFiles: string[]; affectedTests: string[]; maxDepthReached: number; unknownInputs: string[] } {
+): AffectedResult {
   const includeIndirect = options.includeIndirect ?? false
   const maxDepth = options.maxDepth ?? Infinity
   const edges: CliEdge[] = snapshot.edges ?? []
-  const nodeIds = new Set<string>((snapshot.nodes ?? []).map((n: any) => n.id))
+  const nodeIds = new Set<string>((snapshot.nodes ?? []).map((n) => n.id))
 
-  const importerOf = buildCliImporterIndex(edges, includeIndirect)
+  const importerOf = buildCliImporterIndex(edges, { includeIndirect })
   const { affected, unknownInputs, maxDepthReached } = bfsCliAffected(files, nodeIds, importerOf, maxDepth)
 
   const affectedFiles = [...affected].sort()
