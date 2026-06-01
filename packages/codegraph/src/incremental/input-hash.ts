@@ -112,6 +112,7 @@ async function hashConfigFile(rootDir: string): Promise<string | null> {
   for (const name of CONFIG_CANDIDATES) {
     const p = path.join(rootDir, name)
     try {
+      // await-ok: short-circuit sur première match (ordre de priorité des candidats)
       const content = await fs.readFile(p, 'utf-8')
       return sha256(content)
     } catch {

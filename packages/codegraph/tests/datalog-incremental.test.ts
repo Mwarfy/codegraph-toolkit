@@ -82,8 +82,12 @@ describe('runDatalogDetectors — Salsa caching (Phase C)', () => {
     // extractMs warm doit être très court (juste l'iter sur cells)
     expect(run2.stats.extractMs).toBeLessThan(run1.stats.extractMs)
     expect(run2.stats.extractMs).toBeLessThan(50)
-    // C.2 — evalMs warm doit aussi être réduit (cache hit, pas de re-eval)
-    expect(run2.stats.evalMs).toBeLessThan(run1.stats.evalMs)
+    // C.2 — l'eval warm doit être servi depuis le cache (facts inchangés).
+    // On assert le flag déterministe `evalCacheHit` plutôt qu'une comparaison
+    // wall-clock evalMs (l'eval est sub-ms sur cette fixture → la comparaison
+    // temporelle était dominée par le jitter GC/scheduling et flakait).
+    expect(run1.stats.evalCacheHit).toBe(false) // cold : facts hash neuf
+    expect(run2.stats.evalCacheHit).toBe(true) //  warm : même hash → skip eval
   })
 
   it('picks up newly added files when projectFiles changes', async () => {

@@ -70,6 +70,8 @@ interface EvalOutput {
   outputs: Map<string, Tuple[]>
   tuplesIn: number
   tuplesOut: number
+  /** True when the facts hash matched the previous run → eval was skipped. */
+  cacheHit: boolean
 }
 
 /**
@@ -84,6 +86,7 @@ function evaluateCached(factsByRelation: Map<string, string>): EvalOutput {
       outputs: cachedEval.outputs,
       tuplesIn: cachedEval.tuplesIn,
       tuplesOut: cachedEval.tuplesOut,
+      cacheHit: true,
     }
   }
   const program = getCachedProgram()
@@ -97,7 +100,7 @@ function evaluateCached(factsByRelation: Map<string, string>): EvalOutput {
   let tuplesOut = 0
   for (const tuples of result.outputs.values()) tuplesOut += tuples.length
   cachedEval = { factsHash, outputs: result.outputs, tuplesIn, tuplesOut }
-  return { outputs: result.outputs, tuplesIn, tuplesOut }
+  return { outputs: result.outputs, tuplesIn, tuplesOut, cacheHit: false }
 }
 
 /**
@@ -335,6 +338,8 @@ export interface DatalogDetectorResults {
     evalMs: number
     tuplesIn: number
     tuplesOut: number
+    /** True when the Datalog eval was served from the warm cache (facts unchanged). */
+    evalCacheHit: boolean
   }
 }
 
@@ -729,7 +734,7 @@ function finalizeDatalogResults(merged: AstFactsBundle, extractMs: number): Data
     securityPatterns: securityPatternsResult,
     driftPatterns: driftPatternsResult,
     codeQualityPatterns: codeQualityPatternsResult,
-    stats: { extractMs, evalMs, tuplesIn, tuplesOut },
+    stats: { extractMs, evalMs, tuplesIn, tuplesOut, evalCacheHit: evaluation.cacheHit },
   }
 }
 
