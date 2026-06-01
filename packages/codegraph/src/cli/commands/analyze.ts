@@ -374,6 +374,103 @@ function printTiming(timing: import('../../core/analyzer.js').AnalyzeResult['tim
   console.log()
 }
 
+/**
+ * Persiste le snapshot : soit raw JSON (`--output <path>`, pour pipelines
+ * externes), soit le format v2 unifié (`snapshot.json` + sidecar meta +
+ * content-addressed fact store + auto-compaction + prune legacy).
+ */
+async function writeSnapshotOutput(
+  opts: AnalyzeOpts,
+  snapshot: import('../../core/types.js').GraphSnapshot,
+  config: import('../../core/types.js').CodeGraphConfig,
+  files: readonly string[],
+  astFactsBundle?: import('../../datalog-detectors/ast-facts/types.js').AstFactsBundle,
+): Promise<void> {
+  // ADR-027 — `--output <path>` reste l'override raw-JSON autonome.
+  if (opts.output) {
+    await fs.mkdir(path.dirname(opts.output), { recursive: true })
+    await fs.writeFile(opts.output, JSON.stringify(snapshot, null, 2))
+    console.log(chalk.green(`  ✓ Snapshot saved: ${opts.output}\n`))
+    return
+  }
+
+  const outPath = await defaultSnapshotPath(config)
+  const { hash: inputHash, ctx } = await computeInputHash(config, files)
+  // ADR-027 Phase 3 — fact store depuis le bundle agrégé (skip si legacy).
+  const factSetHash = astFactsBundle
+    ? await materializeFactStore(config, snapshot, astFactsBundle)
+    : undefined
+
+  const meta: SnapshotMeta = {
+    version: SNAPSHOT_VERSION,
+    inputHash,
+    generatedAt: snapshot.generatedAt,
+    baseSha: snapshot.commitHash,
+    fileCount: ctx.fileCount,
+    toolingVersion: ctx.toolingVersion,
+    factSetHash,
+  }
+  await writeStoredSnapshot(config.snapshotDir, meta, snapshot)
+  console.log(chalk.green(`  ✓ Snapshot saved: ${outPath} (inputHash: ${inputHash.slice(0, 12)}…)\n`))
+
+  // Migration douce — prune les snapshot-<ts>-<sha>.json legacy (garde 2).
+  const prunedLegacy = await pruneLegacySnapshots(config.snapshotDir, 2)
+  if (prunedLegacy > 0) {
+    console.log(chalk.dim(`  ✓ Pruned ${prunedLegacy} legacy snapshot(s) (kept 2 for rollback)\n`))
+  }
+}
+
+/** Matérialise le content-addressed fact store + auto-compaction. Retourne le factSetHash. */
+async function materializeFactStore(
+  config: import('../../core/types.js').CodeGraphConfig,
+  snapshot: import('../../core/types.js').GraphSnapshot,
+  astFactsBundle: import('../../datalog-detectors/ast-facts/types.js').AstFactsBundle,
+): Promise<string> {
+  const t0 = performance.now()
+  const { head, records } = buildFactsHead(astFactsBundle, {
+    generatedAt: snapshot.generatedAt,
+    baseSha: snapshot.commitHash,
+  })
+  const { added, existing } = await writeFactStore(config.snapshotDir, head, records)
+  const factSetHash = head.factSetHash
+  const ms = (performance.now() - t0).toFixed(0)
+  console.log(chalk.green(
+    `  ✓ Fact store: ${added} added / ${existing} dedup (factSet=${factSetHash.slice(0, 12)}…, ${ms}ms)\n`,
+  ))
+  await autoCompactFactStore(config)
+  return factSetHash
+}
+
+/**
+ * ADR-028 — auto-trigger compaction si seuils dépassés (config user
+ * `factStore.*` sinon defaults). Best-effort : un échec ne casse pas l'analyze.
+ */
+async function autoCompactFactStore(
+  config: import('../../core/types.js').CodeGraphConfig,
+): Promise<void> {
+  try {
+    const userCfg = (config as unknown as {
+      factStore?: { maxOrphanRatio?: number; maxSizeBytes?: number; keepBases?: number }
+    }).factStore
+    const compactCfg = {
+      maxOrphanRatio: userCfg?.maxOrphanRatio ?? DEFAULT_COMPACTION_CONFIG.maxOrphanRatio,
+      maxSizeBytes: userCfg?.maxSizeBytes ?? DEFAULT_COMPACTION_CONFIG.maxSizeBytes,
+      keepBases: userCfg?.keepBases ?? DEFAULT_COMPACTION_CONFIG.keepBases,
+    }
+    const stats = await shouldCompact(config.snapshotDir, compactCfg)
+    if (stats?.shouldCompact) {
+      const cResult = await compactFactStore(config.snapshotDir, compactCfg)
+      const freedMb = (cResult.freedBytes / 1024 / 1024).toFixed(1)
+      console.log(chalk.dim(
+        `  ✓ Auto-compacted store (${stats.reason}): -${cResult.removed} facts, ` +
+        `freed ${freedMb} MB (${cResult.durationMs.toFixed(0)}ms)\n`,
+      ))
+    }
+  } catch (err) {
+    console.error(chalk.yellow(`  ⚠ Compaction skipped: ${err instanceof Error ? err.message : String(err)}`))
+  }
+}
+
 async function persistAnalyzeOutputs(
   opts: AnalyzeOpts,
   snapshot: import('../../core/types.js').GraphSnapshot,
@@ -385,77 +482,7 @@ async function persistAnalyzeOutputs(
   // ADR-027 — `--output <path>` reste l'override raw-JSON pour les
   // pipelines externes qui s'attendent à un fichier autonome. Sinon
   // on écrit le format v2 unifié (`snapshot.json` + sidecar meta).
-  let factSetHash: string | undefined
-  if (opts.output) {
-    await fs.mkdir(path.dirname(opts.output), { recursive: true })
-    await fs.writeFile(opts.output, JSON.stringify(snapshot, null, 2))
-    console.log(chalk.green(`  ✓ Snapshot saved: ${opts.output}\n`))
-  } else {
-    const outPath = await defaultSnapshotPath(config)
-    const { hash: inputHash, ctx } = await computeInputHash(config, files)
-
-    // ADR-027 Phase 3 — matérialise le content-addressed fact store
-    // depuis l'AstFactsBundle agrégé. Skip silencieusement si pas de
-    // bundle (legacy mode pré-Datalog). Le store est append-only,
-    // le head réécrit complet à chaque analyze.
-    if (astFactsBundle) {
-      const t0 = performance.now()
-      const { head, records } = buildFactsHead(astFactsBundle, {
-        generatedAt: snapshot.generatedAt,
-        baseSha: snapshot.commitHash,
-      })
-      const { added, existing } = await writeFactStore(config.snapshotDir, head, records)
-      factSetHash = head.factSetHash
-      const ms = (performance.now() - t0).toFixed(0)
-      console.log(chalk.green(
-        `  ✓ Fact store: ${added} added / ${existing} dedup (factSet=${factSetHash.slice(0, 12)}…, ${ms}ms)\n`,
-      ))
-
-      // ADR-028 — auto-trigger compaction si seuils dépassés. Lit la
-      // config user `factStore.{maxOrphanRatio,maxSizeBytes,keepBases}`
-      // si présente. Best-effort : un échec ne casse pas l'analyze.
-      try {
-        const userCfg = (config as unknown as {
-          factStore?: { maxOrphanRatio?: number; maxSizeBytes?: number; keepBases?: number }
-        }).factStore
-        const compactCfg = {
-          maxOrphanRatio: userCfg?.maxOrphanRatio ?? DEFAULT_COMPACTION_CONFIG.maxOrphanRatio,
-          maxSizeBytes: userCfg?.maxSizeBytes ?? DEFAULT_COMPACTION_CONFIG.maxSizeBytes,
-          keepBases: userCfg?.keepBases ?? DEFAULT_COMPACTION_CONFIG.keepBases,
-        }
-        const stats = await shouldCompact(config.snapshotDir, compactCfg)
-        if (stats?.shouldCompact) {
-          const cResult = await compactFactStore(config.snapshotDir, compactCfg)
-          const freedMb = (cResult.freedBytes / 1024 / 1024).toFixed(1)
-          console.log(chalk.dim(
-            `  ✓ Auto-compacted store (${stats.reason}): -${cResult.removed} facts, ` +
-            `freed ${freedMb} MB (${cResult.durationMs.toFixed(0)}ms)\n`,
-          ))
-        }
-      } catch (err) {
-        console.error(chalk.yellow(`  ⚠ Compaction skipped: ${err instanceof Error ? err.message : String(err)}`))
-      }
-    }
-
-    const meta: SnapshotMeta = {
-      version: SNAPSHOT_VERSION,
-      inputHash,
-      generatedAt: snapshot.generatedAt,
-      baseSha: snapshot.commitHash,
-      fileCount: ctx.fileCount,
-      toolingVersion: ctx.toolingVersion,
-      factSetHash,
-    }
-    await writeStoredSnapshot(config.snapshotDir, meta, snapshot)
-    console.log(chalk.green(`  ✓ Snapshot saved: ${outPath} (inputHash: ${inputHash.slice(0, 12)}…)\n`))
-
-    // Migration douce — supprime progressivement les snapshot-<ts>-<sha>.json
-    // accumulés (Phase 1). On garde 2 plus récents pour rollback manuel.
-    const prunedLegacy = await pruneLegacySnapshots(config.snapshotDir, 2)
-    if (prunedLegacy > 0) {
-      console.log(chalk.dim(`  ✓ Pruned ${prunedLegacy} legacy snapshot(s) (kept 2 for rollback)\n`))
-    }
-  }
+  await writeSnapshotOutput(opts, snapshot, config, files, astFactsBundle)
 
   // Side-channel pour `codegraph detectors` : timing du dernier run, hors
   // snapshot.json (qui est un format public versionne ADR-009 — on
