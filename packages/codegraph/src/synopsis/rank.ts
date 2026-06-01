@@ -100,104 +100,27 @@ export function rankFiles(
   snapshot: GraphSnapshot,
   options: RankOptions,
 ): RankedFile[] {
-  // 1. Filter file nodes only (skip directories)
   const files: string[] = snapshot.nodes
     .filter((n) => n.type === 'file')
     .map((n) => n.id)
-
   if (files.length === 0) return []
 
-  // 2. Build weighted directed edge list
-  type Edge = { from: string; to: string; weight: number }
-  const edges: Edge[] = []
-
-  // 2a. Import edges (weight 1)
-  // Direction : importer → imported (so importance flows toward
-  // commonly-imported files, à la PageRank classique).
+  // Direction des import edges : importer → imported (l'importance flue vers
+  // les fichiers communément importés, à la PageRank classique).
   const importEdges = snapshot.edges.filter((e) => e.type === 'import')
-  for (const e of importEdges) {
-    edges.push({ from: e.from, to: e.to, weight: 1 })
-  }
+  const edges = buildRankEdges(
+    importEdges,
+    snapshot.coChangePairs ?? [],
+    options.coChangeWeight ?? DEFAULT_CO_CHANGE_WEIGHT,
+  )
+  const { personalization, reasons } = buildPersonalization(snapshot, importEdges, options)
 
-  // 2b. Co-change edges (bidirectional, weight = jaccard * config)
-  const coChangeWeight = options.coChangeWeight ?? DEFAULT_CO_CHANGE_WEIGHT
-  for (const p of snapshot.coChangePairs ?? []) {
-    const w = (p.jaccard ?? 0) * coChangeWeight
-    if (w > 0) {
-      edges.push({ from: p.from, to: p.to, weight: w })
-      edges.push({ from: p.to, to: p.from, weight: w })
-    }
-  }
-
-  // 3. Build personalization vector + reasons map
-  const personalization = new Map<string, number>()
-  const reasons = new Map<string, string[]>()
-
-  function addReason(file: string, reason: string): void {
-    let arr = reasons.get(file)
-    if (!arr) {
-      arr = []
-      reasons.set(file, arr)
-    }
-    if (!arr.includes(reason)) arr.push(reason)
-  }
-
-  function addPersonalization(file: string, weight: number): void {
-    personalization.set(file, (personalization.get(file) ?? 0) + weight)
-  }
-
-  // 3a. Focus files
-  for (const f of options.focus) {
-    addPersonalization(f, FOCUS_BOOST)
-    addReason(f, 'focus')
-  }
-
-  // 3b. 1-hop neighbors of focus (importers + imports)
-  const focusSet = new Set(options.focus)
-  for (const e of importEdges) {
-    if (focusSet.has(e.from)) {
-      addPersonalization(e.to, NEIGHBOR_BOOST)
-      addReason(e.to, `imported by ${basename(e.from)}`)
-    }
-    if (focusSet.has(e.to)) {
-      addPersonalization(e.from, NEIGHBOR_BOOST)
-      addReason(e.from, `imports ${basename(e.to)}`)
-    }
-  }
-
-  // 3c. Co-change partners of focus (top 5 per focus file by jaccard)
-  for (const f of options.focus) {
-    const partners = (snapshot.coChangePairs ?? [])
-      .filter((p) => p.from === f || p.to === f)
-      .map((p) => ({
-        other: p.from === f ? p.to : p.from,
-        count: p.count,
-        jaccard: p.jaccard,
-      }))
-      .sort((a, b) => b.jaccard - a.jaccard)
-      .slice(0, 5)
-    for (const p of partners) {
-      const boost = CO_CHANGE_FOCUS_BOOST * p.jaccard
-      addPersonalization(p.other, boost)
-      addReason(p.other, `co-change j=${p.jaccard.toFixed(2)} with ${basename(f)}`)
-    }
-  }
-
-  // 3d. Recently modified files
-  for (const f of options.recentlyModified ?? []) {
-    if (focusSet.has(f)) continue // déjà boosté en focus
-    addPersonalization(f, RECENT_BOOST)
-    addReason(f, 'recently modified')
-  }
-
-  // 4. Run personalized PageRank
   const ranks = pagerank(files, edges, personalization, {
     damping: options.damping ?? DEFAULT_DAMPING,
     iterations: options.iterations ?? DEFAULT_ITERATIONS,
     tolerance: options.tolerance ?? DEFAULT_TOLERANCE,
   })
 
-  // 5. Build sorted output
   const out: RankedFile[] = files
     .map((file) => ({
       file,
@@ -206,14 +129,113 @@ export function rankFiles(
     }))
     .sort((a, b) => b.score - a.score || a.file.localeCompare(b.file))
 
-  // 6. Annotate "structural hub" for top files without explicit reasons.
-  // Un fichier qui remonte sans match focus/neighbor/co-change est high
-  // PageRank par sa centralité du graph — utile à savoir.
+  // Annotate "structural hub" : un top fichier sans reason explicite remonte
+  // par sa centralité du graph — utile à signaler à l'agent.
   for (const r of out.slice(0, 30)) {
     if (r.reasons.length === 0) r.reasons.push('structural hub')
   }
-
   return out
+}
+
+type RankEdge = { from: string; to: string; weight: number }
+
+/**
+ * Liste d'edges pondérés dirigés : imports (weight 1) + co-change
+ * (bidirectionnel, weight = jaccard × coChangeWeight, seulement si > 0).
+ */
+function buildRankEdges(
+  importEdges: GraphSnapshot['edges'],
+  coChangePairs: NonNullable<GraphSnapshot['coChangePairs']>,
+  coChangeWeight: number,
+): RankEdge[] {
+  const edges: RankEdge[] = []
+  for (const e of importEdges) {
+    edges.push({ from: e.from, to: e.to, weight: 1 })
+  }
+  for (const p of coChangePairs) {
+    const w = (p.jaccard ?? 0) * coChangeWeight
+    if (w > 0) {
+      edges.push({ from: p.from, to: p.to, weight: w })
+      edges.push({ from: p.to, to: p.from, weight: w })
+    }
+  }
+  return edges
+}
+
+/** Vecteur de personnalisation + reasons accumulés. */
+interface PersonalizationAcc {
+  personalization: Map<string, number>
+  reasons: Map<string, string[]>
+}
+
+function addReason(acc: PersonalizationAcc, file: string, reason: string): void {
+  let arr = acc.reasons.get(file)
+  if (!arr) {
+    arr = []
+    acc.reasons.set(file, arr)
+  }
+  if (!arr.includes(reason)) arr.push(reason)
+}
+
+function addPersonalization(acc: PersonalizationAcc, file: string, weight: number): void {
+  acc.personalization.set(file, (acc.personalization.get(file) ?? 0) + weight)
+}
+
+/**
+ * Construit le vecteur de personnalisation PageRank depuis le focus :
+ * focus direct (×100), voisins 1-hop (×50), partenaires co-change top-5
+ * (×20·jaccard), fichiers récemment modifiés (×10, sauf si déjà focus).
+ */
+function buildPersonalization(
+  snapshot: GraphSnapshot,
+  importEdges: GraphSnapshot['edges'],
+  options: RankOptions,
+): PersonalizationAcc {
+  const acc: PersonalizationAcc = { personalization: new Map(), reasons: new Map() }
+  const focusSet = new Set(options.focus)
+
+  for (const f of options.focus) {
+    addPersonalization(acc, f, FOCUS_BOOST)
+    addReason(acc, f, 'focus')
+  }
+
+  for (const e of importEdges) {
+    if (focusSet.has(e.from)) {
+      addPersonalization(acc, e.to, NEIGHBOR_BOOST)
+      addReason(acc, e.to, `imported by ${basename(e.from)}`)
+    }
+    if (focusSet.has(e.to)) {
+      addPersonalization(acc, e.from, NEIGHBOR_BOOST)
+      addReason(acc, e.from, `imports ${basename(e.to)}`)
+    }
+  }
+
+  for (const f of options.focus) {
+    for (const p of topCoChangePartners(snapshot.coChangePairs ?? [], f)) {
+      addPersonalization(acc, p.other, CO_CHANGE_FOCUS_BOOST * p.jaccard)
+      addReason(acc, p.other, `co-change j=${p.jaccard.toFixed(2)} with ${basename(f)}`)
+    }
+  }
+
+  for (const f of options.recentlyModified ?? []) {
+    if (focusSet.has(f)) continue
+    addPersonalization(acc, f, RECENT_BOOST)
+    addReason(acc, f, 'recently modified')
+  }
+
+  return acc
+}
+
+/** Top-5 partenaires co-change d'un fichier focus, triés par jaccard desc. */
+function topCoChangePartners(
+  coChangePairs: NonNullable<GraphSnapshot['coChangePairs']>,
+  focus: string,
+): Array<{ other: string; jaccard: number }> {
+  return coChangePairs
+    .filter((p) => p.from === focus || p.to === focus)
+    .map((p) => ({ other: p.from === focus ? p.to : p.from, jaccard: p.jaccard }))
+    .sort((a, b) => b.jaccard - a.jaccard)
+    .slice(0, 5)
 }
 
 interface PageRankOpts {
@@ -237,7 +259,7 @@ interface PageRankOpts {
  */
 function pagerank(
   nodes: string[],
-  edges: Array<{ from: string; to: string; weight: number }>,
+  edges: RankEdge[],
   personalization: Map<string, number>,
   opts: PageRankOpts,
 ): Map<string, number> {
@@ -245,8 +267,24 @@ function pagerank(
   const idx = new Map<string, number>()
   for (let i = 0; i < n; i++) idx.set(nodes[i], i)
 
-  // Outgoing edges per node + total outgoing weight (for normalization)
-  const outEdges: Array<Array<{ to: number; weight: number }>> = []
+  const { outEdges, outSum } = buildAdjacency(n, idx, edges)
+  const persArr = normalizedPersonalization(n, idx, personalization)
+  const rank = powerIterate(n, outEdges, outSum, persArr, opts)
+
+  const result = new Map<string, number>()
+  for (let i = 0; i < n; i++) result.set(nodes[i], rank[i])
+  return result
+}
+
+type AdjList = Array<Array<{ to: number; weight: number }>>
+
+/** Listes d'adjacence sortantes + somme des poids sortants par node. */
+function buildAdjacency(
+  n: number,
+  idx: Map<string, number>,
+  edges: RankEdge[],
+): { outEdges: AdjList; outSum: number[] } {
+  const outEdges: AdjList = []
   for (let i = 0; i < n; i++) outEdges.push([])
   const outSum = new Array<number>(n).fill(0)
   for (const e of edges) {
@@ -256,9 +294,18 @@ function pagerank(
     outEdges[fi].push({ to: ti, weight: e.weight })
     outSum[fi] += e.weight
   }
+  return { outEdges, outSum }
+}
 
-  // Personalization vector (normalized to sum 1).
-  // Fallback : uniform si rien personnalisé.
+/**
+ * Vecteur de personnalisation normalisé (∑ = 1). Fallback uniforme (1/n)
+ * si rien n'est personnalisé (focus vide).
+ */
+function normalizedPersonalization(
+  n: number,
+  idx: Map<string, number>,
+  personalization: Map<string, number>,
+): number[] {
   const persArr = new Array<number>(n).fill(0)
   let persSum = 0
   for (const [name, w] of personalization.entries()) {
@@ -273,9 +320,22 @@ function pagerank(
   } else {
     for (let i = 0; i < n; i++) persArr[i] /= persSum
   }
+  return persArr
+}
 
+/**
+ * Power-method itératif : diffuse le rank le long des edges (damping), gère
+ * la masse dangling + teleport via la personnalisation, early-exit sur
+ * convergence L1 < tolerance.
+ */
+function powerIterate(
+  n: number,
+  outEdges: AdjList,
+  outSum: number[],
+  persArr: number[],
+  opts: PageRankOpts,
+): number[] {
   let rank = new Array<number>(n).fill(1 / n)
-
   for (let iter = 0; iter < opts.iterations; iter++) {
     const newRank = new Array<number>(n).fill(0)
     let danglingMass = 0
@@ -284,27 +344,22 @@ function pagerank(
       if (outSum[i] === 0) {
         danglingMass += rank[i]
       } else {
-        const total = outSum[i]
         for (const { to, weight } of outEdges[i]) {
-          newRank[to] += (opts.damping * rank[i] * weight) / total
+          newRank[to] += (opts.damping * rank[i] * weight) / outSum[i]
         }
       }
     }
 
-    // Distribute dangling mass + teleport mass via personalization.
+    // Distribue la masse dangling + teleport via la personnalisation.
     const teleport = (1 - opts.damping) + opts.damping * danglingMass
     for (let i = 0; i < n; i++) {
       newRank[i] += teleport * persArr[i]
     }
 
-    // Convergence check
     let diff = 0
     for (let i = 0; i < n; i++) diff += Math.abs(newRank[i] - rank[i])
     rank = newRank
     if (diff < opts.tolerance) break
   }
-
-  const result = new Map<string, number>()
-  for (let i = 0; i < n; i++) result.set(nodes[i], rank[i])
-  return result
+  return rank
 }
