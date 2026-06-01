@@ -71,71 +71,101 @@ interface ViolationOut {
   args: readonly unknown[]
 }
 
+type CompositeResult = ReturnType<typeof runCompositeRules>
+type FactsMap = Awaited<ReturnType<typeof loadFactsDir>>
+
 export async function runCrossCheckCommand(opts: CrossCheckOpts): Promise<void> {
   const root = process.cwd()
   const rulesDir = opts.rulesDir ?? await resolveDefaultCrossCutRulesDir(root)
   const factsDir = opts.factsDir ?? path.join(root, '.codegraph/facts')
   const factsRuntimeDir = opts.factsRuntimeDir ?? path.join(root, '.codegraph/facts-runtime')
 
-  // 1. Charge les rules .dl
   const rulesDl = await loadRulesDir(rulesDir)
   if (rulesDl.length === 0) {
-    if (!opts.json) {
-      console.error(chalk.yellow(`⚠ no .dl rule found in ${rulesDir}`))
-      console.error(chalk.dim(`  Pass --rules-dir <path> to specify rules location.`))
-    } else {
-      console.log(JSON.stringify({ violations: [], stats: { rulesLoaded: 0 } }))
-    }
+    printNoRules(rulesDir, { json: opts.json ?? false })
     return
   }
 
-  // 2. Charge facts statique + runtime → Map<RelationName, TSV>
   const staticFacts = await loadFactsDir(factsDir)
   const runtimeFacts = await loadFactsDir(factsRuntimeDir)
+  const merged = mergeFactRelations(staticFacts, runtimeFacts)
 
-  // 3. Merge (relations sans collision attendue — schemas disjoints)
-  const merged = new Map<string, string>(staticFacts)
-  for (const [name, tsv] of runtimeFacts) {
-    const existing = merged.get(name)
-    merged.set(name, existing && existing.length > 0 ? `${existing}\n${tsv}` : tsv)
-  }
-
-  // 4. Évalue via composite runner.
-  // `includeRuntime: false` car on a déjà mergé les facts disque dans
-  // `staticFactsByRelation` ; on ne veut pas double-load la cell Salsa
-  // (qui pourrait être vide en CLI standalone, ou désynchro).
+  // `includeRuntime: false` : on a déjà mergé les facts disque dans
+  // `staticFactsByRelation`, on ne veut pas double-load la cell Salsa.
   const result = runCompositeRules({
     rulesDl,
     staticFactsByRelation: merged,
     includeRuntime: false,
   })
 
-  // 5. Émet violations
-  const violations: ViolationOut[] = []
-  for (const [rule, tuples] of result.outputs) {
-    for (const t of tuples) {
-      violations.push({ rule, args: t })
-    }
-  }
+  const violations = collectViolations(result.outputs)
 
   if (opts.json) {
-    console.log(JSON.stringify({
-      violations,
-      stats: {
-        cacheHit: result.stats.cacheHit,
-        durationMs: Math.round(result.stats.durationMs * 100) / 100,
-        tuplesIn: result.stats.tuplesIn,
-        tuplesOut: result.stats.tuplesOut,
-        rulesLoaded: countRules(rulesDl),
-      },
-    }))
-    return
+    printCrossCheckJson(violations, result, rulesDl)
+  } else {
+    printCrossCheckReport(violations, result, {
+      rulesDl,
+      staticRel: staticFacts.size,
+      runtimeRel: runtimeFacts.size,
+      verbose: opts.verbose ?? false,
+    })
   }
+}
 
-  // Texte humain
+/** Aucune rule trouvée : message (ou JSON vide) puis return côté caller. */
+function printNoRules(rulesDir: string, opts: { json: boolean }): void {
+  if (opts.json) {
+    console.log(JSON.stringify({ violations: [], stats: { rulesLoaded: 0 } }))
+  } else {
+    console.error(chalk.yellow(`⚠ no .dl rule found in ${rulesDir}`))
+    console.error(chalk.dim(`  Pass --rules-dir <path> to specify rules location.`))
+  }
+}
+
+/** Merge static ∪ runtime facts par relation (schemas disjoints attendus). */
+function mergeFactRelations(staticFacts: FactsMap, runtimeFacts: FactsMap): Map<string, string> {
+  const merged = new Map<string, string>(staticFacts)
+  for (const [name, tsv] of runtimeFacts) {
+    const existing = merged.get(name)
+    merged.set(name, existing && existing.length > 0 ? `${existing}\n${tsv}` : tsv)
+  }
+  return merged
+}
+
+/** Aplati les outputs du runner en liste de violations. */
+function collectViolations(outputs: CompositeResult['outputs']): ViolationOut[] {
+  const violations: ViolationOut[] = []
+  for (const [rule, tuples] of outputs) {
+    for (const t of tuples) violations.push({ rule, args: t })
+  }
+  return violations
+}
+
+function printCrossCheckJson(
+  violations: ViolationOut[],
+  result: CompositeResult,
+  rulesDl: string,
+): void {
+  console.log(JSON.stringify({
+    violations,
+    stats: {
+      cacheHit: result.stats.cacheHit,
+      durationMs: Math.round(result.stats.durationMs * 100) / 100,
+      tuplesIn: result.stats.tuplesIn,
+      tuplesOut: result.stats.tuplesOut,
+      rulesLoaded: countRules(rulesDl),
+    },
+  }))
+}
+
+function printCrossCheckReport(
+  violations: ViolationOut[],
+  result: CompositeResult,
+  ctx: { rulesDl: string; staticRel: number; runtimeRel: number; verbose: boolean },
+): void {
   console.log(chalk.bold(`cross-check : ${violations.length} violation(s)`))
   console.log(chalk.dim(
-    `  rules=${countRules(rulesDl)} static=${staticFacts.size}rel runtime=${runtimeFacts.size}rel ` +
+    `  rules=${countRules(ctx.rulesDl)} static=${ctx.staticRel}rel runtime=${ctx.runtimeRel}rel ` +
     `tuplesIn=${result.stats.tuplesIn} ${result.stats.cacheHit ? '✓ cache hit' : '⊘ cache miss'} ` +
     `${result.stats.durationMs.toFixed(1)}ms`,
   ))
@@ -149,7 +179,7 @@ export async function runCrossCheckCommand(opts: CrossCheckOpts): Promise<void> 
   if (violations.length > 20) {
     console.log(chalk.dim(`  (+${violations.length - 20} more — use --json for full)`))
   }
-  if (opts.verbose) {
+  if (ctx.verbose) {
     console.log(chalk.dim(`\nstats : cacheHit=${result.stats.cacheHit} tuplesOut=${result.stats.tuplesOut}`))
   }
 }

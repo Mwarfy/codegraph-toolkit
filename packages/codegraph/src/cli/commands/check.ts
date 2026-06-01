@@ -25,18 +25,11 @@ export interface CheckOpts {
   listRules?: boolean
 }
 
+type CheckResult = ReturnType<typeof runCheck>
+
 export async function runCheckCommand(opts: CheckOpts): Promise<void> {
   if (opts.listRules) {
-    console.log(chalk.bold('\n  CodeGraph Check — available rules\n'))
-    for (const r of ALL_RULES) {
-      const sev = r.defaultSeverity === 'error'
-        ? chalk.red('error')
-        : r.defaultSeverity === 'warn'
-          ? chalk.yellow('warn')
-          : chalk.dim('off')
-      console.log(`  ${chalk.bold(r.name.padEnd(35))} ${sev.padEnd(14)} ${chalk.dim(r.description)}`)
-    }
-    console.log()
+    printRulesList()
     return
   }
 
@@ -48,14 +41,7 @@ export async function runCheckCommand(opts: CheckOpts): Promise<void> {
     else console.log(msg)
   }
 
-  // Résoudre le snapshot "before" — soit un fichier .json, soit un git ref.
-  let before: GraphSnapshot
-  if (against.endsWith('.json')) {
-    before = JSON.parse(await fs.readFile(against, 'utf-8'))
-  } else {
-    progress(chalk.dim(`\n  Analyzing reference ${against}...`))
-    before = await analyzeAtRef(against, config)
-  }
+  const before = await resolveBeforeSnapshot(against, config, progress)
 
   progress(chalk.dim(`  Analyzing current tree...`))
   const after = (await analyze(config)).snapshot
@@ -64,9 +50,41 @@ export async function runCheckCommand(opts: CheckOpts): Promise<void> {
 
   if (opts.json) {
     console.log(JSON.stringify(result, null, 2))
-    process.exit(result.passed ? 0 : 1)
+  } else {
+    printCheckReport(against, result)
   }
+  process.exit(result.passed ? 0 : 1)
+}
 
+/** Liste les rules disponibles + leur sévérité par défaut. */
+function printRulesList(): void {
+  console.log(chalk.bold('\n  CodeGraph Check — available rules\n'))
+  for (const r of ALL_RULES) {
+    const sev = r.defaultSeverity === 'error'
+      ? chalk.red('error')
+      : r.defaultSeverity === 'warn'
+        ? chalk.yellow('warn')
+        : chalk.dim('off')
+    console.log(`  ${chalk.bold(r.name.padEnd(35))} ${sev.padEnd(14)} ${chalk.dim(r.description)}`)
+  }
+  console.log()
+}
+
+/** Résout le snapshot "before" : fichier `.json` ou git ref. */
+async function resolveBeforeSnapshot(
+  against: string,
+  config: Awaited<ReturnType<typeof loadConfig>>,
+  progress: (msg: string) => void,
+): Promise<GraphSnapshot> {
+  if (against.endsWith('.json')) {
+    return JSON.parse(await fs.readFile(against, 'utf-8'))
+  }
+  progress(chalk.dim(`\n  Analyzing reference ${against}...`))
+  return analyzeAtRef(against, config)
+}
+
+/** Rendu human-readable du résultat (sans exit — le caller gère le code). */
+function printCheckReport(against: string, result: CheckResult): void {
   console.log(chalk.bold('\n  CodeGraph Check\n'))
   console.log(`  ${chalk.dim('ref')}    ${against}  ${chalk.dim('→')}  ${chalk.dim('current tree')}`)
   console.log(`  ${chalk.dim('rules')}  ${result.rulesRun.join(', ')}`)
@@ -74,7 +92,7 @@ export async function runCheckCommand(opts: CheckOpts): Promise<void> {
 
   if (result.violations.length === 0) {
     console.log(chalk.green('  ✓ No violations.\n'))
-    process.exit(0)
+    return
   }
 
   for (const v of result.violations) {
@@ -86,5 +104,4 @@ export async function runCheckCommand(opts: CheckOpts): Promise<void> {
 
   const summary = `${result.counts.error} error(s), ${result.counts.warn} warning(s)`
   console.log(result.passed ? chalk.yellow(`  ${summary}\n`) : chalk.red(`  ${summary}\n`))
-  process.exit(result.passed ? 0 : 1)
 }
