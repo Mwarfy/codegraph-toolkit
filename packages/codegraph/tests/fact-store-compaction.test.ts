@@ -201,6 +201,42 @@ describe('fact-store-compaction — ADR-028', () => {
     expect(remaining.sort()).toEqual(['sha-3.json', 'sha-4.json'])
   })
 
+  it('un fact référencé uniquement par une base conservée survit', async () => {
+    // Store avec 5 facts. HEAD ne réfère que le 1er ; une base LRU réfère
+    // le 2e. Les 3 autres sont orphelins. La base étant dans keepBases,
+    // son fact doit être conservé (union HEAD ∪ bases).
+    const bundle = emptyBundle()
+    for (let i = 0; i < 5; i++) {
+      bundle.numericLiterals.push(makeNumericFact(`f${i}.ts`, i, String(i)))
+    }
+    const { head, records } = buildFactsHead(bundle, { generatedAt: 'x' })
+    await writeFactStore(dir, head, records)
+    const ids = head.byRelation.numericLiterals
+
+    // HEAD réduit au seul id[0].
+    await fs.writeFile(path.join(dir, 'facts.head.json'), JSON.stringify({
+      version: FACT_STORE_VERSION,
+      factSetHash: 'reduced',
+      generatedAt: 'x',
+      byRelation: { numericLiterals: [ids[0]] },
+    }))
+    // Base référençant id[1] uniquement.
+    await saveBase(dir, 'sha-base', {
+      version: FACT_STORE_VERSION,
+      factSetHash: 'base',
+      generatedAt: 'x',
+      byRelation: { numericLiterals: [ids[1]] },
+    })
+
+    const result = await compactFactStore(dir, { ...DEFAULT_COMPACTION_CONFIG, keepBases: 5 })
+    expect(result.kept).toBe(2)
+    expect(result.removed).toBe(3)
+
+    const lines = (await fs.readFile(factStorePath(dir), 'utf-8')).split('\n').filter((l) => l)
+    const remainingIds = lines.map((l) => (JSON.parse(l) as { id: string }).id).sort()
+    expect(remainingIds).toEqual([ids[0], ids[1]].sort())
+  })
+
   it('compaction d\'un store vide est un no-op safe', async () => {
     const result = await compactFactStore(dir)
     expect(result.kept).toBe(0)

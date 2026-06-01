@@ -7,6 +7,11 @@ dist/
 .claude/worktrees/
 docs/.*-audit.md
 
+# Le repo utilise npm workspaces — pas de lockfile pnpm
+pnpm-lock.yaml
+# Artefacts npm pack
+*.tgz
+
 # ADR-027 — vues dérivées hors git (projections paresseuses du snapshot+ADRs)
 CLAUDE-CONTEXT.md
 CHANGELOG-RECENT.md
