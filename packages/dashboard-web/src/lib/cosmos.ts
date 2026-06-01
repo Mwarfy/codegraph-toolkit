@@ -105,22 +105,36 @@ function splitPath(p: string): { pkg: string; dir: string; name: string } {
 }
 
 export function buildDatasetFromSnapshot(snap: SnapshotPayload | undefined): CosmosDataset {
-  const apiNodes = snap?.data.nodes ?? []
-  const apiEdges = snap?.data.edges ?? []
+  const { nodes, byApiId, byPath } = buildCosmosNodes(snap?.data.nodes ?? [])
+  const edges = buildCosmosEdges(snap?.data.edges ?? [], byApiId)
+  markHubsByDegree(nodes, edges)
+  layoutNodes(nodes, edges)
 
+  const byId = new Map<number, CosmosNode>(nodes.map((n) => [n.id, n]))
+  return { nodes, edges, byId, byApiId, byPath }
+}
+
+type ApiNodes = NonNullable<SnapshotPayload['data']>['nodes']
+type ApiEdges = NonNullable<SnapshotPayload['data']>['edges']
+
+/** Convertit les nodes API en CosmosNode + index byApiId/byPath. */
+function buildCosmosNodes(apiNodes: ApiNodes): {
+  nodes: CosmosNode[]
+  byApiId: Map<string, CosmosNode>
+  byPath: Map<string, CosmosNode>
+} {
   const nodes: CosmosNode[] = []
   const byApiId = new Map<string, CosmosNode>()
   const byPath = new Map<string, CosmosNode>()
   let id = 0
 
   for (const n of apiNodes) {
-    const apiId = n.id
     const path = n.label ?? n.id
     const { pkg, dir, name } = splitPath(path)
     const tags = n.tags ?? []
     const cosmosNode: CosmosNode = {
       id: id++,
-      apiId,
+      apiId: n.id,
       path,
       name,
       dir,
@@ -138,18 +152,25 @@ export function buildDatasetFromSnapshot(snap: SnapshotPayload | undefined): Cos
       vy: 0,
     }
     nodes.push(cosmosNode)
-    byApiId.set(apiId, cosmosNode)
+    byApiId.set(n.id, cosmosNode)
     byPath.set(path, cosmosNode)
   }
+  return { nodes, byApiId, byPath }
+}
 
+/** Convertit les edges API en CosmosEdge (drop from/to inconnu + self-loops). */
+function buildCosmosEdges(apiEdges: ApiEdges, byApiId: Map<string, CosmosNode>): CosmosEdge[] {
   const edges: CosmosEdge[] = []
   for (const e of apiEdges) {
     const s = byApiId.get(e.from)
     const t = byApiId.get(e.to)
     if (s && t && s.id !== t.id) edges.push({ s: s.id, t: t.id })
   }
+  return edges
+}
 
-  // Mark hubs heuristically: top 4% by degree.
+/** Marque les hubs heuristiquement : top 4% par degré (min 1). */
+function markHubsByDegree(nodes: CosmosNode[], edges: CosmosEdge[]): void {
   const degree = new Map<number, number>()
   for (const e of edges) {
     degree.set(e.s, (degree.get(e.s) ?? 0) + 1)
@@ -162,107 +183,137 @@ export function buildDatasetFromSnapshot(snap: SnapshotPayload | undefined): Cos
     const n = nodes[nid]
     if (n) n.hub = true
   }
-
-  layoutNodes(nodes, edges)
-
-  const byId = new Map<number, CosmosNode>(nodes.map((n) => [n.id, n]))
-  return { nodes, edges, byId, byApiId, byPath }
 }
 
 // Single-pass force-directed layout with grid bucketing.
 // Deliberately bounded — this runs once at dataset build, never in the
 // render loop, to avoid the O(n²) lag the original design hit.
+const LAYOUT = {
+  spring: 0.012,
+  springLen: 90,
+  repel: 1100,
+  center: 0.0008,
+  damp: 0.85,
+  cell: 140,
+} as const
+
+type PkgCenter = Map<string, { x: number; y: number }>
+
 function layoutNodes(nodes: CosmosNode[], edges: CosmosEdge[]): void {
   if (nodes.length === 0) return
 
-  // Group by package so each package clusters around a ring center.
+  const pkgCenter = buildPkgCenters(nodes)
+  seedPositions(nodes, pkgCenter)
+
+  const iters = Math.min(220, 60 + nodes.length)
+  for (let iter = 0; iter < iters; iter++) {
+    const a = 1 - iter / iters
+    const grid = buildSpatialGrid(nodes, LAYOUT.cell)
+    applyRepulsion(nodes, grid, pkgCenter, a)
+    applySprings(nodes, edges, a)
+    integrate(nodes)
+  }
+}
+
+/** Centre d'ancrage par package, réparti sur une ellipse. */
+function buildPkgCenters(nodes: CosmosNode[]): PkgCenter {
   const pkgs = [...new Set(nodes.map((n) => n.pkg))]
-  const pkgCenter = new Map<string, { x: number; y: number }>()
+  const pkgCenter: PkgCenter = new Map()
   pkgs.forEach((p, i) => {
     const a = (i / pkgs.length) * Math.PI * 2
     pkgCenter.set(p, { x: Math.cos(a) * 1100, y: Math.sin(a) * 800 })
   })
+  return pkgCenter
+}
 
+/** Position initiale : autour du centre du package + jitter. */
+function seedPositions(nodes: CosmosNode[], pkgCenter: PkgCenter): void {
   for (const n of nodes) {
     const c = pkgCenter.get(n.pkg) ?? { x: 0, y: 0 }
     n.x = c.x + (Math.random() - 0.5) * 280
     n.y = c.y + (Math.random() - 0.5) * 280
   }
+}
 
-  const ITERS = Math.min(220, 60 + nodes.length)
-  const SPRING = 0.012
-  const SPRING_LEN = 90
-  const REPEL = 1100
-  const CENTER = 0.0008
-  const DAMP = 0.85
-  const cell = 140
+/** Bucketing spatial : map "cx,cy" → nodes de la cellule. */
+function buildSpatialGrid(nodes: CosmosNode[], cell: number): Map<string, CosmosNode[]> {
+  const grid = new Map<string, CosmosNode[]>()
+  for (const n of nodes) {
+    const k = `${Math.floor(n.x / cell)},${Math.floor(n.y / cell)}`
+    let arr = grid.get(k)
+    if (!arr) {
+      arr = []
+      grid.set(k, arr)
+    }
+    arr.push(n)
+  }
+  return grid
+}
 
-  for (let iter = 0; iter < ITERS; iter++) {
-    const a = 1 - iter / ITERS
-
-    const grid = new Map<string, CosmosNode[]>()
-    for (const n of nodes) {
-      const k = `${Math.floor(n.x / cell)},${Math.floor(n.y / cell)}`
-      let arr = grid.get(k)
-      if (!arr) {
-        arr = []
-        grid.set(k, arr)
+/** Forces par node : répulsion voisins (grid 3×3) + attraction package + centre. */
+function applyRepulsion(nodes: CosmosNode[], grid: Map<string, CosmosNode[]>, pkgCenter: PkgCenter, a: number): void {
+  const cell = LAYOUT.cell
+  for (const n of nodes) {
+    const cx = Math.floor(n.x / cell)
+    const cy = Math.floor(n.y / cell)
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        repelAgainstCell(n, grid.get(`${cx + dx},${cy + dy}`), a)
       }
-      arr.push(n)
     }
+    const c = pkgCenter.get(n.pkg) ?? { x: 0, y: 0 }
+    n.vx += (c.x - n.x) * 0.02 * a
+    n.vy += (c.y - n.y) * 0.02 * a
+    n.vx += -n.x * LAYOUT.center * a
+    n.vy += -n.y * LAYOUT.center * a
+  }
+}
 
-    for (const n of nodes) {
-      const cx = Math.floor(n.x / cell)
-      const cy = Math.floor(n.y / cell)
-      for (let dx = -1; dx <= 1; dx++) {
-        for (let dy = -1; dy <= 1; dy++) {
-          const arr = grid.get(`${cx + dx},${cy + dy}`)
-          if (!arr) continue
-          for (const m of arr) {
-            if (m.id === n.id) continue
-            let ddx = n.x - m.x
-            let ddy = n.y - m.y
-            let d2 = ddx * ddx + ddy * ddy
-            if (d2 < 0.1) {
-              ddx = Math.random() - 0.5
-              ddy = Math.random() - 0.5
-              d2 = 0.1
-            }
-            const f = REPEL / d2
-            n.vx += ddx * f * a
-            n.vy += ddy * f * a
-          }
-        }
-      }
-      const c = pkgCenter.get(n.pkg) ?? { x: 0, y: 0 }
-      n.vx += (c.x - n.x) * 0.02 * a
-      n.vy += (c.y - n.y) * 0.02 * a
-      n.vx += -n.x * CENTER * a
-      n.vy += -n.y * CENTER * a
+/** Répulsion de `n` contre tous les nodes d'une cellule voisine. */
+function repelAgainstCell(n: CosmosNode, cellNodes: CosmosNode[] | undefined, a: number): void {
+  if (!cellNodes) return
+  for (const m of cellNodes) {
+    if (m.id === n.id) continue
+    let ddx = n.x - m.x
+    let ddy = n.y - m.y
+    let d2 = ddx * ddx + ddy * ddy
+    if (d2 < 0.1) {
+      ddx = Math.random() - 0.5
+      ddy = Math.random() - 0.5
+      d2 = 0.1
     }
+    const f = LAYOUT.repel / d2
+    n.vx += ddx * f * a
+    n.vy += ddy * f * a
+  }
+}
 
-    for (const e of edges) {
-      const s = nodes[e.s]
-      const t = nodes[e.t]
-      if (!s || !t) continue
-      const dx = t.x - s.x
-      const dy = t.y - s.y
-      const d = Math.sqrt(dx * dx + dy * dy) || 1
-      const f = (d - SPRING_LEN) * SPRING
-      s.vx += (dx / d) * f * a
-      s.vy += (dy / d) * f * a
-      t.vx -= (dx / d) * f * a
-      t.vy -= (dy / d) * f * a
-    }
+/** Forces de ressort le long des edges. */
+function applySprings(nodes: CosmosNode[], edges: CosmosEdge[], a: number): void {
+  for (const e of edges) {
+    const s = nodes[e.s]
+    const t = nodes[e.t]
+    if (!s || !t) continue
+    const dx = t.x - s.x
+    const dy = t.y - s.y
+    const d = Math.sqrt(dx * dx + dy * dy) || 1
+    const f = (d - LAYOUT.springLen) * LAYOUT.spring
+    s.vx += (dx / d) * f * a
+    s.vy += (dy / d) * f * a
+    t.vx -= (dx / d) * f * a
+    t.vy -= (dy / d) * f * a
+  }
+}
 
-    for (const n of nodes) {
-      if (!Number.isFinite(n.vx)) n.vx = 0
-      if (!Number.isFinite(n.vy)) n.vy = 0
-      n.x += n.vx
-      n.y += n.vy
-      n.vx *= DAMP
-      n.vy *= DAMP
-    }
+/** Intégration Verlet amortie : applique vélocité, sanitize NaN, damp. */
+function integrate(nodes: CosmosNode[]): void {
+  for (const n of nodes) {
+    if (!Number.isFinite(n.vx)) n.vx = 0
+    if (!Number.isFinite(n.vy)) n.vy = 0
+    n.x += n.vx
+    n.y += n.vy
+    n.vx *= LAYOUT.damp
+    n.vy *= LAYOUT.damp
   }
 }
 
