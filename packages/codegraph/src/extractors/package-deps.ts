@@ -179,7 +179,12 @@ export async function analyzePackageDeps(
     recordPackageRefs(sf, rootDir, fileSet, active, buckets)
   }
 
-  return buildPackageDepsIssues(active, buckets.importsByManifest, buckets.runtimeAssetsByManifest, testREs, workspaceNames, binPackages, peerRequiredPackages)
+  return buildPackageDepsIssues(active, buckets.importsByManifest, buckets.runtimeAssetsByManifest, {
+    testREs,
+    workspaceNames,
+    binPackages,
+    peerRequiredPackages,
+  })
 }
 
 /**
@@ -551,21 +556,26 @@ export {
  * en runtime), `declared-unused` sinon. Skip @types/* et deps appelees
  * via npm script (ex: `tsc -b`, `vitest run`).
  */
+/** Contexte de lookup pour classifier les deps déclarées d'un manifest. */
+interface DeclaredDepsContext {
+  importedNames: Set<string>
+  runtimeAssets: Map<string, Set<string>>
+  workspaceNames: Set<string>
+  binPackages: Set<string>
+  peerRequiredPackages: Set<string>
+}
+
 function classifyDeclaredDeps(
   m: PackageManifest,
-  importedNames: Set<string>,
-  runtimeAssets: Map<string, Set<string>>,
   issues: PackageDepsIssue[],
-  workspaceNames: Set<string>,
-  binPackages: Set<string>,
-  peerRequiredPackages: Set<string>,
+  ctx: DeclaredDepsContext,
 ): void {
   for (const [name, block] of m.declared) {
-    if (importedNames.has(name)) continue
+    if (ctx.importedNames.has(name)) continue
     if (name.startsWith('@types/')) continue
     // Workspace interne (cf. P2.2) — usage conditionnel via workspace
     // linker, le scan static ne peut pas verifier.
-    if (workspaceNames.has(name)) continue
+    if (ctx.workspaceNames.has(name)) continue
     // Build-time deps (typescript, eslint, vitest, tsup, ...) — jamais
     // importees par du code applicatif, consommees via npm scripts ou
     // par d'autres outils.
@@ -573,13 +583,13 @@ function classifyDeclaredDeps(
     // Packages avec un `bin` field dans node_modules — utilises via
     // `npx <cmd>` ou `package.json#scripts`, pas par import. Cf. F-005
     // dogfood Janus.
-    if (binPackages.has(name)) continue
+    if (ctx.binPackages.has(name)) continue
     // Peer dep transitif d'une autre dep installee — npm/pnpm exigent
     // l'install pour resolution, meme sans import direct par l'app.
     // Cf. F-205 audit v3 (`@liby-tools/salsa` peer de codegraph).
-    if (peerRequiredPackages.has(name)) continue
+    if (ctx.peerRequiredPackages.has(name)) continue
 
-    const runtimeRefs = runtimeAssets.get(name)
+    const runtimeRefs = ctx.runtimeAssets.get(name)
     if (runtimeRefs && runtimeRefs.size > 0) {
       issues.push({
         kind: 'declared-runtime-asset',
@@ -642,14 +652,19 @@ function classifyImportedDeps(
   }
 }
 
+/** Lookups partagés pour la classification des deps (constants par run). */
+interface DepsLookups {
+  testREs: RegExp[]
+  workspaceNames: Set<string>
+  binPackages: Set<string>
+  peerRequiredPackages: Set<string>
+}
+
 function buildPackageDepsIssues(
   active: PackageManifest[],
   importsByManifest: Map<string, Map<string, Set<string>>>,
   runtimeAssetsByManifest: Map<string, Map<string, Set<string>>>,
-  testREs: RegExp[],
-  workspaceNames: Set<string>,
-  binPackages: Set<string>,
-  peerRequiredPackages: Set<string>,
+  lookups: DepsLookups,
 ): PackageDepsIssue[] {
   const issues: PackageDepsIssue[] = []
 
@@ -658,8 +673,14 @@ function buildPackageDepsIssues(
     const runtimeAssets = runtimeAssetsByManifest.get(m.abs)!
     const importedNames = new Set(imports.keys())
 
-    classifyDeclaredDeps(m, importedNames, runtimeAssets, issues, workspaceNames, binPackages, peerRequiredPackages)
-    classifyImportedDeps(m, imports, testREs, issues)
+    classifyDeclaredDeps(m, issues, {
+      importedNames,
+      runtimeAssets,
+      workspaceNames: lookups.workspaceNames,
+      binPackages: lookups.binPackages,
+      peerRequiredPackages: lookups.peerRequiredPackages,
+    })
+    classifyImportedDeps(m, imports, lookups.testREs, issues)
   }
 
   issues.sort((a, b) => {
