@@ -248,6 +248,20 @@ export async function writeStoredSnapshot(
  * qui a déjà son backup. En cas de corruption d'un sub-file, relire le fat
  * blob redonne la vérité.
  */
+/**
+ * Sérialise la valeur d'un detector field : array → NDJSON (un JSON/ligne,
+ * array vide → fichier vide = "detector a tourné, zéro résultat") ; objet
+ * bundle → 1 ligne JSON.
+ */
+function serializeDetectorField(value: unknown): string {
+  if (Array.isArray(value)) {
+    return value.length === 0
+      ? ''
+      : value.map((item) => JSON.stringify(item)).join('\n') + '\n'
+  }
+  return JSON.stringify(value) + '\n'
+}
+
 export async function writeSubSnapshots(
   snapshotDir: string,
   payload: GraphSnapshot,
@@ -256,26 +270,15 @@ export async function writeSubSnapshots(
   const detectorsDir = snapshotDetectorsDir(snapshotDir)
   await fs.mkdir(detectorsDir, { recursive: true })
 
+  // Écritures indépendantes (un fichier distinct par field) → parallèles.
+  const detectorWrites: Promise<void>[] = []
   for (const field of DETECTOR_FIELDS) {
     const value = payload[field]
     if (value === undefined) continue
-
     const target = snapshotDetectorPath(snapshotDir, field)
-    let content: string
-    if (Array.isArray(value)) {
-      // NDJSON canonique : un fact JSON par ligne. Array vide → fichier
-      // vide (sémantiquement : detector a tourné, zéro résultat).
-      content = value.length === 0
-        ? ''
-        : value.map((item) => JSON.stringify(item)).join('\n') + '\n'
-    } else {
-      // Bundle objet (e.g. codeQualityPatterns, securityPatterns,
-      // testCoverage, sqlSchema, ...). Écrit en 1 ligne JSON — un futur
-      // consumer Phase 2 pourra le lire d'un coup.
-      content = JSON.stringify(value) + '\n'
-    }
-    await writeAtomic(target, content)
+    detectorWrites.push(writeAtomic(target, serializeDetectorField(value)))
   }
+  await Promise.all(detectorWrites)
 
   // 2. Metrics — un seul fichier JSON imbriqué.
   const metricsBundle: Record<string, unknown> = {}

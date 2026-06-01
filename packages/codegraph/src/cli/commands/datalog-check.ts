@@ -44,6 +44,7 @@ async function resolveDefaultRulesDir(root: string): Promise<string> {
   ]
   for (const candidate of candidates) {
     try {
+      // await-ok: short-circuit sur première match (ordre de priorité des candidats)
       const stat = await fs.stat(candidate)
       if (stat.isDirectory()) return candidate
     } catch {
