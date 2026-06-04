@@ -32,3 +32,10 @@ Violation("NO-RESOURCE-IMBALANCE", File, Line,
   "acquire/release counts mismatch dans la meme fonction — leak probable") :-
     ResourceImbalance(File, Line, Sym, _, _, _),
     !ResourceImbalanceGrandfathered(File, Sym).
+
+// ─── Grandfather ────────────────────────────────────────────────────────
+// Format : ResourceImbalanceGrandfathered("path/file.ts", "containingSymbol").
+// `startWatcher` acquiert le `watch()` mais le `close()` vit dans la fonction
+// de teardown RETOURNÉE (`return () => watcher.close()`) — pattern teardown
+// standard. L'extracteur compte acquire dans la fn / release hors-scope → FP.
+ResourceImbalanceGrandfathered("packages/dashboard-server/src/watch/file-watcher.ts", "startWatcher").

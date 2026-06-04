@@ -45,3 +45,14 @@ Violation("COMPOSITE-ORPHAN-FILE", F, 0,
     !IsFrameworkRouted(F),
     !IsTestFixture(F),
     !OrphanFileGrandfathered(F).
+
+// ─── Grandfather ────────────────────────────────────────────────────────
+// Format : OrphanFileGrandfathered("path/file.ts").
+// `_determinism-capture.ts` : helper de capture importé UNIQUEMENT par des
+// tests E2E (`*-determinism-e2e.test.ts`), eux-mêmes exclus du graphe
+// (`**/*.test.ts`). Il apparaît donc orphelin alors qu'il est bien utilisé.
+OrphanFileGrandfathered("packages/codegraph/tests/_determinism-capture.ts").
+// `main.tsx` : entry-point Vite/SolidJS chargé par `index.html`
+// (`<script src="/src/main.tsx">`), jamais importé par du TS — entry réel,
+// pas un orphelin. La règle datalog ne consomme pas `config.entryPoints`.
+OrphanFileGrandfathered("packages/dashboard-web/src/main.tsx").
