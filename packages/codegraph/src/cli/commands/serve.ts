@@ -61,7 +61,9 @@ function errorResponse(res: ServerResponse, msg: string, status = 500): void {
 
 // ── Route handlers ──
 
-/** GET /api/snapshots — liste les snapshots disponibles (loader unifié ADR-027). */
+// ADR-027 : délégué au loader unifié (`incremental/snapshot-loader.ts`)
+// qui retourne le v2 canonique + backups + legacy historiques.
+/** GET /api/snapshots — liste les snapshots disponibles. */
 async function handleSnapshots(res: ServerResponse, ctx: ServeContext): Promise<void> {
   try {
     const { all } = await listAllSnapshotPaths(ctx.config.snapshotDir)
