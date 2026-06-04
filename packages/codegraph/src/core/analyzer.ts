@@ -393,38 +393,12 @@ export async function analyze(
   // dépendent de snapshot.nodes + snapshot.edges (cf. helper).
   await runPostSnapshotMetrics(config, snapshot, timing, { factsOnly, incremental })
 
-  // ─── 7b. Doc claims extraction (composite-doc-stale ADR-026) ──────
-  // Lit les .md de docs/ + frontmatter YAML, cross-check contre les
-  // .dl rules existantes, les fichiers source, et les ADRs. Émet des
-  // facts DocClaim + DocStaleClaim consommés par composite-doc-stale.dl.
-  // Pas dans factsOnly mode (output dégénéré).
-  if (!factsOnly) {
-    const tDoc = performance.now()
-    try {
-      await runDocClaimsExtraction(config.rootDir, snapshot)
-    } catch (err) {
-      console.error(`  ✗ doc-claims failed: ${err}`)
-    } finally {
-      timing.detectors['doc-claims'] = performance.now() - tDoc
-    }
-  }
-
-  // ─── 8. Datalog shadow run (ADR-026 phase A.1) ─────────────────────
-  // Compare runner Datalog vs legacy snapshot. Skip si factsOnly (snapshot
-  // incomplet, comparaison aurait des faux ✗ partout).
-  if (datalogShadow && !factsOnly) {
-    const tShadow = performance.now()
-    try {
-      const report = await runDatalogShadow({
-        project: sharedProject, files, rootDir: config.rootDir, snapshot,
-      })
-      logShadowReport(report)
-    } catch (err) {
-      console.error(`  ✗ datalog-shadow failed: ${err}`)
-    } finally {
-      timing.detectors['datalog-shadow'] = performance.now() - tShadow
-    }
-  }
+  // ─── 7b. Doc claims (composite-doc-stale ADR-026) + 8. Datalog shadow.
+  await runDocClaimsPhase(config, snapshot, timing, { factsOnly })
+  await runDatalogShadowPhase({
+    datalogShadow, factsOnly, project: sharedProject,
+    files, rootDir: config.rootDir, snapshot, timing,
+  })
 
   // ─── Persist disk cache (Sprint 7) ───────────────────────────────────
   await persistDiskCacheIfIncremental(config, incremental, skipPersistenceSave)
@@ -432,6 +406,56 @@ export async function analyze(
   timing.total = performance.now() - t0
 
   return { snapshot, timing, files, astFactsBundle }
+}
+
+/**
+ * Phase doc-claims (composite-doc-stale ADR-026) : lit les .md docs +
+ * frontmatter, cross-check vs .dl rules / source / ADRs. Skip en factsOnly
+ * (output dégénéré). Best-effort : un échec ne casse pas l'analyze.
+ */
+async function runDocClaimsPhase(
+  config: CodeGraphConfig,
+  snapshot: Parameters<typeof runDocClaimsExtraction>[1],
+  timing: AnalyzeResult['timing'],
+  opts: { factsOnly: boolean },
+): Promise<void> {
+  if (opts.factsOnly) return
+  const tDoc = performance.now()
+  try {
+    await runDocClaimsExtraction(config.rootDir, snapshot)
+  } catch (err) {
+    console.error(`  ✗ doc-claims failed: ${err}`)
+  } finally {
+    timing.detectors['doc-claims'] = performance.now() - tDoc
+  }
+}
+
+/**
+ * Phase datalog-shadow (ADR-026 A.1) : compare runner Datalog vs snapshot
+ * legacy. Skip si désactivée ou factsOnly. Best-effort.
+ */
+async function runDatalogShadowPhase(
+  params: {
+    datalogShadow: boolean
+    factsOnly: boolean
+    timing: AnalyzeResult['timing']
+  } & Parameters<typeof runDatalogShadow>[0],
+): Promise<void> {
+  if (!params.datalogShadow || params.factsOnly) return
+  const tShadow = performance.now()
+  try {
+    const report = await runDatalogShadow({
+      project: params.project,
+      files: params.files,
+      rootDir: params.rootDir,
+      snapshot: params.snapshot,
+    })
+    logShadowReport(report)
+  } catch (err) {
+    console.error(`  ✗ datalog-shadow failed: ${err}`)
+  } finally {
+    params.timing.detectors['datalog-shadow'] = performance.now() - tShadow
+  }
 }
 
 /**

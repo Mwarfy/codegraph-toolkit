@@ -712,15 +712,7 @@ function finalizeDatalogResults(merged: AstFactsBundle, extractMs: number): Data
   const codeQualityPatternsResult = projectCodeQualityPatterns(result.outputs)
   const driftPatternsResult = projectDriftPatterns(result.outputs)
 
-  const tuplesIn = computeTuplesIn(merged)
-  const tuplesOut = computeTuplesOut(
-    structural, barrels, envUsage, argumentsResult,
-    resourceImbalances, taintedVarsResult, eventEmitSites,
-    constantExpressions, eventListenerSites,
-    securityPatternsResult, codeQualityPatternsResult, driftPatternsResult,
-  )
-
-  return {
+  const detectors = {
     ...structural,
     deadCode,
     eventListenerSites,
@@ -734,6 +726,13 @@ function finalizeDatalogResults(merged: AstFactsBundle, extractMs: number): Data
     securityPatterns: securityPatternsResult,
     driftPatterns: driftPatternsResult,
     codeQualityPatterns: codeQualityPatternsResult,
+  }
+
+  const tuplesIn = computeTuplesIn(merged)
+  const tuplesOut = computeTuplesOut(detectors)
+
+  return {
+    ...detectors,
     stats: { extractMs, evalMs, tuplesIn, tuplesOut, evalCacheHit: evaluation.cacheHit },
   }
 }
@@ -995,33 +994,22 @@ function computeTuplesIn(merged: AstFactsBundle): number {
     + merged.awaitInLoopCandidates.length + merged.allocationInLoopCandidates.length
 }
 
-function computeTuplesOut(
-  s: StructuralOutputs,
-  barrels: DatalogDetectorResults['barrels'],
-  envUsage: DatalogDetectorResults['envUsage'],
-  args: DatalogDetectorResults['arguments'],
-  resourceImbalances: DatalogDetectorResults['resourceImbalances'],
-  taintedVars: DatalogDetectorResults['taintedVars'],
-  eventEmitSites: DatalogDetectorResults['eventEmitSites'],
-  constantExpressions: DatalogDetectorResults['constantExpressions'],
-  eventListenerSites: DatalogDetectorResults['eventListenerSites'],
-  sec: DatalogDetectorResults['securityPatterns'],
-  cq: DatalogDetectorResults['codeQualityPatterns'],
-  drift: DatalogDetectorResults['driftPatterns'],
-): number {
-  return s.magicNumbers.length + s.deadCodeIdenticalSubexpressions.length
-    + s.evalCalls.length + s.cryptoCalls.length + s.booleanParams.length
-    + s.sanitizers.length + s.taintSinks.length + s.longFunctions.length
-    + s.functionComplexities.length + s.hardcodedSecrets.length
-    + eventListenerSites.length + barrels.length + envUsage.length
-    + constantExpressions.length + args.taintedArgs.length + args.params.length
-    + eventEmitSites.length + taintedVars.decls.length + taintedVars.argCalls.length
-    + resourceImbalances.length
-    + sec.secretRefs.length + sec.corsConfigs.length + sec.tlsUnsafe.length + sec.weakRandoms.length
-    + drift.excessiveOptionalParams.length + drift.wrapperSuperfluous.length
-    + drift.deepNesting.length + drift.emptyCatchNoComment.length
-    + cq.regexLiterals.length + cq.tryCatchSwallows.length
-    + cq.awaitInLoops.length + cq.allocationInLoops.length
+/** Compte total des tuples projetés (somme des .length de toutes relations). */
+function computeTuplesOut(r: Omit<DatalogDetectorResults, 'stats'>): number {
+  return r.magicNumbers.length + r.deadCodeIdenticalSubexpressions.length
+    + r.evalCalls.length + r.cryptoCalls.length + r.booleanParams.length
+    + r.sanitizers.length + r.taintSinks.length + r.longFunctions.length
+    + r.functionComplexities.length + r.hardcodedSecrets.length
+    + r.eventListenerSites.length + r.barrels.length + r.envUsage.length
+    + r.constantExpressions.length + r.arguments.taintedArgs.length + r.arguments.params.length
+    + r.eventEmitSites.length + r.taintedVars.decls.length + r.taintedVars.argCalls.length
+    + r.resourceImbalances.length
+    + r.securityPatterns.secretRefs.length + r.securityPatterns.corsConfigs.length
+    + r.securityPatterns.tlsUnsafe.length + r.securityPatterns.weakRandoms.length
+    + r.driftPatterns.excessiveOptionalParams.length + r.driftPatterns.wrapperSuperfluous.length
+    + r.driftPatterns.deepNesting.length + r.driftPatterns.emptyCatchNoComment.length
+    + r.codeQualityPatterns.regexLiterals.length + r.codeQualityPatterns.tryCatchSwallows.length
+    + r.codeQualityPatterns.awaitInLoops.length + r.codeQualityPatterns.allocationInLoops.length
 }
 
 // ─── Sub-projectors (extraits de finalizeDatalogResults pour réduire ─────

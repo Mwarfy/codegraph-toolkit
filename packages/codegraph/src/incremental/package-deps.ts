@@ -94,6 +94,11 @@ export const allPackageDeps = derived<string, PackageDepsIssue[]>(
     const binPackages = new Set<string>()
     const peerRequiredPackages = new Set<string>()
 
-    return buildPackageDepsIssues(active, importsByManifest, runtimeAssetsByManifest, DEFAULT_TEST_RES, workspaceNames, binPackages, peerRequiredPackages)
+    return buildPackageDepsIssues(active, importsByManifest, runtimeAssetsByManifest, {
+      testREs: DEFAULT_TEST_RES,
+      workspaceNames,
+      binPackages,
+      peerRequiredPackages,
+    })
   },
 )
