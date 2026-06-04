@@ -96,3 +96,20 @@ DocStaleGrandfathered("docs/PHASE-5-COMPOSITE-BACKLOG.md", "ADR-017").
 DocStaleGrandfathered("docs/PHASE-5-COMPOSITE-BACKLOG.md", "ADR-019").
 DocStaleGrandfathered("docs/PHASE-5-COMPOSITE-BACKLOG.md", "ADR-021").
 DocStaleGrandfathered("docs/PHASE-5-COMPOSITE-BACKLOG.md", "ADR-022").
+DocStaleGrandfathered("docs/AUDIT-EXTERNAL-V4-2026-05-09.md", "ADR-019").
+DocStaleGrandfathered("docs/DOGFOODING-DPL-RAG.md", "ADR-019").
+
+// ─── Références fichiers historiques + exemples externes ────────────────
+// Docs d'audit/plan datés (point-in-time) qui citent des fichiers ayant
+// existé alors mais restructurés depuis : code-quality-patterns / detectors-
+// index / env-usage / drift-patterns ont migré vers datalog-detectors/ ou
+// été retirés (ADR-031). Réécrire un audit daté falsifierait le record.
+DocStaleGrandfathered("docs/EXTERNAL-VALIDATION.md", "packages/codegraph/src/extractors/code-quality-patterns.ts").
+DocStaleGrandfathered("docs/OSS-AUDIT-2026-05-08.md", "packages/codegraph/src/core/detectors/index.ts").
+DocStaleGrandfathered("docs/PHASE-1-SALSA-MIGRATION.md", "packages/codegraph/src/incremental/env-usage.ts").
+DocStaleGrandfathered("docs/PHASE-4-AGENT-FIRST-PLAN.md", "packages/codegraph/src/extractors/drift-patterns.ts").
+// Exemples tanstack-query : chemins d'AUTRES projets cités en prose, pas des
+// fichiers de ce repo — faux positifs structurels du file-ref regex.
+DocStaleGrandfathered("docs/OSS-AUDIT-2026-05-08.md", "packages/svelte-query/tests/...test-d.ts").
+DocStaleGrandfathered("docs/OSS-AUDIT-2026-05-08.md", "packages/react-query/src/foo.ts").
+DocStaleGrandfathered("docs/OSS-AUDIT-2026-05-08.md", "packages/vue-query/src/foo.ts").
