@@ -46,6 +46,7 @@ Violation("NO-BOOLEAN-POSITIONAL-PARAM", File, Line,
 
 // adr-toolkit : feature detection + dry-run flags.
 BooleanParamGrandfathered("packages/adr-toolkit/src/bootstrap.ts", "resolveMode").
+BooleanParamGrandfathered("packages/adr-toolkit/src/init.ts", "tryNextJs").
 BooleanParamGrandfathered("packages/adr-toolkit/src/init.ts", "tryFullstackMonorepo").
 BooleanParamGrandfathered("packages/adr-toolkit/src/init.ts", "tryWorkspacesMonorepo").
 BooleanParamGrandfathered("packages/adr-toolkit/src/init.ts", "trySimpleSrc").

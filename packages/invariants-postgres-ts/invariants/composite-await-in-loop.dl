@@ -179,3 +179,9 @@ AwaitInLoopGrandfathered("sentinel-web/src/lib/api-client.ts", 115).
 AwaitInLoopGrandfathered("sentinel-web/src/lib/api-client.ts", 121).
 AwaitInLoopGrandfathered("sentinel-web/src/lib/api-client.ts", 128).
 AwaitInLoopGrandfathered("sentinel-web/src/lib/api-client.ts", 139).
+// telemetry.ts /api/boot-context : short-circuit qui lit le premier candidat
+// existant (CLAUDE-CONTEXT.md puis CLAUDE.md) et return — séquentiel légitime.
+// Grandfather .dl (pas de marker source) pour ne pas re-déclencher l'alerte
+// CodeQL js/missing-rate-limiting pré-existante sur ce handler.
+AwaitInLoopGrandfathered("packages/dashboard-server/src/routes/telemetry.ts", 141).
+AwaitInLoopGrandfathered("packages/dashboard-server/src/routes/telemetry.ts", 142).

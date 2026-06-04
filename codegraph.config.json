@@ -11,12 +11,14 @@
     "**/__tests__/**",
     "**/*.test.ts",
     "**/*.spec.ts",
-    "**/*.d.ts"
+    "**/*.d.ts",
+    "examples/**"
   ],
   "entryPoints": [
     "apps/**/index.ts",
     "apps/**/main.ts",
-    "packages/**/index.ts"
+    "packages/**/index.ts",
+    "packages/**/main.tsx"
   ],
   "detectors": [
     "ts-imports",
