@@ -69,8 +69,15 @@ export function createSharedProject(
     const absPath = path.join(rootDir, relPath)
     try {
       project.addSourceFileAtPath(absPath)
-    } catch {
-      // Skip unparseable files
+    } catch (e) {
+      // Skip unparseable files. Ce catch est SILENCIEUX par design (fichiers
+      // genuinement malformés), mais c'est aussi un suspect pour le flake
+      // déterminisme E2E : un échec I/O transitoire sous charge (104 forks,
+      // pression fd) droppe silencieusement un fichier → facts manquants.
+      // `DET_DEBUG=1` rend ces échecs observables pour la prochaine occurrence.
+      if (process.env.DET_DEBUG) {
+        console.error(`[DET_DEBUG] addSourceFileAtPath FAILED: ${relPath} — ${(e as Error)?.message}`)
+      }
     }
   }
   return project
