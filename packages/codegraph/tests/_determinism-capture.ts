@@ -83,6 +83,16 @@ export function captureFactsDivergence(
   label: string,
   records1: { id: string; r: string; v: unknown }[],
   records2: { id: string; r: string; v: unknown }[],
+  // Contexte optionnel pour distinguer la SOURCE de divergence (cf. invest.
+  // 2026-06-09) : ts-morph traversal RÉFUTÉ (stable), suspect = pipeline.
+  // `files` permet de voir si la découverte diffère ; `counts` si l'extraction
+  // par-relation diffère même à fichiers identiques.
+  context?: {
+    files1?: readonly string[]
+    files2?: readonly string[]
+    counts1?: Record<string, number>
+    counts2?: Record<string, number>
+  },
 ): void {
   const ids1 = new Set(records1.map((r) => r.id))
   const ids2 = new Set(records2.map((r) => r.id))
@@ -90,9 +100,26 @@ export function captureFactsDivergence(
   const onlyIn2 = records2.filter((r) => !ids1.has(r.id)).map((r) => ({ r: r.r, v: r.v }))
   if (onlyIn1.length === 0 && onlyIn2.length === 0) return
   const relations = [...new Set([...onlyIn1, ...onlyIn2].map((x) => x.r))]
+  // Diagnostic clé : les fichiers découverts sont-ils identiques entre les 2 runs ?
+  const sameFiles = context
+    ? JSON.stringify([...(context.files1 ?? [])].sort()) === JSON.stringify([...(context.files2 ?? [])].sort())
+    : undefined
   writeReport(
     label,
-    { label, divergentRelations: relations, onlyIn1, onlyIn2, capturedAt: new Date().toISOString() },
-    `relations: ${relations.join(', ')} (+${onlyIn1.length}/-${onlyIn2.length} tuples)`,
+    {
+      label,
+      divergentRelations: relations,
+      onlyIn1,
+      onlyIn2,
+      // sameFiles=true → divergence d'EXTRACTION (mêmes fichiers, facts ≠).
+      // sameFiles=false → divergence de DÉCOUVERTE (un run voit moins de fichiers).
+      sameFiles,
+      files1: context?.files1,
+      files2: context?.files2,
+      counts1: context?.counts1,
+      counts2: context?.counts2,
+      capturedAt: new Date().toISOString(),
+    },
+    `relations: ${relations.join(', ')} (+${onlyIn1.length}/-${onlyIn2.length} tuples)${sameFiles === false ? ' [DÉCOUVERTE diffère]' : sameFiles === true ? ' [EXTRACTION diffère, mêmes fichiers]' : ''}`,
   )
 }

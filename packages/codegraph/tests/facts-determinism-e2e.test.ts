@@ -68,7 +68,22 @@ describe('ADR-027 Phase 3 — fact store determinism (e2e)', () => {
     const b1 = buildFactsHead(r1.astFactsBundle!, { generatedAt: 'x' })
     const b2 = buildFactsHead(r2.astFactsBundle!, { generatedAt: 'x' })
     if (b2.head.factSetHash !== b1.head.factSetHash) {
-      captureFactsDivergence('facts-2runs', b1.records, b2.records)
+      // Capture enrichie : `files` + `counts` distinguent divergence de
+      // DÉCOUVERTE vs EXTRACTION (cf. investigation 2026-06-09 — ts-morph
+      // traversal réfuté comme cause, suspect = pipeline analyze).
+      const cnt = (b: typeof r1.astFactsBundle): Record<string, number> => {
+        const o: Record<string, number> = {}
+        for (const [k, v] of Object.entries(b as Record<string, unknown[]>)) {
+          if (Array.isArray(v) && v.length) o[k] = v.length
+        }
+        return o
+      }
+      captureFactsDivergence('facts-2runs', b1.records, b2.records, {
+        files1: r1.files,
+        files2: r2.files,
+        counts1: cnt(r1.astFactsBundle!),
+        counts2: cnt(r2.astFactsBundle!),
+      })
     }
     expect(b2.head.factSetHash).toBe(b1.head.factSetHash)
   })
